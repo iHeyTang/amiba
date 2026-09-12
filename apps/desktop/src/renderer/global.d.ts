@@ -21,8 +21,11 @@ type WorkspaceChange =
   | { kind: "unbound"; sessionId: string };
 
 interface AmibaBridgeApi {
+  desktopPet: import("../shared/desktop-pet").DesktopPetBridge;
   embeddedPage: {
-    request(input: import("../shared/embedded-page").EmbeddedPageRequest): Promise<void>;
+    request(
+      input: import("../shared/embedded-page").EmbeddedPageRequest,
+    ): Promise<void>;
   };
   windowChrome: {
     topBarHeightPx: number;
@@ -76,7 +79,7 @@ interface AmibaBridgeApi {
   shell: {
     openExternal(url: string): Promise<void>;
   };
-  embeddedBrowser: import("@amiba/app-runtime/platform").EmbeddedBrowserAdapter;
+  nativeExtensions: import("@amiba/extension-sdk").DesktopExtensionBridge;
   workspaces: {
     chooseDirectory(defaultPath?: string): Promise<string | null>;
     getDefaultRoot(): Promise<string>;
@@ -105,16 +108,6 @@ interface AmibaBridgeApi {
     ): () => void;
   };
   workspaceDevelopment: WorkspaceDevelopmentAdapter;
-  notifier: {
-    onMessage(cb: (msg: unknown) => void): () => void;
-    hide(): Promise<void>;
-    openSession(sessionId: string): Promise<void>;
-    approve(approvalId: string): Promise<void>;
-    deny(approvalId: string): Promise<void>;
-    demo(
-      kind?: "chat-completed" | "approval-pending" | "plugin",
-    ): Promise<void>;
-  };
   quickAsk: {
     onPrefill(
       cb: (payload: { text: string; sourceApp: string }) => void,

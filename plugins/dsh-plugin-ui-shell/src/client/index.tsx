@@ -1,8 +1,15 @@
+import { CONVERSATION_ENTRY_REMOTE } from "../conversation-remote.js";
+import { createConversationPreparer } from "./conversation-submit.js";
+import { ConversationSubmitProvider } from "@amiba/ui/plugin";
+// Share the public plugin UI through the existing shell module identity.
+// Consumers retain their source imports; Vite maps the external to this factory.
+export * from "@amiba/ui/plugin";
 import { createSurfaceSelections, type SurfaceSelections } from "./surface-selections.js";
 import { SurfaceSettings } from "./surface-settings.js";
 export { usePresentationCoordinator, useSurfaceActivity, useSurfaceInteraction } from "@amiba/ui/plugin";
 export * from "streamdown";
 export { WorkspaceFileWorkspace, CodeEditor, PreviewHeader, useWorkspacePane, WorkbenchViewBoundary } from "@amiba/ui/plugin";
+export { cn } from "@amiba/ui/plugin";
 export { getPlatform } from "@amiba/app-runtime/platform";
 export { createSlotContributionsSource } from "./session-list-sources.js";
 import { WorkbenchExtensionsProvider, builtinWorkbenchViews } from "@amiba/ui/plugin";
@@ -255,6 +262,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     surfaces: SurfaceSelections;
     workbenchSource: ContributionsSource<WorkbenchViewExtension>;
     reportMarkdown: (sessionId:string, capabilities:MarkdownCapabilities[]) => Promise<void>;
+    prepareConversation: (sessionId: string) => Promise<string>;
   };
 
 const ROOT_READY_EVENT = "amiba:dsh-root-ready";
@@ -284,6 +292,7 @@ function AmibaRoot({
   workbenchSource,
   surfaces,
   reportMarkdown,
+  prepareConversation,
   useSessions,
   useWorkspaces,
 }: AmibaRootProps): ReactNode {
@@ -296,7 +305,7 @@ function AmibaRoot({
   }, []);
 
   return (
-    <WorkbenchExtensionsProvider extensions={workbench}><MarkdownProvider extensions={markdown} report={reportMarkdown}><AmibaProductShell
+    <ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench}><MarkdownProvider extensions={markdown} report={reportMarkdown}><AmibaProductShell
       dshClient={dshClient}
       openSettingsSection={openSettingsSection}
       renderSlot={renderSlot}
@@ -311,7 +320,7 @@ function AmibaRoot({
       messageSources={messageSources}
       useOfficialSessions={useSessions}
       useOfficialWorkspaces={useWorkspaces}
-    /></MarkdownProvider></WorkbenchExtensionsProvider>
+    /></MarkdownProvider></WorkbenchExtensionsProvider></ConversationSubmitProvider>
   );
 }
 
@@ -375,9 +384,14 @@ function dispatchLayoutAction(
 
 /** Register Amiba as the one DSH root owner and declare its child authority. */
 export async function apply(ctx: ClientContext): Promise<void> {
-  const disposeMarkdownRemote = await ctx.remote.$mount(MARKDOWN_REMOTE);
-  ctx.effect(() => disposeMarkdownRemote);
+  // Typert owns descriptors by package, so all shell namespaces mount together.
+  const disposeShellRemote = await ctx.remote.$mount({
+    package: MARKDOWN_REMOTE.package,
+    descriptors: [...MARKDOWN_REMOTE.descriptors, ...CONVERSATION_ENTRY_REMOTE.descriptors],
+  });
+  ctx.effect(() => disposeShellRemote);
   const reportMarkdown = await createMarkdownReporter(ctx);
+  const prepareConversation = await createConversationPreparer(ctx);
   const baseUrl =
     window.location.protocol === "file:"
       ? "http://dsh.internal"
@@ -583,6 +597,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           workbenchSource,
           surfaces,
           reportMarkdown,
+          prepareConversation,
           settingsSections: sectionsSource,
           settingsOnboardingSteps: onboardingSource,
           openSettingsSection: (sectionId: string) =>
@@ -623,6 +638,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
               openWorkspace: (viewId: string) => layout.openWorkspace(viewId),
             },
           },
+          "amiba.session.observer": { kind: "list", scope: "root" },
           "amiba.workspace.view": { kind: "list", scope: "root" },
           // Official vocabulary: the right-aligned session-header utilities
           // strip, from @deepseek-ai/dsh-client-ui-conversation (replaces

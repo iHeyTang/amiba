@@ -1,3 +1,5 @@
+import { upsertCompactionTimeline, interruptOpenCompactions } from "@amiba/app-runtime/dsh-client";
+import type { CompactionUpdate } from "@amiba/app-runtime/protocol";
 import { useCallback, useEffect, useRef } from "react";
 import { shortId } from "@amiba/app-runtime/utils";
 import {
@@ -85,6 +87,8 @@ export interface UseStreamBufferResult {
   onToolCalls: (calls: ToolCall[]) => void;
   /** Record a runtime tool-progress event in stable order. */
   onToolProgress: (ev: ToolProgress) => void;
+  onCompaction: (update: CompactionUpdate) => void;
+  finishCompactions: () => void;
   /** Push an approval marker into the verbose timeline so the chip
    * renders inline. Idempotent on `approvalId`. */
   onApprovalToTimeline: (approvalId: string) => void;
@@ -411,6 +415,17 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     [appendToolToVerboseTimeline, scheduleVerboseFlush],
   );
 
+  const onCompaction = useCallback((update: CompactionUpdate): void => {
+    const v = verboseStateRef.current;
+    if (v) upsertCompactionTimeline(v.timeline, update);
+    scheduleVerboseFlush();
+  }, [scheduleVerboseFlush]);
+
+  const finishCompactions = useCallback((): void => {
+    const v = verboseStateRef.current;
+    if (v) interruptOpenCompactions(v.timeline);
+  }, []);
+
   const getCurrentAssistantUiId = useCallback((): string | undefined => {
     return (
       verboseStateRef.current?.assistantUiId ??
@@ -428,6 +443,8 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     onReasoning,
     onToolCalls,
     onToolProgress,
+    onCompaction,
+    finishCompactions,
     onApprovalToTimeline: appendApprovalToVerboseTimeline,
     cancelStreamChunkFlush,
     cancelVerboseFlush,

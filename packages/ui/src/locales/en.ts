@@ -30,6 +30,12 @@
  */
 export const en = {
   // Generic
+  "sidepanel.compaction.unconfirmed": "Compaction status unavailable",
+  "sidepanel.compaction.running": "Compacting context…",
+  "sidepanel.compaction.completed": "Context compacted",
+  "sidepanel.compaction.failed": "Context compaction failed",
+  "sidepanel.compaction.interrupted": "Context compaction interrupted",
+  "sidepanel.compaction.stats": "{items} history items · ~{tokens} tokens",
   "common.add": "Add",
   "common.cancel": "Cancel",
   "common.back": "Back",
@@ -156,24 +162,6 @@ export const en = {
   "workspacePane.closeTerminalTab": "Close {title}",
   "workspacePane.hideTerminalPanel": "Hide terminal panel",
 
-  // Embedded browser
-  "embeddedBrowser.title": "Browser",
-  "embeddedBrowser.open": "Open browser",
-  "embeddedBrowser.close": "Close browser",
-  "embeddedBrowser.newTab": "New tab",
-  "embeddedBrowser.back": "Back",
-  "embeddedBrowser.forward": "Forward",
-  "embeddedBrowser.stop": "Stop loading",
-  "embeddedBrowser.addressPlaceholder": "Type a URL",
-  "embeddedBrowser.openExternal": "Open in default browser",
-  "embeddedBrowser.emptyTitle": "Browse and verify",
-  "embeddedBrowser.emptyDescription":
-    "Amiba can browse, click, type, and take screenshots here. Enter a URL above to start.",
-  "embeddedBrowser.previewPrompt": "Preview your app instead?",
-  "embeddedBrowser.detectDevServer": "Detect dev server",
-  "embeddedBrowser.detecting": "Detecting…",
-  "embeddedBrowser.noDevServer": "No local dev server detected",
-  "embeddedBrowser.agentOperating": "Agent is browsing",
   "workspacePane.recoveryPoints": "Recovery points",
   "workspacePane.recoveryPointsHint":
     "Automatic safety snapshots created before Agent changes.",
@@ -549,8 +537,7 @@ export const en = {
 
   // New tab
   "newtab.greeting": "What can I help with?",
-  "newtab.subtitle":
-    "Search the web, read a page, work with project files, run commands, or schedule work — just tell me what you need.",
+  "newtab.subtitle": "What shall we work on today?",
   // Typewriter cycle in the new-tab composer — keep each line short
   // enough to fit on one line at the default composer width (~640px)
   // and concrete enough to suggest a real capability rather than just

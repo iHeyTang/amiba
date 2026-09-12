@@ -1,34 +1,83 @@
-import type { SurfaceActivitySnapshot, SurfaceInteractionSnapshot } from "@amiba/extension-sdk";
+import { companionActions } from "../mofli-capabilities.generated.js";
+import type {
+  SurfaceActivitySnapshot,
+  SurfaceInteractionSnapshot,
+} from "@amiba/extension-sdk";
 
-export type CompanionScene = "idle" | "typing" | "thinking" | "responding" | "tooling" | "waiting" | "completed" | "failed" | "interrupted";
-export function companionScene(state?: SurfaceActivitySnapshot, input?: SurfaceInteractionSnapshot): CompanionScene {
-  if (state && !["idle", "completed"].includes(state.phase)) return state.phase as CompanionScene;
+export type CompanionScene =
+  | "loading"
+  | "idle"
+  | "typing"
+  | "thinking"
+  | "responding"
+  | "tooling"
+  | "waiting"
+  | "completed"
+  | "failed"
+  | "interrupted";
+export function companionScene(
+  state?: SurfaceActivitySnapshot,
+  input?: SurfaceInteractionSnapshot,
+): CompanionScene {
+  if (state && !["idle", "completed"].includes(state.phase))
+    return state.phase as CompanionScene;
   if (input?.input.active || input?.input.composing) return "typing";
   if (state?.phase === "completed" && !state.restored) return "completed";
   return "idle";
 }
-// Grove's shared expression vocabulary. Keep the body in its idle state;
-// business events select expressions, never the showroom's shape sequence.
-const sequences: Record<CompanionScene, readonly (readonly [number, number])[]> = {
-  idle: [[12, -1]],
-  typing: [[3, 1], [2, 11]],
-  thinking: [[3, 1], [2, 9], [3, 1]],
-  responding: [[4, 1], [2, -1]],
-  tooling: [[5, 1], [2, 11]],
-  waiting: [[3, 11], [3, -1]],
-  completed: [[1.4, 3], [2, 4], [3, -1]],
-  failed: [[2, 10], [3, 7], [3, -1]],
-  interrupted: [[1.5, 2], [2, -1]],
+// Published 0.1.1 supports expressions, but has no authored companion action table.
+const expressions: Record<CompanionScene, readonly (readonly [number, number])[]> = {
+  idle: [[12, -1]], loading: [[3, 1], [2, 9]],
+  typing: [[3, 1], [2, 11]], thinking: [[3, 1], [2, 9], [3, 1]],
+  responding: [[4, 1], [2, -1]], tooling: [[5, 1], [2, 11]],
+  waiting: [[3, 11], [3, -1]], completed: [[1.4, 3], [2, 4], [3, -1]],
+  failed: [[2, 10], [3, 7], [3, -1]], interrupted: [[1.5, 2], [2, -1]],
 };
-export function companionExpression(scene: CompanionScene, elapsed: number): number {
-  const steps = sequences[scene];
-  const duration = steps.reduce((n, [seconds]) => n + seconds, 0);
-  const once = ["completed", "failed", "interrupted"].includes(scene);
-  if (once && elapsed >= duration) return -1;
-  let local = Math.max(0, elapsed) % duration;
-  for (const [seconds, expression] of steps) {
-    if (local < seconds) return expression;
-    local -= seconds;
+function publishedPose(scene: CompanionScene, elapsed: number, reduced: boolean) {
+  const steps = expressions[scene];
+  const duration = steps.reduce((sum, [seconds]) => sum + seconds, 0);
+  if (["completed", "failed", "interrupted"].includes(scene) && elapsed >= duration)
+    return publishedPose("idle", elapsed - duration, reduced);
+  let time = reduced ? 0 : Math.max(0, elapsed) % duration;
+  let expression = -1;
+  for (const [seconds, value] of steps) {
+    if (time < seconds) { expression = value; break; }
+    time -= seconds;
   }
-  return -1;
+  return { state: 0, expression, action: `expression-${scene}`, followsPointer: scene === "idle" || scene === "waiting" };
+}
+/** Four authored body actions per scene. Index offset preserves existing saved poses. */
+export function companionPose(
+  scene: CompanionScene,
+  elapsed: number,
+  spatial = false,
+  reducedMotion = false,
+) {
+  const terminal = ["completed", "failed", "interrupted"].includes(scene);
+  const candidates = companionActions
+    .map((action, index) => ({ action, index }))
+    .filter(({ action }) => action.scene === scene);
+  if (!candidates.length) return publishedPose(scene, elapsed, reducedMotion);
+  const duration = candidates.reduce(
+    (sum, { action }) => sum + action.duration,
+    0,
+  );
+  if (terminal && elapsed >= duration)
+    return companionPose("idle", elapsed - duration, spatial, reducedMotion);
+  let local = reducedMotion ? 0 : Math.max(0, elapsed) % duration;
+  let selected = candidates[0];
+  for (const entry of candidates) {
+    selected = entry;
+    if (local < entry.action.duration) break;
+    local -= entry.action.duration;
+  }
+  const expression = selected.action.expression;
+  return {
+    state: selected.index + (spatial ? 8 : 14),
+    expression: spatial ? expression + 1 : expression,
+    action: selected.action.id,
+    // Task choreography owns attention. Terminal scenes recurse to idle above,
+    // so pointer attention resumes when their authored feedback has finished.
+    followsPointer: scene === "idle" || scene === "waiting",
+  };
 }

@@ -1,3 +1,4 @@
+import { upsertCompactionTimeline, interruptOpenCompactions } from "./compaction.js";
 import type {
   ApprovalDecision,
   ApprovalRequest,
@@ -323,6 +324,7 @@ export class DshChatEngineClient implements ChatEngineClient {
       case "reasoning":
       case "toolCalls":
       case "toolProgress":
+      case "compaction":
         if (!state?.passive) return;
         this.emit(sessionId, event);
         return;
@@ -362,6 +364,9 @@ export class DshChatEngineClient implements ChatEngineClient {
         state.reasoningEndedAt = now;
         break;
       }
+      case "compaction":
+        upsertCompactionTimeline(state.timeline, event.event);
+        break;
       case "toolProgress": {
         const index = state.toolProgress.findIndex(
           (item) => item.toolCallId === event.event.toolCallId,
@@ -430,9 +435,11 @@ export class DshChatEngineClient implements ChatEngineClient {
         break;
       case "done":
       case "aborted":
+        interruptOpenCompactions(state.timeline);
         state.streaming = false;
         break;
       case "error":
+        interruptOpenCompactions(state.timeline);
         state.streaming = false;
         state.error = {
           message: event.message,

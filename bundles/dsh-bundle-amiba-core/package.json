@@ -39,6 +39,7 @@
     "@amiba/dsh-plugin-provider-tokendance": "workspace:*",
     "@amiba/dsh-plugin-media": "workspace:*",
     "@amiba/dsh-plugin-media-minimax": "workspace:*",
-    "@amiba/dsh-plugin-pets": "workspace:*"
+    "@amiba/dsh-plugin-pets": "workspace:*",
+    "@amiba/dsh-plugin-conversation-notifications": "workspace:*"
   }
 }

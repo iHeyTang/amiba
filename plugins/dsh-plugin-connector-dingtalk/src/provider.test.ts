@@ -156,12 +156,12 @@ const rawTextMessage = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("createDingtalkProvider", () => {
-  it("has the expected static shape and no onboard method", () => {
+  it("has the expected static shape and supports onboarding", () => {
     const provider = createDingtalkProvider(fakeDeps());
     expect(provider.id).toBe("dingtalk");
     expect(typeof provider.name).toBe("string");
     expect(provider.configSchema).toBeDefined();
-    expect(typeof provider.onboard).toBe("undefined");
+    expect(typeof provider.onboard).toBe("function");
     expect(provider.capabilities(validConfig)).toHaveLength(1);
   });
 

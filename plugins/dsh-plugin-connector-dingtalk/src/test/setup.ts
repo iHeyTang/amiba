@@ -16,21 +16,23 @@ if (typeof globalThis.ResizeObserver === "undefined") {
   };
 }
 
-if (!HTMLElement.prototype.scrollIntoView) {
-  HTMLElement.prototype.scrollIntoView = function () {};
-}
+if (typeof HTMLElement !== "undefined") {
+  if (!HTMLElement.prototype.scrollIntoView) {
+    HTMLElement.prototype.scrollIntoView = function () {};
+  }
 
-// Radix Select/Dialog use pointer-capture APIs that jsdom does not implement.
-if (!HTMLElement.prototype.hasPointerCapture) {
-  HTMLElement.prototype.hasPointerCapture = function () {
-    return false;
-  };
-}
-if (!HTMLElement.prototype.setPointerCapture) {
-  HTMLElement.prototype.setPointerCapture = function () {};
-}
-if (!HTMLElement.prototype.releasePointerCapture) {
-  HTMLElement.prototype.releasePointerCapture = function () {};
+  // Radix Select/Dialog use pointer-capture APIs that jsdom does not implement.
+  if (!HTMLElement.prototype.hasPointerCapture) {
+    HTMLElement.prototype.hasPointerCapture = function () {
+      return false;
+    };
+  }
+  if (!HTMLElement.prototype.setPointerCapture) {
+    HTMLElement.prototype.setPointerCapture = function () {};
+  }
+  if (!HTMLElement.prototype.releasePointerCapture) {
+    HTMLElement.prototype.releasePointerCapture = function () {};
+  }
 }
 
 // Components under test reach for the platform via `useT()` (i18n) and other

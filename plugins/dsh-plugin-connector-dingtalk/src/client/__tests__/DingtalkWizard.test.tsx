@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConnectWizardHost } from "@amiba/dsh-plugin-connector-core/client";
 
 import { DingtalkWizard } from "../DingtalkWizard";
@@ -91,6 +91,10 @@ function typeName(value = "Bot") {
 const closeButton = () => screen.getByRole("button", { name: /关闭|Close/ });
 
 function fillIds({ clientId = "cid", clientSecret = "sec" } = {}) {
+  const manual = screen.queryByRole("button", {
+    name: /高级设置|Advanced:/,
+  });
+  if (manual) fireEvent.click(manual);
   fireEvent.change(screen.getByLabelText("Client ID"), {
     target: { value: clientId },
   });
@@ -157,6 +161,7 @@ describe("DingtalkWizard", () => {
     const host = hostWith();
     render(<DingtalkWizard host={host} />);
     typeName("Bot");
+    fillIds();
     fireEvent.change(screen.getByLabelText("Client ID"), {
       target: { value: " cid " },
     });
@@ -177,6 +182,7 @@ describe("DingtalkWizard", () => {
     const host = hostWith();
     render(<DingtalkWizard host={host} />);
     typeName("Bot");
+    fillIds({ clientId: "", clientSecret: "" });
     expect(submitButton()).toBeDisabled();
     expect(host.adapter.create).not.toHaveBeenCalled();
   });
@@ -216,6 +222,134 @@ describe("DingtalkWizard", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText("agent_preset_required")).not.toBeInTheDocument();
+    expect(host.done).not.toHaveBeenCalled();
+  });
+});
+
+describe("DingtalkWizard quick connection", () => {
+  afterEach(() => vi.useRealTimers());
+  const startButton = () =>
+    screen.getByRole("button", { name: /开始快速连接|Start quick connection/ });
+  const manualButton = () =>
+    screen.getByRole("button", { name: /高级设置|Advanced:/ });
+  function setupScan() {
+    vi.useFakeTimers();
+    const host = hostWith({ prefill: { name: "Bot" } });
+    vi.mocked(host.adapter.beginOnboarding).mockResolvedValue({
+      sessionId: "s1",
+      state: "pending",
+    });
+    const view = render(<DingtalkWizard host={host} />);
+    return { host, ...view };
+  }
+  async function start() {
+    await act(async () => fireEvent.click(startButton()));
+  }
+  async function poll() {
+    await act(async () => vi.advanceTimersByTimeAsync(1500));
+  }
+  it("defaults to quick connection and completes using the server-created connection", async () => {
+    const { host } = setupScan();
+    expect(screen.queryByLabelText("Client ID")).not.toBeInTheDocument();
+    await start();
+    expect(host.adapter.beginOnboarding).toHaveBeenCalledWith({
+      provider: "dingtalk",
+      name: "Bot",
+      agentPreset: "restricted",
+    });
+    vi.mocked(host.adapter.pollOnboarding).mockResolvedValueOnce({
+      sessionId: "s1",
+      state: "pending",
+      qrUrl: "https://open-dev.dingtalk.com/authorize",
+      statusNote: "polling",
+    });
+    await poll();
+    expect(
+      screen.getByRole("img", { name: /钉钉授权|DingTalk authorization/ }),
+    ).toBeInTheDocument();
+    const connect = { id: "created" } as never;
+    vi.mocked(host.adapter.pollOnboarding).mockResolvedValueOnce({
+      sessionId: "s1",
+      state: "completed",
+      connect,
+    });
+    await poll();
+    await poll();
+    expect(host.done).toHaveBeenCalledTimes(1);
+    expect(host.done).toHaveBeenCalledWith(connect);
+    expect(host.adapter.create).not.toHaveBeenCalled();
+  });
+  it("cancels polling when switching to manual input", async () => {
+    const { host } = setupScan();
+    await start();
+    await act(async () => fireEvent.click(manualButton()));
+    await poll();
+    expect(host.adapter.cancelOnboarding).toHaveBeenCalledWith("s1");
+    expect(host.adapter.pollOnboarding).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Client ID")).toBeInTheDocument();
+  });
+  it("cancels a session returned after the wizard was closed", async () => {
+    const { host, unmount } = setupScan();
+    let resolve!: (v: never) => void;
+    vi.mocked(host.adapter.beginOnboarding).mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolve = r;
+        }),
+    );
+    await start();
+    unmount();
+    await act(async () =>
+      resolve({ sessionId: "late", state: "pending" } as never),
+    );
+    expect(host.adapter.cancelOnboarding).toHaveBeenCalledWith("late");
+    expect(host.done).not.toHaveBeenCalled();
+  });
+  it("offers a fresh scan after expiration", async () => {
+    const { host } = setupScan();
+    await start();
+    vi.mocked(host.adapter.pollOnboarding).mockResolvedValueOnce({
+      sessionId: "s1",
+      state: "error",
+      error: "dingtalk_registration_expired",
+    });
+    await poll();
+    expect(
+      screen.getByText(/授权已过期|Authorization expired/),
+    ).toBeInTheDocument();
+    expect(startButton()).toBeEnabled();
+    await start();
+    expect(host.adapter.beginOnboarding).toHaveBeenCalledTimes(2);
+  });
+  it("cancels the server session and permits retry after a polling transport failure", async () => {
+    const { host } = setupScan();
+    await start();
+    vi.mocked(host.adapter.pollOnboarding).mockRejectedValueOnce(
+      new Error("network offline"),
+    );
+    await poll();
+    expect(host.adapter.cancelOnboarding).toHaveBeenCalledWith("s1");
+    expect(startButton()).toBeEnabled();
+  });
+  it("ignores a stale successful poll after switching to manual mode", async () => {
+    const { host } = setupScan();
+    await start();
+    let resolve!: (v: never) => void;
+    vi.mocked(host.adapter.pollOnboarding).mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolve = r;
+        }),
+    );
+    await poll();
+    await act(async () => fireEvent.click(manualButton()));
+    await act(async () =>
+      resolve({
+        sessionId: "s1",
+        state: "completed",
+        connect: { id: "stale" },
+      } as never),
+    );
     expect(host.done).not.toHaveBeenCalled();
   });
 });

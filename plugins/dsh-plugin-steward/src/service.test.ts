@@ -1,3 +1,5 @@
+import { ConversationLifecycle } from "@amiba/dsh-plugin-session-features";
+import { dirname } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { DISPATCH_FOOTER, STEWARD_TITLE } from "./service.js";
@@ -639,4 +641,61 @@ it("disposes a newly created steward if ownership persistence fails", async () =
   vi.spyOn(store, "mutate").mockRejectedValueOnce(new Error("disk full"));
   await expect(service.ensureStewardSessionId()).rejects.toThrow("disk full");
   expect(disposed).toEqual([created[0]!.sessionId]);
+});
+
+
+describe("StewardService — shared conversation lifecycle", () => {
+  it("configures and requests a new conversation without starting work from settings", async () => {
+    const { service, store, reflectServices, created } = harness();
+    reflectServices.set("amibaConversations", new ConversationLifecycle(dirname(store.path)));
+    expect((await service.conversationSettings("status")).history).toEqual([]);
+    expect(created).toHaveLength(0);
+    const configured = await service.conversationSettings("configure", "manual");
+    expect(configured.policy.cadence).toBe("manual");
+    expect(created).toHaveLength(0);
+    const first = await service.ensureStewardSessionId();
+    const pending = await service.conversationSettings("new");
+    expect(pending.currentSessionId).toBe(first);
+    expect(pending.pendingNewConversation).toBe(true);
+    expect(await service.ensureStewardSessionId()).toBe(first);
+    const next = await service.prepareStewardSession(first);
+    expect(next).not.toBe(first);
+    expect((await service.conversationSettings("status")).history).toHaveLength(2);
+    await expect(service.conversationSettings("configure")).rejects.toThrow("cadence_required");
+    await service.dispose();
+  });
+  it("advances only on send, keeps old work alive, and rejects adopting prior steward history", async () => {
+    const { service, store, reflectServices, live, created, disposed } = harness();
+    let now = Date.now();
+    const lifecycle = new ConversationLifecycle(dirname(store.path), () => now);
+    reflectServices.set("amibaConversations", lifecycle);
+    const first = await service.ensureStewardSessionId();
+    let finish!: () => void;
+    live.get(first)!.whenIdle.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+    now += 48 * 60 * 60 * 1000;
+    expect(await service.ensureStewardSessionId()).toBe(first);
+    expect(created).toHaveLength(1);
+    const second = await service.prepareStewardSession(first);
+    expect(second).not.toBe(first);
+    expect(disposed).not.toContain(first);
+    expect(await service.stewardConversationIds()).toEqual([first, second]);
+    await expect(service.adopt({ sessionId: first })).rejects.toThrow("own session");
+    await expect(service.prepareStewardSession("unrelated")).rejects.toThrow("does not belong");
+    finish();
+    await vi.waitFor(() => expect(disposed).toContain(first));
+    await service.dispose();
+  });
+  it("serializes competing sends and preserves independent task sessions across rollover", async () => {
+    const { service, store, reflectServices, created } = harness();
+    let now = Date.now();
+    reflectServices.set("amibaConversations", new ConversationLifecycle(dirname(store.path), () => now));
+    const first = await service.ensureStewardSessionId();
+    const task = await service.dispatch({ newTask: { title: "Long work" }, message: "work" });
+    now += 48 * 60 * 60 * 1000;
+    const results = await Promise.all([service.prepareStewardSession(first), service.prepareStewardSession(first)]);
+    expect(results[0]).toBe(results[1]);
+    expect(created).toHaveLength(3);
+    expect((await service.listTasks(true)).map((item) => item.sessionId)).toContain(task.sessionId);
+    await service.dispose();
+  });
 });

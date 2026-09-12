@@ -13,9 +13,32 @@ const { PetService } = await import(
 const { StudioHost } = await import(
   "../../../plugins/dsh-plugin-pets/lib/studio.js"
 );
+if (process.env.AMIBA_TEST_DESKTOP_PET) {
+  await createRequire(require.resolve("vite"))("esbuild").build({
+    entryPoints: [
+      path.join(root, "apps/desktop/src/main/desktop-pet-window.ts"),
+    ],
+    outfile: path.join(root, "apps/desktop/out/main/desktop-pet-smoke.mjs"),
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    external: ["electron"],
+  });
+}
 const studio = new StudioHost();
 const profile = await mkdtemp(path.join(tmpdir(), "amiba-surfaces-"));
 const pets = new PetService(profile);
+const { AmibaNotificationHub } = await import("../../../plugins/dsh-plugin-notification-hub/lib/index.js");
+const notifications = new AmibaNotificationHub({ logger: { warn: console.warn } }, profile);
+const notificationMethods = {
+  watch: (after, subscriber) => notifications.watch(after,subscriber),
+  cancelWatch: (subscriber) => { notifications.cancelWatch(subscriber); return true; },
+  dismiss: (id) => { notifications.dismiss(id); return true; },
+  markSessionsRead: (reads) => { notifications.markSessionsRead(reads); return true; },
+  testPost: (input) => notifications.post(input),
+  testActivity: (id, title, status) => { notifications.setSessionActivity(id, title, status); return true; },
+  testRename: (id, title) => { notifications.renameSession(id, title); return true; },
+};
 const server = await createServer({
   configFile: false,
   plugins: [
@@ -29,9 +52,11 @@ const server = await createServer({
             const method = req.url.slice(1);
             const args = JSON.parse(raw);
             const value =
-              method === "studio"
+              notificationMethods[method] ? await notificationMethods[method](...args) : method === "studio"
                 ? await studio.open()
-                : await pets[method === "deletePet" ? "remove" : method](...args);
+                : await pets[method === "deletePet" ? "remove" : method](
+                    ...args,
+                  );
             res.setHeader("content-type", "application/json");
             res.end(JSON.stringify({ ok: true, value }));
           } catch (e) {
@@ -82,17 +107,36 @@ try {
     ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
   };
   delete env.ELECTRON_RUN_AS_NODE;
-  const child = spawn(
-    require("electron"),
-    [fileURLToPath(new URL("./fixtures/pets-smoke.mjs", import.meta.url))],
-    { env, stdio: "inherit" },
-  );
-  const timer = setTimeout(() => child.kill("SIGTERM"), 90000);
-  const code = await new Promise((resolve) =>
-    child.once("exit", (code) => resolve(code ?? 1)),
-  );
-  clearTimeout(timer);
-  process.exitCode = code;
+  const run = async (restore = false) => {
+    const child = spawn(
+      require("electron"),
+      [
+        fileURLToPath(
+          new URL(
+            process.env.AMIBA_TEST_PET_PAGE
+              ? "./fixtures/pet-page-smoke.mjs"
+              : process.env.AMIBA_TEST_DESKTOP_PET
+              ? "./fixtures/desktop-pet-smoke.mjs"
+              : "./fixtures/pets-smoke.mjs",
+            import.meta.url,
+          ),
+        ),
+      ],
+      {
+        env: { ...env, ...(restore ? { AMIBA_TEST_PET_RESTORE: "1" } : {}) },
+        stdio: "inherit",
+      },
+    );
+    const timer = setTimeout(() => child.kill("SIGTERM"), 90000);
+    const code = await new Promise((resolve) =>
+      child.once("exit", (code) => resolve(code ?? 1)),
+    );
+    clearTimeout(timer);
+    return code;
+  };
+  process.exitCode = await run();
+  if (!process.exitCode && process.env.AMIBA_TEST_DESKTOP_PET)
+    process.exitCode = await run(true);
 } finally {
   studio.dispose();
   await server.close();

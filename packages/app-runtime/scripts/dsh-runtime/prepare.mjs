@@ -1,5 +1,5 @@
 import { canReuseAddedDependencies } from "./reuse-dependencies.mjs";
-import { validateDependencyLock } from "./dependency-lock.mjs";
+import { validateDependencyLock, validatePluginBuildSources } from "./dependency-lock.mjs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -160,7 +160,7 @@ async function sourceFiles(root) {
       if (entry.isDirectory()) await visit(target);
       else if (
         entry.isFile() &&
-        !/\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(entry.name)
+        !/\.(?:test|spec|generated)\.[cm]?[jt]sx?$/u.test(entry.name)
       ) {
         files.push(target);
       }
@@ -205,19 +205,27 @@ async function computeAmibaSourceDigest() {
       "tsconfig.build.json",
       "vite.config.ts",
       "vite.host.config.ts",
+      "vite.native.config.ts",
       "tailwind.config.cjs",
+      "tailwind-preset.cjs",
       "postcss.config.cjs",
       "cordis.patch.yml",
     ]) {
       const target = path.join(directory, name);
       if (fs.existsSync(target)) files.push(target);
     }
+    const scriptsDir = path.join(directory, "scripts");
+    if (fs.existsSync(scriptsDir)) files.push(...(await sourceFiles(scriptsDir)));
     const sourceDir = path.join(directory, "src");
     if (fs.existsSync(sourceDir)) files.push(...(await sourceFiles(sourceDir)));
   }
   const patchesDir = path.join(workspaceDir, "patches");
   if (fs.existsSync(patchesDir)) files.push(...(await sourceFiles(patchesDir)));
   files.push(path.join(workspaceDir, "package.json"));
+  files.push(path.join(workspaceDir, "scripts/dsh-client-inputs.mjs"));
+  for (const name of ["pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.json", "tsconfig.dsh-plugin.json"]) {
+    files.push(path.join(workspaceDir, name));
+  }
   const hash = createHash("sha256");
   for (const file of files.sort()) {
     hash.update(path.relative(workspaceDir, file));
@@ -228,6 +236,7 @@ async function computeAmibaSourceDigest() {
   return hash.digest("hex");
 }
 
+await validatePluginBuildSources(workspaceDir, pluginPackages.map((manifest, index) => ({ manifest, directory: pluginSourceDirs[index] })));
 const amibaSourceDigest = await computeAmibaSourceDigest();
 
 /**
@@ -305,6 +314,7 @@ function expectedMarker() {
     nodeVersion: declaration.nodeVersion,
     amibaPluginRevision: declaration.amibaPluginRevision,
     amibaSourceDigest,
+    dependencyInstallMode: "locked-npm-v1",
     appTreeHash,
     dependencyLockHash,
     platform: process.platform,
@@ -430,6 +440,8 @@ function verify(root = outputDir) {
         ? [amibaPluginClient(root, pluginNames[index])]
         : [],
     ),
+    ...pluginPackages.flatMap((manifest, index) => [manifest.dsh?.native, manifest.dsh?.bundle?.patch]
+      .filter(Boolean).map(entry => path.join(root, "app/node_modules/@amiba", pluginNames[index], entry))),
     ...bundleNames.map((name) => amibaPatch(root, name)),
     path.join(
       root,
@@ -649,6 +661,8 @@ async function reuseAppDependencyTree(appDir) {
     const installedMarker = JSON.parse(
       await fsp.readFile(installedMarkerPath, "utf8"),
     );
+    // Only reuse trees created by the registry-only installer, never earlier injected trees.
+    if (installedMarker.dependencyInstallMode !== "locked-npm-v1") return false;
     const sameDependencies = installedMarker.appTreeHash === appTreeHash;
     const existingPromotions = !sameDependencies && installedMarker.dependencyLockHash === dependencyLockHash && Boolean(installedMarker.appTreeHash) && await canReuseAddedDependencies(
       JSON.parse(await fsp.readFile(path.join(outputDir, "app", "package.json"), "utf8")),
@@ -767,6 +781,10 @@ try {
         path.join(pluginDestination, "package.json"),
       ),
     ]);
+    const patch = pluginPackages[index].dsh?.bundle?.patch;
+    if (patch) {
+      await fsp.copyFile(path.join(pluginSourceDir, patch), path.join(pluginDestination, patch));
+    }
   }
   for (const [index, bundleSourceDir] of bundleSourceDirs.entries()) {
     const bundleDestination = path.join(amibaScope, bundleNames[index]);

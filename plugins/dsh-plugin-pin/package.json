@@ -19,6 +19,7 @@
   },
   "dsh": {
     "client": {
+      "external": [],
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-api-remotes",

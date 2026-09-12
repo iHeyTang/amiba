@@ -7,7 +7,10 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "exports": {
-    ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
     "./client": {
       "types": "./lib/client/index.d.ts",
       "default": "./lib/client.js"
@@ -16,6 +19,11 @@
   },
   "dsh": {
     "client": {
+      "external": [
+        "@amiba/dsh-plugin-ui-shell/client",
+        "react",
+        "react/jsx-runtime"
+      ],
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-api-remotes",
@@ -25,7 +33,9 @@
       "platform": "web"
     }
   },
-  "files": ["lib"],
+  "files": [
+    "lib"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && vite build",
     "typecheck": "tsc --noEmit",
@@ -37,10 +47,13 @@
     "@amiba/ui": "workspace:*",
     "dingtalk-stream": "2.1.6-beta.1",
     "@deepseek-ai/schemastery": "catalog:",
+    "qrcode-generator": "^2.0.4",
     "lucide-react": "^0.460.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@amiba/dsh-plugin-resources": "workspace:*",
+    "@deepseek-ai/dsh-typert-protocol": "catalog:"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",

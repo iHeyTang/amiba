@@ -3,10 +3,15 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
 /** Connection-owned copy; provider-specific copy stays in each provider plugin. */
 export const connectI18n: PluginCatalogOverlay = {
   en: {
+    "options.connect.dsh.account.customize": "Manage connection and advanced settings",
     "options.connect.dsh.account.presetHint":
       "Used for new conversations; existing conversations keep their current preset.",
     "options.connect.dsh.account.save": "Save",
     "options.connect.dsh.account.messaging": "Messages and access",
+    "options.connect.dsh.account.diagnostics": "Connection diagnostics",
+    "options.connect.dsh.account.retryReplies": "Retry failed replies",
+    "options.connect.dsh.account.nothingToRetry": "No replies are eligible for retry. Approval prompts and archived conversations cannot be resent.",
+    "options.connect.dsh.account.deliveryFailed": "Some replies could not be sent. Check the connection status; details are available in diagnostics.",
     "options.connect.dsh.account.owners": "Allowed users",
     "options.connect.dsh.account.pairing":
       "The first person to message this connection becomes its owner. Set IDs below to restrict access beforehand.",
@@ -117,10 +122,15 @@ export const connectI18n: PluginCatalogOverlay = {
     "options.connect.dsh.tool.failed": "Failed",
   },
   "zh-CN": {
+    "options.connect.dsh.account.customize": "连接管理与高级设置",
     "options.connect.dsh.account.presetHint":
       "用于新会话，已有会话继续使用原预设。",
     "options.connect.dsh.account.save": "保存",
     "options.connect.dsh.account.messaging": "消息与访问",
+    "options.connect.dsh.account.diagnostics": "连接诊断",
+    "options.connect.dsh.account.retryReplies": "重试未发送的回复",
+    "options.connect.dsh.account.nothingToRetry": "没有可重试的回复。审批提示和已归档对话不会重新发送。",
+    "options.connect.dsh.account.deliveryFailed": "有回复未能发送，请检查连接状态；具体原因可在连接诊断中查看。",
     "options.connect.dsh.account.owners": "允许访问的用户",
     "options.connect.dsh.account.pairing":
       "首位发消息的用户会成为所有者。也可以先在下方指定允许访问的用户。",

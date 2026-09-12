@@ -26,7 +26,7 @@ export const name = "amiba-steward";
 // on-demand via `ctx.reflect.get` — the same non-throwing, point-in-time
 // lookup already used for the optional `agentDefaultModel` service — and
 // treats its absence as "nothing is archived".
-export const inject = ["agents", "sessions", "tools", "agentPresets", "sessionPersistence", "sessionQuery", "sessionTitle", "systemPrompt", "amibaSessionFeatures"];
+export const inject = ["agents", "sessions", "tools", "agentPresets", "sessionPersistence", "sessionQuery", "sessionTitle", "systemPrompt", "amibaSessionFeatures", "amibaConversations"];
 
 export interface Config {
   root: string;
@@ -59,6 +59,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     basePreset: config.basePreset,
     onStewardSetup: (agentCtx) => ctx.amibaSessionFeatures.ensure(agentCtx, [{ sessionId: "", plugin: name, version: 1 }]),
   });
+  ctx.effect(() => ctx.amibaConversations.registerSubmitHandler(name, (_origin, sessionId) => service.prepareStewardSession(sessionId)), "amiba-steward.conversations");
   ctx.effect(() => ctx.amibaSessionFeatures.register(name, { version: 1, install: (agentCtx) => installStewardExtension(agentCtx, service) }), "amiba-steward.feature");
   // The disposer returns the teardown promise so unload waits for the
   // steward agent to actually go away (cordis effect disposers may be async).

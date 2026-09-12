@@ -7,6 +7,7 @@ import type {
   ConnectView,
 } from "../types.js";
 import type { ConnectAdapter } from "./adapter.js";
+import type { MessageConversationSettingsInput } from "../remote.js";
 import type {
   ConnectorUIContribution,
   PresetOption,
@@ -46,9 +47,22 @@ export function ConnectAccountPage({
   const [name, setName] = useState(connect.name);
   const [preset, setPreset] = useState(connect.agentPreset ?? "");
   const [owners, setOwners] = useState(connect.owners.join(", "));
+  const [nothingToRetry, setNothingToRetry] = useState(false);
   const Settings = entry?.settings;
   const refresh = useCallback(async () => {
     setDetails(await adapter.details(connect.id));
+  }, [adapter, connect.id]);
+  const manageConversation = useCallback((key: string, input: MessageConversationSettingsInput) => {
+    if (!adapter.conversationSettings) return Promise.reject(new Error("conversation_owner_unavailable"));
+    return adapter.conversationSettings(connect.id, key, input);
+  }, [adapter, connect.id]);
+  const searchResources = useCallback((key: string, query: string) => {
+    if (!adapter.searchConversationResources) return Promise.reject(new Error("resource_source_unavailable"));
+    return adapter.searchConversationResources(connect.id, key, query);
+  }, [adapter, connect.id]);
+  const shareResources = useCallback((key: string, references: string[]) => {
+    if (!adapter.shareConversationResources) return Promise.reject(new Error("resource_source_unavailable"));
+    return adapter.shareConversationResources(connect.id, key, references);
   }, [adapter, connect.id]);
   useEffect(() => {
     let active = true;
@@ -88,22 +102,65 @@ export function ConnectAccountPage({
     void run(operation).catch(() => undefined);
   };
   const preview = async (action: "remove" | "disable") => {
-    setBusy(true); setError(null);
+    setBusy(true);
+    setError(null);
     try {
       setDetails(await adapter.details(connect.id));
-      if (action === "remove") setRemoving(true); else setDisabling(true);
-    } catch (cause) { setError(describeError(t, cause)); }
-    finally { setBusy(false); }
+      if (action === "remove") setRemoving(true);
+      else setDisabling(true);
+    } catch (cause) {
+      setError(describeError(t, cause));
+    } finally {
+      setBusy(false);
+    }
   };
   const impact = details?.capabilityUses?.length ? (
     <div className="space-y-1 text-sm">
       <p>{t("options.connect.dsh.account.affected")}</p>
-      <ul className="space-y-1 text-muted-foreground">{details.capabilityUses.map((use, index) => <li key={`${use.name}-${index}`}>
-        <span className="font-medium">{use.name}</span> · {use.capabilities.join("、")}
-      </li>)}</ul>
+      <ul className="space-y-1 text-muted-foreground">
+        {details.capabilityUses.map((use, index) => (
+          <li key={`${use.name}-${index}`}>
+            <span className="font-medium">{use.name}</span> ·{" "}
+            {use.capabilities.join("、")}
+          </li>
+        ))}
+      </ul>
     </div>
   ) : null;
 
+  const basics = (
+    <form
+      className="space-y-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        act(() => adapter.update(connect.id, { name, agentPreset: preset }));
+      }}
+    >
+      <BasicsFields
+        name={name}
+        onNameChange={setName}
+        preset={preset}
+        onPresetChange={setPreset}
+        presets={presets}
+      />
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-sm text-muted-foreground">
+          {t("options.connect.dsh.account.presetHint")}
+        </p>
+        <Button
+          type="submit"
+          disabled={
+            busy ||
+            !name.trim() ||
+            !preset ||
+            (name === connect.name && preset === connect.agentPreset)
+          }
+        >
+          {t("options.connect.dsh.account.save")}
+        </Button>
+      </div>
+    </form>
+  );
   return (
     <div className="max-w-3xl space-y-8" data-connect-account={connect.id}>
       <Button
@@ -132,7 +189,11 @@ export function ConnectAccountPage({
         <Button
           variant="ghost"
           disabled={busy}
-          onClick={() => connect.enabled ? void preview("disable") : act(() => adapter.setEnabled(connect.id, true))}
+          onClick={() =>
+            connect.enabled
+              ? void preview("disable")
+              : act(() => adapter.setEnabled(connect.id, true))
+          }
         >
           <Power />
           {t(
@@ -142,51 +203,41 @@ export function ConnectAccountPage({
           )}
         </Button>
       </header>
-      {disabling ? <div className="space-y-3 rounded-xl border border-border p-4">
-        <p className="text-sm">{t("options.connect.dsh.account.disableHint")}</p>
-        {impact}
-        <div className="flex gap-2">
-          <Button variant="outline" disabled={busy} onClick={() => setDisabling(false)}>{t("options.connect.dsh.cancel")}</Button>
-          <Button disabled={busy} onClick={() => act(async () => { await adapter.setEnabled(connect.id, false); setDisabling(false); })}>{t("options.connect.dsh.disable")}</Button>
+      {disabling ? (
+        <div className="space-y-3 rounded-xl border border-border p-4">
+          <p className="text-sm">
+            {t("options.connect.dsh.account.disableHint")}
+          </p>
+          {impact}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => setDisabling(false)}
+            >
+              {t("options.connect.dsh.cancel")}
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={() =>
+                act(async () => {
+                  await adapter.setEnabled(connect.id, false);
+                  setDisabling(false);
+                })
+              }
+            >
+              {t("options.connect.dsh.disable")}
+            </Button>
+          </div>
         </div>
-      </div> : null}
+      ) : null}
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
       ) : null}
-      <form
-        className="space-y-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          act(() => adapter.update(connect.id, { name, agentPreset: preset }));
-        }}
-      >
-        <BasicsFields
-          name={name}
-          onNameChange={setName}
-          preset={preset}
-          onPresetChange={setPreset}
-          presets={presets}
-        />
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">
-            {t("options.connect.dsh.account.presetHint")}
-          </p>
-          <Button
-            type="submit"
-            disabled={
-              busy ||
-              !name.trim() ||
-              !preset ||
-              (name === connect.name && preset === connect.agentPreset)
-            }
-          >
-            {t("options.connect.dsh.account.save")}
-          </Button>
-        </div>
-      </form>
-      {accessPanel}
+      {!entry?.settingsFirst && basics}
+      {!entry?.settingsFirst && accessPanel}
       {!details ? (
         <Loader2
           className="h-4 w-4 animate-spin text-muted-foreground"
@@ -199,11 +250,31 @@ export function ConnectAccountPage({
               host={{
                 connect,
                 settings: details.settings,
+                ...(details.messaging && adapter.conversationSettings ? { conversations: { items: details.messaging.conversations, manage: manageConversation, refresh, searchResources, shareResources } } : {}),
                 save: async (settings) => {
                   await run(() => adapter.update(connect.id, { settings }));
                 },
               }}
             />
+          ) : null}
+          {entry?.settingsFirst && (
+            <details className="space-y-4">
+              <summary className="cursor-pointer text-sm text-muted-foreground">
+                {t("options.connect.dsh.account.customize")}
+              </summary>
+              {basics}
+              {accessPanel}
+            </details>
+          )}
+          {provider?.messaging?.sharedConversations && details.messaging?.delivery.lastDeliveryError ? (
+            <div className="space-y-2"><p role="status" className="text-sm text-destructive">{t("options.connect.dsh.account.deliveryFailed")}</p>
+              {adapter.retryFailedReplies ? <Button variant="outline" size="sm" disabled={busy || !connect.enabled} onClick={() => act(async () => {
+                setNothingToRetry(false);
+                const result = await adapter.retryFailedReplies!(connect.id);
+                setNothingToRetry(result.retried === 0);
+              })}>{t("options.connect.dsh.account.retryReplies")}</Button> : null}
+              {nothingToRetry ? <p role="status" className="text-sm text-muted-foreground">{t("options.connect.dsh.account.nothingToRetry")}</p> : null}
+            </div>
           ) : null}
           {details.messaging ? (
             <details className="group space-y-5">
@@ -212,9 +283,9 @@ export function ConnectAccountPage({
                   className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90 motion-reduce:transition-none"
                   aria-hidden="true"
                 />
-                {t("options.connect.dsh.account.messaging")}
+                {t(provider?.messaging?.sharedConversations ? "options.connect.dsh.account.diagnostics" : "options.connect.dsh.account.messaging")}
               </summary>
-              {provider?.messaging?.ownerPairing ? (
+              {provider?.messaging?.ownerPairing && !provider.messaging.sharedConversations ? (
                 <form
                   className="space-y-3"
                   onSubmit={(event) => {
@@ -322,7 +393,10 @@ export function ConnectAccountPage({
       <div className="pt-2">
         {removing ? (
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <div className="flex-1 space-y-3"><p>{t("options.connect.dsh.account.removeHint")}</p>{impact}</div>
+            <div className="flex-1 space-y-3">
+              <p>{t("options.connect.dsh.account.removeHint")}</p>
+              {impact}
+            </div>
             <Button
               variant="ghost"
               onClick={() => setRemoving(false)}

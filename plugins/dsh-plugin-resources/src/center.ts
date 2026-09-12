@@ -64,6 +64,7 @@ export class ResourceCenter {
       if (this.sources.get(source.id) === entry) this.sources.delete(source.id);
     };
   }
+  listSources(): string[] { return [...this.sources.keys()]; }
   dispose(): void {
     for (const item of this.sources.values()) item.controller.abort();
     this.sources.clear();
@@ -80,7 +81,7 @@ export class ResourceCenter {
     if (request.source && !entries.length)
       return {
         items: [],
-        unavailable: [{ source: request.source, reason: "source_unavailable" }],
+        unavailable: [{ source: request.source, reason: "source_not_registered" }],
       };
     const results = await Promise.all(
       entries.map(async (entry): Promise<ResourceSearchResult> => {
@@ -119,7 +120,7 @@ export class ResourceCenter {
               ...(item.connectionId
                 ? { connectionId: item.connectionId.slice(0, 512) }
                 : {}),
-              reason: "permission_or_source_unavailable",
+              reason: ["connection_unavailable", "personal_authorization_required", "personal_authorization_expired", "agent_access_disabled", "permission_required", "resource_kind_unavailable", "permission_or_resource_unavailable", "search_failed"].includes(item.reason) ? item.reason : "permission_or_source_unavailable",
             })),
           };
         } catch {

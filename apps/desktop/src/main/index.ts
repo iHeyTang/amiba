@@ -1,3 +1,4 @@
+import { installDesktopPetWindow } from "./desktop-pet-window";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import type net from "node:net";
@@ -6,6 +7,7 @@ import {
   Menu,
   app,
   ipcMain,
+  webContents,
   nativeImage,
   nativeTheme,
   session,
@@ -29,14 +31,6 @@ process.on("uncaughtException", (err) => {
   console.error("[main] uncaughtException:", err);
 });
 
-import {
-  createNotifierWindow,
-  destroyNotifierWindow,
-  hideNotifier,
-  showDemoNotifier,
-  showPluginNotification,
-} from "./notifier-window";
-import { pluginNotificationOperation } from "./plugin-notification";
 import { buildAppMenuTemplate } from "./app-menu";
 import {
   createQuickAskWindow,
@@ -55,13 +49,13 @@ import {
 import { startHotkeyManager, stopHotkeyManager } from "./hotkey";
 import { registerIpcHandlers } from "./ipc";
 import { registerEmbeddedPageHandlers } from "./embedded-page";
-import { embeddedBrowserController } from "./embedded-browser";
+import { DesktopExtensionHost } from "./desktop-extensions";
 import { createMainPlatformAdapter } from "./platform";
 import { cleanupOldSnips } from "./screen-capture";
 import { startWorkspaceManager, stopWorkspaceManager } from "./workspace";
 import { disposeWorkspaceDevelopment } from "./workspace-development";
 import { mainStore } from "./storage";
-import { dshRuntime } from "./dsh-runtime";
+import { dshRuntime, managedDshPaths } from "./dsh-runtime";
 import {
   startDshNativeGateway,
   type DshNativeGateway,
@@ -71,7 +65,9 @@ import { resolveUserDataOverride } from "./user-data";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const userDataOverride = resolveUserDataOverride(process.env.AMIBA_USER_DATA_DIR);
+const userDataOverride = resolveUserDataOverride(
+  process.env.AMIBA_USER_DATA_DIR,
+);
 if (userDataOverride) app.setPath("userData", userDataOverride);
 
 const isDev = !app.isPackaged;
@@ -203,25 +199,39 @@ function installPermissionRequestHandler(): void {
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) =>
     allowed.has(permission),
   );
-
-  // Arbitrary pages loaded in the built-in browser use a separate persistent
-  // session for cookies/login state. They do not inherit Amiba renderer
-  // privileges: sites may render normally, but camera, microphone,
-  // notifications, MIDI, and other privileged requests are denied.
-  const browserSession = session.fromPartition("persist:amiba-browser");
-  browserSession.setPermissionRequestHandler(
-    (_webContents, _permission, callback) => callback(false),
-  );
-  browserSession.setPermissionCheckHandler(() => false);
 }
 
-// Track the main window explicitly. The notifier + quick-ask windows
+// Track the main window explicitly. The quick-ask windows
 // are persistent (hidden on dismiss, not destroyed), so any "find the
 // main window" lookup via BrowserWindow.getAllWindows() would happily
 // return one of them after the user closed the real main window via
 // the red traffic light — breaking dock-icon reopen, hotkey summon,
 // and protocol-URL handling.
 let mainWindow: BrowserWindow | null = null;
+const nativeExtensions = new DesktopExtensionHost({
+  profileManifest: () => managedDshPaths().profileManifest,
+  context: {
+    hostContentsId: () =>
+      mainWindow && !mainWindow.isDestroyed()
+        ? mainWindow.webContents.id
+        : null,
+    emit: (ownerId, event, payload) => {
+      const owner = webContents.fromId(ownerId);
+      if (owner && !owner.isDestroyed()) owner.send(event, payload);
+    },
+  },
+});
+dshRuntime.onDevelopmentChanged(() => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reload();
+});
+dshRuntime.onStopped(() => {
+  try {
+    nativeExtensions.reset();
+  } catch (error) {
+    console.error("Native extension cleanup failed", error);
+  }
+});
+
 let startupWindowTheme: "light" | "dark" = nativeTheme.shouldUseDarkColors
   ? "dark"
   : "light";
@@ -270,7 +280,7 @@ function summonQuickAskFromHotkey(): void {
 /**
  * Raise the primary window and open its settings dialog. Target of the
  * application menu's `Settings…` (⌘, / Ctrl+,). The chord is app-wide, so
- * it also fires while the Quick-Ask popup or the notifier has focus — the
+ * it also fires while the Quick-Ask popup has focus — the
  * dialog lives only in the main window, hence the summon first.
  */
 function openSettingsInMainWindow(summon: () => void): void {
@@ -311,41 +321,6 @@ function openSessionInMainWindow(
   return true;
 }
 
-/**
- * Wire the renderer-side actions from the Heads-up Notifier back to main:
- *
- *   - `notifier:open-session` — the explicit View action raises the primary
- *     window and asks its renderer to open the matching conversation.
- *   - `notifier:approve` / `notifier:deny` — forward the verdict to the
- *     chat engine so the DSH pending approval resolves.
- */
-function registerNotifierIpcHandlers(summon: () => void): void {
-  ipcMain.handle("notifier:open-session", (_event, sessionId: string) => {
-    if (!openSessionInMainWindow(sessionId, summon)) return;
-    hideNotifier();
-  });
-  ipcMain.handle("notifier:hide", () =>
-    hideNotifier({ restorePreviousApp: true }),
-  );
-  // Manual demo trigger so users can confirm the notifier window
-  // appears + clicks register without having to provoke a real
-  // approval or wait for a cron run. Exposed via the preload bridge as
-  // `window.amiba.notifier.demo(kind?)`.
-  ipcMain.handle(
-    "notifier:demo",
-    (_e, kind?: "chat-completed" | "approval-pending" | "plugin") => {
-      showDemoNotifier(kind ?? "chat-completed");
-    },
-  );
-  ipcMain.handle("notifier:approve", (_e, approvalId: string) => {
-    void approvalId;
-    hideNotifier({ restorePreviousApp: true });
-  });
-  ipcMain.handle("notifier:deny", (_e, approvalId: string) => {
-    void approvalId;
-    hideNotifier({ restorePreviousApp: true });
-  });
-}
 
 /**
  * Quick-Ask Spotlight popup back-channels: dismiss + dynamic resize.
@@ -465,33 +440,30 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      // Required only for Amiba's visible browser pane. DSH Client plugins
-      // render through the official slot runtime; they never receive an
-      // Electron <webview> or preload bridge.
+      // Native extensions declare their allowed partitions; attachment is checked below.
       webviewTag: true,
     },
   });
 
   mainWindow = win;
   installRendererDiagnostics(win);
-  // Only this renderer mounts the workbench, so it is the only valid target
-  // for the Agent's create-tab request.
-  embeddedBrowserController.setHostWindowResolver(() => mainWindow);
-  win.webContents.on(
-    "will-attach-webview",
-    (event, webPreferences, params) => {
-      if (params.partition !== "persist:amiba-browser") {
-        event.preventDefault();
-        return;
-      }
-      // The page is untrusted web content. Enforce these preferences in main
-      // even if renderer attributes are accidentally changed later.
-      webPreferences.nodeIntegration = false;
-      webPreferences.contextIsolation = true;
-      webPreferences.sandbox = true;
-      delete webPreferences.preload;
-    },
-  );
+  win.webContents.on("will-attach-webview", (event, webPreferences, params) => {
+    if (!nativeExtensions.allowsPartition(params.partition)) {
+      event.preventDefault();
+      return;
+    }
+    const guestSession = session.fromPartition(params.partition);
+    guestSession.setPermissionRequestHandler(
+      (_contents, _permission, callback) => callback(false),
+    );
+    guestSession.setPermissionCheckHandler(() => false);
+    // The page is untrusted web content. Enforce these preferences in main
+    // even if renderer attributes are accidentally changed later.
+    webPreferences.nodeIntegration = false;
+    webPreferences.contextIsolation = true;
+    webPreferences.sandbox = true;
+    delete webPreferences.preload;
+  });
   win.on("closed", () => {
     if (mainWindow === win) mainWindow = null;
   });
@@ -602,6 +574,30 @@ if (!gotSingleInstanceLock) {
     installDshClientWebSocketHeaders();
     installPermissionRequestHandler();
     registerIpcHandlers();
+    const assertExtensionSender = (event: Electron.IpcMainInvokeEvent) => {
+      if (
+        !mainWindow ||
+        event.sender.id !== mainWindow.webContents.id ||
+        event.senderFrame !== event.sender.mainFrame
+      )
+        throw new Error("Native extensions require the main renderer");
+    };
+    ipcMain.handle("native-extension:connect", (event, packageName: string) => {
+      assertExtensionSender(event);
+      return nativeExtensions.connect(packageName);
+    });
+    ipcMain.handle(
+      "native-extension:call",
+      (event, lease: string, method: string, args: unknown) => {
+        assertExtensionSender(event);
+        return nativeExtensions.rendererCall(
+          event.sender.id,
+          lease,
+          method,
+          args,
+        );
+      },
+    );
     registerEmbeddedPageHandlers();
     // Replace Electron's implicit default menu (which has no Preferences
     // entry) before any window exists so ⌘, / Ctrl+, is live from the first
@@ -618,29 +614,55 @@ if (!gotSingleInstanceLock) {
     );
     try {
       _dshNativeGateway = await startDshNativeGateway([
-        ...embeddedBrowserController.platformOperations(),
-        // DSH plugins post desktop notifications through the runtime's
-        // notification hub; the runtime-gateway plugin forwards each one
-        // here for the heads-up notifier to render.
-        pluginNotificationOperation(showPluginNotification),
+        {
+          name: "amiba_native_attach",
+          call: (args) =>
+            nativeExtensions.attach(
+              String(args.packageName ?? ""),
+              String(args.instanceId ?? ""),
+            ),
+        },
+        {
+          name: "amiba_native_detach",
+          call: (args) =>
+            args.lease
+              ? nativeExtensions.detach(String(args.lease))
+              : nativeExtensions.detachInstance(
+                  String(args.packageName ?? ""),
+                  String(args.instanceId ?? ""),
+                ),
+        },
+        {
+          name: "amiba_native_call",
+          call: (args, context) =>
+            nativeExtensions.call(
+              String(args.lease ?? ""),
+              String(args.method ?? ""),
+              args.input &&
+                typeof args.input === "object" &&
+                !Array.isArray(args.input)
+                ? (args.input as Record<string, unknown>)
+                : {},
+              context,
+            ),
+        },
+
       ]);
       process.env.AMIBA_RUNTIME_GATEWAY_URL = _dshNativeGateway.url;
       process.env.AMIBA_RUNTIME_GATEWAY_TOKEN = _dshNativeGateway.token;
-      console.info(
-        `[main] DSH native gateway: ${_dshNativeGateway.url}`,
-      );
+      console.info(`[main] DSH native gateway: ${_dshNativeGateway.url}`);
     } catch (error) {
       console.error("[main] DSH native gateway failed to start:", error);
     }
     createWindow();
-    createNotifierWindow();
+    await installDesktopPetWindow(() => mainWindow, summonWindow, (sessionId) => { openSessionInMainWindow(sessionId, summonWindow); });
     // Pre-create the Quick-Ask popup so the first double-tap doesn't
     // pay BrowserWindow construction + renderer boot latency (~400ms
     // cold). Hidden by default; surfaces via `summonQuickAsk` on
     // hotkey.
     createQuickAskWindow();
     // macOS dock icon. We pin it twice:
-    //   1. NOW — after panel + main + notifier windows have all been
+    //   1. NOW — after panel + main windows have all been
     //      created and any activation-policy transitions have flushed.
     //   2. On `app.on("activate", …)` and again on a short timeout —
     //      macOS sometimes refreshes the dock from the bundle's .icns
@@ -663,7 +685,6 @@ if (!gotSingleInstanceLock) {
       setTimeout(pinDockIcon, 200);
       app.on("activate", pinDockIcon);
     }
-    registerNotifierIpcHandlers(summonWindow);
     registerQuickAskIpcHandlers(summonWindow);
 
     // Load the persisted summon-hotkey config and start listening. The
@@ -691,7 +712,7 @@ if (!gotSingleInstanceLock) {
     // route through summonWindow so closed → recreate, hidden/minimized
     // → restore, background → focus all work the same as the hotkey.
     // Checking `getAllWindows().length === 0` here would be wrong: the
-    // notifier + quick-ask windows are persistent (hidden, not destroyed),
+    // quick-ask windows are persistent (hidden, not destroyed),
     // so that length is never 0 and the dock click would no-op.
     app.on("activate", () => {
       summonWindow();
@@ -717,15 +738,16 @@ let _runtimeShutdownDone = false;
 app.on("before-quit", async (event) => {
   if (_runtimeShutdownDone) return;
   event.preventDefault();
+  await dshRuntime.closeDevelopment().catch(console.error);
+  await dshRuntime.stop().catch(() => {
+    /* ignore runtime shutdown errors */
+  });
   if (_dshNativeGateway) {
     await _dshNativeGateway.stop().catch(() => {
       /* ignore shutdown errors */
     });
     _dshNativeGateway = null;
   }
-  await dshRuntime.stop().catch(() => {
-    /* ignore runtime shutdown errors */
-  });
   delete process.env.AMIBA_RUNTIME_GATEWAY_URL;
   delete process.env.AMIBA_RUNTIME_GATEWAY_TOKEN;
   _runtimeShutdownDone = true;
@@ -738,7 +760,6 @@ app.on("before-quit", async (event) => {
 // the uiohook hook used by double-tap mode.
 app.on("will-quit", () => {
   stopHotkeyManager();
-  destroyNotifierWindow();
   destroyQuickAskWindow();
   void disposeWorkspaceDevelopment();
   void stopWorkspaceManager();

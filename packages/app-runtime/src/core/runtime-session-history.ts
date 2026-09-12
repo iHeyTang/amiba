@@ -1,3 +1,5 @@
+import { compactionUpdate, upsertCompactionTimeline, interruptOpenCompactions } from "../dsh-client/compaction";
+import type { AssistantTimelineItem } from "../protocol";
 import type {
   AgentSessionHistoryEntry,
   AgentSessionEvent,
@@ -29,11 +31,7 @@ type RuntimeSessionMessage = SessionMessage & {
   /** Wall-clock span of the process phase, from durable event times. */
   processMs?: number;
   toolProgress?: ToolProgress[];
-  assistantTimeline?: Array<
-    | { kind: "text"; id: string; text: string }
-  | { kind: "reasoning"; id: string; text: string; startedAt?: number; endedAt?: number }
-    | { kind: "tool"; id: string; toolCallId: string }
-  >;
+  assistantTimeline?: AssistantTimelineItem[];
   runtimeSeq?: number;
 };
 
@@ -131,7 +129,7 @@ function finishTurn(
   if (!turn) return;
   const content = turn.text || turn.draftText;
   const tools = [...turn.tools.values()];
-  if (!content && !turn.reasoning && tools.length === 0) return;
+  if (!content && !turn.reasoning && tools.length === 0 && !turn.timeline?.length) return;
   const reasoningMs =
     turn.reasoningStartAt !== null && turn.reasoningEndAt !== null
       ? Math.max(0, turn.reasoningEndAt - turn.reasoningStartAt)
@@ -232,6 +230,12 @@ export function projectRuntimeSessionHistory(
 
   for (const entry of [...entries].sort((a, b) => a.event.seq - b.event.seq)) {
     const event = entry.event;
+    const compact = compactionUpdate(event);
+    if (compact) {
+      if (!turn) turn = beginTurn(event);
+      upsertCompactionTimeline(turn.timeline!, compact);
+      continue;
+    }
     if (event.type === "command/run") {
       finishTurn(turn, output);
       turn = null;
@@ -354,6 +358,7 @@ export function projectRuntimeSessionHistory(
       continue;
     }
     if (event.type === "turn/end") {
+      interruptOpenCompactions(turn.timeline!);
       finishTurn(turn, output);
       turn = null;
     }

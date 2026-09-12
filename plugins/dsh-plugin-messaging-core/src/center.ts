@@ -1,3 +1,4 @@
+import { sharedConversationSeed, type ConversationCadence, type ConversationLifecycle, type ConversationView } from "@amiba/dsh-plugin-session-features";
 import type { Agent } from "@deepseek-ai/dsh-agent";
 import {
   createUserMessage,
@@ -16,6 +17,7 @@ import {
 } from "./approval.js";
 import {
   hashChannelSecret,
+  conversationAccessScope,
   MessageCenterStore,
   MIN_APPROVAL_TIMEOUT_MS,
   resolveChannelApproval,
@@ -43,6 +45,14 @@ export interface MessageChannelView {
   delivery: MessageChannelDeliveryStatus;
 }
 
+export interface MessageConversationSettingsInput {
+  action: "status" | "configure" | "new";
+  cadence?: ConversationCadence;
+}
+export interface MessageConversationView extends ConversationView {
+  access: "owner" | "shared";
+}
+
 export interface MessageChannelProviderView {
   id: string;
   name: string;
@@ -60,6 +70,9 @@ export interface MessageChannelProvider {
   readonly supportsOutbound: boolean;
   readonly inboundPath?: string;
   validate?(channel: StoredMessageChannel): void | Promise<void>;
+  /** Approval authority is independent from permission to send chat messages. */
+  canApprove?(channel: StoredMessageChannel, sender: string | undefined): Promise<boolean>;
+  conversationAccess?(channel: StoredMessageChannel, envelope: InboundMessageEnvelope): Promise<"owner" | "shared">;
   deliver?(
     channel: StoredMessageChannel,
     envelope: OutboundMessageEnvelope,
@@ -91,6 +104,7 @@ export interface MessageChannelProvider {
 }
 
 export interface InboundConversationRef {
+  access?: "owner" | "shared";
   key: string;
   kind: "p2p" | "group";
   title?: string;
@@ -379,6 +393,17 @@ export class MessageChannelCenter {
 
   async start(): Promise<void> {
     if (this.started) return;
+    const lifecycle = this.ctx.reflect?.get?.("amibaConversations") as ConversationLifecycle | undefined;
+    if (lifecycle) {
+      const channels = new Map((await this.store.list()).map((channel) => [channel.id, channel]));
+      const bindings = (await this.store.listConversations(undefined, true))
+        .sort((a, b) => Number(Boolean(a.superseded)) - Number(Boolean(b.superseded)));
+      for (const binding of bindings) {
+        const channel = channels.get(binding.channelId);
+        if (!channel) continue;
+        await lifecycle.adopt({ plugin: channel.provider, entry: channel.id, scope: conversationAccessScope({ key: binding.conversationKey, kind: binding.kind, access: binding.access }) }, binding.sessionId, Date.parse(binding.createdAt));
+      }
+    }
     this.started = true;
     this.ctx.effect(() => {
       const timer = setInterval(() => {
@@ -397,11 +422,21 @@ export class MessageChannelCenter {
       throw new Error("invalid_channel_provider_id");
     if (this.providers.has(provider.id))
       throw new Error(`duplicate channel provider ${provider.id}`);
+    const lifecycle = this.ctx.reflect?.get?.("amibaConversations") as ConversationLifecycle | undefined;
+    const disposeSubmit = lifecycle?.registerSubmitHandler(provider.id, async (origin, sessionId) => {
+      const channel = (await this.store.list()).find((item) => item.id === origin.entry && item.provider === provider.id);
+      const binding = await this.store.findConversationBySession(sessionId);
+      if (!channel?.enabled || !binding || conversationAccessScope({ key: binding.conversationKey, kind: binding.kind, access: binding.access }) !== origin.scope || binding.channelId !== channel.id)
+        throw new Error("conversation_unavailable");
+      return this.resolveConversationSession(channel, { key: binding.conversationKey, kind: binding.kind, access: binding.access, ...(binding.title ? { title: binding.title } : {}) });
+    });
     this.providers.set(provider.id, provider);
     void this.pumpDeliveries();
     return () => {
-      if (this.providers.get(provider.id) === provider)
+      if (this.providers.get(provider.id) === provider) {
         this.providers.delete(provider.id);
+        disposeSubmit?.();
+      }
     };
   }
 
@@ -499,6 +534,38 @@ export class MessageChannelCenter {
     return this.store.listConversations(channelId);
   }
 
+  /** Host settings only: derive ownership from an actual channel binding. */
+  async conversationSettings(channelId: string, conversationKey: string, input: MessageConversationSettingsInput): Promise<MessageConversationView> {
+    const lifecycle = this.ctx.reflect?.get?.("amibaConversations") as ConversationLifecycle | undefined;
+    if (!lifecycle) throw new Error("conversation_owner_unavailable");
+    const channel = (await this.store.list()).find(item => item.id === channelId);
+    const binding = await this.store.findConversation(channelId, conversationKey);
+    if (!channel || !binding) throw new Error("conversation_not_found");
+    const origin = { plugin: channel.provider, entry: channel.id, scope: conversationAccessScope({ key: binding.conversationKey, kind: binding.kind, access: binding.access }) };
+    const registered = await lifecycle.originForSession(binding.sessionId);
+    if (!registered || registered.plugin !== origin.plugin || registered.entry !== origin.entry || registered.scope !== origin.scope)
+      throw new Error("conversation_ownership_mismatch");
+    if (input.action === "configure") {
+      if (!input.cadence) throw new Error("conversation_cadence_required");
+      await lifecycle.configureCadence(origin, input.cadence);
+    } else if (input.action === "new") {
+      await lifecycle.newConversation(origin);
+    } else if (input.action !== "status") {
+      throw new Error("invalid_conversation_action");
+    }
+    return { ...await lifecycle.view(origin), access: binding.access ?? "owner" };
+  }
+
+  async shareConversationResources(channelId: string, conversationKey: string, grants: Array<{ reference: string; title: string }>): Promise<MessageConversationView> {
+    const view = await this.conversationSettings(channelId, conversationKey, { action: "status" });
+    if (view.access !== "shared" || !view.currentSessionId) throw new Error("shared_conversation_required");
+    const lifecycle = this.ctx.reflect?.get?.("amibaConversations") as ConversationLifecycle | undefined;
+    const origin = await lifecycle?.originForSession(view.currentSessionId);
+    if (!origin || !lifecycle) throw new Error("conversation_owner_unavailable");
+    await lifecycle.setSharedResources(origin, grants);
+    return this.conversationSettings(channelId, conversationKey, { action: "status" });
+  }
+
   unbindConversation(
     channelId: string,
     conversationKey: string,
@@ -569,12 +636,14 @@ export class MessageChannelCenter {
    */
   private async createBoundSession(
     channel: StoredMessageChannel,
+    conversation?: InboundConversationRef,
   ): Promise<{ sessionId: string; dispose: () => Promise<void> }> {
     const sessionId = `session-${randomUUID()}`;
     const runtime = this.ctx as MessageRuntimeContext;
     const agentOptions = this.defaultAgentOptions();
     const handle = await this.ctx.agents.create({
       sessionId: sessionId as never,
+      ...(conversation?.access === "shared" ? { seed: sharedConversationSeed(sessionId, { plugin: channel.provider, entry: channel.id, scope: conversationAccessScope(conversation) }) } : {}),
       // Agent presets (e.g. `restricted`'s persona section) reference
       // `{{cwd}}`, resolved from `agent.session.header.cwd`. IM-originated
       // sessions have no workspace of their own — mirror the desktop
@@ -649,6 +718,35 @@ export class MessageChannelCenter {
         channel.id,
         conversation.key,
       );
+      const lifecycle = this.ctx.reflect?.get?.("amibaConversations") as ConversationLifecycle | undefined;
+      if (lifecycle) {
+        const origin = { plugin: channel.provider, entry: channel.id, scope: conversationAccessScope(conversation) };
+        if (bound && (bound.access ?? "owner") === (conversation.access ?? "owner"))
+          await lifecycle.adopt(origin, bound.sessionId, Date.parse(bound.createdAt));
+        const segment = await lifecycle.resolve(origin, {
+          create: () => this.createBoundSession(channel, conversation),
+          isClosed: async (id) => {
+            if (this.isSessionArchived(id)) return true;
+            if (this.ctx.agents.get(id as never)) return false;
+            try { await (this.ctx as MessageRuntimeContext).sessionPersistence.inspect(id); return false; }
+            catch (error) {
+              if ((error as NodeJS.ErrnoException).code === "ENOENT" || (error instanceof Error && error.message === "session_not_found")) return true;
+              throw error;
+            }
+          },
+        });
+        if (segment.sessionId !== bound?.sessionId) {
+          await this.store.bindConversation({
+            channelId: channel.id, conversationKey: conversation.key,
+            kind: conversation.kind, access: conversation.access, ...(conversation.title ? { title: conversation.title } : {}),
+            sessionId: segment.sessionId,
+          });
+        }
+        if (bound && this.isSessionArchived(bound.sessionId)) this.approvals.cancelForSession(bound.sessionId);
+        // A time boundary does not cancel work/approvals in the previous segment.
+        return segment.sessionId;
+      }
+      if (conversation.access === "shared") throw new Error("conversation_service_unavailable");
       if (bound && !this.isSessionArchived(bound.sessionId)) return bound.sessionId;
       if (bound) {
         // Amiba's session "delete" is becoming DSH's host-side archive, and
@@ -712,17 +810,44 @@ export class MessageChannelCenter {
     )
       throw new Error("sender_not_allowed");
 
-    const sessionId = envelope.conversation
-      ? await this.resolveConversationSession(channel, envelope.conversation)
-      : await this.resolveChannelSession(channel);
-    if (!sessionId) throw new Error("conversation_required");
     const receiptKey = `${channel.id}:${envelope.id.trim()}`;
+    const receipt = await this.store.findReceipt(receiptKey);
+    if (receipt?.sessionId) return {
+      accepted: true, duplicate: true, sessionId: receipt.sessionId,
+      ...(receipt.consumedAsApproval ? { consumedAsApproval: true } : {}),
+    };
+
+    const conversation = envelope.conversation ? {
+      ...envelope.conversation,
+      // The platform's envelope cannot grant its own execution scope.
+      access: await provider.conversationAccess?.(channel, envelope) ?? "owner" as const,
+    } : undefined;
+
+    // An answer to yesterday's pending question must reach yesterday's task.
+    // Resolve against the stable chat route before advancing its current segment.
+    const approvalTargets: string[] = [];
+    for (const pendingId of this.approvals.pendingSessionIds(channel.id)) {
+      const route = await this.store.findConversationBySession(pendingId);
+      const sameConversation = envelope.conversation
+        ? route?.channelId === channel.id && route.conversationKey === envelope.conversation.key
+        : pendingId === channel.sessionId;
+      if (sameConversation && !this.isSessionArchived(pendingId) && this.approvals.matchesPending(channel.id, pendingId, envelope.text))
+        approvalTargets.push(pendingId);
+    }
+    // A bare answer spanning multiple outstanding segments is ambiguous.
+    if (approvalTargets.length > 1) throw new Error("approval_number_required");
+    const sessionId = approvalTargets[0] ?? (envelope.conversation
+      ? await this.resolveConversationSession(channel, conversation!)
+      : await this.resolveChannelSession(channel));
+    if (!sessionId) throw new Error("conversation_required");
     // An approval answer is consumed here, BEFORE it can become a user turn:
     // the sender already passed this channel's `allowedSenders` rule above, so
     // whoever may talk to the bot may also answer its approvals (plan §2).
     // Anything the protocol cannot parse — or aimed at a number nobody is
     // waiting on — falls through to the normal inbound path untouched.
     if (this.approvals.matchesPending(channel.id, sessionId, envelope.text)) {
+      if (provider.canApprove && !await provider.canApprove(channel, envelope.sender))
+        throw new Error("sender_cannot_approve");
       // Claim the receipt FIRST. A transport that redelivers an answer we
       // already consumed must not settle whatever question is pending now:
       // "同意" sent for question #1 must never grant question #2 because the
@@ -730,7 +855,7 @@ export class MessageChannelCenter {
       // In the narrow window between the probe and this write the question
       // may have settled on its own (a deadline); the answer then grants
       // nothing, but its receipt is ours, so it stays consumed either way.
-      const fresh = await this.store.acceptReceipt(receiptKey);
+      const fresh = await this.store.acceptReceipt(receiptKey, sessionId);
       if (fresh)
         this.approvals.answerFromText(
           channel.id,
@@ -881,6 +1006,23 @@ export class MessageChannelCenter {
       this.deliveryPump = null;
     });
     return this.deliveryPump;
+  }
+
+  /** Explicit owner retry; serialize with the pump to avoid duplicate sends. */
+  async retryFailedReplies(channelId: string): Promise<{ retried: number }> {
+    while (this.deliveryPump) await this.deliveryPump;
+    let retried = 0;
+    this.deliveryPump = (async () => {
+      const channel = (await this.store.list()).find(item => item.id === channelId);
+      if (!channel?.enabled) throw new Error("channel_disabled_or_missing");
+      const provider = this.providers.get(channel.provider);
+      if (!provider?.supportsOutbound || !provider.deliver) throw new Error("provider_unavailable");
+      const candidates = (await this.store.listOutbox()).filter(item => item.channelId === channelId && item.lastError && !item.envelope.inReplyTo.startsWith("approval:") && !this.isSessionArchived(item.envelope.sessionId));
+      retried = await this.store.retryDeliveries(channelId, candidates.map(item => item.id));
+      await this.deliverDue();
+    })().finally(() => { this.deliveryPump = null; });
+    await this.deliveryPump;
+    return { retried };
   }
 
   private async deliverDue(): Promise<void> {

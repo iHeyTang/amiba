@@ -1,5 +1,7 @@
+import { clientInputs } from "../../scripts/dsh-client-inputs.mjs";
 import { defineConfig } from "vite";
 export default defineConfig({
+  plugins: [clientInputs()],
   build: {
     target: "es2022",
     outDir: "lib",
@@ -12,6 +14,7 @@ export default defineConfig({
     },
     rollupOptions: {
       external: [
+        "@amiba/ui/plugin",
         "react",
         "react/jsx-runtime",
         "react-dom",
@@ -23,6 +26,7 @@ export default defineConfig({
         "@amiba/dsh-plugin-ui-shell/client",
       ],
       output: {
+        paths: { "@amiba/ui/plugin": "@amiba/dsh-plugin-ui-shell/client" },
         // DSH registers one factory per entry; relative CJS chunks are not loadable.
         inlineDynamicImports: true,
         exports: "named",

@@ -1,4 +1,4 @@
-import { featureSeed } from "@amiba/dsh-plugin-session-features";
+import { featureSeed, type ConversationCadence, type ConversationLifecycle } from "@amiba/dsh-plugin-session-features";
 import { randomUUID } from "node:crypto";
 
 import type { Context } from "@deepseek-ai/cordis";
@@ -84,7 +84,7 @@ type StewardRuntimeContext = Omit<Context, "agentPresets" | "sessionPersistence"
     mount(agentCtx: Context, id?: string): Promise<unknown>;
   };
   sessionPersistence: {
-    inspect(id: string): Promise<{ meta: { cwd?: string; agentPreset?: string }; events: readonly SessionEvent[] }>;
+    inspect(id: string): Promise<{ meta: { cwd?: string; agentPreset?: string; createdAt?: number }; events: readonly SessionEvent[] }>;
     readFrom(id: string, fromSeq: number): Promise<{ events: readonly SessionEvent[] }>;
   };
   sessionQuery: {
@@ -126,6 +126,7 @@ export class StewardService {
   private readonly log: { info(msg: string): void; warn(msg: string): void; error(msg: string): void };
   private stewardHandle: { agent: Agent; dispose(): Promise<void> } | null = null;
   private stewardPending: Promise<Agent> | null = null;
+  private readonly retiredStewards = new Set<{ agent: Agent; dispose(): Promise<void> }>();
   private readonly taskAgents = new Map<string, Promise<Agent>>();
   /** Per-task deferred "go answer the question" notices, keyed by task id. */
   private readonly askTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -168,6 +169,9 @@ export class StewardService {
     this.askGuards.clear();
     const handle = this.stewardHandle;
     this.stewardHandle = null;
+    const retired = [...this.retiredStewards];
+    this.retiredStewards.clear();
+    await Promise.allSettled(retired.map((entry) => entry.dispose()));
     try {
       await handle?.dispose();
     } catch {
@@ -179,6 +183,29 @@ export class StewardService {
 
   async ensureStewardSessionId(): Promise<string> {
     return (await this.ensureStewardAgent()).id as string;
+  }
+
+  async stewardConversationIds(): Promise<string[]> {
+    const lifecycle = this.ctx.reflect?.get?.("amibaConversations") as ConversationLifecycle | undefined;
+    const state = await this.store.read();
+    const history = lifecycle ? await lifecycle.history({ plugin: STEWARD_SOURCE, entry: "main", scope: "owner" }) : [];
+    return [...new Set([...history.map((segment) => segment.sessionId), ...(state.stewardSessionId ? [state.stewardSessionId] : [])])];
+  }
+
+  /** Settings reads never create or advance a conversation. */
+  async conversationSettings(action: "status" | "configure" | "new", cadence?: ConversationCadence) {
+    const lifecycle = this.ctx.reflect?.get?.("amibaConversations") as ConversationLifecycle | undefined;
+    if (!lifecycle) throw new Error("conversation_owner_unavailable");
+    const origin = { plugin: STEWARD_SOURCE, entry: "main", scope: "owner" };
+    if (action === "configure") {
+      if (!cadence) throw new Error("conversation_cadence_required");
+      await lifecycle.configureCadence(origin, cadence);
+    } else if (action === "new") {
+      await lifecycle.newConversation(origin);
+    } else if (action !== "status") {
+      throw new Error("invalid_conversation_action");
+    }
+    return lifecycle.view(origin);
   }
 
   /**
@@ -219,20 +246,86 @@ export class StewardService {
     }
   }
 
-  private ensureStewardAgent(): Promise<Agent> {
+  /** Called by the submit path, never by page polling, to advance the entry. */
+  async prepareStewardSession(sessionId: string): Promise<string> {
+    const lifecycle = this.ctx.reflect?.get?.("amibaConversations") as ConversationLifecycle | undefined;
+    const state = await this.store.read();
+    const origin = lifecycle ? await lifecycle.originForSession(sessionId) : undefined;
+    if (sessionId !== state.stewardSessionId && !(origin?.plugin === STEWARD_SOURCE && origin.entry === "main" && origin.scope === "owner"))
+      throw new Error("steward: session does not belong to this entry");
+    return (await this.ensureStewardAgent(true)).id as string;
+  }
+
+  private retireSteward(handle: { agent: Agent; dispose(): Promise<void> }): void {
+    this.retiredStewards.add(handle);
+    // A rollover releases memory only after the old turn finishes; it never cancels it.
+    void (async () => {
+      await handle.agent.whenIdle();
+      if (!this.retiredStewards.delete(handle)) return;
+      await handle.dispose();
+    })().catch((error) => this.log.warn(`steward: failed to release previous conversation: ${String(error)}`));
+  }
+
+  private ensureStewardAgent(advance = false): Promise<Agent> {
     // Never mint (or adopt) an agent after unload has begun: a report racing
     // `dispose()` would otherwise leave a live steward nobody owns.
     if (this.disposed) return Promise.reject(new Error("steward: disposed"));
-    if (this.stewardHandle) return Promise.resolve(this.stewardHandle.agent);
     if (this.stewardPending) return this.stewardPending;
+    if (this.stewardHandle && !advance) return Promise.resolve(this.stewardHandle.agent);
     this.stewardPending = (async () => {
-      const state = await this.store.read();
+      let state = await this.store.read();
       if (state.extensionVersion !== undefined && state.extensionVersion !== 1) throw new Error(`Unsupported steward extension version ${state.extensionVersion}`);
       let basePreset = state.basePreset ?? this.options.basePreset ?? this.ctx.agentPresets.defaultId;
       const setup = async (agentCtx: Context) => {
         await this.ctx.agentPresets.mount(agentCtx, basePreset);
         this.options.onStewardSetup?.(agentCtx);
       };
+      const lifecycle = this.ctx.reflect?.get?.("amibaConversations") as ConversationLifecycle | undefined;
+      if (lifecycle) {
+        const origin = { plugin: STEWARD_SOURCE, entry: "main", scope: "owner" };
+        if (state.stewardSessionId && !await lifecycle.originForSession(state.stewardSessionId)) {
+          try {
+            const legacy = await this.ctx.sessionPersistence.inspect(state.stewardSessionId);
+            const persistedPreset = resolveSessionPreset({ header: legacy.meta, events: legacy.events } as never);
+            if (persistedPreset) basePreset = persistedPreset;
+            await lifecycle.adopt(origin, state.stewardSessionId, legacy.meta.createdAt ?? legacy.events[0]?.time ?? this.now());
+          } catch (error) {
+            const missing = (error as NodeJS.ErrnoException).code === "ENOENT" || (error instanceof Error && error.message === "session_not_found");
+            if (!missing) throw error;
+          }
+        }
+        let created: { agent: Agent; dispose(): Promise<void> } | undefined;
+        const segment = await lifecycle.resolve(origin, {
+          create: async () => {
+            const sessionId = `session-${randomUUID()}`;
+            created = await this.ctx.agents.create({
+              sessionId: sessionId as never,
+              meta: { cwd: this.options.defaultCwd, agentPreset: basePreset },
+              seed: featureSeed(sessionId, STEWARD_SOURCE, 1),
+              ...this.agentOptionsSpread(), setup,
+            });
+            return { sessionId, dispose: () => created!.dispose() };
+          },
+          isClosed: async (id) => {
+            if (this.isArchived(id)) return true;
+            if (this.ctx.agents.get(id as never)) return false;
+            try { await this.ctx.sessionPersistence.inspect(id); return false; }
+            catch (error) {
+              if ((error as NodeJS.ErrnoException).code === "ENOENT" || (error instanceof Error && error.message === "session_not_found")) return true;
+              throw error;
+            }
+          },
+        }, undefined, advance);
+        state = await this.store.mutate((current) => ({ ...current, stewardSessionId: segment.sessionId, basePreset, extensionVersion: 1 }));
+        if (this.stewardHandle?.agent.id === segment.sessionId) return this.stewardHandle.agent;
+        if (this.stewardHandle) this.retireSteward(this.stewardHandle);
+        this.stewardHandle = null;
+        if (created) {
+          this.stewardHandle = created;
+          await this.pinStewardTitle(created.agent);
+          return created.agent;
+        }
+      }
       if (state.stewardSessionId) {
         const id = state.stewardSessionId;
         const live = this.ctx.agents.get(id as never) as Agent | undefined;
@@ -509,12 +602,13 @@ export class StewardService {
 
   async adopt(input: AdoptInput): Promise<AdoptResult> {
     const state = await this.store.read();
+    const stewardIds = new Set(await this.stewardConversationIds());
     let sessionId = input.sessionId?.trim();
     if (!sessionId) {
       const query = input.titleQuery?.trim();
       if (!query) throw new Error("steward: adopt requires sessionId or titleQuery");
       const page = await this.ctx.sessionQuery.searchSessions({ query, limit: 5 });
-      const hits = page.items.filter((item) => item.header.id !== state.stewardSessionId);
+      const hits = page.items.filter((item) => !stewardIds.has(item.header.id));
       if (hits.length !== 1) {
         const candidates = await Promise.all(
           hits.map(async (item) => ({ sessionId: item.header.id, title: (await this.ctx.sessionQuery.readTitle(item.header.id))?.title ?? UNTITLED })),
@@ -523,7 +617,7 @@ export class StewardService {
       }
       sessionId = hits[0]!.header.id;
     }
-    if (sessionId === state.stewardSessionId) throw new Error("steward: the steward's own session cannot be adopted");
+    if (stewardIds.has(sessionId)) throw new Error("steward: the steward's own session cannot be adopted");
     // `sessionQuery.searchSessions` (titleQuery path above) does not exclude
     // archived sessions, and an explicit `sessionId` can name one directly —
     // refuse up front instead of creating a task row the very next

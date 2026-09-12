@@ -312,6 +312,12 @@ export class ApprovalRelay {
     }
   }
 
+  pendingSessionIds(channelId: string): string[] {
+    return [...new Set([...this.pending.values()]
+      .filter((item) => item.channelId === channelId && !item.settled)
+      .map((item) => item.sessionId))];
+  }
+
   /** Pending questions of one conversation, oldest first. */
   private pendingFor(channelId: string, sessionId: string): PendingApproval[] {
     return [...this.pending.values()]
@@ -467,19 +473,14 @@ export class ApprovalRelay {
        * fails — falls back to the snapshot rather than opening the gate.
        */
       const canAnswer = async (sender: string | undefined): Promise<boolean> => {
-        let current = channel;
         try {
-          current =
-            (await this.host.store.list()).find(
-              (item) => item.id === channel.id,
-            ) ?? channel;
-        } catch {
-          // Keep the snapshot: a read failure must never widen the gate.
-        }
-        return (
-          current.allowedSenders.length === 0 ||
-          (sender !== undefined && current.allowedSenders.includes(sender))
-        );
+          const current = (await this.host.store.list()).find((item) => item.id === channel.id);
+          if (!current?.enabled) return false;
+          const currentProvider = this.host.providerFor(current);
+          if (!currentProvider) return false;
+          if (current.allowedSenders.length && (sender === undefined || !current.allowedSenders.includes(sender))) return false;
+          return currentProvider.canApprove ? await currentProvider.canApprove(current, sender) : true;
+        } catch { return false; }
       };
 
       const prompt: ApprovalPrompt = {

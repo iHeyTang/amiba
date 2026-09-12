@@ -1,4 +1,5 @@
 import type { Context } from "@deepseek-ai/cordis";
+import type { MessageConversationSettingsInput } from "@amiba/dsh-plugin-messaging-core";
 import { Remote, TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol";
 
 import type { ConnectorCenter } from "./center.js";
@@ -30,6 +31,26 @@ export class AmibaConnectorsRemoteService extends TypertRemoteService {
     // `TypertGatewayBindingOptions.namespace` is exactly "wire namespace;
     // defaults to the Cordis service key" — the divergence this fix needs.
     super(ctx, "amibaConnectorsRemote", { namespace: "amibaConnectors" });
+  }
+
+  @Remote
+  conversationSettings(id: string, conversationKey: string, input: MessageConversationSettingsInput) {
+    return this.center.conversationSettings(id, conversationKey, input);
+  }
+
+  @Remote
+  retryFailedReplies(id: string) {
+    return this.center.retryFailedReplies(id);
+  }
+
+  @Remote
+  searchConversationResources(id: string, key: string, query: string) {
+    return this.center.searchConversationResources(id, key, query);
+  }
+
+  @Remote
+  shareConversationResources(id: string, key: string, references: string[]) {
+    return this.center.shareConversationResources(id, key, references);
   }
 
   @Remote

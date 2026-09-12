@@ -64,3 +64,36 @@ export function WorkbenchResourceView(props: WorkbenchViewProps) {
     </WorkbenchViewBoundary>
   );
 }
+
+/** Elect once per resource type so replaced plugins cannot retain hidden surfaces. */
+export function selectedWorkbenchViews(
+  extensions: readonly WorkbenchViewExtension[],
+) {
+  return [...new Set(extensions.map((extension) => extension.resourceType))]
+    .sort()
+    .map((type) => selectWorkbenchView(extensions, type)!);
+}
+
+export function WorkbenchExtensionHosts({ children }: { children: ReactNode }) {
+  const extensions = selectedWorkbenchViews(useWorkbenchExtensions());
+  return (
+    <>
+      {children}
+      {extensions.map((extension) => {
+        const Host = extension.host;
+        return Host ? <Host key={extension.id} /> : null;
+      })}
+    </>
+  );
+}
+
+export function WorkbenchExtensionToolbar() {
+  return (
+    <>
+      {selectedWorkbenchViews(useWorkbenchExtensions()).map((extension) => {
+        const Toolbar = extension.toolbar;
+        return Toolbar ? <Toolbar key={extension.id} /> : null;
+      })}
+    </>
+  );
+}

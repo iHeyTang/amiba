@@ -9,6 +9,8 @@ import type { AdoptResult } from "../types.js";
 /** Tiny client-side cache: the steward session id and which sessions are already managed. */
 export interface StewardClientState {
   stewardSessionId(): string | null;
+  stewardSessionIds(): ReadonlySet<string>;
+  setStewardSessionIds(ids: Iterable<string>): void;
   setStewardSessionId(id: string): void;
   adoptedSessionIds(): ReadonlySet<string>;
   setAdopted(ids: Iterable<string>): void;
@@ -17,6 +19,7 @@ export interface StewardClientState {
 
 export function createStewardClientState(): StewardClientState {
   let stewardId: string | null = null;
+  let stewardIds: ReadonlySet<string> = new Set();
   let adopted: ReadonlySet<string> = new Set();
   const listeners = new Set<() => void>();
   const notify = () => {
@@ -24,8 +27,11 @@ export function createStewardClientState(): StewardClientState {
   };
   return {
     stewardSessionId: () => stewardId,
+    stewardSessionIds: () => stewardIds,
+    setStewardSessionIds(ids) { stewardIds = new Set(ids); notify(); },
     setStewardSessionId(id) {
       stewardId = id;
+      stewardIds = new Set([...stewardIds, id]);
       notify();
     },
     adoptedSessionIds: () => adopted,
@@ -86,7 +92,7 @@ export interface StewardMenuDeps {
 export function stewardMenuFace(state: StewardClientState, deps: StewardMenuDeps): SessionMenuContribution {
   return {
     visible: (session: SessionListItemTarget) =>
-      session.id !== state.stewardSessionId() && !state.adoptedSessionIds().has(session.id),
+      !state.stewardSessionIds().has(session.id) && !state.adoptedSessionIds().has(session.id),
     run: async (session: SessionListItemTarget) => {
       const result = await deps.adopt(session.id);
       if (result.kind === "adopted") {

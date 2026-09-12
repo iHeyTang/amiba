@@ -26,7 +26,8 @@
     "lint:no-extension-leak": "bash scripts/check-no-knowledge-in-core.sh",
     "sdk:pack": "bash scripts/sdk-pack.sh",
     "sdk:verify-scaffold": "bash scripts/verify-scaffold.sh",
-    "runtime:lock": "pnpm --dir packages/app-runtime runtime:lock"
+    "runtime:lock": "pnpm --dir packages/app-runtime runtime:lock",
+    "verify:browser": "node scripts/verify-browser-pluginization.mjs"
   },
   "devDependencies": {
     "prettier": "3.3.3",

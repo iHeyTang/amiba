@@ -139,7 +139,7 @@ export interface ConnectorProvider {
   readonly description: string;
   readonly icon?: string;
   /** Omit for tool-only connectors. Authentication remains provider-owned. */
-  readonly messaging?: { ownerPairing: boolean };
+  readonly messaging?: { ownerPairing: boolean; sharedConversations?: boolean };
   /** Schema value driving the settings form; validated by the provider. */
   readonly configSchema: unknown;
   validate(config: unknown): Promise<void>;
@@ -163,7 +163,7 @@ export interface ConnectorProviderView {
   description: string;
   icon?: string;
   supportsOnboarding: boolean;
-  messaging?: { ownerPairing: boolean };
+  messaging?: { ownerPairing: boolean; sharedConversations?: boolean };
 }
 
 export interface ConnectDetails {

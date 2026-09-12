@@ -1,0 +1,4 @@
+# This package owns its activation layer so it can be removed independently.
+- insert:
+    - id: amiba-browser-provider-electron
+      name: "@amiba/dsh-plugin-browser-provider-electron"

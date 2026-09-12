@@ -1,3 +1,5 @@
+import { CompactionRow } from "./CompactionRow";
+import type { CompactionProgress } from "@amiba/app-runtime/protocol";
 import { Fragment } from "react";
 import { MessageDecoration } from "../../primitives/empty-state-visual";
 import { ToolRowFrame } from "./tool-row-frame";
@@ -221,7 +223,7 @@ function hasInterleavedAssistantTimeline(message: UiMessage): boolean {
   const timeline = message.assistantTimeline ?? [];
   return (
     (timeline.length > 0 && !!message.streaming) ||
-    timeline.some(item => item.kind === "reasoning") ||
+    timeline.some(item => item.kind === "reasoning" || item.kind === "compaction") ||
     timeline.some(
       (item) => item.kind === "text" && item.text.trim().length > 0,
     ) && timeline.some((item) => item.kind !== "text")
@@ -1182,6 +1184,7 @@ function buildTurnReplyItems(replies: UiMessage[]): TurnReplyItem[] {
 }
 
 type AssistantFlowItem =
+  | { kind: "compaction"; id: string; compaction: CompactionProgress }
   | { kind: "text"; id: string; text: string }
   | {
       kind: "execution";
@@ -1247,6 +1250,9 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
       pendingDetails.push({kind:"reasoning",id:item.id,text:item.text,reasoningMs:item.startedAt !== undefined && item.endedAt !== undefined ? Math.max(0,item.endedAt-item.startedAt) : undefined});
     } else if (item.kind === "tool") {
       appendTool(item.id, item.toolCallId);
+    } else if (item.kind === "compaction") {
+      flushExecution();
+      flow.push(item);
     } else {
       appendApproval(item.id, item.approvalId);
     }
@@ -1311,7 +1317,7 @@ function InterleavedAssistantFlow({
     (segment) =>
       segment.kind === "execution"
         ? segment.details
-        : [{ kind: "narration" as const, id: segment.id, text: segment.text }],
+        : segment.kind === "text" ? [{ kind: "narration" as const, id: segment.id, text: segment.text }] : [],
   );
   processDetails.push(
     ...(executionNotices.get(message.uiId) ?? []).map((notice) => ({
@@ -1329,7 +1335,9 @@ function InterleavedAssistantFlow({
     .trim();
   const resultStreaming = !!message.streaming;
   const processStreaming = resultStreaming && resultText.length === 0;
-  const showRunning = resultStreaming && !awaitingUserInput;
+  const hasCompactions = flow.some(segment => segment.kind === "compaction");
+  const compacting = flow.some(segment => segment.kind === "compaction" && segment.compaction.status === "running");
+  const showRunning = resultStreaming && !awaitingUserInput && !compacting;
 
   const flowRef = useRef<HTMLDivElement>(null);
   const liveHeight = useRef(0);
@@ -1411,7 +1419,7 @@ function InterleavedAssistantFlow({
   return (
     <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
       <div ref={flowRef} className="flex min-w-0 flex-col gap-2">
-        {resultStreaming ? (
+        {resultStreaming || hasCompactions ? (
           <>
             {trace.reasoningText.length > 0 &&
               !message.assistantTimeline?.some(
@@ -1422,23 +1430,25 @@ function InterleavedAssistantFlow({
                     (detail) => detail.kind === "reasoning",
                   )}
                   tools={[]}
-                  streaming={!awaitingUserInput}
+                  streaming={resultStreaming && !awaitingUserInput}
                   latestProgress={clusterProgress}
                 />
               )}
             {flow.map((segment, index) =>
-              segment.kind === "text" ? (
+              segment.kind === "compaction" ? (
+                <CompactionRow key={segment.id} compaction={segment.compaction} live={resultStreaming} />
+              ) : segment.kind === "text" ? (
                 <div
                   key={segment.id}
                   data-live-tail={index === flow.length - 1 ? "" : undefined}
                 >
                   <Streamdown
                     components={chatMarkdownComponents}
-                    mode="streaming"
+                    mode={resultStreaming ? "streaming" : "static"}
                     parseIncompleteMarkdown
                     caret="circle"
                     isAnimating={
-                      index === flow.length - 1 && !awaitingUserInput
+                      resultStreaming && index === flow.length - 1 && !awaitingUserInput
                     }
                     className="chat-md break-words"
                   >
@@ -1450,7 +1460,7 @@ function InterleavedAssistantFlow({
                   key={segment.id}
                   details={segment.details}
                   tools={segment.tools}
-                  streaming={index === flow.length - 1 && !awaitingUserInput}
+                  streaming={resultStreaming && index === flow.length - 1 && !awaitingUserInput}
                 />
               ),
             )}

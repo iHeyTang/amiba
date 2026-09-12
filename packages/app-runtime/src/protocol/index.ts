@@ -320,11 +320,26 @@ export interface SubmitPayload {
   modelSelection?: RuntimeModelSelection;
 }
 
+/** Presentation evidence from DSH's compaction lifecycle, scoped to one session. */
+export interface CompactionProgress {
+  compactionId: string;
+  status: "running" | "completed" | "failed" | "interrupted";
+  startedAt?: number;
+  endedAt?: number;
+  summary?: string;
+  shadowedItemCount?: number;
+  shadowedTokenCount?: number;
+  error?: string;
+}
+
+export type CompactionUpdate = Pick<CompactionProgress, "compactionId"> & Partial<Omit<CompactionProgress, "compactionId">>;
+
 export type AssistantTimelineItem =
   | { kind: "text"; id: string; text: string }
   | { kind: "reasoning"; id: string; text: string; startedAt?: number; endedAt?: number }
   | { kind: "tool"; id: string; toolCallId: string }
-  | { kind: "approval"; id: string; approvalId: string };
+  | { kind: "approval"; id: string; approvalId: string }
+  | { kind: "compaction"; id: string; compaction: CompactionProgress };
 
 export interface ChatRuntimeError {
   message: string;
@@ -419,6 +434,7 @@ export type StreamEvent =
   | { kind: "reasoning"; text: string }
   | { kind: "toolCalls"; calls: ToolCall[] }
   | { kind: "toolProgress"; event: ToolProgress }
+  | { kind: "compaction"; event: CompactionUpdate }
   | { kind: "session"; sessionId: string }
   | { kind: "turn"; turnId: string }
   | { kind: "approvalRequest"; request: ApprovalRequest }

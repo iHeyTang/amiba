@@ -9,11 +9,13 @@ import type { AgentRuntimeLogEntry, AgentRuntimeLogLevel } from "@amiba/app-runt
 import NodeWebSocket from "ws"
 import {
   MANAGED_DSH_RUNTIME,
+  createDevelopmentProfile,
   ensureManagedDshProfile,
   resolveManagedDshRuntimeDir,
   resolveManagedDshPaths,
   resolvePackagedManagedDshRuntimeDir,
 } from "@amiba/app-runtime/dsh-runtime"
+import { servePluginDevelopment } from "./plugin-development"
 import { resolveDshListenPort } from "../shared/dsh-dev-port"
 
 const READY_TIMEOUT_MS = 90_000
@@ -36,7 +38,9 @@ export function extractDshReadyUrl(output: string): string | null {
   return url.origin
 }
 
-export function managedDshPaths(): ReturnType<typeof resolveManagedDshPaths> {
+let developmentProfile: Awaited<ReturnType<typeof createDevelopmentProfile>> | undefined
+
+export function installedDshPaths(): ReturnType<typeof resolveManagedDshPaths> {
   const runtimeDir = app.isPackaged
     ? resolvePackagedManagedDshRuntimeDir(process.resourcesPath)
     : resolveManagedDshRuntimeDir({
@@ -51,7 +55,63 @@ export function managedDshPaths(): ReturnType<typeof resolveManagedDshPaths> {
   return resolveManagedDshPaths(app.getPath("userData"), runtimeDir)
 }
 
+export function managedDshPaths(): ReturnType<typeof resolveManagedDshPaths> {
+  return developmentProfile?.paths ?? installedDshPaths()
+}
+
 export class DshRuntimeController {
+  private transition: Promise<unknown> | null = null
+  private closing = false
+  private withTransition<T>(action: () => Promise<T>): Promise<T> {
+    const previous = this.transition ?? Promise.resolve()
+    const result = previous.catch(() => {}).then(action)
+    this.transition = result
+    void result.finally(() => { if (this.transition === result) this.transition = null }).catch(() => {})
+    return result
+  }
+
+  private developmentServer: Awaited<ReturnType<typeof servePluginDevelopment>> | undefined
+  private readonly developmentListeners = new Set<() => void>()
+  onDevelopmentChanged(listener: () => void): void { this.developmentListeners.add(listener) }
+  private authorProjects: string[] | undefined
+
+  private changeDevelopmentProjects(directories: string[]): Promise<void> {
+    return this.withTransition(async () => {
+    const base = installedDshPaths()
+    await ensureManagedDshProfile(base)
+    const all = [...(this.authorProjects ?? []), ...directories]
+    const next = all.length ? await createDevelopmentProfile(base, all, this.authorProjects) : undefined
+    const previous = developmentProfile
+    await this.stop()
+    developmentProfile = next
+    try {
+      await this.ensureStartedUnblocked()
+      await previous?.dispose()
+      for (const listener of this.developmentListeners) listener()
+    } catch (error) {
+      await this.stop()
+      developmentProfile = previous
+      await next?.dispose()
+      await this.ensureStartedUnblocked()
+      throw error
+    }
+    })
+  }
+
+  async closeDevelopment(): Promise<void> {
+    this.closing = true
+    await this.developmentServer?.close()
+    this.developmentServer = undefined
+    await this.stop()
+    await developmentProfile?.dispose()
+    developmentProfile = undefined
+  }
+
+  private readonly stoppedListeners = new Set<() => void>()
+  onStopped(listener: () => void): () => void {
+    this.stoppedListeners.add(listener)
+    return () => { this.stoppedListeners.delete(listener) }
+  }
   private child: ChildProcess | null = null
   private handle: DshRuntimeHandle | null = null
   private starting: Promise<DshRuntimeHandle> | null = null
@@ -110,8 +170,12 @@ export class DshRuntimeController {
     }
   }
 
+  assertPluginMutationAllowed(): void {
+    if (developmentProfile) throw new Error("Finish local plugin development before installing, updating, or removing published plugins.")
+  }
+
   async ensureManagedProfile(): Promise<void> {
-    await ensureManagedDshProfile(managedDshPaths())
+    await ensureManagedDshProfile(installedDshPaths())
   }
 
   get current(): DshRuntimeHandle | null {
@@ -139,6 +203,12 @@ export class DshRuntimeController {
   }
 
   ensureStarted(): Promise<DshRuntimeHandle> {
+    if (this.closing) return Promise.reject(new Error("Amiba is shutting down"))
+    if (this.transition) return this.transition.then(() => this.ensureStarted())
+    return this.ensureStartedUnblocked()
+  }
+
+  private ensureStartedUnblocked(): Promise<DshRuntimeHandle> {
     if (this.handle && this.child?.exitCode === null) return Promise.resolve(this.handle)
     if (this.starting) return this.starting
     this.starting = this.start()
@@ -154,6 +224,15 @@ export class DshRuntimeController {
   }
 
   private async start(): Promise<DshRuntimeHandle> {
+    if (!this.authorProjects) {
+      this.authorProjects = !app.isPackaged && process.env.AMIBA_DSH_DEV_PROJECTS
+        ? JSON.parse(process.env.AMIBA_DSH_DEV_PROJECTS) : []
+      if (this.authorProjects!.length) {
+        const base = installedDshPaths()
+        await ensureManagedDshProfile(base)
+        developmentProfile = await createDevelopmentProfile(base, this.authorProjects!, this.authorProjects!)
+      }
+    }
     const managed = managedDshPaths()
     this.appendLog("system", `Starting managed DSH ${MANAGED_DSH_RUNTIME.version}.`)
     await Promise.all([
@@ -183,9 +262,11 @@ export class DshRuntimeController {
     const child = spawn(
       launch.node,
       [
+        ...(developmentProfile ? ["--import", developmentProfile.preload] : []),
         launch.entrypoint,
         "--profile",
         managed.profileName,
+        ...(developmentProfile ? ["--patch", developmentProfile.overlay] : []),
         "--host",
         "127.0.0.1",
         "--port",
@@ -237,6 +318,7 @@ export class DshRuntimeController {
         settle(() => reject(error))
       })
       child.once("exit", (code, signal) => {
+        for (const listener of this.stoppedListeners) listener()
         this.flushOutput()
         this.child = null
         this.handle = null
@@ -271,6 +353,12 @@ export class DshRuntimeController {
       pluginToken,
     }
     this.handle = handle
+    if (!this.developmentServer) {
+      this.developmentServer = await servePluginDevelopment({
+        home: installedDshPaths().home,
+        change: directories => this.changeDevelopmentProjects(directories),
+      })
+    }
     this.lastError = null
     this.appendLog("system", `Managed DSH is ready at ${baseUrl}.`)
     return handle
@@ -300,8 +388,10 @@ export class DshRuntimeController {
 
   async restart(): Promise<DshRuntimeHandle> {
     this.appendLog("system", "Restarting managed DSH runtime.")
-    await this.stop()
-    return this.ensureStarted()
+    return this.withTransition(async () => {
+      await this.stop()
+      return this.ensureStartedUnblocked()
+    })
   }
 }
 

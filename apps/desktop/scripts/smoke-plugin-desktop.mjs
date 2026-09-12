@@ -1,0 +1,179 @@
+import { createRequire } from "node:module";
+import { spawn } from "node:child_process";
+import { mkdtemp, rm, writeFile, readFile, mkdir, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import http from "node:http";
+import { fileURLToPath } from "node:url";
+const require = createRequire(import.meta.url);
+const WebSocket = require("ws");
+import assert from "node:assert/strict";
+const root = fileURLToPath(new URL("../../..", import.meta.url));
+const profile = await mkdtemp(path.join(tmpdir(), "amiba-plugin-app-"));
+async function port() {
+  const server = http.createServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const value = server.address().port;
+  await new Promise((resolve) => server.close(resolve));
+  return value;
+}
+const debugPort = await port(),
+  dshPort = await port();
+const author = process.argv.includes("--author");
+const native = process.argv.includes("--native");
+const { workspacePackages } = await import("./dsh-client-dependencies.mjs");
+const authorProjects = author ? [...(await workspacePackages(root)).values()].filter(pkg => pkg.directory.startsWith(path.join(root, "plugins") + path.sep)).map(pkg => pkg.directory) : undefined;
+const env = {
+  ...process.env,
+  AMIBA_USER_DATA_DIR: profile,
+  ...(authorProjects ? { AMIBA_DSH_DEV_PROJECTS: JSON.stringify(authorProjects) } : {}),
+  AMIBA_DSH_DEV_PORT: String(dshPort),
+  AMIBA_DSH_RUNTIME_DIR: path.join(
+    root,
+    "packages/app-runtime/resources/dsh-runtime",
+  ),
+};
+delete env.ELECTRON_RUN_AS_NODE;
+delete env.ELECTRON_RENDERER_URL;
+const child = spawn(
+  require("electron"),
+  [path.join(root, "apps/desktop"), `--remote-debugging-port=${debugPort}`],
+  { env, stdio: ["ignore", "pipe", "pipe"] },
+);
+let logs = "";
+child.stdout.on("data", (value) => {
+  logs += value;
+});
+child.stderr.on("data", (value) => {
+  logs += value;
+});
+const project = path.join(profile, "dsh-plugin-probe");
+let cli;
+let cliLogs = "";
+let socket;
+const pending = new Map();
+let next = 0;
+async function wait(check) {
+  for (let i = 0; i < 60; i++) {
+    const result = await check();
+    if (result) return result;
+    if (child.exitCode !== null)
+      throw new Error("App exited: " + logs.slice(-5000));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  if (socket?.readyState === 1) logs += JSON.stringify(await evaluate("(async()=>({hmr:Array.from(window.__probeCtx?.loader.entries()??[]).filter(e=>e.options.name.includes('hmr')||e.options.name.includes('probe')).map(e=>({name:e.options.name,state:e.fiber?.state,inject:e.fiber?.inject})),frames:window.__probeFrames?.map(s=>{try{const f=JSON.parse(s);return {type:f.type,id:f.id,rev:f.rev}}catch{return s}}),diagnostics:(await window.amiba.agentDiagnostics.logs({limit:100})).entries.filter(e=>/PROBE|hmr|error/i.test(e.message))}))()").catch(String));
+  throw new Error("App UI timeout: " + logs.slice(-18000) + "\nCLI: " + cliLogs);
+}
+function call(method, params = {}) {
+  const id = ++next;
+  return new Promise((resolve, reject) => {
+    pending.set(id, { resolve, reject });
+    socket.send(JSON.stringify({ id, method, params }));
+  });
+}
+async function evaluate(expression) {
+  const response = await call("Runtime.evaluate", {
+    expression,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  if (response.exceptionDetails)
+    throw new Error(JSON.stringify(response.exceptionDetails));
+  return response.result.value;
+}
+try {
+  const target = await wait(async () => {
+    try {
+      const targets = await (
+        await fetch(`http://127.0.0.1:${debugPort}/json/list`)
+      ).json();
+      return targets.find(
+        (target) =>
+          target.type === "page" &&
+          /out\/renderer\/index.html/.test(target.url),
+      );
+    } catch {
+      return null;
+    }
+  });
+  socket = new WebSocket(target.webSocketDebuggerUrl);
+  socket.on("message", (bytes) => {
+    const message = JSON.parse(String(bytes));
+    if (!message.id) { if (message.method === "Runtime.consoleAPICalled" || message.method === "Runtime.exceptionThrown" || message.method === "Log.entryAdded" || (message.method === "Network.responseReceived" && message.params.response.url.includes("dsh-plugin-probe"))) logs += JSON.stringify(message.params) + "\n"; return; }
+    const request = pending.get(message.id);
+    if (!request) return;
+    pending.delete(message.id);
+    message.error
+      ? request.reject(new Error(JSON.stringify(message.error)))
+      : request.resolve(message.result);
+  });
+  await new Promise((resolve) => socket.once("open", resolve));
+  await call("Runtime.enable");
+  await call("Log.enable");
+  await call("Network.enable");
+  await wait(() => evaluate("Boolean(document.querySelector('[data-amiba-product-shell]'))"));
+  assert.equal(await evaluate("location.protocol"), "file:");
+  const home = path.join(profile, "dsh/home");
+  const installedManifest = path.join(home, "profiles/amiba-desktop/package.json");
+  const before = await readFile(installedManifest, "utf8");
+  await mkdir(path.join(project, "src"), { recursive: true });
+  await symlink(path.join(root, "apps/desktop/node_modules"), path.join(project, "node_modules"), "dir");
+  await writeFile(path.join(project, "package.json"), JSON.stringify({ name: "dsh-plugin-probe", version: "0.0.0", type: "module", main: "lib/index.js", exports: { ".": "./lib/index.js", "./client": "./lib/client.js", "./package.json": "./package.json" }, scripts: { build: "tsc -p tsconfig.build.json && vite build" + (native ? " && vite build --config vite.native.config.mjs" : "") }, dsh: { ...(native ? { native: "./lib/native.cjs" } : {}), client: { inject: ["@deepseek-ai/dsh-client-runtime"], platform: "web" } } }));
+  await writeFile(path.join(project, "tsconfig.build.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", rootDir: "src", outDir: "lib", skipLibCheck: true }, include: ["src"] }));
+  await writeFile(path.join(project, "vite.config.mjs"), `export default { build: { emptyOutDir:false, lib: {entry:'src/client.ts',formats:['cjs'],fileName:()=> 'client.js'}, rollupOptions: {output: {banner:'window.__ModuleLoader__.load({id:"dsh-plugin-probe",factory:(require)=>{const module={exports:{}};const exports=module.exports;',footer:'return module.exports;}});'}}}}`);
+  const hostSource = version => `export function apply(ctx: any) { ctx.effect(() => { console.log('AMIBA_PROBE_HOST_${version}'); return () => console.log('AMIBA_PROBE_DISPOSE_${version}'); }); }`;
+  const clientSource = version => `export function apply(ctx: any) { (window as any).__probeCtx=ctx; ctx.effect(() => { const node=document.createElement('div');node.id='amiba-plugin-probe';node.textContent='client-${version}';document.body.append(node);return ()=>node.remove(); }); }`;
+  const nativeEvents = path.join(profile, "native-events.jsonl");
+  const nativeSource = version => `import {appendFileSync} from 'node:fs';export function create(){appendFileSync(${JSON.stringify(nativeEvents)},'native-start-${version}\\n');return {call(){return 'native-${version}'},rendererCall(){return 'native-${version}'},dispose(){appendFileSync(${JSON.stringify(nativeEvents)},'native-stop-${version}\\n')}}}`;
+  if (native) {
+    await writeFile(path.join(project, "src/native.ts"), nativeSource(1));
+    await writeFile(path.join(project, "vite.native.config.mjs"), `export default {build:{emptyOutDir:false,lib:{entry:'src/native.ts',formats:['cjs'],fileName:()=> 'native.cjs'},rollupOptions:{external:['node:fs']}}}`);
+  }
+  const source = version => native ? `export const inject=['amibaRuntimeGateway']; export async function apply(ctx:any) { let lease:string|undefined;let disposed=false;ctx.effect(()=>async()=>{disposed=true;if(lease)await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease})});lease=await ctx.amibaRuntimeGateway.call('amiba_native_attach',{packageName:'dsh-plugin-probe',instanceId:'probe-'+Date.now()});if(disposed){await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease});return}console.log('AMIBA_PROBE_HOST_${version}'); }` : hostSource(version);
+  await writeFile(path.join(project, "src/index.ts"), source(1));
+  await writeFile(path.join(project, "src/client.ts"), clientSource(1));
+  cli = spawn(process.execPath, [process.env.AMIBA_SMOKE_CLI || path.join(root, "apps/cli/dist/cli.js"), "--dsh-home", home, "plugin", "dev"], { cwd: project, env: {...process.env}, stdio: ["ignore", "pipe", "pipe"] });
+  cli.stdout.on("data", chunk => { cliLogs += chunk; });
+  cli.stderr.on("data", chunk => { cliLogs += chunk; });
+  await wait(async () => {
+    if (cli.exitCode !== null) throw new Error("Plugin CLI failed: " + cliLogs);
+    try { return await evaluate("document.querySelector('#amiba-plugin-probe')?.textContent === 'client-1'"); } catch { return false; }
+  });
+  await evaluate("window.__amibaHmrProbe = 42; window.__probeFrames=[]; const probeSse = new EventSource('/plugins/events'); probeSse.onmessage=e=>window.__probeFrames.push(e.data); probeSse.onerror=e=>window.__probeFrames.push('error')");
+  const runtimeBefore = await evaluate("window.amiba.agentDiagnostics.status()");
+  await writeFile(path.join(project, "src/index.ts"), source(2));
+  await writeFile(path.join(project, "src/client.ts"), clientSource(2));
+  await wait(() => evaluate("document.querySelector('#amiba-plugin-probe')?.textContent === 'client-2'"));
+  await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_HOST_2'})")).entries.length > 0);
+  assert.equal((await evaluate("window.amiba.agentDiagnostics.status()")).pid, runtimeBefore.pid, "host HMR must preserve the DSH process");
+  assert.equal(await evaluate("window.__amibaHmrProbe"), 42, "ordinary client HMR must preserve the document");
+  assert.equal(await evaluate("document.querySelectorAll('#amiba-plugin-probe').length"), 1, "old plugin DOM must be disposed");
+  assert.equal(await readFile(installedManifest, "utf8"), before);
+  if (native) {
+    assert.equal(await evaluate("(async()=>window.amiba.nativeExtensions.call(await window.amiba.nativeExtensions.connect('dsh-plugin-probe'),'version'))()"), "native-1");
+    await writeFile(path.join(project, "src/native.ts"), nativeSource(2));
+    await wait(async () => { try { return await evaluate("(async()=>window.amiba.nativeExtensions.call(await window.amiba.nativeExtensions.connect('dsh-plugin-probe'),'version'))()") === 'native-2'; } catch { return false; } });
+    assert.match(await readFile(nativeEvents, 'utf8'), /native-stop-1/);
+    assert.equal((await evaluate("window.amiba.agentDiagnostics.status()")).pid, runtimeBefore.pid);
+  }
+  await evaluate("window.__probePoll=setInterval(()=>window.amiba.agentDiagnostics.status().catch(()=>{}),50)");
+  cli.kill("SIGINT");
+  await wait(() => cli.exitCode !== null);
+  await wait(async () => { try { return await evaluate("Boolean(document.querySelector('[data-amiba-product-shell]')) && !document.querySelector('#amiba-plugin-probe')"); } catch { return false; } });
+  assert.equal(await readFile(installedManifest, "utf8"), before);
+  console.log(`${author ? "Author" : "Installed"}${native ? " + native" : ""} Desktop file: plugin development passed: CLI attach, host/client rebuild, client HMR without document reload, detach, installed profile unchanged.`);
+} finally {
+  if (cli?.exitCode === null) cli.kill("SIGTERM");
+  if (process.exitCode) console.error(cliLogs);
+  socket?.close();
+  child.kill("SIGTERM");
+  await new Promise((resolve) => {
+    if (child.exitCode !== null) return resolve();
+    const timer = setTimeout(() => child.kill("SIGKILL"), 6000);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+  await rm(profile, { recursive: true, force: true });
+}

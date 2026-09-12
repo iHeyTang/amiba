@@ -3,6 +3,18 @@ import type {
   TypertRemoteContribution,
 } from "@deepseek-ai/dsh-typert-protocol";
 import { z } from "zod";
+import type { SharedResourceSearch } from "./conversation-sharing.js";
+import type { MessageConversationSettingsInput, MessageConversationView } from "@amiba/dsh-plugin-messaging-core";
+export type { MessageConversationSettingsInput, MessageConversationView } from "@amiba/dsh-plugin-messaging-core";
+
+const conversationViewSchema = z.object({
+  access: z.enum(["owner", "shared"]),
+  policy: z.object({ cadence: z.enum(["daily", "weekly", "manual"]), timeZone: z.string() }),
+  currentSessionId: z.string().optional(),
+  pendingNewConversation: z.boolean(),
+  history: z.array(z.object({ sessionId: z.string(), createdAt: z.number() })),
+  sharedResources: z.array(z.object({ reference: z.string(), title: z.string() })),
+});
 
 import type {
   ConnectorProviderView,
@@ -53,7 +65,7 @@ const providerViewSchema = z.object({
   description: z.string(),
   icon: z.string().optional(),
   supportsOnboarding: z.boolean(),
-  messaging: z.object({ ownerPairing: z.boolean() }).optional(),
+  messaging: z.object({ ownerPairing: z.boolean(), sharedConversations: z.boolean().optional() }).optional(),
 });
 
 // No secret or config field: ConnectView never carries credential material,
@@ -165,6 +177,10 @@ const ownersCodec = codec(z.array(z.string()), "@amiba/connectors#owners");
 declare module "@deepseek-ai/dsh-typert-protocol" {
   interface TypertRemoteNamespaceMap {
     amibaConnectors: {
+      searchConversationResources(id: string, key: string, query: string): Promise<RemoteResult<SharedResourceSearch>>;
+      shareConversationResources(id: string, key: string, references: string[]): Promise<RemoteResult<MessageConversationView>>;
+      retryFailedReplies(id: string): Promise<RemoteResult<{ retried: number }>>;
+      conversationSettings(id: string, conversationKey: string, input: MessageConversationSettingsInput): Promise<RemoteResult<MessageConversationView>>;
       getConnectDetails(id: string): Promise<RemoteResult<ConnectDetails>>;
       updateConnect(
         id: string,
@@ -197,6 +213,10 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
   }
 
   interface TypertRemoteMap {
+    "amibaConnectors/searchConversationResources": (id: string, key: string, query: string) => Promise<RemoteResult<SharedResourceSearch>>;
+    "amibaConnectors/shareConversationResources": (id: string, key: string, references: string[]) => Promise<RemoteResult<MessageConversationView>>;
+    "amibaConnectors/retryFailedReplies": (id: string) => Promise<RemoteResult<{ retried: number }>>;
+    "amibaConnectors/conversationSettings": (id: string, conversationKey: string, input: MessageConversationSettingsInput) => Promise<RemoteResult<MessageConversationView>>;
     "amibaConnectors/getConnectDetails": (
       id: string,
     ) => Promise<RemoteResult<ConnectDetails>>;
@@ -264,6 +284,22 @@ const descriptor = (
 export const AMIBA_CONNECTORS_REMOTE: TypertRemoteContribution = {
   package: "@amiba/dsh-plugin-connector-core",
   descriptors: [
+    descriptor("searchConversationResources", [
+      { name: "id", wire: "id", source: "json", codec: stringCodec },
+      { name: "key", wire: "key", source: "json", codec: stringCodec },
+      { name: "query", wire: "query", source: "json", codec: codec(z.string().trim().min(1).max(100), "@amiba/connectors#resource-query") },
+    ], codec(z.object({ items: z.array(z.object({ reference: z.string(), title: z.string(), description: z.string().optional() })), unavailable: z.boolean() }), "@amiba/connectors#share-search")),
+    descriptor("shareConversationResources", [
+      { name: "id", wire: "id", source: "json", codec: stringCodec },
+      { name: "key", wire: "key", source: "json", codec: stringCodec },
+      { name: "references", wire: "references", source: "json", codec: codec(z.array(z.string().min(1).max(25000)).max(100), "@amiba/connectors#shared-references") },
+    ], codec(conversationViewSchema, "@amiba/connectors#conversation-view")),
+    descriptor("retryFailedReplies", [{ name: "id", wire: "id", source: "json", codec: stringCodec }], codec(z.object({ retried: z.number().int().nonnegative() }), "@amiba/connectors#retry-result")),
+    descriptor("conversationSettings", [
+      { name: "id", wire: "id", source: "json", codec: stringCodec },
+      { name: "conversationKey", wire: "conversationKey", source: "json", codec: stringCodec },
+      { name: "input", wire: "input", source: "json", codec: codec(z.object({ action: z.enum(["status", "configure", "new"]), cadence: z.enum(["daily", "weekly", "manual"]).optional() }).strict(), "@amiba/connectors#conversation-settings-input") },
+    ], codec(conversationViewSchema, "@amiba/connectors#conversation-view")),
     descriptor(
       "getConnectDetails",
       [{ name: "id", wire: "id", source: "json", codec: stringCodec }],

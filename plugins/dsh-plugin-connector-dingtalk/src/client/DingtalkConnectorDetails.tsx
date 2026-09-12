@@ -1,10 +1,12 @@
-import { Bot, Radio, ShieldCheck, Wrench } from "lucide-react";
+import { Bot, FileText, QrCode, Radio, ShieldCheck, Wrench } from "lucide-react";
 
 import { usePluginT } from "@amiba/ui/plugin";
 
 import { dingtalkI18n } from "./i18n.js";
 
 const FEATURES = [
+  { icon: FileText, key: "documents" },
+  { icon: QrCode, key: "onboarding" },
   { icon: Radio, key: "stream" },
   { icon: Bot, key: "messaging" },
   { icon: ShieldCheck, key: "approval" },

@@ -101,16 +101,33 @@ pnpm runtime:prepare
 pnpm dev:desktop
 ```
 
-`pnpm dev:desktop` watches every workspace Amiba plugin with a Client entry.
-Saving UI or plugin source incrementally rebuilds only affected Client bundles
-and automatically refreshes the current window through DSH's rebuild channel;
-normally there is no need to rerun `runtime:rebuild` or restart the desktop app.
-Host-plugin, dependency-manifest, and Cordis-patch changes still require a dev
-process restart.
+`pnpm dev:desktop` verifies/prepares the managed runtime, then starts a lightweight
+source watcher and Electron. It reuses verified Client bundles instead of rebuilding
+all of them again before opening the window. The first preparation, or a changed
+runtime source digest, still runs the normal runtime build/install path.
+
+Saving UI or plugin source queues only affected Client bundles. Compiler-recorded
+inputs include tree-shaken modules; older bundles fall back to workspace dependency
+tracking. A short debounce coalesces saves, and one short-lived compiler runs at a
+time so Rollup/PostCSS caches do not accumulate across all plugins. Development
+rebuilds skip minification, retain sourcemaps, and publish the existing CJS factory
+last through an atomic rename. Failed builds leave the last working bundle intact.
+DSH's existing rebuild channel refreshes the window; host-plugin, dependency-manifest,
+and Cordis-patch changes still require a dev process restart.
+
+Plugins that already inject UI Shell share `@amiba/ui/plugin` through that existing
+module identity. Source imports and the DSH factory/injection protocol are unchanged.
+The build-only `.client-inputs.json` is not a runtime API.
+Every emitted external request must also be declared in `dsh.client.external`;
+`dsh.client.inject` only controls service injection, not module arrival. The build
+fails on declaration drift, and the client verifier exercises cold consumer-first
+and concurrent imports with the installed DSH browser module loader.
 
 Useful verification commands:
 
 ```bash
+node --test apps/desktop/scripts/dsh-client-externals.test.mjs apps/desktop/scripts/dsh-module-arrival.test.mjs apps/desktop/scripts/dsh-client-dependencies.test.mjs apps/desktop/scripts/watch-dsh-clients.test.mjs
+node apps/desktop/scripts/verify-dsh-clients.mjs
 pnpm runtime:verify
 pnpm runtime:smoke
 pnpm -r typecheck

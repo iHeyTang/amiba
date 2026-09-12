@@ -147,20 +147,15 @@ export function installDshClientTransport(
   };
 }
 
-/**
- * Reload the Electron development document after one managed client bundle
- * changes. The build remains incremental (only affected workspace clients are
- * emitted); a document reload is intentional because a fiber-level swap of
- * the plugin that owns `root` briefly leaves the official renderer without a
- * root registration. Packaged renderers use file: and never open this stream.
+/** Ordinary plugin changes use DSH's client HMR in both dev and file: renderers.
+ * The root owner needs a document boot because disposing it removes the root slot.
  */
 export function installDshClientDevReload(): () => void {
-  if (!/^https?:$/u.test(window.location.protocol)) return () => undefined;
-
   const source = new EventSource("/plugins/events");
   let reloading = false;
   const onMessage = (event: MessageEvent<string>): void => {
-    if (reloading || parseDshClientRebuildFrame(event.data) === null) return;
+    const frame = parseDshClientRebuildFrame(event.data);
+    if (reloading || frame?.id !== "@amiba/dsh-plugin-ui-shell") return;
     reloading = true;
     source.close();
     window.location.reload();

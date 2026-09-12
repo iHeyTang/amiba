@@ -55,3 +55,15 @@ Electron never discovers it directly.
 `amiba plugin pack` produces `dsh-plugin.tgz` containing `package.json`, `README.md`,
 and the built `lib/` directory. Installation is deliberately not implemented
 as an Electron registry operation; it belongs to the DSH Loader/config layer.
+
+`amiba plugin dev` builds the project, connects it to running Amiba through a
+temporary DSH profile, then watches host/client/native source changes. Ctrl+C
+restores the installed profile. It works with a packaged desktop; Amiba source
+is not required. Use `--no-connect` for build-only watching, or the global
+`--dsh-home` option to select a desktop with a custom data directory.
+See [Local plugin development](../../docs/local-plugin-development.md).
+
+The CLI tarball includes the shared runtime helpers during `prepare`; installing
+it does not require the private `@amiba/app-runtime` workspace package. The desktop
+continues to own the installed DSH runtime. Verify the standalone tarball with
+`node apps/cli/scripts/smoke-package.mjs` from the repository root.

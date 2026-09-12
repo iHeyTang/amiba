@@ -55,6 +55,11 @@ it("persists explicit selection, keeps missing choices and restores candidates a
   await reloaded.set("amiba.composer.accessory", "");
   expect(reloaded.getSnapshot().choices["amiba.emptyState.visual"]).toBe("b");
   await reloaded.set("amiba.emptyState.visual", "");
+  expect(reloaded.getSnapshot().choices["amiba.emptyState.visual"]).toBe("");
+  const disabled = createSurfaceSelections(core, storage);
+  await disabled.set("amiba.composer.accessory", undefined);
+  expect(disabled.getSnapshot().choices["amiba.emptyState.visual"]).toBe("");
+  await reloaded.set("amiba.emptyState.visual", undefined);
   expect(
     reloaded.getSnapshot().choices["amiba.emptyState.visual"],
   ).toBeUndefined();

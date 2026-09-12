@@ -152,7 +152,8 @@ export type AmibaShellSlot =
   | "tool.call.toolview";
 
 /** The official DSH child-slot dispatcher, handed down from AmibaRoot. */
-export type AmibaShellRenderSlot = PropsRenderSlots<AmibaShellSlot>["renderSlot"];
+export type AmibaShellRenderSlot =
+  PropsRenderSlots<AmibaShellSlot>["renderSlot"];
 
 /**
  * Project the DSH `settings.section` ledger into Amiba's Settings
@@ -199,12 +200,9 @@ function normalizeAttachment(raw: unknown): PendingPromptAttachment | null {
       typeof value.uiId === "string" && value.uiId
         ? value.uiId
         : `att_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    name:
-      typeof value.name === "string" && value.name ? value.name : "file",
+    name: typeof value.name === "string" && value.name ? value.name : "file",
     mime:
-      typeof value.mime === "string"
-        ? value.mime
-        : "application/octet-stream",
+      typeof value.mime === "string" ? value.mime : "application/octet-stream",
     size:
       typeof value.size === "number" && Number.isFinite(value.size)
         ? value.size
@@ -587,8 +585,13 @@ function ProductShellInner({
         entryKey: request.owner.toolName,
         fallback: renderOfficialToolFallback(request.owner, request.fallback),
       });
-      return renderSlot("amiba.tool.execution", {...request.owner, fallback}, {fallback});
-    }, [renderSlot],
+      return renderSlot(
+        "amiba.tool.execution",
+        { ...request.owner, fallback },
+        { fallback },
+      );
+    },
+    [renderSlot],
   );
 
   // Amiba's KEYED per-question seat. Dispatched once per pending request with
@@ -674,183 +677,235 @@ function ProductShellInner({
     sessionsBridge?.setActive(sessions.activeId);
   }, [sessionsBridge, sessions.activeId]);
 
-  return (
-    <PresentationRoot><SurfaceProvider surfaces={surfaces} renderSlot={renderSlot}><div
-      data-amiba-product-shell
-      className="relative h-screen w-full overflow-hidden bg-background text-foreground"
-    >
-      {standaloneTitleBar && (
-        <div
-          data-testid="native-window-titlebar"
-          className="app-drag-region flex shrink-0 items-center border-b border-border/40 bg-background pl-4 text-xs text-muted-foreground"
-          style={{
-            height: topBarHeightPx,
-            paddingRight: `max(${platform.windowChrome?.rightInsetPx ?? 138}px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)))`,
-          }}
-        >
-          <span className="select-none">Amiba</span>
-        </div>
-      )}
-      <div className="relative" style={standaloneTitleBar ? { height: `calc(100% - ${topBarHeightPx}px)` } : undefined}>
-      <FullScreenChatView
-        viewportTopInsetPx={standaloneTitleBar ? topBarHeightPx : 0}
-        client={client}
-        capabilities={capabilities}
-        mentionProviders={mentionProviders}
-        triggerRuntime={triggerRuntime}
-        settingsOpen={settingsOpen}
-        openSettings={(tab) => {
-          // ErrorBlock's recovery targets are registry hash ids
-          // (`models`/`connection`/`logs`), not `settings.section` ids, so
-          // they are written raw — SettingsView's own routing resolves an
-          // unknown bare id against the section ledger.
-          if (tab) window.location.hash = tab;
-          settings.openAt();
-        }}
-        openAgentDestination={(url) => platform.shell.openExternal(url)}
-        topBarLeftInset={topBarLeftInset}
-        topBarHeightPx={topBarHeightPx}
-        topBarClassName={desktop ? "app-drag-region" : undefined}
-        restoreSidebarViewOnMount={false}
-        hiddenSessionIds={hiddenSessions}
-        groups={sessionGroupList}
-        itemMenuItems={sessionMenuItemList}
-        messageSourceLabel={messageSourceLabel}
-        slots={{
-          emptyState: (
-            <HomeView
-              triggerRuntime={triggerRuntime}
-              onOpenChat={() => {}}
-              onOpenSettings={() => settings.openAt()}
-              panelMode
-              modelPicker={renderModelPickerSeat}
-            />
-          ),
-          settingsTrigger: renderSettingsTrigger,
-          modelPicker: renderModelPickerSeat,
-          planSeat: renderPlanSeat,
-          notice: (owner, fallback) => renderSlot("amiba.conversation.notice", owner, { entryKey: owner.reference ? `reference:${owner.reference.kind}` : owner.source, fallback }),
-          toolAnnotation: (owner) => renderSlot("amiba.tool.activity", owner),
-          progress: () => renderSlot("amiba.conversation.progress", {}),
-          workbenchPanel: (owner) => renderSlot("amiba.workbench.panel", owner),
-          // The official composer overlay anchor. The seat declares NO owner
-          // share, so `{}` is the faithful dispatch — anything else would be
-          // a fabricated owner. Session-scoped: the renderer resolves the
-          // session from the official current (kept in step by the R1
-          // bridge) and renders nothing while none is current, which is also
-          // why the home/draft composer keeps Amiba's own trigger menu.
-          inputOverlay: renderSlot("conversation.input.overlay", {}),
-          toolView: renderToolViewSeat,
-          questionSeat: renderQuestionSeat,
-          navigationBefore: renderSlot("amiba.navigation.before", {}),
-          workspaceNavigation: (activeView) =>
-            renderSlot("amiba.workspace.navigation", { activeView, sessionActivity: {
-              sessions: sessions.sessions,
-              visibleSessionId: activeView === "chats" ? sessions.activeId : "",
-              markUnread: sessions.markUnread, markRead: sessions.markRead,
-            } }),
-          navigationAfter: renderSlot("amiba.navigation.after", {}),
-          workspaceView: (viewId, owner) =>
-            renderSlot("amiba.workspace.view", { ...owner, sessionActivity: {
-              sessions: sessions.sessions, visibleSessionId: "",
-              markUnread: sessions.markUnread, markRead: sessions.markRead,
-            } }, { only: viewId }),
-          // Official session-scoped seat: the renderer resolves the session
-          // from the official ctx.sessions current (kept in step by the R1
-          // bridge) and renders null while none is current, so the strip is
-          // empty on the home view and on a not-yet-materialized draft.
-          headerAfter: renderSlot("conversation.session.header.utilities", {}),
-          // The title-adjacent counterpart, same session resolution and the
-          // same empty owner share the contract declares. The header row it
-          // lands in collapses while the seat is empty, so a session with no
-          // contributed action looks exactly as it did before the seat
-          // existed.
-          headerActions: renderSlot("conversation.session.header.actions", {}),
-          contentOverlay: renderSlot("amiba.chat.content.overlay", {}),
-        }}
-      />
+  if (
+    platform.kind === "desktop" &&
+    new URLSearchParams(location.search).get("desktopPet") === "1"
+  ) {
+    return (
+      <div data-amiba-product-shell className="h-screen w-full">
+        {renderSlot("amiba.workspace.view", {}, { only: "desktop-pet" })}
       </div>
-      {/*
+    );
+  }
+
+  return (
+    <PresentationRoot>
+      <div hidden aria-hidden="true">{renderSlot("amiba.session.observer", { readStates: sessions.sessions.filter(s => s.readAt !== undefined).map(s => ({sessionId: s.id, readAt: s.readAt!})) })}</div>
+      <SurfaceProvider surfaces={surfaces} renderSlot={renderSlot}>
+        <div
+          data-amiba-product-shell
+          className="relative h-screen w-full overflow-hidden bg-background text-foreground"
+        >
+          {standaloneTitleBar && (
+            <div
+              data-testid="native-window-titlebar"
+              className="app-drag-region flex shrink-0 items-center border-b border-border/40 bg-background pl-4 text-xs text-muted-foreground"
+              style={{
+                height: topBarHeightPx,
+                paddingRight: `max(${platform.windowChrome?.rightInsetPx ?? 138}px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)))`,
+              }}
+            >
+              <span className="select-none">Amiba</span>
+            </div>
+          )}
+          <div
+            className="relative"
+            style={
+              standaloneTitleBar
+                ? { height: `calc(100% - ${topBarHeightPx}px)` }
+                : undefined
+            }
+          >
+            <FullScreenChatView
+              viewportTopInsetPx={standaloneTitleBar ? topBarHeightPx : 0}
+              client={client}
+              capabilities={capabilities}
+              mentionProviders={mentionProviders}
+              triggerRuntime={triggerRuntime}
+              settingsOpen={settingsOpen}
+              openSettings={(tab) => {
+                // ErrorBlock's recovery targets are registry hash ids
+                // (`models`/`connection`/`logs`), not `settings.section` ids, so
+                // they are written raw — SettingsView's own routing resolves an
+                // unknown bare id against the section ledger.
+                if (tab) window.location.hash = tab;
+                settings.openAt();
+              }}
+              openAgentDestination={(url) => platform.shell.openExternal(url)}
+              topBarLeftInset={topBarLeftInset}
+              topBarHeightPx={topBarHeightPx}
+              topBarClassName={desktop ? "app-drag-region" : undefined}
+              restoreSidebarViewOnMount={false}
+              hiddenSessionIds={hiddenSessions}
+              groups={sessionGroupList}
+              itemMenuItems={sessionMenuItemList}
+              messageSourceLabel={messageSourceLabel}
+              slots={{
+                emptyState: (
+                  <HomeView
+                    triggerRuntime={triggerRuntime}
+                    onOpenChat={() => {}}
+                    onOpenSettings={() => settings.openAt()}
+                    panelMode
+                    modelPicker={renderModelPickerSeat}
+                  />
+                ),
+                settingsTrigger: renderSettingsTrigger,
+                modelPicker: renderModelPickerSeat,
+                planSeat: renderPlanSeat,
+                notice: (owner, fallback) =>
+                  renderSlot("amiba.conversation.notice", owner, {
+                    entryKey: owner.reference
+                      ? `reference:${owner.reference.kind}`
+                      : owner.source,
+                    fallback,
+                  }),
+                toolAnnotation: (owner) =>
+                  renderSlot("amiba.tool.activity", owner),
+                progress: () => renderSlot("amiba.conversation.progress", {}),
+                workbenchPanel: (owner) =>
+                  renderSlot("amiba.workbench.panel", owner),
+                // The official composer overlay anchor. The seat declares NO owner
+                // share, so `{}` is the faithful dispatch — anything else would be
+                // a fabricated owner. Session-scoped: the renderer resolves the
+                // session from the official current (kept in step by the R1
+                // bridge) and renders nothing while none is current, which is also
+                // why the home/draft composer keeps Amiba's own trigger menu.
+                inputOverlay: renderSlot("conversation.input.overlay", {}),
+                toolView: renderToolViewSeat,
+                questionSeat: renderQuestionSeat,
+                navigationBefore: renderSlot("amiba.navigation.before", {}),
+                workspaceNavigation: (activeView) =>
+                  renderSlot("amiba.workspace.navigation", {
+                    activeView,
+                    sessionActivity: {
+                      sessions: sessions.sessions,
+                      visibleSessionId:
+                        activeView === "chats" ? sessions.activeId : "",
+                      markUnread: sessions.markUnread,
+                      markRead: sessions.markRead,
+                    },
+                  }),
+                navigationAfter: renderSlot("amiba.navigation.after", {}),
+                workspaceView: (viewId, owner) =>
+                  renderSlot(
+                    "amiba.workspace.view",
+                    {
+                      ...owner,
+                      sessionActivity: {
+                        sessions: sessions.sessions,
+                        visibleSessionId: "",
+                        markUnread: sessions.markUnread,
+                        markRead: sessions.markRead,
+                      },
+                    },
+                    { only: viewId },
+                  ),
+                // Official session-scoped seat: the renderer resolves the session
+                // from the official ctx.sessions current (kept in step by the R1
+                // bridge) and renders null while none is current, so the strip is
+                // empty on the home view and on a not-yet-materialized draft.
+                headerAfter: renderSlot(
+                  "conversation.session.header.utilities",
+                  {},
+                ),
+                // The title-adjacent counterpart, same session resolution and the
+                // same empty owner share the contract declares. The header row it
+                // lands in collapses while the seat is empty, so a session with no
+                // contributed action looks exactly as it did before the seat
+                // existed.
+                headerActions: renderSlot(
+                  "conversation.session.header.actions",
+                  {},
+                ),
+                contentOverlay: renderSlot("amiba.chat.content.overlay", {}),
+              }}
+            />
+          </div>
+          {/*
         Settings, as a modal dialog layered over the chat surface above.
         The structure is the official shell's (mask + `role="dialog"
         aria-modal="true"` panel named through `aria-labelledby`, Escape and
         mask-click close paths); the pixels, the navigation, the page
         registry and the scaffold are Amiba's, unchanged.
       */}
-      <SettingsDialog
-        onClose={closeSettings}
-        open={settingsOpen}
-        titleId={SETTINGS_TITLE_ID}
-      >
-        <SettingsView
-          dshSections={sections}
-          headerId={SETTINGS_TITLE_ID}
-          onClose={closeSettings}
-          // The official `settings.close` seat: the close button's
-          // visually-hidden label. Empty owner share by contract. Amiba's own
-          // copy rides as the fallback, which is the job upstream's own
-          // CloseLabel registration does — Amiba cannot register it, because
-          // a priority-0 occupant on a SINGLE slot makes the next
-          // registration throw.
-          // `fallback` is the ONLY way to supply Amiba's own copy for a
-          // SINGLE seat: Amiba cannot register into it (a priority-0
-          // occupant makes the first third-party registration throw), and a
-          // `??` on the dispatch result never fires — renderSlot returns a
-          // real `<div data-slot>` element for an EMPTY seat, not nullish.
-          closeLabel={renderSlot(
-            "settings.close",
-            {},
-            { fallback: t("common.close") },
-          )}
-          slots={{
-            assistantNavigation: (activeSection) => (
-              <SettingsSectionNavigation
-                activeSection={activeSection}
-                openSettings={openSettingsSection}
-                sections={sections}
-              />
-            ),
-            // Official settings.section owner contract: `close` is the one
-            // shell affordance a section receives, wired to the same
-            // close-the-dialog path as the header button and Escape.
-            section: (sectionId) =>
-              renderSlot(
-                "settings.section",
-                { close: closeSettings },
-                { only: sectionId },
-              ),
-            // The three remaining shell-level seats. All three take the
-            // EMPTY owner share their contract declares, so `{}` is the
-            // faithful dispatch and anything else would be fabricated.
-            // Same fallback rule as `settings.close` above. This one is
-            // load-bearing beyond the pixels: the dialog names itself
-            // through this node (`aria-labelledby`), so an empty seat with
-            // no fallback leaves the dialog with a BLANK accessible name.
-            header: renderSlot(
-              "settings.header",
-              {},
-              { fallback: t("chat.settings") },
-            ),
-            action: renderSlot("settings.action", {}),
-            generalItem: renderSlot("settings.general.item", {}),
-            contentOverlay: renderSlot("amiba.settings.content.overlay", {}),
-          }}
-          // No OS-chrome reserve inside the dialog. `topBarLeftInset` /
-          // `topBarHeightPx` still go to the chat surface above (which does
-          // own the window's top strip), but Settings is a centred panel
-          // floating BELOW the traffic lights now — SettingsDialog keeps it
-          // clear of them — so reserving a second time in here would just
-          // indent the navigation heading into empty space.
-          // `onGoHome` is gone for the same reason: the dialog's own close
-          // button is the escape hatch, which is also what upstream's
-          // SettingsRoot gives its panel.
-          sidebarHeaderHeightPx={topBarHeightPx}
-        />
-      </SettingsDialog>
-      <div className="pointer-events-none absolute inset-0 z-[var(--z-shell-overlay)]">
-        {renderSlot("shell.overlay", {})}
-      </div>
-      {/*
+          <SettingsDialog
+            onClose={closeSettings}
+            open={settingsOpen}
+            titleId={SETTINGS_TITLE_ID}
+          >
+            <SettingsView
+              dshSections={sections}
+              headerId={SETTINGS_TITLE_ID}
+              onClose={closeSettings}
+              // The official `settings.close` seat: the close button's
+              // visually-hidden label. Empty owner share by contract. Amiba's own
+              // copy rides as the fallback, which is the job upstream's own
+              // CloseLabel registration does — Amiba cannot register it, because
+              // a priority-0 occupant on a SINGLE slot makes the next
+              // registration throw.
+              // `fallback` is the ONLY way to supply Amiba's own copy for a
+              // SINGLE seat: Amiba cannot register into it (a priority-0
+              // occupant makes the first third-party registration throw), and a
+              // `??` on the dispatch result never fires — renderSlot returns a
+              // real `<div data-slot>` element for an EMPTY seat, not nullish.
+              closeLabel={renderSlot(
+                "settings.close",
+                {},
+                { fallback: t("common.close") },
+              )}
+              slots={{
+                assistantNavigation: (activeSection) => (
+                  <SettingsSectionNavigation
+                    activeSection={activeSection}
+                    openSettings={openSettingsSection}
+                    sections={sections}
+                  />
+                ),
+                // Official settings.section owner contract: `close` is the one
+                // shell affordance a section receives, wired to the same
+                // close-the-dialog path as the header button and Escape.
+                section: (sectionId) =>
+                  renderSlot(
+                    "settings.section",
+                    { close: closeSettings },
+                    { only: sectionId },
+                  ),
+                // The three remaining shell-level seats. All three take the
+                // EMPTY owner share their contract declares, so `{}` is the
+                // faithful dispatch and anything else would be fabricated.
+                // Same fallback rule as `settings.close` above. This one is
+                // load-bearing beyond the pixels: the dialog names itself
+                // through this node (`aria-labelledby`), so an empty seat with
+                // no fallback leaves the dialog with a BLANK accessible name.
+                header: renderSlot(
+                  "settings.header",
+                  {},
+                  { fallback: t("chat.settings") },
+                ),
+                action: renderSlot("settings.action", {}),
+                generalItem: renderSlot("settings.general.item", {}),
+                contentOverlay: renderSlot(
+                  "amiba.settings.content.overlay",
+                  {},
+                ),
+              }}
+              // No OS-chrome reserve inside the dialog. `topBarLeftInset` /
+              // `topBarHeightPx` still go to the chat surface above (which does
+              // own the window's top strip), but Settings is a centred panel
+              // floating BELOW the traffic lights now — SettingsDialog keeps it
+              // clear of them — so reserving a second time in here would just
+              // indent the navigation heading into empty space.
+              // `onGoHome` is gone for the same reason: the dialog's own close
+              // button is the escape hatch, which is also what upstream's
+              // SettingsRoot gives its panel.
+              sidebarHeaderHeightPx={topBarHeightPx}
+            />
+          </SettingsDialog>
+          <div className="pointer-events-none absolute inset-0 z-[var(--z-shell-overlay)]">
+            {renderSlot("shell.overlay", {})}
+          </div>
+          {/*
         The onboarding coordinator's single mounted step. Rendered OUTSIDE
         the dialog, exactly as upstream renders it beside the panel: a step
         owns its own visible chrome (including `#root` inert ownership) and
@@ -858,23 +913,25 @@ function ProductShellInner({
         nothing at all. `{ only: activeStepId }` is what makes "one at a
         time" structural rather than a convention.
       */}
-      {onboardingStepId !== undefined &&
-        renderSlot(
-          "settings.onboarding",
-          {
-            stepId: onboardingStepId,
-            complete: () => completeOnboardingStep(onboardingStepId),
-            // Rule 5: "open the settings panel directly on one registered
-            // section". Deliberately the SAME affordance the settings
-            // navigation uses (`ctx.layout.openSettings(id)`), so a step's
-            // deep link and a nav click cannot diverge.
-            openSection: openSettingsSection,
-          },
-          { only: onboardingStepId },
-        )}
-      <span className="sr-only" aria-live="polite">
-        {t("app.initializing")}
-      </span>
-    </div></SurfaceProvider></PresentationRoot>
+          {onboardingStepId !== undefined &&
+            renderSlot(
+              "settings.onboarding",
+              {
+                stepId: onboardingStepId,
+                complete: () => completeOnboardingStep(onboardingStepId),
+                // Rule 5: "open the settings panel directly on one registered
+                // section". Deliberately the SAME affordance the settings
+                // navigation uses (`ctx.layout.openSettings(id)`), so a step's
+                // deep link and a nav click cannot diverge.
+                openSection: openSettingsSection,
+              },
+              { only: onboardingStepId },
+            )}
+          <span className="sr-only" aria-live="polite">
+            {t("app.initializing")}
+          </span>
+        </div>
+      </SurfaceProvider>
+    </PresentationRoot>
   );
 }

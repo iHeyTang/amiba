@@ -23,6 +23,11 @@
   },
   "dsh": {
     "client": {
+      "external": [
+        "@amiba/dsh-plugin-ui-shell/client",
+        "react",
+        "react/jsx-runtime"
+      ],
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-api-remotes",
@@ -50,7 +55,8 @@
     "lucide-react": "^0.460.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@amiba/dsh-plugin-session-features": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",

@@ -23,7 +23,7 @@ export const larkI18n: PluginCatalogOverlay = {
   en: {
     "options.connect.dsh.lark.title": "Connect Feishu",
     "options.connect.dsh.lark.subtitleScan":
-      "Scan with the Feishu app to authorize; the connect is created automatically.",
+      "Connect Feishu to chat with AI and let it find and summarize your documents.",
     "options.connect.dsh.lark.subtitleManual":
       "Copy from Feishu Open Platform → your app → Credentials & Basic Info.",
     "options.connect.dsh.lark.appId": "App ID",
@@ -40,19 +40,22 @@ export const larkI18n: PluginCatalogOverlay = {
       "Choose the app domain, then enter the credentials from the developer console.",
     "options.connect.dsh.detail.capabilities": "Capabilities",
     "options.connect.dsh.lark.detail.summary":
-      "Connect a Feishu or Lark bot to Amiba over the official long connection. Each connection is an independent bot account with its own credentials, agent preset and conversation ownership.",
-    "options.connect.dsh.lark.detail.messaging.title": "Bot conversations",
+      "Bring AI into your Feishu work: chat with your assistant, find documents and organize information. We will guide you through the connection steps.",
+    "options.connect.dsh.lark.detail.messaging.title":
+      "Chat with your AI assistant",
     "options.connect.dsh.lark.detail.messaging.description":
       "Receive messages in real time and return agent replies to the same chat.",
     "options.connect.dsh.lark.detail.onboarding.title": "Quick QR setup",
     "options.connect.dsh.lark.detail.onboarding.description":
-      "Scan to authorize and connect. Manual app credentials are available as a fallback.",
-    "options.connect.dsh.lark.detail.approval.title": "Native approvals",
+      "Follow the guided scans to connect your workspace and documents.",
+    "options.connect.dsh.lark.detail.approval.title":
+      "Confirm important actions",
     "options.connect.dsh.lark.detail.approval.description":
       "Present tool approvals as interactive cards and update the result in place.",
-    "options.connect.dsh.lark.detail.tools.title": "Feishu tools and skills",
+    "options.connect.dsh.lark.detail.tools.title":
+      "Find and work with your information",
     "options.connect.dsh.lark.detail.tools.description":
-      "Provision the official MCP tools and selected document, wiki, drive and contact skills.",
+      "Find documents and people, and work with information your workspace allows AI to access.",
     "options.connect.dsh.wizard.changePlatform": "Back to connectors",
     "options.connect.dsh.wizard.privacyHint":
       "Credentials stay on this device and are never sent to the model",
@@ -71,10 +74,11 @@ export const larkI18n: PluginCatalogOverlay = {
     "options.connect.dsh.error.onboarding_unsupported":
       "That provider doesn't support scan-to-connect onboarding.",
     "options.connect.dsh.onboard.modeScan": "Back to scanning",
-    "options.connect.dsh.onboard.modeManual": "Set up manually instead",
+    "options.connect.dsh.onboard.customize": "Connection name and AI assistant",
+    "options.connect.dsh.onboard.modeManual": "Advanced: use an existing app",
     "options.connect.dsh.onboard.begin": "Start scanning",
     "options.connect.dsh.onboard.intro":
-      "Start scanning to generate a QR code for this provider.",
+      "Scan with Feishu and follow its prompts. Next, connect your documents and enable the supported AI work abilities in this setup.",
     "options.connect.dsh.onboard.qrAlt": "Onboarding QR code",
     "options.connect.dsh.onboard.waiting": "Waiting for the provider…",
     "options.connect.dsh.onboard.error.generic":
@@ -91,7 +95,7 @@ export const larkI18n: PluginCatalogOverlay = {
   "zh-CN": {
     "options.connect.dsh.lark.title": "接入飞书",
     "options.connect.dsh.lark.subtitleScan":
-      "用飞书 App 扫码授权，完成后自动创建连接。",
+      "连接飞书，和 AI 对话，让它帮你查文档、整理资料。",
     "options.connect.dsh.lark.subtitleManual":
       "在飞书开放平台 → 你的应用 → 凭证与基础信息 里复制。",
     "options.connect.dsh.lark.appId": "App ID",
@@ -108,19 +112,19 @@ export const larkI18n: PluginCatalogOverlay = {
       "选择应用所属域名，再填写开发者后台中的应用凭证。",
     "options.connect.dsh.detail.capabilities": "可用能力",
     "options.connect.dsh.lark.detail.summary":
-      "通过官方长连接把飞书或 Lark 机器人接入 Amiba。每个连接都是独立的机器人账号，分别保存凭据、智能体预设与会话所有者。",
-    "options.connect.dsh.lark.detail.messaging.title": "机器人会话",
+      "把 AI 带进你的飞书工作中：随时对话、查找文档、整理资料。按页面引导完成连接即可。",
+    "options.connect.dsh.lark.detail.messaging.title": "在聊天中随时找 AI 帮忙",
     "options.connect.dsh.lark.detail.messaging.description":
       "实时接收消息，并把 Agent 的回复发回原会话。",
     "options.connect.dsh.lark.detail.onboarding.title": "扫码快速接入",
     "options.connect.dsh.lark.detail.onboarding.description":
-      "扫码授权即可完成连接；无法扫码时，可手动填写应用凭证。",
-    "options.connect.dsh.lark.detail.approval.title": "原生审批",
+      "跟着页面扫码，完成工作区和资料的连接。",
+    "options.connect.dsh.lark.detail.approval.title": "重要操作由你确认",
     "options.connect.dsh.lark.detail.approval.description":
       "在会话中展示交互式审批卡片，并原位更新处理结果。",
-    "options.connect.dsh.lark.detail.tools.title": "飞书工具与技能",
+    "options.connect.dsh.lark.detail.tools.title": "查找和处理工作资料",
     "options.connect.dsh.lark.detail.tools.description":
-      "配置官方 MCP 工具，以及文档、知识库、云盘和通讯录等精选技能。",
+      "查找文档和联系人，处理工作区允许 AI 访问的信息。",
     "options.connect.dsh.wizard.changePlatform": "返回连接器",
     "options.connect.dsh.wizard.privacyHint":
       "凭证只保存在本机，不会发送给模型",
@@ -136,9 +140,11 @@ export const larkI18n: PluginCatalogOverlay = {
     "options.connect.dsh.error.onboarding_unsupported":
       "该连接器不支持扫码接入。",
     "options.connect.dsh.onboard.modeScan": "返回扫码",
-    "options.connect.dsh.onboard.modeManual": "无法扫码？手动填写",
+    "options.connect.dsh.onboard.customize": "连接名称与 AI 助手",
+    "options.connect.dsh.onboard.modeManual": "高级设置：使用已有应用",
     "options.connect.dsh.onboard.begin": "开始扫码",
-    "options.connect.dsh.onboard.intro": "点击“开始扫码”，生成飞书授权二维码。",
+    "options.connect.dsh.onboard.intro":
+      "用飞书扫码，按提示确认。接着在这里连接工作资料，将一并开通此连接支持的资料查阅和工作操作。",
     "options.connect.dsh.onboard.qrAlt": "接入二维码",
     "options.connect.dsh.onboard.waiting": "正在生成授权二维码…",
     "options.connect.dsh.onboard.error.generic": "扫码失败，请重试。",

@@ -6,19 +6,68 @@
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
-  "exports": { ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" } },
-  "files": ["lib"],
-  "scripts": { "build": "tsc -p tsconfig.build.json", "typecheck": "tsc --noEmit", "test": "vitest run" },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./model": {
+      "types": "./lib/model.d.ts",
+      "default": "./lib/model.js"
+    },
+    "./remote": {
+      "types": "./lib/remote.d.ts",
+      "default": "./lib/remote.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
   "dependencies": {
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@deepseek-ai/schemastery": "catalog:",
+    "@deepseek-ai/dsh-typert-protocol": "catalog:",
+    "@amiba/dsh-plugin-ui-shell": "workspace:*"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "catalog:"
+    "@deepseek-ai/cordis": "catalog:",
+    "react": "18.3.1",
+    "@deepseek-ai/dsh-client-runtime": "catalog:",
+    "@deepseek-ai/dsh-client-ui-slots": "catalog:"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "catalog:",
     "@types/node": "22.9.0",
     "typescript": "5.6.3",
-    "vitest": "^2.1.4"
+    "vitest": "^2.1.4",
+    "@amiba/extension-sdk": "workspace:*",
+    "@deepseek-ai/dsh-client-runtime": "catalog:",
+    "@deepseek-ai/dsh-client-ui-slots": "catalog:",
+    "react": "18.3.1",
+    "@types/react": "18.3.12",
+    "vite": "5.4.11"
+  },
+  "dsh": {
+    "client": {
+      "external": [
+        "react"
+      ],
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-api-remotes",
+        "@amiba/dsh-plugin-ui-shell"
+      ],
+      "platform": "web"
+    }
   }
 }

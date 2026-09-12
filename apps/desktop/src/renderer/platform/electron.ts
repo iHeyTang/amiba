@@ -2,13 +2,19 @@ import {
   createDshPlatformAdapters,
   type DshApiClient,
 } from "@amiba/app-runtime/dsh-client";
-import type { PlatformAdapter, StorageChangeMap } from "@amiba/app-runtime/platform";
+import type {
+  PlatformAdapter,
+  StorageChangeMap,
+} from "@amiba/app-runtime/platform";
 
-export function createElectronAdapter(dshClient?: DshApiClient): PlatformAdapter {
+export function createElectronAdapter(
+  dshClient?: DshApiClient,
+): PlatformAdapter {
   const bridge = window.amiba;
 
   return {
     kind: "desktop",
+    desktopPet: bridge.desktopPet,
     windowChrome: bridge.windowChrome,
 
     storage: {
@@ -37,7 +43,10 @@ export function createElectronAdapter(dshClient?: DshApiClient): PlatformAdapter
     ...(dshClient ? createDshPlatformAdapters(dshClient) : {}),
     agentDiagnostics: bridge.agentDiagnostics,
 
-    embeddedBrowser: bridge.embeddedBrowser,
+    // Native workbench extensions belong to the main window, not the pet canvas.
+    nativeExtensions: new URLSearchParams(window.location.search).get("desktopPet") === "1"
+      ? undefined
+      : bridge.nativeExtensions,
 
     workspaces: {
       chooseDirectory: (defaultPath) =>

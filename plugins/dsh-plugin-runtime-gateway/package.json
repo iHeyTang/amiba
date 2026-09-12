@@ -6,12 +6,22 @@
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
-  "exports": { ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" } },
-  "files": ["lib"],
-  "scripts": { "build": "tsc -p tsconfig.build.json", "typecheck": "tsc --noEmit", "test": "vitest run" },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
   "dependencies": {
     "@amiba/dsh-plugin-catalog": "workspace:*",
-    "@amiba/dsh-plugin-notification-hub": "workspace:*",
     "@deepseek-ai/schemastery": "catalog:"
   },
   "peerDependencies": {

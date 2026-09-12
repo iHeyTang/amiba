@@ -84,7 +84,7 @@ describe("account-bound resources", () => {
     const center = new ResourceCenter();
     expect(await center.search({ query: "abc", source: "fake" })).toEqual({
       items: [],
-      unavailable: [{ source: "fake", reason: "source_unavailable" }],
+      unavailable: [{ source: "fake", reason: "source_not_registered" }],
     });
   });
   it("rejects a provider returning a different account or identity", async () => {
@@ -155,3 +155,5 @@ describe("account-bound resources", () => {
     await expect(result).rejects.toThrow();
   });
 });
+
+it("distinguishes missing capability registration from personal authorization", async()=>{const center=new ResourceCenter();expect(center.listSources()).toEqual([]);expect((await center.search({query:"docs",source:"dingtalk"})).unavailable[0]?.reason).toBe("source_not_registered");center.register({id:"dingtalk",search:async()=>({items:[],unavailable:[{source:"dingtalk",reason:"personal_authorization_required"}]}),read:async()=>{throw new Error("unused")}});expect(center.listSources()).toEqual(["dingtalk"]);expect((await center.search({query:"docs",source:"dingtalk"})).unavailable[0]?.reason).toBe("personal_authorization_required");});

@@ -7,12 +7,12 @@ describe("LarkConnectorDetails", () => {
   it("presents the provider overview and capabilities without outlined cards", () => {
     const { container } = render(<LarkConnectorDetails />);
     expect(
-      screen.getByText(/official long connection|官方长连接/),
+      screen.getByText(/Bring AI into|把 AI 带进/),
     ).toBeVisible();
     expect(
       screen.getByRole("heading", { name: /Capabilities|可用能力/ }),
     ).toBeVisible();
-    expect(screen.getByText(/Bot conversations|机器人会话/)).toBeVisible();
+    expect(screen.getByText(/Chat with your AI assistant|在聊天中随时找 AI 帮忙/)).toBeVisible();
     expect(
       container.querySelector("[data-provider-details='lark']"),
     ).not.toHaveClass("border");

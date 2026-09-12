@@ -19,6 +19,11 @@
   },
   "dsh": {
     "client": {
+      "external": [
+        "react",
+        "react-dom",
+        "react/jsx-runtime"
+      ],
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-api-remotes",

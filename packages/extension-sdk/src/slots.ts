@@ -546,6 +546,7 @@ export interface EmptyStateVisualOwner {
 }
 
 export const AMIBA_ROOT_SLOTS = [
+  "amiba.session.observer",
   "amiba.message.decoration",
   "amiba.composer.accessory",
   "amiba.emptyState.visual",
@@ -742,6 +743,7 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
       owner: AmibaWorkspaceNavigationOwner;
       inject: { openWorkspace(viewId: string): void };
     };
+    "amiba.session.observer": { kind: "list"; scope: "root"; owner: { readStates: { sessionId: string; readAt: number }[] }; };
     "amiba.workspace.view": {
       kind: "list";
       scope: "root";

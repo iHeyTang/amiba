@@ -6,7 +6,20 @@ vi.mock("@amiba/i18n", () => ({
   useT: () => ({ t: (key: string) => key }),
 }));
 
-import { getPlatform } from "@amiba/app-runtime/platform";
+import { WorkbenchExtensionsProvider } from "../workbench-extensions";
+import type { WorkbenchViewExtension } from "@amiba/extension-sdk";
+const extension: WorkbenchViewExtension = {
+  id: "test.preview",
+  resourceType: "preview",
+  order: 1,
+  component: () => null,
+  resolveUrl: (url) => ({
+    type: "preview",
+    id: url,
+    title: url,
+    data: { url },
+  }),
+};
 
 import { WorkspacePaneProvider, useWorkspacePane } from "../WorkspacePane";
 
@@ -15,7 +28,7 @@ const PAGE = "file:///Users/me/report.html";
 function Probe() {
   const pane = useWorkspacePane();
   const browserTabs = pane.tabs.filter(
-    (tab) => tab.resource.kind === "browser",
+    (tab) => tab.resource.kind === "extension",
   );
   const active = pane.activeTab?.resource;
   return (
@@ -23,45 +36,47 @@ function Probe() {
       <button
         type="button"
         onClick={() => {
-          const opened = pane.openBrowserUrl(PAGE);
+          const opened = pane.openUrl(PAGE);
           document.title = opened ? "opened" : "refused";
         }}
       >
         open page
       </button>
-      <button type="button" onClick={pane.newBrowserTab}>
+      <button
+        type="button"
+        onClick={() =>
+          pane.openResource({
+            type: "preview",
+            id: "blank",
+            title: "Blank",
+            data: { url: "about:blank" },
+          })
+        }
+      >
         new tab
       </button>
       <output aria-label="browser tabs">{browserTabs.length}</output>
       <output aria-label="active url">
-        {active?.kind === "browser" ? active.url : ""}
+        {active?.kind === "extension"
+          ? (active.resource.data as { url: string }).url
+          : ""}
       </output>
       <output aria-label="workspace open">{String(pane.open)}</output>
     </>
   );
 }
 
-describe("WorkspacePane openBrowserUrl", () => {
-  const platform = getPlatform() as unknown as Record<string, unknown>;
-  const previous = platform.embeddedBrowser;
-
+describe("WorkspacePane URL contributions", () => {
   beforeEach(() => {
     document.title = "";
   });
-  afterEach(() => {
-    platform.embeddedBrowser = previous;
-  });
-
   it("opens a preset browser tab and reuses it for the same page", async () => {
-    platform.embeddedBrowser = {
-      onCreateRequested: () => () => {},
-      onFocusRequested: () => () => {},
-      onAgentActivity: () => () => {},
-    };
     render(
-      <WorkspacePaneProvider sessionId="session-1">
-        <Probe />
-      </WorkspacePaneProvider>,
+      <WorkbenchExtensionsProvider extensions={[extension]}>
+        <WorkspacePaneProvider sessionId="session-1">
+          <Probe />
+        </WorkspacePaneProvider>
+      </WorkbenchExtensionsProvider>,
     );
 
     await userEvent.click(screen.getByRole("button", { name: "open page" }));
@@ -82,8 +97,7 @@ describe("WorkspacePane openBrowserUrl", () => {
     expect(screen.getByLabelText("active url")).toHaveTextContent(PAGE);
   });
 
-  it("refuses when the host has no embedded browser", async () => {
-    platform.embeddedBrowser = undefined;
+  it("declines when no plugin handles URLs", async () => {
     render(
       <WorkspacePaneProvider sessionId="session-1">
         <Probe />

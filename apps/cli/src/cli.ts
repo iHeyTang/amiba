@@ -71,8 +71,9 @@ plugin
 
 plugin
   .command("dev")
-  .description("Build the DSH plugin in watch mode")
-  .action(devCommand)
+  .description("Connect a local plugin to running Amiba and rebuild on changes")
+  .option("--no-connect", "build and watch without connecting to desktop")
+  .action(options => devCommand({ ...options, home: program.opts().dshHome }))
 
 plugin.command("build").description("Production build").action(buildCommand)
 

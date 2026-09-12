@@ -384,14 +384,10 @@ function Home({
               fallback failed on blank/light backgrounds in light
               theme. */}
           {panelMode ? (
-            // Panel mode (embedded in the chat surface's empty state):
-            // a centred Amiba mark over a single-line description.
-            // Matches the look the ChatSurface fallback used to
-            // render, so the home composer reads as "Amiba here, type
-            // below" instead of an out-of-context wordmark + tagline.
+            // Let the companion lead, with one quiet invitation above the composer.
             <div className="flex flex-col items-center gap-2 text-center">
               <EmptyStateVisual scene="home"><AmibaLogo size={56} /></EmptyStateVisual>
-              <p className="max-w-[40ch] text-xs text-muted-foreground">
+              <p className="text-balance text-sm font-normal leading-6 text-muted-foreground">
                 {t("newtab.subtitle")}
               </p>
             </div>
@@ -415,10 +411,9 @@ function Home({
               return (
                 <div className={className}>
                   <EmptyStateVisual scene="home" />
-                  <p className="text-sm font-semibold">
-                    {t("newtab.greeting")}
+                  <p className="text-balance text-sm font-normal leading-6 opacity-80">
+                    {t("newtab.subtitle")}
                   </p>
-                  <p className="text-xs opacity-80">{t("newtab.subtitle")}</p>
                 </div>
               );
             })()

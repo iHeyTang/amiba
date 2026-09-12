@@ -29,14 +29,14 @@ import {
   type TransitionEvent as ReactTransitionEvent,
 } from "react";
 
-import {
-  useSessions,
-  type ChatEngineClient,
-} from "@amiba/app-runtime/core";
+import { useSessions, type ChatEngineClient } from "@amiba/app-runtime/core";
 import type { TriggerProvider } from "./composer/providers/types";
 import type { ComposerTriggerRuntime } from "./composer/triggers/contracts";
 import { useT } from "@amiba/i18n";
-import { getPlatform, type StorageChangeMap } from "@amiba/app-runtime/platform";
+import {
+  getPlatform,
+  type StorageChangeMap,
+} from "@amiba/app-runtime/platform";
 import { useResolvedTheme } from "../theme";
 import { cn } from "../primitives";
 import { PaneHeaderBar } from "../navigation/PaneHeaderBar";
@@ -47,7 +47,11 @@ import { Sidebar, type ActivityViewId, type HistoryLayout } from "./Sidebar";
 import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
 import { SessionTitleProvider, useSessionTitle } from "./useSessionTitle";
-import { filterSearchMatches, isRuntimeOwnedSession, visibleChatSessions } from "./session-visibility";
+import {
+  filterSearchMatches,
+  isRuntimeOwnedSession,
+  visibleChatSessions,
+} from "./session-visibility";
 import type {
   SessionListGroup,
   SessionListMenuItem,
@@ -69,9 +73,9 @@ import {
   useWorkspacePane,
 } from "./WorkspacePane";
 import {
-  EmbeddedBrowserHost,
-  EmbeddedBrowserToggle,
-} from "./EmbeddedBrowserPane";
+  WorkbenchExtensionHosts,
+  WorkbenchExtensionToolbar,
+} from "./workbench-extensions";
 import {
   APP_SIDEBAR_DEFAULT_WIDTH,
   clampAppSidebarWidth,
@@ -332,33 +336,11 @@ export default function FullScreenChatView(props: FullScreenChatViewProps) {
         capability={props.capabilities?.workspaceInspector}
         sessionId={sessions.activeId}
       >
-        <EmbeddedBrowserMount>
+        <WorkbenchExtensionHosts>
           <FullScreenChatViewInner {...props} />
-        </EmbeddedBrowserMount>
+        </WorkbenchExtensionHosts>
       </WorkspacePaneProvider>
     </SessionTitleProvider>
-  );
-}
-
-/**
- * Mounts the embedded browser's `<webview>`s once, ABOVE the workbench.
- *
- * They cannot live inside the workbench: it renders only the visible
- * session, so a background task could never get a tab attached (main's
- * five-second registration wait simply timed out), and switching tabs would
- * re-parent a live `<webview>`, which reloads its page.
- */
-function EmbeddedBrowserMount({ children }: { children: ReactNode }) {
-  const pane = useWorkspacePane();
-  return (
-    <EmbeddedBrowserHost
-      tabs={pane.browserTabs}
-      shownSessionId={pane.sessionId}
-      shownTabId={pane.visibleBrowserTabId}
-      onUpdateTab={pane.updateBrowserTabIn}
-    >
-      {children}
-    </EmbeddedBrowserHost>
   );
 }
 
@@ -383,7 +365,7 @@ function FullScreenChatViewInner({
   messageSourceLabel,
 }: FullScreenChatViewProps) {
   useResolvedTheme();
-  const { t } = useT();
+  const { t, language } = useT();
   const sessions = useSessions();
   const toolNavigation = useMemo(createToolNavigation, [sessions.activeId]);
   const palette = useCommandPalette();
@@ -454,6 +436,19 @@ function FullScreenChatViewInner({
     [],
   );
 
+  useEffect(() => {
+    const acknowledge = () => {
+      if (sidebarView === "chats" && sessions.activeId && !document.hidden && document.hasFocus())
+        void sessions.markRead(sessions.activeId);
+    };
+    window.addEventListener("focus", acknowledge);
+    document.addEventListener("visibilitychange", acknowledge);
+    acknowledge();
+    return () => { window.removeEventListener("focus", acknowledge); document.removeEventListener("visibilitychange", acknowledge); };
+  }, [sessions.activeId, sessions.markRead, sidebarView]);
+
+  useEffect(() => { void getPlatform().desktopPet?.setLanguage(language); }, [language]);
+
   // Keep unread tracking above ChatSurface so it remains active while the
   // user is looking at Automation, Tasks, or an extension-contributed view.
   // A visible chat is read in place; background completions and failures are
@@ -492,7 +487,7 @@ function FullScreenChatViewInner({
     const unsubscribeEvents = client.onStreamEvent((sessionId, event) => {
       const visibleSessionId = sidebarView === "chats" ? sessions.activeId : "";
       const completedInBackground =
-        sessionId !== visibleSessionId &&
+        (sessionId !== visibleSessionId || document.hidden || !document.hasFocus()) &&
         (event.kind === "done" || event.kind === "error");
 
       if (event.kind === "begin") {
@@ -517,11 +512,14 @@ function FullScreenChatViewInner({
       unsubscribeSnapshots();
       unsubscribeEvents();
     };
-  }, [client, sessions.activeId, sessions.markUnread, sessions.markRead, sidebarView]);
+  }, [
+    client,
+    sessions.activeId,
+    sessions.markUnread,
+    sessions.markRead,
+    sidebarView,
+  ]);
 
-  useEffect(() => {
-    if (sidebarView === "chats" && sessions.activeId) void sessions.markRead(sessions.activeId);
-  }, [sidebarView, sessions.activeId, sessions.markRead]);
 
   // External session authors wake their owning session instead of minting a
   // parallel transcript, so the chat list filters on exactly two things: the
@@ -788,7 +786,8 @@ function FullScreenChatViewInner({
   // session by `WorkspacePaneProvider`. The id-less chat home has no task, so
   // the whole workbench — pane, terminal drawer and edge controls alike —
   // stays off there.
-  const workbenchVisible = sidebarView === "chats" && Boolean(sessions.activeId);
+  const workbenchVisible =
+    sidebarView === "chats" && Boolean(sessions.activeId);
 
   // Measure the edge-control row so the workbench tab strip can reserve its
   // width. The row floats over the pane at `z-50`; without this the tabs
@@ -830,7 +829,14 @@ function FullScreenChatViewInner({
   // region keeps chat and workbench in one row, with the terminal drawer as a
   // separate bottom row so it can span the active workspace like an IDE pane.
   return (
-    <div className="flex h-screen min-h-0 w-full bg-background text-foreground" style={viewportTopInsetPx ? { height: `calc(100dvh - ${viewportTopInsetPx}px)` } : undefined}>
+    <div
+      className="flex h-screen min-h-0 w-full bg-background text-foreground"
+      style={
+        viewportTopInsetPx
+          ? { height: `calc(100dvh - ${viewportTopInsetPx}px)` }
+          : undefined
+      }
+    >
       <aside
         data-testid="main-sidebar"
         aria-hidden={sidebarCollapsed}
@@ -965,7 +971,7 @@ function FullScreenChatViewInner({
                   messagesMaxWidth={messagesWidth}
                   client={client}
                   capabilities={capabilities}
-                  slots={{...slots, toolNavigation}}
+                  slots={{ ...slots, toolNavigation }}
                   openSettings={openSettings}
                   openAgentDestination={openAgentDestination}
                   mentionProviders={mentionProviders}
@@ -986,12 +992,18 @@ function FullScreenChatViewInner({
               })}
             </PrimaryWorkspaceView>
           </div>
-          <WorkspacePane visible={workbenchVisible} renderPanel={slots?.workbenchPanel} inspectToolCall={callId => {
-            const event = (sessions.activeMessages as UiMessage[]).flatMap(message => message.toolProgress ?? []).find(event => event.toolCallId === callId);
-            if (!event) return false;
-            toolNavigation.reveal(callId);
-            return true;
-          }} />
+          <WorkspacePane
+            visible={workbenchVisible}
+            renderPanel={slots?.workbenchPanel}
+            inspectToolCall={(callId) => {
+              const event = (sessions.activeMessages as UiMessage[])
+                .flatMap((message) => message.toolProgress ?? [])
+                .find((event) => event.toolCallId === callId);
+              if (!event) return false;
+              toolNavigation.reveal(callId);
+              return true;
+            }}
+          />
         </div>
         <WorkspaceTerminalPanel
           visible={workbenchVisible}
@@ -1006,22 +1018,7 @@ function FullScreenChatViewInner({
             style={{ height: topBarHeightPx ?? 40 }}
           >
             {slots?.headerAfter}
-            <EmbeddedBrowserToggle
-              open={
-                workspacePane.open &&
-                workspacePane.activeTab?.resource.kind === "browser"
-              }
-              onToggle={() => {
-                if (
-                  workspacePane.open &&
-                  workspacePane.activeTab?.resource.kind === "browser"
-                ) {
-                  workspacePane.setOpen(false);
-                } else {
-                  workspacePane.openBrowser();
-                }
-              }}
-            />
+            <WorkbenchExtensionToolbar />
             <WorkspaceTerminalToggle
               open={workspacePane.terminalOpen}
               onToggle={() =>

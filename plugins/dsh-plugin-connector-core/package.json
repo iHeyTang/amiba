@@ -16,6 +16,11 @@
   },
   "dsh": {
     "client": {
+      "external": [
+        "@amiba/dsh-plugin-ui-shell/client",
+        "react",
+        "react/jsx-runtime"
+      ],
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-api-remotes",
@@ -34,6 +39,7 @@
     "@amiba/app-runtime": "workspace:*",
     "@amiba/dsh-plugin-mcp-manager": "workspace:*",
     "@amiba/dsh-plugin-messaging-core": "workspace:*",
+    "@amiba/dsh-plugin-resources": "workspace:*",
     "@amiba/dsh-plugin-ui-shell": "workspace:*",
     "@amiba/extension-sdk": "workspace:*",
     "@amiba/ui": "workspace:*",

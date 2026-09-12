@@ -937,6 +937,20 @@ describe("FullScreenChatView new-chat home", () => {
     });
   });
 
+  it("keeps background completions unread until the chat regains focus", () => {
+    const focus = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    const sessions = makeSessions();
+    mocks.useSessions.mockReturnValue(sessions);
+    render(<FullScreenChatView client={makeClient() as never} openSettings={() => {}} openAgentDestination={() => {}} restoreSidebarViewOnMount={false} />);
+    act(() => mocks.streamListener?.("session-1", { kind: "done" }));
+    expect(sessions.markUnread).toHaveBeenCalledWith("session-1");
+    expect(sessions.markRead).not.toHaveBeenCalled();
+    focus.mockReturnValue(true);
+    fireEvent.focus(window);
+    expect(sessions.markRead).toHaveBeenCalledWith("session-1");
+    focus.mockRestore();
+  });
+
   it("marks a completion unread while another app view is visible", async () => {
     const sessions = makeSessions();
     mocks.useSessions.mockReturnValue(sessions);

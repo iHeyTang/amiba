@@ -1,3 +1,4 @@
+import { clientInputs } from "../../scripts/dsh-client-inputs.mjs";
 import { defineConfig } from "vite";
 
 const PLUGIN_ID = "@amiba/dsh-plugin-ui-shell";
@@ -19,6 +20,7 @@ const DSH_CLIENT_EXTERNALS = [
 ];
 
 export default defineConfig({
+  plugins: [clientInputs()],
   build: {
     // Match the TypeScript target. Vite's default ("modules") includes
     // safari14, which makes esbuild LOWER optional chaining — and its

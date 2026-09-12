@@ -16,6 +16,12 @@
   },
   "dsh": {
     "client": {
+      "external": [
+        "@amiba/dsh-plugin-ui-shell/client",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "react",
+        "react/jsx-runtime"
+      ],
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-api-remotes",

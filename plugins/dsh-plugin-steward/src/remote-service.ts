@@ -1,4 +1,5 @@
 import type { Context } from "@deepseek-ai/cordis";
+import type { ConversationCadence } from "@amiba/dsh-plugin-session-features";
 import { Remote, TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol";
 
 import type { StewardService } from "./service.js";
@@ -13,7 +14,13 @@ class AmibaStewardRemoteService extends TypertRemoteService {
 
   @Remote
   async ensureStewardSession() {
-    return { sessionId: await this.service.ensureStewardSessionId() };
+    const sessionId = await this.service.ensureStewardSessionId();
+    return { sessionId, sessionIds: await this.service.stewardConversationIds() };
+  }
+
+  @Remote
+  conversationSettings(input: { action: "status" | "configure" | "new"; cadence?: ConversationCadence }) {
+    return this.service.conversationSettings(input.action, input.cadence);
   }
 
   @Remote

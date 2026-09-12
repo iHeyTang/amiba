@@ -30,12 +30,12 @@ export function SurfaceSettings({ surfaces }: { surfaces: SurfaceSelections }) {
             <Label>{labels[i]}</Label>
             <Select
               disabled={!state.ready}
-              value={id ? `provider:${id}` : "default"}
+              value={id === undefined ? "default" : id === "" ? "none" : `provider:${id}`}
               onValueChange={(value) => {
                 void surfaces
                   .set(
                     slot,
-                    value === "default" ? "" : value.slice("provider:".length),
+                    value === "default" ? undefined : value === "none" ? "" : value.slice("provider:".length),
                   )
                   .catch(() => {});
               }}
@@ -50,6 +50,9 @@ export function SurfaceSettings({ surfaces }: { surfaces: SurfaceSelections }) {
               <SelectContent>
                 <SelectItem value="default">
                   {zh ? "默认" : "Default"}
+                </SelectItem>
+                <SelectItem value="none">
+                  {zh ? "不显示" : "None"}
                 </SelectItem>
                 {id && !available && (
                   <SelectItem value={`provider:${id}`} disabled>

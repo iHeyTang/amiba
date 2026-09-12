@@ -6,6 +6,7 @@ import {
   cp,
   mkdir,
   readFile,
+  realpath,
   rename,
   rm,
   stat,
@@ -33,6 +34,7 @@ export interface DshPluginCommandResult {
 }
 
 export interface DshProfilePluginRuntime {
+  assertPluginMutationAllowed?(): void;
   ensureManagedProfile(): Promise<void>;
   ensureStarted(): Promise<unknown>;
   stop(): Promise<void>;
@@ -209,6 +211,15 @@ async function assertInstalledBundle(
   );
   if (!installed || installed.name !== packageName) {
     throw new Error(`Installed package identity does not match ${packageName}.`);
+  }
+  const native = object(installed.dsh)?.native;
+  if (native !== undefined) {
+    if (typeof native !== "string" || !native.endsWith(".cjs")) throw new Error(`${packageName} requires a bundled dsh.native .cjs entry.`);
+    const nativePath = await realpath(path.resolve(directory, native));
+    const relativeNative = path.relative(await realpath(directory), nativePath);
+    if (relativeNative.startsWith("..") || path.isAbsolute(relativeNative) || !(await stat(nativePath)).isFile()) {
+      throw new Error(`${packageName} native entry is outside its package or is not a file.`);
+    }
   }
   const patchValue = object(object(installed.dsh)?.bundle)?.patch;
   if (typeof patchValue !== "string" || !patchValue.trim()) {
@@ -444,6 +455,7 @@ export class DshProfilePluginManager {
     prepare?: () => Promise<void>,
     dependenciesBeforeOverride?: Record<string, string>,
   ): Promise<AmibaDshPluginMutationResult> {
+    this.runtime.assertPluginMutationAllowed?.();
     await this.runtime.ensureManagedProfile();
     const before = await readProfileManifest(this.paths.profileManifest);
     const beforeDependencies =

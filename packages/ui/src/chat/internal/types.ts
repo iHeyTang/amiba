@@ -1,3 +1,4 @@
+import type { CompactionProgress } from "@amiba/app-runtime/protocol"
 /**
  * UI-level message shape used by the chat bubble renderer.
  *
@@ -83,6 +84,7 @@ export type AssistantTimelineItem =
   | { kind: "reasoning"; id: string; text: string; startedAt?: number; endedAt?: number }
   | { kind: "tool"; id: string; toolCallId: string }
   | { kind: "approval"; id: string; approvalId: string }
+  | { kind: "compaction"; id: string; compaction: CompactionProgress }
 
 /** Errors a chat surface needs to render (top-level banner or per-bubble). */
 export interface ChatError {

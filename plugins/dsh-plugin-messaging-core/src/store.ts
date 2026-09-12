@@ -6,6 +6,9 @@ const STATE_VERSION = 1;
 const MAX_RECEIPTS = 1_000;
 
 export interface StoredConversationBinding {
+  access?: "owner" | "shared";
+  /** Superseded routes remain available for in-flight replies and approvals. */
+  superseded?: boolean;
   channelId: string;
   conversationKey: string;
   kind: "p2p" | "group";
@@ -98,6 +101,8 @@ export interface MessageChannelDeliveryStatus {
 }
 
 interface StoredReceipt {
+  sessionId?: string;
+  consumedAsApproval?: boolean;
   key: string;
   acceptedAt: string;
 }
@@ -211,6 +216,8 @@ function normalizeConversation(value: unknown): StoredConversationBinding | null
     typeof row.updatedAt !== "string"
   ) return null;
   return {
+    ...(row.access === "shared" ? { access: "shared" as const } : {}),
+    ...(row.superseded === true ? { superseded: true } : {}),
     channelId: row.channelId,
     conversationKey: row.conversationKey,
     kind: row.kind,
@@ -306,7 +313,7 @@ export class MessageCenterStore {
               if (!item || typeof item !== "object") return [];
               const row = item as Record<string, unknown>;
               return typeof row.key === "string" && typeof row.acceptedAt === "string"
-                ? [{ key: row.key, acceptedAt: row.acceptedAt }]
+                ? [{ key: row.key, acceptedAt: row.acceptedAt, ...(typeof row.sessionId === "string" ? { sessionId: row.sessionId } : {}), ...(row.consumedAsApproval === true ? { consumedAsApproval: true } : {}) }]
                 : [];
             }).slice(-MAX_RECEIPTS)
           : [],
@@ -457,10 +464,14 @@ export class MessageCenterStore {
     });
   }
 
-  acceptReceipt(key: string): Promise<boolean> {
+  findReceipt(key: string): Promise<StoredReceipt | undefined> {
+    return this.chain.then(async () => (await this.readDocument()).receipts.find((item) => item.key === key));
+  }
+
+  acceptReceipt(key: string, sessionId?: string): Promise<boolean> {
     return this.mutate((document) => {
       if (document.receipts.some((item) => item.key === key)) return false;
-      document.receipts.push({ key, acceptedAt: new Date().toISOString() });
+      document.receipts.push({ key, acceptedAt: new Date().toISOString(), ...(sessionId ? { sessionId, consumedAsApproval: true } : {}) });
       document.receipts = document.receipts.slice(-MAX_RECEIPTS);
       return true;
     });
@@ -469,7 +480,7 @@ export class MessageCenterStore {
   acceptInbound(input: StoredPendingInbound): Promise<boolean> {
     return this.mutate((document) => {
       if (document.receipts.some((item) => item.key === input.key)) return false;
-      document.receipts.push({ key: input.key, acceptedAt: input.acceptedAt });
+      document.receipts.push({ key: input.key, acceptedAt: input.acceptedAt, sessionId: input.sessionId });
       document.receipts = document.receipts.slice(-MAX_RECEIPTS);
       document.pending.push(input);
       return true;
@@ -519,6 +530,21 @@ export class MessageCenterStore {
     });
   }
 
+  retryDeliveries(channelId: string, ids: readonly string[]): Promise<number> {
+    const selected = new Set(ids);
+    return this.mutate(document => {
+      let count = 0;
+      for (const delivery of document.outbox) {
+        if (delivery.channelId !== channelId || !selected.has(delivery.id) || !delivery.lastError || delivery.envelope.inReplyTo.startsWith("approval:")) continue;
+        delivery.attempts = 0;
+        delivery.nextAttemptAt = new Date().toISOString();
+        delivery.updatedAt = delivery.nextAttemptAt;
+        count++;
+      }
+      return count;
+    });
+  }
+
   markDeliveryFailed(
     id: string,
     error: string,
@@ -564,7 +590,7 @@ export class MessageCenterStore {
       (await this.readDocument()).conversations.find(
         (item) =>
           item.channelId === channelId &&
-          item.conversationKey === conversationKey,
+          item.conversationKey === conversationKey && !item.superseded,
       ),
     );
   }
@@ -579,9 +605,9 @@ export class MessageCenterStore {
     );
   }
 
-  listConversations(channelId?: string): Promise<StoredConversationBinding[]> {
+  listConversations(channelId?: string, includeSuperseded = false): Promise<StoredConversationBinding[]> {
     return this.chain.then(async () => {
-      const conversations = (await this.readDocument()).conversations;
+      const conversations = (await this.readDocument()).conversations.filter((item) => includeSuperseded || !item.superseded);
       return channelId
         ? conversations.filter((item) => item.channelId === channelId)
         : conversations;
@@ -596,19 +622,23 @@ export class MessageCenterStore {
       const index = document.conversations.findIndex(
         (item) =>
           item.channelId === input.channelId &&
-          item.conversationKey === input.conversationKey,
+          item.conversationKey === input.conversationKey && !item.superseded,
       );
       const binding: StoredConversationBinding = {
+        ...(input.access === "shared" ? { access: "shared" } : {}),
         channelId: input.channelId,
         conversationKey: input.conversationKey,
         kind: input.kind,
         ...(input.title ? { title: input.title } : {}),
         sessionId: input.sessionId,
-        createdAt: index >= 0 ? document.conversations[index]!.createdAt : now,
+        createdAt: index >= 0 && document.conversations[index]!.sessionId === input.sessionId ? document.conversations[index]!.createdAt : now,
         updatedAt: now,
       };
-      if (index >= 0) document.conversations[index] = binding;
-      else document.conversations.push(binding);
+      if (index >= 0 && document.conversations[index]!.sessionId === input.sessionId) document.conversations[index] = binding;
+      else {
+        if (index >= 0) document.conversations[index]!.superseded = true;
+        document.conversations.push(binding);
+      }
       return binding;
     });
   }
@@ -627,4 +657,9 @@ export class MessageCenterStore {
       return document.conversations.length !== before;
     });
   }
+}
+
+
+export function conversationAccessScope(conversation: { key: string; kind: "p2p" | "group"; access?: "owner" | "shared" }): string {
+  return conversation.access === "shared" ? JSON.stringify(["shared", conversation.kind, conversation.key]) : conversation.key;
 }

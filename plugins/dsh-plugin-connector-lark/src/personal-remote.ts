@@ -14,6 +14,7 @@ export const personalRequestSchema = z
       "cancel",
       "disconnect",
       "model-access",
+      "complete-connection",
     ]),
     flowId: z.string().max(512).optional(),
     allowed: z.boolean().optional(),
@@ -37,6 +38,7 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
   }
 }
 const status = z.object({
+  work: z.enum(["ready", "pending", "unavailable"]).optional(),
   modelAccess: z.boolean(),
   access: z.object({
     identity: z.enum(["application", "user"]),

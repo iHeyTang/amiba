@@ -84,18 +84,18 @@ export function resolvePackagedManagedDshRuntimeDir(
   return pathApi.join(resourcesPath, "resources", "dsh-runtime")
 }
 
-export function resolveAmibaDshHome(
+export function resolveAmibaDshHomes(
   explicit?: string,
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
   userHome = homedir(),
-): string {
+): string[] {
   const configured =
     explicit?.trim() || env.AMIBA_DSH_HOME?.trim() || env.DSH_HOME?.trim()
-  if (configured) return path.resolve(configured)
+  if (configured) return [path.resolve(configured)]
 
   const userDataRoot = env.AMIBA_USER_DATA_DIR?.trim()
-  if (userDataRoot) return path.resolve(userDataRoot, "dsh", "home")
+  if (userDataRoot) return [path.resolve(userDataRoot, "dsh", "home")]
 
   const roots =
     platform === "darwin"
@@ -126,8 +126,17 @@ export function resolveAmibaDshHome(
               "Amiba",
             ),
           ]
-  const existing = roots.find((root) => existsSync(path.join(root, "dsh", "home")))
-  return path.join(existing ?? roots.at(-1)!, "dsh", "home")
+  return roots.map(root => path.join(root, "dsh", "home"))
+}
+
+export function resolveAmibaDshHome(
+  explicit?: string,
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  userHome = homedir(),
+): string {
+  const homes = resolveAmibaDshHomes(explicit, env, platform, userHome)
+  return homes.find(home => existsSync(home)) ?? homes.at(-1)!
 }
 
 export interface ManagedDshPaths {
@@ -345,10 +354,24 @@ export async function ensureManagedDshProfile(
   const existing = existsSync(paths.profileManifest)
     ? (JSON.parse(await readFile(paths.profileManifest, "utf8")) as unknown)
     : undefined
+  const manifest = managedDshProfileManifest(paths.surface, existing) as {
+    dependencies: Record<string, string>;
+    dsh: { profile: { bundles: string[]; optionalBrowserMigration?: number } };
+  }
+  // Once-only migration: formerly part of Desktop's mandatory activation patch.
+  // A user removal must survive every subsequent runtime restart.
+  if (paths.surface === "desktop" && manifest.dsh.profile.optionalBrowserMigration !== 1) {
+    const browser = "@amiba/dsh-plugin-browser-provider-electron"
+    manifest.dependencies[browser] ??= `link:${path.join(paths.runtimeDir, "app/node_modules", browser)}`
+    if (!manifest.dsh.profile.bundles.includes(browser)) manifest.dsh.profile.bundles.push(browser)
+    manifest.dsh.profile.optionalBrowserMigration = 1
+    // Keep first creation identical to later restarts (including dev attach/detach).
+    Object.assign(manifest, managedDshProfileManifest(paths.surface, manifest))
+  }
   await Promise.all([
     writeFile(
       paths.profileManifest,
-      `${JSON.stringify(managedDshProfileManifest(paths.surface, existing), null, 2)}\n`,
+      `${JSON.stringify(manifest, null, 2)}\n`,
       { encoding: "utf8", mode: 0o600 },
     ),
     existsSync(paths.profilePatch)
@@ -372,3 +395,5 @@ export async function ensureManagedDshProfile(
 }
 
 export { AMIBA_DSH_BUNDLES }
+
+export * from "./plugin-development.js"

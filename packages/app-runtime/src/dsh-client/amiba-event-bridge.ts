@@ -1,3 +1,4 @@
+import { compactionUpdate } from "./compaction.js"
 import type {
   ApprovalOutcome,
   StreamEvent,
@@ -158,6 +159,8 @@ export class DshAmibaEventBridge {
     source: DshSessionEvent,
     view: unknown,
   ): BridgedDshEvent[] {
+    const compact = compactionUpdate(source)
+    if (compact) return [{ sessionId, event: { kind: "compaction", event: compact } }]
     const data = source.data
     if (source.type === "amiba/notice") {
       const notice = presentationNotice(data)

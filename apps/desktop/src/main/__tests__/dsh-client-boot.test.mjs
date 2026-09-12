@@ -104,7 +104,7 @@ test("carries the inline bootstrap facade, and not the boot global", () => {
   ]);
 });
 
-test("drops fiber HMR because desktop development reloads the document", () => {
+test("keeps native DSH client HMR in the desktop boot graph", () => {
   const graphHtml = (entries) =>
     `<script>globalThis["__DSH_BOOT__"] = ${JSON.stringify({ rev: "r", entries })}</script>`;
   const hmr = {
@@ -118,12 +118,11 @@ test("drops fiber HMR because desktop development reloads the document", () => {
     url: "/plugins/@amiba/dsh-plugin-ui-shell/client.js?rev=b",
     rev: "b",
   };
-  // The desktop renderer owns the SSE channel and reloads the whole document;
-  // fiber-swapping the root owner would leave a transient empty root slot.
+  // Ordinary plugins must retain native HMR in both HTTP and file renderers.
   assert.deepEqual(
     extractDshClientBootGraph(graphHtml([hmr, shell]), "http://127.0.0.1:43123")
       .entries.map((entry) => entry.id),
-    ["@amiba/dsh-plugin-ui-shell"],
+    ["@deepseek-ai/dsh-client-hmr", "@amiba/dsh-plugin-ui-shell"],
   );
   // Never remove it from under an entry that injects it, which would strand
   // that entry waiting on a service instead.

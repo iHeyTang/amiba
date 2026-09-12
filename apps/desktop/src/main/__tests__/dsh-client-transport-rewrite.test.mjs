@@ -79,7 +79,7 @@ test("accepts only complete client rebuilt frames", () => {
   assert.equal(parseDshClientRebuildFrame("not json"), null);
 });
 
-test("development rebuilt frames refresh the document exactly once", () => {
+for (const protocol of ["http:", "file:"]) test(`${protocol} uses DSH plugin HMR and refreshes only the root owner`, () => {
   const previousWindow = globalThis.window;
   const previousEventSource = globalThis.EventSource;
   let reloads = 0;
@@ -107,7 +107,7 @@ test("development rebuilt frames refresh the document exactly once", () => {
 
   globalThis.window = {
     location: {
-      protocol: "http:",
+      protocol,
       reload: () => {
         reloads += 1;
       },
@@ -124,6 +124,9 @@ test("development rebuilt frames refresh the document exactly once", () => {
     source.emit(
       JSON.stringify({ type: "rebuilt", id: "plugin-b", rev: "later" }),
     );
+    assert.equal(reloads, 0);
+    source.emit(JSON.stringify({ type: "rebuilt", id: "@amiba/dsh-plugin-ui-shell", rev: "root1" }));
+    source.emit(JSON.stringify({ type: "rebuilt", id: "@amiba/dsh-plugin-ui-shell", rev: "root2" }));
     assert.equal(reloads, 1);
     assert.equal(source.closed, true);
     dispose();

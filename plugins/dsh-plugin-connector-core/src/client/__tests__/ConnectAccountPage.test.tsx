@@ -61,6 +61,32 @@ function props(messaging = true) {
 }
 
 describe("connection account page", () => {
+  it("retries this connection's failed replies only after a click and refreshes delivery status", async () => {
+    const p = props();
+    let failed = true;
+    vi.mocked(p.adapter.details).mockImplementation(async () => ({ connect, settings: {}, messaging: { conversations: [], delivery: { pendingInbound: 0, queuedOutbound: 0, failedOutbound: failed ? 1 : 0, ...(failed ? { lastDeliveryError: "offline" } : {}) } } }));
+    const retry = vi.fn(async () => { failed = false; return { retried: 1 }; });
+    p.adapter.retryFailedReplies = retry;
+    render(<ConnectAccountPage {...p} provider={{ ...p.provider, messaging: { ownerPairing: true, sharedConversations: true } }} />);
+    const button = await screen.findByRole("button", { name: "Retry failed replies" });
+    expect(retry).not.toHaveBeenCalled();
+    await userEvent.click(button);
+    expect(retry).toHaveBeenCalledWith("a");
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Retry failed replies" })).not.toBeInTheDocument());
+  });
+  it("gives shared connectors chat management without a user-ID allowlist", async () => {
+    const p = props();
+    const manage = vi.fn(async () => ({ access: "shared" as const, policy: { cadence: "daily" as const, timeZone: "Asia/Shanghai" }, history: [], sharedResources: [], pendingNewConversation: false }));
+    p.adapter.conversationSettings = manage;
+    render(<ConnectAccountPage {...p} provider={{ ...p.provider, messaging: { ownerPairing: true, sharedConversations: true } }} entry={{ component: () => null, settingsFirst: true, settings: ({ host }) => <button onClick={() => void host.conversations!.manage("thread", { action: "status" })}>View chat history</button> }} />);
+    await userEvent.click(await screen.findByRole("button", { name: "View chat history" }));
+    expect(manage).toHaveBeenCalledWith("a", "thread", { action: "status" });
+    expect(screen.queryByRole("textbox", { name: "Allowed users" })).not.toBeInTheDocument();
+    expect(document.querySelector("#connect-owners")).toBeNull();
+    const diagnostics = screen.getByText("Connection diagnostics").closest("details")!;
+    expect(diagnostics.open).toBe(false);
+    expect(diagnostics).toContainElement(screen.getByText("session-a"));
+  });
   it("refreshes and shows all affected consumers before disabling or deleting a connection", async () => {
     const p = props();
     vi.mocked(p.adapter.details).mockResolvedValue({ connect, settings: {},
@@ -146,4 +172,9 @@ describe("connection account page", () => {
     await user.click(screen.getByRole("button", { name: "Remove connection" }));
     await waitFor(() => expect(p.onRemoved).toHaveBeenCalledOnce());
   });
+});
+
+it("puts provider abilities before optional account fields",async()=>{
+ const p=props();const {container}=render(<ConnectAccountPage {...p} entry={{component:()=>null,settingsFirst:true,settings:()=> <h3>Work with documents</h3>}} accessPanel={<div>More work abilities</div>}/>);
+ const heading=await screen.findByText("Work with documents");const name=screen.getByLabelText("Connect name");expect(name.closest("details")).not.toHaveAttribute("open");expect(heading.compareDocumentPosition(name)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();expect(container.textContent!.indexOf("Work with documents")).toBeLessThan(container.textContent!.indexOf("More work abilities"));
 });

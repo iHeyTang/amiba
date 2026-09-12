@@ -1,3 +1,4 @@
+import { LarkConversationSettings } from "./LarkConversationSettings.js";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 // Type-only: loads connector-core's `declare module "@deepseek-ai/cordis"`
@@ -8,7 +9,7 @@ import type {} from "@amiba/dsh-plugin-connector-core/client";
 
 import { LarkMark } from "./brand-mark.js";
 import { LarkConnectorDetails } from "./LarkConnectorDetails.js";
-import { LarkWizard } from "./LarkWizard.js";
+import { LarkConnectFlow } from "./LarkConnectFlow.js";
 import { LarkPersonalSettings } from "./LarkPersonalSettings.js";
 import { AMIBA_LARK_PERSONAL_REMOTE } from "../personal-remote.js";
 
@@ -27,7 +28,13 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
   const fiber = ctx.inject(["remote.amibaLarkPersonal"], (ready) => {
     ready.effect(() =>
       ctx.amibaConnectorUI.register("lark", {
-        component: LarkWizard,
+        component: ({ host }) => (
+          <LarkConnectFlow
+            host={host}
+            remote={ready.remote.amibaLarkPersonal}
+          />
+        ),
+        settingsFirst: true,
         details: LarkConnectorDetails,
         settings: ({ host }) => (
           <>
@@ -36,6 +43,7 @@ export async function apply(ctx: ClientContext): Promise<() => void> {
               host={host}
               remote={ready.remote.amibaLarkPersonal}
             />
+            <LarkConversationSettings host={host} />
           </>
         ),
         icon: <LarkMark size={22} />,

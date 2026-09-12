@@ -21,16 +21,23 @@
     "lib"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && vite build",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "build": "node scripts/prepare-mofli.mjs && tsc -p tsconfig.build.json && vite build",
+    "typecheck": "node scripts/prepare-mofli.mjs && tsc --noEmit",
+    "test": "node scripts/prepare-mofli.mjs && vitest run",
+    "prepare:mofli": "node scripts/prepare-mofli.mjs"
   },
   "dsh": {
     "client": {
+      "external": [
+        "@amiba/dsh-plugin-ui-shell/client",
+        "react",
+        "react/jsx-runtime"
+      ],
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-api-remotes",
-        "@amiba/dsh-plugin-ui-shell"
+        "@amiba/dsh-plugin-ui-shell",
+        "@amiba/dsh-plugin-notification-hub"
       ],
       "platform": "web"
     }
@@ -44,7 +51,8 @@
     "zod": "^4.4.3",
     "@mofli/core": "0.1.1",
     "@mofli/grove": "0.1.1",
-    "@mofli/studio": "0.1.1"
+    "@mofli/studio": "0.1.1",
+    "@amiba/dsh-plugin-notification-hub": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",

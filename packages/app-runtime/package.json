@@ -34,7 +34,9 @@
     "runtime:smoke": "pnpm build:dsh-runtime && node scripts/dsh-runtime/smoke.mjs",
     "runtime:lock": "node scripts/dsh-runtime/prepare.mjs --update-lock"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@amiba/extension-sdk": "workspace:*"
+  },
   "peerDependencies": {
     "electron": "*",
     "react": "^18.0.0"

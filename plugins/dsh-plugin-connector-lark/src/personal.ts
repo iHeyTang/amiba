@@ -54,6 +54,7 @@ export function personalAccess(
   };
 }
 export interface PersonalStatus {
+  work?: "ready" | "pending" | "unavailable";
   access: ConnectorAccessView;
   modelAccess: boolean;
 }

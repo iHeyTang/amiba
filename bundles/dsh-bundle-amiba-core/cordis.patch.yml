@@ -9,6 +9,11 @@
     # Composed first so every later plugin can post into the hub.
     - id: amiba-notification-hub
       name: "@amiba/dsh-plugin-notification-hub"
+      config:
+        root: !!js dshHomePath('amiba-notifications')
+
+    - id: amiba-conversation-notifications
+      name: "@amiba/dsh-plugin-conversation-notifications"
 
     - id: amiba-capability-catalog
       name: "@amiba/dsh-plugin-catalog"
@@ -110,6 +115,8 @@
 
     - id: amiba-session-features
       name: "@amiba/dsh-plugin-session-features"
+      config:
+        root: !!js dshHomePath('amiba-conversations')
 
     - id: amiba-steward
       name: "@amiba/dsh-plugin-steward"

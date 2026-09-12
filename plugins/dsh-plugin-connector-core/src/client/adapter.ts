@@ -1,4 +1,5 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { SharedResourceSearch } from "../conversation-sharing.js";
 import type { RemoteResult } from "@deepseek-ai/dsh-typert-protocol";
 
 import type {
@@ -10,6 +11,7 @@ import type {
 } from "../types.js";
 
 import type { CreateConnectInput, BeginOnboardingInput } from "../remote.js";
+import type { MessageConversationSettingsInput, MessageConversationView } from "../remote.js";
 export type { CreateConnectInput, BeginOnboardingInput } from "../remote.js";
 
 /**
@@ -23,6 +25,10 @@ export type { CreateConnectInput, BeginOnboardingInput } from "../remote.js";
  * method they'd collide with.
  */
 export interface ConnectAdapter {
+  searchConversationResources?(id: string, key: string, query: string): Promise<SharedResourceSearch>;
+  shareConversationResources?(id: string, key: string, references: string[]): Promise<MessageConversationView>;
+  retryFailedReplies?(id: string): Promise<{ retried: number }>;
+  conversationSettings?(id: string, conversationKey: string, input: MessageConversationSettingsInput): Promise<MessageConversationView>;
   details(id: string): Promise<ConnectDetails>;
   update(id: string, input: UpdateConnectInput): Promise<ConnectView>;
   listProviders(): Promise<ConnectorProviderView[]>;
@@ -55,6 +61,10 @@ async function valueOf<T>(result: Promise<RemoteResult<T>>): Promise<T> {
 /** Build the `ConnectAdapter` over the mounted `amibaConnectors` remote. */
 export function buildConnectAdapter(remote: ConnectorsRemote): ConnectAdapter {
   return {
+    searchConversationResources: (id, key, query) => valueOf(remote.searchConversationResources(id, key, query)),
+    shareConversationResources: (id, key, references) => valueOf(remote.shareConversationResources(id, key, references)),
+    retryFailedReplies: id => valueOf(remote.retryFailedReplies(id)),
+    conversationSettings: (id, key, input) => valueOf(remote.conversationSettings(id, key, input)),
     details: (id) => valueOf(remote.getConnectDetails(id)),
     update: (id, input) => valueOf(remote.updateConnect(id, input)),
     listProviders: async () => {

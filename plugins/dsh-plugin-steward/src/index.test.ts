@@ -1,3 +1,4 @@
+import { ConversationLifecycle } from "@amiba/dsh-plugin-session-features";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +10,7 @@ import { harness } from "./test/service-harness.js";
 
 describe("amiba-steward host entry", () => {
   it("declares the remote contract and the preset id", () => {
-    expect(AMIBA_STEWARD_REMOTE.descriptors.map((d) => d.method)).toEqual(["ensureStewardSession", "listTasks", "adopt", "closeTask"]);
+    expect(AMIBA_STEWARD_REMOTE.descriptors.map((d) => d.method)).toEqual(["conversationSettings", "ensureStewardSession", "listTasks", "adopt", "closeTask"]);
   });
 
   it("does not seed presets, starts the service, and registers the steward tools into the steward scope", async () => {
@@ -18,6 +19,7 @@ describe("amiba-steward host entry", () => {
     const provided: string[] = [];
     const hostCtx = {
       ...ctx,
+      amibaConversations: new ConversationLifecycle(root),
       effect: ctx.effect,
       provide: vi.fn((name: string) => provided.push(name)),
       reflect: { get: () => undefined, provide: vi.fn() },

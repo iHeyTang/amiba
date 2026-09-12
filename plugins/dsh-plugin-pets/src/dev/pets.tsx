@@ -1,3 +1,5 @@
+import { apply as applyNotifications } from "../../../dsh-plugin-notification-hub/src/client/index";
+import { NOTIFICATION_REMOTE } from "../../../dsh-plugin-notification-hub/src/remote";
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 import * as ReactDOMClient from "react-dom/client";
@@ -42,7 +44,10 @@ const storage = {
   remove: async () => {},
   watch: () => () => {},
 };
-setPlatform({ storage } as unknown as PlatformAdapter);
+setPlatform({
+  storage,
+  desktopPet: (window as any).amiba?.desktopPet,
+} as unknown as PlatformAdapter);
 installMessageCatalog({ en, "zh-CN": zhCN });
 const core = new Slots.SlotCore();
 const surfaces = createSurfaceSelections(core, storage);
@@ -100,7 +105,9 @@ gatewayContext.provide("connection", {
   rpc: {
     call: async (_path: string, endpoint: string, { args }: any) => {
       const method = endpoint.split("/")[1];
-      const descriptor = PET_REMOTE.descriptors.find((d) => d.method === method)!;
+      const descriptor = [...PET_REMOTE.descriptors, ...NOTIFICATION_REMOTE.descriptors].find(
+        (d) => d.method === method,
+      )!;
       return fetch("/__pets/" + method, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -110,12 +117,15 @@ gatewayContext.provide("connection", {
   },
 } as any);
 for (const source of [registrySource, gatewaySource]) {
-  new Function("window", source)({ __ModuleLoader__: {
-    load: ({ factory }: any) => factory((id: string) => {
-      if (id === "@deepseek-ai/cordis") return Cordis;
-      throw new Error(`Unknown gateway dependency: ${id}`);
-    }).apply(gatewayContext),
-  } });
+  new Function("window", source)({
+    __ModuleLoader__: {
+      load: ({ factory }: any) =>
+        factory((id: string) => {
+          if (id === "@deepseek-ai/cordis") return Cordis;
+          throw new Error(`Unknown gateway dependency: ${id}`);
+        }).apply(gatewayContext),
+    },
+  });
 }
 const pluginContext: any = {
   slots: {
@@ -123,6 +133,9 @@ const pluginContext: any = {
     inject: (_name: string, fn: () => () => void) => fn(),
   },
   remote: (gatewayContext as any).remote,
+  provide: (name: string, value: unknown) => { pluginContext[name] = value; },
+  on: gatewayContext.on.bind(gatewayContext),
+  effect: (fn: () => (() => void)) => { const dispose = fn(); return dispose; },
   layout: {
     openNewChat: (prompt: string) => {
       (window as any).agentPrompt = prompt;
@@ -131,32 +144,52 @@ const pluginContext: any = {
   inject: (_deps: unknown, fn: (ctx: unknown) => () => void) => {
     const off = fn(pluginContext);
     const p = Promise.resolve() as any;
-    p.dispose = off;
+    p.dispose = () => off?.();
     return p;
   },
 };
 function App({
   renderSlot,
 }: Slots.PropsRenderSlots<
+  | "amiba.session.observer"
   | "amiba.workspace.view"
   | "amiba.emptyState.visual"
   | "amiba.composer.accessory"
   | "amiba.message.decoration"
 >) {
+  const [readStates, setReadStates] = React.useState<{sessionId:string;readAt:number}[]>([]);
   const [surface, setSurface] = React.useState(false);
   const [conversation, setConversation] = React.useState(false);
   React.useEffect(() => {
     let dispose: (() => unknown) | undefined;
-    void apply(pluginContext).then((off) => {
+    void applyNotifications(pluginContext).then(() => apply(pluginContext)).then((off) => {
       dispose = off;
     });
     return () => {
       dispose?.();
     };
   }, []);
-  (window as any).petsHarness = { select: surfaces.set, getSurfaces: surfaces.getSnapshot, remote: (gatewayContext as any).remote.amibaPets };
+  (window as any).petsHarness = {
+    markRead: setReadStates,
+    select: surfaces.set,
+    getSurfaces: surfaces.getSnapshot,
+    get remote() {
+      return pluginContext.remote.amibaPets;
+    },
+  };
+  if (new URLSearchParams(location.search).has("desktopPet")) {
+    document.documentElement.style.background = "transparent";
+    document.body.style.cssText =
+      "margin:0;padding:0;background:transparent;overflow:hidden";
+    return (
+      <div style={{ width: 200, height: 200 }}>
+        {renderSlot("amiba.workspace.view", {}, { only: "desktop-pet" })}
+      </div>
+    );
+  }
   return (
     <PresentationRoot>
+      <div hidden>{renderSlot("amiba.session.observer", {readStates})}</div>
       <SurfaceProvider surfaces={surfaces} renderSlot={renderSlot as any}>
         <button data-switch onClick={() => setSurface(!surface)}>
           Toggle companion test
@@ -165,9 +198,26 @@ function App({
           <>
             <SurfaceSettings surfaces={surfaces} />
             <InteractionRegion className="surface">
-              <button data-conversation onClick={() => setConversation(!conversation)}>Toggle conversation</button>
-              {conversation ? <div style={{ padding: "48px 0" }}>Conversation reply</div> : <EmptyStateVisual scene="home">Default</EmptyStateVisual>}
-              <div data-composer-dock="" style={{ paddingTop: "calc(8px + var(--amiba-companion-clearance, 0px))" }}><Composer value="" onChange={() => {}} onSubmit={() => {}} /></div>
+              <button
+                data-conversation
+                onClick={() => setConversation(!conversation)}
+              >
+                Toggle conversation
+              </button>
+              {conversation ? (
+                <div style={{ padding: "48px 0" }}>Conversation reply</div>
+              ) : (
+                <EmptyStateVisual scene="home">Default</EmptyStateVisual>
+              )}
+              <div
+                data-composer-dock=""
+                style={{
+                  paddingTop:
+                    "calc(8px + var(--amiba-companion-clearance, 0px))",
+                }}
+              >
+                <Composer value="" onChange={() => {}} onSubmit={() => {}} />
+              </div>
             </InteractionRegion>
           </>
         ) : (
@@ -185,6 +235,7 @@ core.register(
     children: {
       "amiba.workspace.navigation": { kind: "list", scope: "root" },
       "amiba.workspace.view": { kind: "list", scope: "root" },
+      "amiba.session.observer": { kind: "list", scope: "root" },
       "amiba.emptyState.visual": { kind: "list", scope: "root" },
       "amiba.composer.accessory": { kind: "list", scope: "root" },
       "amiba.message.decoration": { kind: "list", scope: "root" },

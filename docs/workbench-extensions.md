@@ -10,7 +10,7 @@ UI Shell / 工作台宿主
       │       ├─ 内置文本、图片
       │       └─ 其他插件注册的文件类型
       ├─ code、diff、checkpoints → Shell 内置贡献
-      ├─ browser → Shell 内置贡献 / Electron 浏览器表面
+      ├─ browser → 可独立安装的 dsh-plugin-browser-provider-electron
       └─ 任意插件资源类型
 ```
 
@@ -62,8 +62,24 @@ openResource({
 
 ## 兼容与宿主职责
 
-原有文件、工具执行、Diff、浏览器事件在宿主入口转换为开放资源协议。已有 `amiba.workbench.panel` 保持兼容。旧 `files` / `checkpoints` 模式保留为状态适配，新的导航入口使用 `view:<resourceType>`。
+原有文件、工具执行、Diff 事件在宿主入口转换为开放资源协议；浏览器事件由浏览器插件自身转换。已有 `amiba.workbench.panel` 保持兼容。旧 `files` / `checkpoints` 模式保留为状态适配，新的导航入口使用 `view:<resourceType>`。
 
-布局、标签页、会话隔离、终端与 Electron 浏览器表面的跨会话生命周期仍由宿主处理。现有内置资源展示也注册到同一贡献记录中；文件内容读取及预览器选择已移出 `WorkspacePane`。文件布局和代码编辑器是共享 UI 组件，不会自行注册或读取文件内容。
+布局、标签页、会话隔离与终端由宿主处理。浏览器表面的跨会话生命周期归浏览器插件所有。现有内置资源展示也注册到同一贡献记录中；文件内容读取及预览器选择已移出 `WorkspacePane`。文件布局和代码编辑器是共享 UI 组件，不会自行注册或读取文件内容。
 
 文件类型扩展示例与二进制接口限制见 `plugins/dsh-plugin-file-preview/README.md`。
+
+## 常驻插件与原生扩展
+
+`WorkbenchViewExtension.host` 是与聊天树并列的常驻组件，可以处理后台会话资源。
+`toolbar` 提供工作台边缘按钮，`tabIcon` 提供标签图标，`resolveUrl(url, resources)`
+处理链接并返回开放资源。所有字段跟随同一资源类型的贡献选举，卸载或替换后同时移除，
+不会重新挂载聊天树。插件可以通过闭包共享自身状态，不需要全局注册表。
+
+`useWorkspacePane()` 提供 `resources`（所有会话）、`openResourceIn(sessionId, resource)`、
+`updateResourceIn(sessionId, type, id, update)`、`focusResourceIn(sessionId, type, id)`。
+操作只影响指定会话；更新不会改变资源身份。`openUrl()` 委托已选中的插件，不存在处理器时返回 false。
+
+桌面原生插件通过 `dsh.native` 声明单文件 CommonJS 入口，契约见 SDK 的
+`DesktopExtensionModule`、`DesktopExtensionContext`、`DesktopExtensionBridge`。
+主进程只装载已安装依赖图中的入口，实例通道由不复用的 lease 标识；停止 DSH 时强制清理所有实例。
+浏览器的安装、卸载、打包与替换方式见 `plugins/dsh-plugin-browser-provider-electron/README.md`。

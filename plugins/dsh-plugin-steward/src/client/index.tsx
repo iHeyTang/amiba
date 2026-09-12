@@ -8,6 +8,8 @@ import type { ReactNode } from "react";
 
 import { AMIBA_STEWARD_REMOTE } from "../remote.js";
 import { STEWARD_SOURCE, type AdoptResult, type StewardTask } from "../types.js";
+import { ConciergeBell } from "lucide-react";
+import { StewardSettings } from "./StewardSettings.js";
 import { StewardNavigation } from "./StewardNavigation.js";
 import { createStewardClientState, stewardGroupFace, stewardMenuFace } from "./state.js";
 
@@ -77,17 +79,16 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     ["slots", "remote.amibaSteward", "layout", "sessions", "amibaSessionVisibility"],
     (injectedCtx) => {
       const remote: StewardRemote = injectedCtx.remote.amibaSteward;
-      let disposeHidden = () => {};
-      let hiddenSessionId: string | undefined;
+      const hiddenSessions = new Map<string, () => void>();
       let disposed = false;
       const ensureStewardSession = () =>
-        valueOf(remote.ensureStewardSession()).then(({ sessionId }) => {
+        valueOf(remote.ensureStewardSession()).then(({ sessionId, sessionIds }) => {
           if (disposed) throw new Error("Steward client disposed");
-          if (hiddenSessionId !== sessionId) {
-            disposeHidden();
-            disposeHidden = injectedCtx.amibaSessionVisibility.hideSession(sessionId);
-            hiddenSessionId = sessionId;
+          const ids = sessionIds ?? [sessionId];
+          for (const id of ids) {
+            if (!hiddenSessions.has(id)) hiddenSessions.set(id, injectedCtx.amibaSessionVisibility.hideSession(id));
           }
+          state.setStewardSessionIds(ids);
           state.setStewardSessionId(sessionId);
           return sessionId;
         });
@@ -115,7 +116,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
       // Task completion, and adoption from another client/window, don't
       // notify this client — poll so the group set stays close to the
       // host's truth without a push channel.
-      const refreshIntervalId = setInterval(() => void refreshAdopted(), REFRESH_INTERVAL_MS);
+      const refreshIntervalId = setInterval(() => { void refreshAdopted(); void ensureStewardSession().catch(() => undefined); }, REFRESH_INTERVAL_MS);
 
       const disposeNavigation = injectedCtx.slots.inject("amiba.workspace.navigation", () =>
         injectedCtx.slots.register(
@@ -138,6 +139,19 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           },
           StewardNavigation as (props: PropsRuntime<"amiba.workspace.navigation">) => ReactNode,
         ),
+      );
+      const settings = (input: import("../remote.js").ConversationSettingsInput) => valueOf(remote.conversationSettings(input));
+      const disposeSettings = injectedCtx.slots.inject("settings.section", () =>
+        injectedCtx.slots.register({
+          name: "settings.section",
+          id: NAV_ID,
+          order: 290,
+          label: copy,
+          inject: () => ({ navIcon: () => <ConciergeBell /> }),
+        }, () => <StewardSettings settings={settings} openSession={(sessionId) => {
+          injectedCtx.layout.openChat();
+          openSession(sessionId);
+        }} />),
       );
       // Session list: group every session the steward has ever adopted into
       // its own 「大管家」 section below the built-in recent-tasks section.
@@ -197,7 +211,9 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         disposeMenu();
         disposeGroup();
         disposeNavigation();
-        disposeHidden();
+        disposeSettings();
+        for (const dispose of hiddenSessions.values()) dispose();
+        hiddenSessions.clear();
       };
     },
   );

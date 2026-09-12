@@ -64,14 +64,12 @@ app
       await button("Create with Agent");
       await wait('window.agentPrompt?.includes("pets_save")');
       await button("New pet");
-      await click('[aria-label="Skin"]');
-      await wait('document.querySelectorAll("[role=option]").length===6');
-      await js('document.querySelectorAll("[role=option]")[4].click()');
+      await js('document.querySelectorAll("[data-pet-skin]")[4].click()');
       await button("Save pet");
-      await wait('document.querySelectorAll("aside button").length===3');
+      await wait('document.querySelectorAll("[data-pet-record]").length===2');
       await button("Use as companion");
       await wait(
-        'document.querySelectorAll("aside button")[2].textContent.includes("Active")',
+        'document.querySelectorAll("[data-pet-record]")[1].textContent.includes("Active")',
       );
       await writeFile(
         path.join(tmpdir(), "amiba-pets-manager.png"),
@@ -152,10 +150,10 @@ app
       await js("window.petsHarness.remote.activate(null)");
       await wait('!document.querySelector(".surface [data-mofli-pet]")');
       await click("[data-switch]");
-      await wait('document.querySelectorAll("aside button").length===3');
-      await js('document.querySelectorAll("aside button")[2].click()');
-      await button("Delete");
-      await wait('document.querySelectorAll("aside button").length===2');
+      await wait('document.querySelectorAll("[data-pet-record]").length===2');
+      await js('document.querySelectorAll("[data-pet-record]")[1].click()');
+      await click('[aria-label="Delete"]');
+      await wait('document.querySelectorAll("[data-pet-record]").length===1');
       if (errors.length) throw new Error(errors.join("\n"));
       console.log(
         "Mofli integration passed: real npm engine/Grove, DSH slot registration, durable multi-pet creation/activation/deletion, Agent entry, isolated Studio rendering and regional companion.",

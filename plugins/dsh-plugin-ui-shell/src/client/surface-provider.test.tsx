@@ -7,6 +7,19 @@ vi.mock("@amiba/ui/plugin", () => ({
 }));
 import { SurfaceProvider } from "./surface-provider.js";
 afterEach(cleanup);
+it("picks a visual arriving after boot and falls back safely on unload", () => {
+  let state: any = { ready: true, choices: {}, rows: { "amiba.emptyState.visual": [] } };
+  let notify = () => {};
+  const surfaces: any = { getSnapshot: () => state, subscribe: (fn: () => void) => { notify = fn; return () => {}; } };
+  render(<SurfaceProvider surfaces={surfaces} renderSlot={(() => <span>Pet</span>) as any}>{null}</SurfaceProvider>);
+  expect(screen.getByText("Default logo")).toBeTruthy();
+  act(() => { state = { ...state, rows: { "amiba.emptyState.visual": [{ id: "mofli" }] } }; notify(); });
+  expect(screen.getByText("Pet")).toBeTruthy();
+  act(() => { state = { ...state, choices: { "amiba.emptyState.visual": "uninstalled" } }; notify(); });
+  expect(screen.getByText("Default logo")).toBeTruthy();
+  act(() => { state = { ...state, choices: {}, rows: { "amiba.emptyState.visual": [] } }; notify(); });
+  expect(screen.getByText("Default logo")).toBeTruthy();
+});
 it("does not flash the default visual while saved surface selection loads", () => {
   let state: any = { ready: false, choices: {}, rows: { "amiba.emptyState.visual": [] } };
   let notify = () => {};
@@ -17,5 +30,7 @@ it("does not flash the default visual while saved surface selection loads", () =
   expect(screen.getByText("Pet")).toBeTruthy();
   expect(screen.queryByText("Default logo")).toBeNull();
   act(() => { state = { ...state, choices: {} }; notify(); });
+  expect(screen.getByText("Pet")).toBeTruthy();
+  act(() => { state = { ...state, choices: { "amiba.emptyState.visual": "" } }; notify(); });
   expect(screen.getByText("Default logo")).toBeTruthy();
 });

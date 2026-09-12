@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Check, FileText, MessageSquare } from "lucide-react";
 import qrcode from "qrcode-generator";
 import { Button, Switch, usePluginT } from "@amiba/ui/plugin";
 import type { ConnectSettingsHost } from "@amiba/dsh-plugin-connector-core/client";
@@ -9,12 +10,17 @@ import type {
   PersonalResult,
 } from "../personal-remote.js";
 import { personalI18n } from "./i18n-personal.js";
+
 export function LarkPersonalSettings({
   host,
   remote,
+  onDone,
+  autoStart = false,
 }: {
   host: ConnectSettingsHost;
   remote: LarkPersonalRemote;
+  onDone?: () => void;
+  autoStart?: boolean;
 }) {
   const { t } = usePluginT(personalI18n);
   const [status, setStatus] = useState<PersonalStatus>();
@@ -23,12 +29,15 @@ export function LarkPersonalSettings({
     [error, setError] = useState(false);
   const alive = useRef(false),
     pending = useRef<PersonalAuthorization>();
+  // Only the explicit “let AI read” action authorizes enabling model access.
+  // Merely opening settings never changes a user's existing access choice.
+  const consent = useRef(false);
   const id = host.connect.id;
   const call = async (
     input: Omit<PersonalRequest, "connectionId">,
   ): Promise<PersonalResult> => {
     const result = await remote.manage({ ...input, connectionId: id });
-    if (!result.ok) throw new Error("personal_authorization_failed");
+    if (!result.ok) throw new Error("connection_action_failed");
     return result.value;
   };
   useEffect(() => {
@@ -44,6 +53,7 @@ export function LarkPersonalSettings({
       );
     return () => {
       alive.current = false;
+      consent.current = false;
       const active = pending.current;
       if (active?.state === "pending")
         void remote
@@ -53,8 +63,8 @@ export function LarkPersonalSettings({
   }, [id, remote, host.connect.enabled]);
   useEffect(() => {
     if (!flow || flow.state !== "pending") return;
-    let stopped = false,
-      timer: ReturnType<typeof setTimeout>;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
         const result = await call({ action: "poll", flowId: flow.id });
@@ -63,12 +73,23 @@ export function LarkPersonalSettings({
         pending.current = next;
         setFlow(next);
         if (next.state === "completed") {
-          const current = await call({ action: "status" });
-          if (!stopped) setStatus(current.status);
+          const current = await call(
+            consent.current
+              ? { action: "complete-connection" }
+              : { action: "status" },
+          );
+          if (!stopped) {
+            consent.current = false;
+            setStatus(current.status);
+            setError(false);
+          }
         } else if (next.state === "pending")
           timer = setTimeout(() => void poll(), 5000);
       } catch {
-        if (!stopped) setError(true);
+        if (!stopped) {
+          setError(true);
+          timer = setTimeout(() => void poll(), 5000);
+        }
       }
     };
     timer = setTimeout(() => void poll(), 5000);
@@ -88,8 +109,21 @@ export function LarkPersonalSettings({
         if (alive.current) setBusy(false);
       });
   };
-  const begin = () =>
+  const authorized = status?.access.state === "authorized";
+  const docsGranted = ["search:docs:read", "docx:document:readonly"].every(
+    (scope) =>
+      status?.access.capabilities.some((c) => c.id === scope && c.available),
+  );
+  const documentsReady = authorized && docsGranted && status.modelAccess;
+  const ready = documentsReady && status.work === "ready";
+  const connect = () =>
     run(async () => {
+      if (authorized && docsGranted) {
+        const current = await call({ action: "complete-connection" });
+        if (alive.current) setStatus(current.status);
+        return;
+      }
+      consent.current = true;
       const result = await call({ action: "begin" });
       if (!alive.current) {
         if (result.authorization)
@@ -99,6 +133,36 @@ export function LarkPersonalSettings({
       pending.current = result.authorization;
       setFlow(result.authorization);
     });
+  const started = useRef(false);
+  useEffect(() => {
+    if (!autoStart || started.current || !status || !host.connect.enabled)
+      return;
+    started.current = true;
+    if (!ready) connect();
+  }, [autoStart, !!status, host.connect.enabled]);
+  useEffect(() => {
+    if (status?.work !== "pending") return;
+    let stopped = false;
+    const timer = setTimeout(() => {
+      void call({ action: "status" }).then(
+        (result) => {
+          if (!stopped) setStatus(result.status);
+        },
+        () => {
+          if (!stopped) {
+            setError(true);
+            setStatus((current) =>
+              current ? { ...current, work: "unavailable" } : current,
+            );
+          }
+        },
+      );
+    }, 1500);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [status, id, remote]);
   const qr =
     flow?.state === "pending"
       ? (() => {
@@ -109,35 +173,90 @@ export function LarkPersonalSettings({
         })()
       : undefined;
   return (
-    <section className="space-y-5 py-4" aria-labelledby="lark-personal-heading">
+    <section className="space-y-6 py-4" aria-labelledby="lark-personal-heading">
       <div className="space-y-2">
-        <h3 id="lark-personal-heading" className="text-base font-semibold">
+        {onDone && (
+          <p className="text-xs text-muted-foreground">
+            {t("lark.personal.step")}
+          </p>
+        )}
+        <h3 id="lark-personal-heading" className="text-lg font-semibold">
           {t("lark.personal.title")}
         </h3>
         <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
           {t("lark.personal.description")}
         </p>
       </div>
-      {!host.connect.enabled ? (
-        <p className="text-sm text-muted-foreground">
-          {t("lark.personal.enable")}
-        </p>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm">
-              {status
-                ? status.access.label || t("lark.personal.unauthorized")
-                : t("lark.personal.loading")}
+      <div className="divide-y divide-border/50">
+        <div className="flex gap-3 py-4">
+          <MessageSquare className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+          <div className="flex-1 space-y-1">
+            <p className="text-sm font-medium">
+              {t("lark.personal.messaging")}
             </p>
-            <Button disabled={busy} variant="outline" onClick={begin}>
-              {t(
-                status?.access.state === "authorized"
-                  ? "lark.personal.retry"
-                  : "lark.personal.connect",
-              )}
-            </Button>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {t("lark.personal.messagingHint")}
+            </p>
           </div>
+          <span className="max-w-40 shrink-0 text-right text-xs leading-5 text-muted-foreground">
+            {t(
+              host.connect.status.state === "ready"
+                ? "lark.personal.messagesReady"
+                : host.connect.status.state === "connecting"
+                  ? "lark.personal.messagesWaiting"
+                  : "lark.personal.messagesError",
+            )}
+          </span>
+        </div>
+        <div className="flex gap-3 py-4">
+          <FileText className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+          <div className="space-y-2">
+            <p className="text-sm font-medium">{t("lark.personal.docs")}</p>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {t("lark.personal.docsHint")}
+            </p>
+            <p role="status" className="flex items-center gap-2 text-sm">
+              {ready && <Check className="h-4 w-4" />}
+              {t(
+                !host.connect.enabled
+                  ? "lark.personal.enable"
+                  : !status
+                    ? "lark.personal.loading"
+                    : status?.work === "pending"
+                      ? "lark.personal.finishing"
+                      : ready
+                        ? "lark.personal.ready"
+                        : authorized && !docsGranted
+                          ? "lark.personal.partial"
+                          : authorized
+                            ? "lark.personal.paused"
+                            : "lark.personal.unauthorized",
+              )}
+            </p>
+          </div>
+        </div>
+      </div>
+      {host.connect.enabled && (
+        <>
+          {!ready && !qr && status?.work !== "pending" && (
+            <div className="space-y-3">
+              {authorized && !docsGranted && (
+                <p className="text-sm text-muted-foreground">
+                  {t("lark.personal.partialHint")}
+                </p>
+              )}
+              <Button disabled={busy || (!status && !error)} onClick={connect}>
+                {t(
+                  authorized && docsGranted
+                    ? "lark.personal.resume"
+                    : "lark.personal.connect",
+                )}
+              </Button>
+              <p className="max-w-xl text-xs leading-5 text-muted-foreground">
+                {t("lark.personal.consent")}
+              </p>
+            </div>
+          )}
           {qr && flow && (
             <div className="flex flex-wrap items-center gap-6 rounded-xl bg-muted/30 p-5">
               <img
@@ -145,9 +264,14 @@ export function LarkPersonalSettings({
                 alt={t("lark.personal.scan")}
                 className="h-40 w-40 rounded-lg"
               />
-              <div className="space-y-3">
+              <div className="max-w-sm space-y-3">
                 <p className="text-sm font-medium">{t("lark.personal.scan")}</p>
-                <p className="font-mono text-sm">{flow.userCode}</p>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {t("lark.personal.consent")}
+                </p>
+                {flow.userCode && (
+                  <p className="font-mono text-sm">{flow.userCode}</p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" asChild>
                     <a
@@ -160,11 +284,15 @@ export function LarkPersonalSettings({
                   </Button>
                   <Button
                     variant="ghost"
+                    disabled={busy}
                     onClick={() =>
                       run(async () => {
+                        consent.current = false;
                         await call({ action: "cancel", flowId: flow.id });
-                        pending.current = undefined;
-                        setFlow(undefined);
+                        if (alive.current) {
+                          pending.current = undefined;
+                          setFlow(undefined);
+                        }
                       })
                     }
                   >
@@ -179,44 +307,32 @@ export function LarkPersonalSettings({
               {t("lark.personal.expired")}
             </p>
           )}
-          <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
-            {t("lark.personal.scopes")}
-          </p>
-          {status?.access.state === "authorized" && (
-            <>
-              <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-                {status.access.capabilities.map((capability, index) => (
-                  <span
-                    key={capability.id}
-                    className={
-                      capability.available
-                        ? "text-foreground"
-                        : "text-muted-foreground"
-                    }
-                  >
-                    {t(
-                      [
-                        "lark.personal.contacts",
-                        "lark.personal.search",
-                        "lark.personal.read",
-                      ][index]!,
-                    )}{" "}
-                    · {capability.available ? "✓" : t("lark.personal.missing")}
-                  </span>
-                ))}
-              </div>
-              <label className="flex items-start justify-between gap-6 py-2">
+          {status?.work === "pending" && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {t("lark.personal.finishing")}
+            </p>
+          )}
+          {ready && onDone && (
+            <Button onClick={onDone}>{t("lark.personal.finish")}</Button>
+          )}
+          {status?.access.identity === "user" && (
+            <details className="space-y-4">
+              <summary className="cursor-pointer text-sm text-muted-foreground">
+                {t("lark.personal.advanced")}
+                {status.access.label ? ` · ${status.access.label}` : ""}
+              </summary>
+              <label className="flex items-start justify-between gap-6">
                 <span className="space-y-1">
                   <span className="block text-sm font-medium">
                     {t("lark.personal.agent")}
                   </span>
-                  <span className="block max-w-xl text-sm leading-6 text-muted-foreground">
+                  <span className="block max-w-xl text-xs leading-5 text-muted-foreground">
                     {t("lark.personal.agentDescription")}
                   </span>
                 </span>
                 <Switch
                   checked={status.modelAccess}
-                  disabled={busy}
+                  disabled={busy || !!qr}
                   onCheckedChange={(allowed) =>
                     run(async () => {
                       const result = await call({
@@ -228,28 +344,30 @@ export function LarkPersonalSettings({
                   }
                 />
               </label>
-            </>
-          )}
-          {status?.access.identity === "user" && (
-            <Button
-              variant="ghost"
-              disabled={busy}
-              onClick={() =>
-                run(async () => {
-                  const result = await call({ action: "disconnect" });
-                  if (alive.current) {
-                    setStatus(result.status);
-                    setFlow(undefined);
-                    pending.current = undefined;
-                  }
-                })
-              }
-            >
-              {t("lark.personal.disconnect")}
-            </Button>
+              <Button
+                variant="ghost"
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    consent.current = false;
+                    const result = await call({ action: "disconnect" });
+                    if (alive.current) {
+                      setStatus(result.status);
+                      setFlow(undefined);
+                      pending.current = undefined;
+                    }
+                  })
+                }
+              >
+                {t("lark.personal.disconnect")}
+              </Button>
+            </details>
           )}
         </>
       )}
+      <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
+        {t("lark.personal.boundary")}
+      </p>
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {t("lark.personal.error")}

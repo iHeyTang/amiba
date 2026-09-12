@@ -44,3 +44,36 @@ test("committed distribution lock retains native dependencies for all platforms"
     }
   }
 });
+
+test('distribution rejects local plugin dependencies while profile links stay independent', async () => {
+  const fs = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { validatePluginBuildSources } = await import('./dependency-lock.mjs');
+  const root = await fs.mkdtemp(join(tmpdir(), 'plugin-build-sources-'));
+  try {
+    const directory = join(root, 'plugins/example');
+    const published = join(root, 'node_modules/.pnpm/example-lib@1.0.0/node_modules/example-lib');
+    const local = join(root, 'local/example-lib');
+    await fs.mkdir(published, { recursive: true });
+    await fs.mkdir(local, { recursive: true });
+    await fs.mkdir(join(directory, 'node_modules'), { recursive: true });
+    const link = join(directory, 'node_modules/example-lib');
+    await fs.symlink(published, link, 'junction');
+    const manifest = { name: 'dsh-plugin-example', dependencies: { 'example-lib': '1.0.0' } };
+    // A profile may freely link a plugin without changing the app build's sources.
+    await fs.mkdir(join(root, 'profile/node_modules'), { recursive: true });
+    await fs.symlink(local, join(root, 'profile/node_modules/example-lib'), 'junction');
+    await validatePluginBuildSources(root, [{ directory, manifest }]);
+    await fs.rm(link);
+    await fs.symlink(local, link, 'junction');
+    await assert.rejects(validatePluginBuildSources(root, [{ directory, manifest }]), /local development package/);
+    const archiveInstall = join(root, 'node_modules/.pnpm/example-lib@file+vendor+example.tgz/node_modules/example-lib');
+    await fs.mkdir(archiveInstall, { recursive: true });
+    await fs.rm(link);
+    await fs.symlink(archiveInstall, link, 'junction');
+    await assert.rejects(validatePluginBuildSources(root, [{ directory, manifest }]), /local development package/);
+    manifest.dependencies['example-lib'] = 'file:../local';
+    await assert.rejects(validatePluginBuildSources(root, [{ directory, manifest }]), /local dependency/);
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});

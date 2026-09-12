@@ -23,3 +23,11 @@ plugins/dsh-plugin-*/vite.config.js
 plugins/dsh-plugin-*/vite.config.d.ts
 .dsh-runtime-build-*/
 .claude/worktrees/
+
+# Local development artifacts are never distribution inputs.
+.local/
+vendor/mofli/
+plugins/dsh-plugin-pets/src/mofli-capabilities.generated.ts
+
+# Atomic development compiler output.
+**/.amiba-build-*/

@@ -395,3 +395,45 @@ it("retains separate reasoning segments in a live snapshot around a tool call",a
  expect(live.state.timeline.map(item=>item.kind)).toEqual(["reasoning","tool","reasoning"]);
  engine.dispose();
 });
+
+
+describe("compaction event delivery", () => {
+  it.each(["running", "completed", "failed"])("restores %s compaction from a passive snapshot", async (status) => {
+    const script = [TURN_START, sessionFrame("compaction/start", { compactionId: "compact-1" }, 3)];
+    if (status !== "running") {
+      script.push(sessionFrame("compaction/summary", { compactionId: "compact-1", summary: [{ type: "text", text: "checkpoint" }] }, 4));
+      script.push(sessionFrame("compaction/end", { compactionId: "compact-1", ...(status === "failed" ? { error: "timeout" } : {}) }, 5));
+    }
+    const engine = new DshChatEngineClient({ client: scriptedClient(script) });
+    const events: StreamEvent[] = [];
+    const snapshots: SnapshotFrame[] = [];
+    engine.onStreamEvent((_id, event) => events.push(event));
+    engine.onSnapshot(frame => snapshots.push(frame));
+    engine.subscribe("session-1");
+    await eventually(() => expect(events.filter(event => event.kind === "compaction")).toHaveLength(status === "running" ? 1 : 3));
+    engine.requestSnapshot("session-1");
+    const snapshot = snapshots.at(-1) as Extract<SnapshotFrame, { kind: "live" }>;
+    expect(snapshot.kind).toBe("live");
+    expect(snapshot.state.error).toBeNull();
+    expect(snapshot.state.timeline).toMatchObject([{ kind: "compaction", compaction: { compactionId: "compact-1", status } }]);
+    engine.dispose();
+  });
+
+  it("delivers compaction only once while the local run and watcher both subscribe", async () => {
+    const script = [
+      { rpcId: "sub", payload: { type: "session/subscribed", sessionId: "session-1", lastSeq: 0 } } as DshMuxEnvelope,
+      TURN_START,
+      sessionFrame("compaction/start", { compactionId: "c" }, 3),
+      sessionFrame("compaction/end", { compactionId: "c" }, 4),
+      sessionFrame("turn/end", { reason: { kind: "completed" } }, 5),
+    ];
+    const engine = new DshChatEngineClient({ client: scriptedClient(script) });
+    const events: StreamEvent[] = [];
+    engine.onStreamEvent((_id, event) => events.push(event));
+    engine.subscribe("session-1");
+    engine.submit(payload({ history: [{ role: "user", content: "continue" }] }));
+    await eventually(() => expect(events.some(event => event.kind === "done")).toBe(true));
+    expect(events.filter(event => event.kind === "compaction")).toHaveLength(2);
+    engine.dispose();
+  });
+});

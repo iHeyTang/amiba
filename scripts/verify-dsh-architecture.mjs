@@ -93,6 +93,7 @@ const bundleSpecs = [
       "@amiba/dsh-plugin-messaging-core",
       "@amiba/dsh-plugin-model-plane",
       "@amiba/dsh-plugin-notification-hub",
+      "@amiba/dsh-plugin-conversation-notifications",
       "@amiba/dsh-plugin-pin",
       "@amiba/dsh-plugin-provider-tokendance",
       "@amiba/dsh-plugin-resources",
@@ -155,8 +156,22 @@ for (const spec of bundleSpecs) {
   }
   patches.push(await text(`bundles/${spec.directory}/cordis.patch.yml`));
 }
-const patch = patches.join("\n");
 const pluginPackages = [...new Set(bundleSpecs.flatMap((spec) => spec.plugins))].sort();
+// Optional plugins own their activation layer instead of being activated by a
+// mandatory distribution bundle. Count both layers to still reject duplicates.
+for (const packageName of pluginPackages) {
+  const project = `plugins/${packageName.slice("@amiba/".length)}`;
+  const manifest = await json(`${project}/package.json`);
+  const ownPatch = manifest.dsh?.bundle?.patch;
+  if (ownPatch === undefined) continue;
+  const projectRoot = path.join(root, project);
+  if (typeof ownPatch !== "string" || !ownPatch.startsWith("./") ||
+      !path.resolve(projectRoot, ownPatch).startsWith(`${projectRoot}${path.sep}`)) {
+    fail(`${packageName} must declare a package-local dsh.bundle.patch`);
+  }
+  patches.push(await text(`${project}/${ownPatch}`));
+}
+const patch = patches.join("\n");
 for (const packageName of pluginPackages) {
   const project = `plugins/${packageName.slice("@amiba/".length)}`;
   const manifest = await json(`${project}/package.json`);
@@ -185,7 +200,7 @@ for (const packageName of pluginPackages) {
     fail(`${packageName} must not use a default plugin export`);
   const occurrences = [...patch.matchAll(pluginPattern(packageName))].length;
   if (occurrences !== 1)
-    fail(`${packageName} must occur exactly once across the Amiba bundles`);
+    fail(`${packageName} must occur exactly once across distribution and standalone activation layers`);
   for (const file of await sourceFiles(`${project}/src`)) {
     const body = await readFile(file, "utf8");
     for (const match of body.matchAll(/(?:webServer|server)\.register\(/gu)) {
@@ -220,6 +235,11 @@ const PLUGIN_CLIENT_PLATFORM_ALLOWLIST = new Set([
   "kind",
   "windowChrome",
   "storage",
+  // Opaque, leased transport to installed native modules; carries no feature API.
+  "nativeExtensions",
+  // Existing companion window capability: geometry, pointer routing and navigation.
+  // Notification content and acknowledgement state stay behind plugin remotes.
+  "desktopPet",
 ]);
 for (const packageName of pluginPackages) {
   if (packageName === "@amiba/dsh-plugin-ui-shell") continue;
@@ -306,14 +326,14 @@ before(
   "@amiba/dsh-plugin-connector-webhook",
 );
 // The notification hub composes before its posters (schedule-adapter) and
-// before its desktop delivery sink (runtime-gateway).
+// before its presentation plugin (pets).
 before(
   "@amiba/dsh-plugin-notification-hub",
   "@amiba/dsh-plugin-schedule-adapter",
 );
 before(
   "@amiba/dsh-plugin-notification-hub",
-  "@amiba/dsh-plugin-runtime-gateway",
+  "@amiba/dsh-plugin-pets",
 );
 before(
   "@amiba/dsh-plugin-ui-shell",
@@ -488,12 +508,12 @@ for (const [body, where] of [
 // `close` wired to the shell's leave-Settings path.
 for (const dispatch of [
   /renderSlot\(\s*"settings\.section",\s*\{ close:[\s\S]{0,200}?\{ only: sectionId \}/u,
-  /renderSlot\(\s*"amiba\.workspace\.view",[\s\S]{0,200}?\{ only: viewId \}/u,
+  /renderSlot\(\s*"amiba\.workspace\.view",[\s\S]{0,800}?\{ only: viewId \}/u,
   /renderSlot\(\s*"shell\.overlay"/u,
-  /renderSlot\(\s*"conversation\.session\.header\.utilities",\s*\{\}\s*\)/u,
+  /renderSlot\(\s*"conversation\.session\.header\.utilities",\s*\{\}\s*,?\s*\)/u,
   // Title-adjacent counterpart of the utilities strip; the official owner
   // share is EMPTY, so anything but `{}` here would be a fabricated one.
-  /renderSlot\(\s*"conversation\.session\.header\.actions",\s*\{\}\s*\)/u,
+  /renderSlot\(\s*"conversation\.session\.header\.actions",\s*\{\}\s*,?\s*\)/u,
   // The composer model chip is seat-split: the official session seat while
   // the composer has a session, the vendor hero seat while drafting.
   /renderSlot\(\s*"conversation\.input\.model",\s*request\.owner\s*\)/u,
@@ -505,7 +525,7 @@ for (const dispatch of [
   // the faithful dispatch and anything else would be a fabricated owner.
   // This is byte-for-byte the upstream dispatch (ui-conversation's composer
   // entry does `overlay: renderSlot("conversation.input.overlay", {})`).
-  /renderSlot\(\s*"conversation\.input\.overlay",\s*\{\}\s*\)/u,
+  /renderSlot\(\s*"conversation\.input\.overlay",\s*\{\}\s*,?\s*\)/u,
   // The three settings seats whose official owner share is the EMPTY marker
   // interface (`SettingsHeaderOwnerProps` / `SettingsGeneralItemOwnerProps`,
   // both `{ children?: never }`). `{}` is the faithful dispatch; TypeScript
@@ -1047,7 +1067,6 @@ for (const [pattern, what] of [
 }
 for (const entry of [
   "apps/desktop/src/renderer/quick-ask/index.tsx",
-  "apps/desktop/src/renderer/notifier/index.tsx",
 ]) {
   const source = code(await text(entry));
   if (!/installWindowMessages\(\)/u.test(source)) {
@@ -1130,7 +1149,7 @@ if (!(await exists(SHELL_CLIENT_BUNDLE))) {
 // nowhere, to pin the missing-key behaviour.
 const dictionaryKeys = new Set();
 const DICTIONARY_FILE =
-  /(locales[\\/](en|zh-CN)\.ts|src[\\/]client[\\/]i18n[^\\/]*\.ts)$/u;
+  /(locales[\\/](en|zh-CN)\.ts|src[\\/]client[\\/](i18n[^\\/]*|(?:[^\\/]+-)?locales)\.ts)$/u;
 let dictionaryFileCount = 0;
 for (const scanRoot of ["packages", "plugins", "apps"]) {
   for (const file of await sourceFiles(scanRoot)) {
@@ -1139,10 +1158,11 @@ for (const scanRoot of ["packages", "plugins", "apps"]) {
     if (!DICTIONARY_FILE.test(relative)) continue;
     if (/\.test\.tsx?$/u.test(relative)) continue;
     dictionaryFileCount += 1;
-    for (const [, key] of (await readFile(file, "utf8")).matchAll(
-      /^\s+"([^"]+)":\s*["`]/gmu,
+    // Plugin dictionaries also use identifier keys and multiline string values.
+    for (const [, quotedKey, identifierKey] of code(await readFile(file, "utf8")).matchAll(
+      /^\s+(?:["']([^"']+)["']|([A-Za-z_$][\w$]*)):\s*["'`]/gmu,
     )) {
-      dictionaryKeys.add(key);
+      dictionaryKeys.add(quotedKey ?? identifierKey);
     }
   }
 }
@@ -2375,7 +2395,7 @@ const desktopPackage = await json("apps/desktop/package.json");
 const cliPackage = await json("apps/cli/package.json");
 const desktopDev = await text("apps/desktop/scripts/dev-desktop.mjs");
 if (
-  !desktopPackage.scripts?.predev?.includes("pnpm runtime:prepare") ||
+  desktopPackage.scripts?.dev !== "node scripts/dev-desktop.mjs" ||
   !desktopDev.includes('spawnSync(pnpm, ["runtime:prepare"]')
 ) {
   fail(
@@ -2384,7 +2404,7 @@ if (
 }
 if (
   desktopPackage.dependencies?.["@amiba/app-runtime"] !== "workspace:*" ||
-  cliPackage.dependencies?.["@amiba/app-runtime"] !== "workspace:*"
+  cliPackage.devDependencies?.["@amiba/app-runtime"] !== "workspace:*"
 ) {
   fail(
     "CLI and Desktop must consume the app-runtime-owned DSH Runtime",
@@ -2424,3 +2444,12 @@ if (
 console.log(
   `[dsh-architecture] verified one app-runtime-owned DSH distribution, one public DSH plugin SDK, an execution-only Electron gateway, ${pluginPackages.length} independent DSH plugins, Core/Web/Desktop bundles, and a harness-independent Model Plane module`,
 );
+
+// Notification presentation belongs to plugins, never to a fixed host window.
+for (const retired of ["apps/desktop/src/main/notifier-window.ts", "apps/desktop/src/renderer/notifier/index.tsx"]) {
+  if (await exists(retired)) fail(`${retired} must not return; desktop notices are plugin-rendered`);
+}
+
+for (const retired of ["apps/desktop/src/main/notifier-window.ts", "apps/desktop/src/renderer/notifier/index.tsx"]) {
+  if (await exists(retired)) fail(`${retired} must not return; desktop notices are plugin-rendered`);
+}

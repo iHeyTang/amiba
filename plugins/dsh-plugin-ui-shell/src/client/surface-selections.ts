@@ -36,7 +36,7 @@ export function createSurfaceSelections(
       if (value && typeof value === "object")
         for (const slot of SURFACE_SLOTS) {
           const id = (value as Record<string, unknown>)[slot];
-          if (typeof id === "string" && id) choices[slot] = id;
+          if (typeof id === "string") choices[slot] = id;
         }
     })
     .catch((e) => {
@@ -82,11 +82,11 @@ export function createSurfaceSelections(
         off.forEach((f) => f());
       };
     },
-    set(slot: SurfaceSlot, id: string) {
+    set(slot: SurfaceSlot, id: string | undefined) {
       const write = async () => {
         await loading;
         const next = { ...choices };
-        if (id) next[slot] = id;
+        if (id !== undefined) next[slot] = id;
         else delete next[slot];
         try {
           await storage.set({ [key]: next });

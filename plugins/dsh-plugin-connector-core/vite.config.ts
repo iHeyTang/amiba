@@ -1,7 +1,9 @@
+import { clientInputs } from "../../scripts/dsh-client-inputs.mjs";
 import { defineConfig } from "vite";
 
 const PLUGIN_ID = "@amiba/dsh-plugin-connector-core";
 const DSH_CLIENT_EXTERNALS = [
+  "@amiba/ui/plugin",
   "react",
   "react/jsx-runtime",
   "react-dom",
@@ -14,6 +16,7 @@ const DSH_CLIENT_EXTERNALS = [
 ];
 
 export default defineConfig({
+  plugins: [clientInputs()],
   build: {
     // Match the TypeScript target. Vite's default ("modules") includes
     // safari14, which makes esbuild lower optional chaining — and that lowering
@@ -30,6 +33,7 @@ export default defineConfig({
     rollupOptions: {
       external: DSH_CLIENT_EXTERNALS,
       output: {
+        paths: { "@amiba/ui/plugin": "@amiba/dsh-plugin-ui-shell/client" },
         // DSH registers one factory per entry; relative CJS chunks are not loadable.
         inlineDynamicImports: true,
         exports: "named",

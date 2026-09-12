@@ -1,5 +1,11 @@
 export const i18n = {
   en: {
+    "mcpAccess.more": "More ways AI can help",
+    "mcpAccess.work": "Work with information in this account",
+    "mcpAccess.workDescription": "Enable AI to perform the listed actions through this connection. Depending on the actions, this can include reading information, sending messages or making changes. Your workspace still controls what can be accessed.",
+    "mcpAccess.operations": "See what AI can do",
+    "mcpAccess.enableWork": "Enable these abilities",
+
     "mcpAccess.title": "Plugin access",
     "mcpAccess.ordinary": "Ordinary agents",
     "mcpAccess.description": "Choose an account and approve the capabilities each plugin needs. Connection credentials are managed in Connections.",
@@ -24,6 +30,12 @@ export const i18n = {
     "mcpAccess.empty": "Create or enable a compatible connection to continue.",
   },
   "zh-CN": {
+    "mcpAccess.more": "让 AI 帮你做更多",
+    "mcpAccess.work": "处理这个账号里的工作",
+    "mcpAccess.workDescription": "让 AI 通过此连接完成下列操作，可能包括读取资料、发送消息或修改内容。实际可用范围由你的工作区决定。",
+    "mcpAccess.operations": "查看 AI 可以执行的操作",
+    "mcpAccess.enableWork": "启用这些能力",
+
     "mcpAccess.title": "插件访问授权",
     "mcpAccess.ordinary": "普通智能体",
     "mcpAccess.description": "为插件选择账号，并批准它需要的能力。账号凭据统一在「连接」中维护。",

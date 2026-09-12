@@ -2419,3 +2419,26 @@ describe("connection ownership and optional messaging", () => {
     expect(fake.runtimes.at(-1)!.stop).toHaveBeenCalledOnce();
   });
 });
+
+it("admits members to shared conversations while keeping pairing and approval authority with the owner", async () => {
+  const { center, messageCenter, store } = await harness();
+  const { provider, starts } = fakeProvider();
+  center.registerProvider({ ...provider, messaging: { ownerPairing: true, sharedConversations: true } });
+  const connect = await center.createConnect({ provider: "fake", name: "Group assistant", config: {}, agentPreset: "restricted" });
+  const handle = starts[0]!;
+  const group = { key: "group", kind: "group" as const };
+  await handle.onInbound({ id: "first-group", text: "hi", sender: "member", conversation: group });
+  expect(messageCenter.acceptInbound).not.toHaveBeenCalled();
+  expect((await store.list())[0]?.owners).toEqual([]);
+  await handle.onInbound({ id: "pair-owner", text: "hi", sender: "owner", conversation: { key: "owner-chat", kind: "p2p" } });
+  await handle.onInbound({ id: "group-member", text: "help", sender: "member", conversation: group });
+  expect(messageCenter.acceptInbound).toHaveBeenCalledTimes(2);
+  const bridge = messageCenter.providers.get("connector-fake")!;
+  const channel = { id: "channel-1" } as never;
+  await expect(bridge.conversationAccess!(channel, { id: "g", text: "help", sender: "owner", conversation: group })).resolves.toBe("shared");
+  await expect(bridge.conversationAccess!(channel, { id: "p", text: "help", sender: "owner", conversation: { key: "owner-chat", kind: "p2p" } })).resolves.toBe("owner");
+  await expect(bridge.canApprove!(channel, "member")).resolves.toBe(false);
+  await expect(bridge.canApprove!(channel, "owner")).resolves.toBe(true);
+  await center.setOwners(connect.id, ["replacement"]);
+  await expect(bridge.canApprove!(channel, "owner")).resolves.toBe(false);
+});

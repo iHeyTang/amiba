@@ -1,3 +1,5 @@
+import { useConversationSubmitHandoff } from "./useConversationSubmitHandoff";
+import { usePrepareConversationSubmit } from "./conversation-submit";
 import { createSurfaceActivity } from "../primitives/surface-activity";
 import { InteractionRegion } from "../primitives/interaction-region";
 import { EmptyStateVisual } from "../primitives/empty-state-visual";
@@ -579,7 +581,7 @@ export default function ChatSurface({
         const absolute = resolveWorkspaceFilePath(link.path, workspacePath);
         if (
           absolute &&
-          workspacePane.openBrowserUrl(workspaceFileUrl(absolute))
+          workspacePane.openUrl(workspaceFileUrl(absolute))
         ) {
           return;
         }
@@ -1365,6 +1367,9 @@ export default function ChatSurface({
       case "toolProgress":
         stream.onToolProgress(event.event);
         break;
+      case "compaction":
+        stream.onCompaction(event.event);
+        break;
       case "session":
         if (event.sessionId && event.sessionId !== sessionId) {
           console.warn(
@@ -1400,12 +1405,15 @@ export default function ChatSurface({
         setClarifyError(null);
         break;
       case "done":
+        stream.finishCompactions();
         handleStreamDone(sessionId, event.agentFinalUrl, event.agentFinalTitle);
         break;
       case "aborted":
+        stream.finishCompactions();
         handleStreamAborted(sessionId, event.assistantUiId);
         break;
       case "error":
+        stream.finishCompactions();
         handleStreamError(sessionId, event);
         break;
     }
@@ -1516,6 +1524,15 @@ export default function ChatSurface({
   // change, hydration-guarded) is owned by `usePendingQueue`.
 
   const prepareMarkdownTurn = usePrepareMarkdownTurn();
+  const prepareConversationSubmit = usePrepareConversationSubmit();
+  const handoffConversationSubmit = useConversationSubmitHandoff({
+    activeId: sessions.activeId,
+    prepare: prepareConversationSubmit,
+    refresh: sessions.refresh,
+    open: sessions.openTab,
+    run: (args: { text: string; attachments: Attachment[] }) => runChatTurn(args),
+  });
+
 
   async function runChatTurn(args: {
     text: string;
@@ -1524,6 +1541,14 @@ export default function ChatSurface({
     const { text, attachments: attachmentsForTurn } = args;
 
     setError(null);
+    try {
+      if (await handoffConversationSubmit(args)) return;
+    } catch (error) {
+      setInput(text);
+      setAttachments(attachmentsForTurn);
+      setError({ message: error instanceof Error ? error.message : String(error), source: "run" });
+      return;
+    }
 
     const sessionAgent = sessions.sessions.find(
       (session) => session.id === sessions.activeId,
@@ -2056,7 +2081,7 @@ export default function ChatSurface({
   );
 
   return (
-    <InteractionRegion activity={surfaceActivity.activity}
+    <InteractionRegion activity={surfaceActivity.activity} activityTitle={currentSessionMeta?.title}
       className={cn(
         "relative flex flex-col bg-background text-foreground",
         // The surface is mounted inside a flex column and consumes the remaining
@@ -2144,12 +2169,9 @@ export default function ChatSurface({
               // submission creates a session via ``ensureActive`` and
               // the conversation continues seamlessly.
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 overflow-y-auto px-6 py-8">
-                <div className="space-y-1 text-center">
+                <div className="flex flex-col items-center gap-2 text-center">
                   <EmptyStateVisual scene="conversation"><AmibaLogo size={56} /></EmptyStateVisual>
-                  <p className="pt-2 text-sm font-semibold">
-                    {t("newtab.greeting")}
-                  </p>
-                  <p className="max-w-[40ch] text-xs text-muted-foreground">
+                  <p className="text-balance text-sm font-normal leading-6 text-muted-foreground">
                     {t("newtab.subtitle")}
                   </p>
                 </div>

@@ -4,7 +4,7 @@ import { getWindowChrome } from "../shared/window-chrome";
 
 // Node EventEmitter defaults `maxListeners` to 10. Each Amiba window
 // stacks more than that on a few high-fan-out IPC channels (storage,
-// workspace, chat, notifier, quick-ask) because every React hook that
+// workspace, chat, quick-ask) because every React hook that
 // observes state — wallpaper, schedules, chat, notifications, and the
 // platform adapter's `storage.watch` — adds its
 // own listener on top of the shared `ipcRenderer`. Without bumping
@@ -111,51 +111,17 @@ const api = {
       ipcRenderer.invoke("shell:open-external", url),
   },
 
-  embeddedBrowser: {
-    registerTab: (input: {
-      tabId: string;
-      webContentsId: number;
-      active?: boolean;
-      sessionId?: string;
-    }) => ipcRenderer.invoke("embedded-browser:register-tab", input),
-    unregisterTab: (tabId: string) =>
-      ipcRenderer.invoke("embedded-browser:unregister-tab", tabId),
-    setActiveTab: (tabId: string) =>
-      ipcRenderer.invoke("embedded-browser:set-active-tab", tabId),
-    command: (
-      tabId: string,
-      command: import("@amiba/app-runtime/platform").EmbeddedBrowserCommand,
-    ) => ipcRenderer.invoke("embedded-browser:command", tabId, command),
-    detectDevServers: () =>
-      ipcRenderer.invoke("embedded-browser:detect-dev-servers"),
-    onCreateRequested: (cb: (event: { sessionId?: string }) => void) => {
-      // Older main builds sent no payload; treat that as "no owning session".
-      const handler = (_event: unknown, payload?: { sessionId?: string }) =>
-        cb(payload ?? {});
-      ipcRenderer.on("embedded-browser:create-tab", handler);
-      return () => ipcRenderer.off("embedded-browser:create-tab", handler);
+  nativeExtensions: {
+    connect: (packageName: string) => ipcRenderer.invoke("native-extension:connect", packageName),
+    call: (lease: string, method: string, args?: unknown) => ipcRenderer.invoke("native-extension:call", lease, method, args),
+    subscribe: (lease: string, event: string, listener: (payload: unknown) => void) => {
+      const handler = (_event: unknown, message: { lease: string; event: string; payload: unknown }) => {
+        if (message.lease === lease && message.event === event) listener(message.payload);
+      };
+      ipcRenderer.on("native-extension:event", handler);
+      return () => { ipcRenderer.off("native-extension:event", handler); };
     },
-    onFocusRequested: (
-      cb: (event: { tabId: string; sessionId?: string }) => void,
-    ) => {
-      const handler = (
-        _event: unknown,
-        payload: { tabId: string; sessionId?: string },
-      ) => cb(payload);
-      ipcRenderer.on("embedded-browser:focus", handler);
-      return () => ipcRenderer.off("embedded-browser:focus", handler);
-    },
-    onAgentActivity: (
-      cb: (event: { tabId: string; action: string; running: boolean }) => void,
-    ) => {
-      const handler = (
-        _event: unknown,
-        payload: { tabId: string; action: string; running: boolean },
-      ) => cb(payload);
-      ipcRenderer.on("embedded-browser:agent-activity", handler);
-      return () => ipcRenderer.off("embedded-browser:agent-activity", handler);
-    },
-  },
+  } satisfies import("@amiba/extension-sdk").DesktopExtensionBridge,
 
   /**
    * Workspace binding bridge. A bound directory gives the chat session
@@ -348,17 +314,71 @@ const api = {
   },
 
   /**
-   * Heads-up Notifier bridge. The notifier renderer (bottom-right floating
-   * window) listens for `notifier:message` pushes from main and sends
-   * approve/deny/activate-main back over their own channels.
-   */
-  /**
    * Spotlight-style Quick-Ask popup bridge. Main fires `prefill` after
    * summon (with the captured selection + source app name); renderer
    * sends `dismiss` / `resize` back. `submit` / `abort` go through the
    * existing `chat.*` channel — the popup uses the same chat engine as
    * the main window, just with its own session id.
    */
+  desktopPet: {
+    setLanguage: (language: "en" | "zh-CN") => ipcRenderer.invoke("desktop-pet:language", language),
+    openConversation: (sessionId: string) => ipcRenderer.invoke("desktop-pet:open-conversation", sessionId),
+    onLayout: (listener: (layout: import("@amiba/app-runtime/platform").DesktopPetLayout) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, layout: import("@amiba/app-runtime/platform").DesktopPetLayout) => listener(layout);
+      ipcRenderer.on("desktop-pet:layout", handler);
+      return () => { ipcRenderer.off("desktop-pet:layout", handler); };
+    },
+    setVisualBounds: (bounds: import("@amiba/app-runtime/platform").DesktopPetLayout["visual"]) => ipcRenderer.invoke("desktop-pet:visual", bounds),
+    resize: (corner: "nw" | "ne" | "sw" | "se" | null) => ipcRenderer.invoke("desktop-pet:resize", corner),
+    finishResize: () => ipcRenderer.invoke("desktop-pet:finish-resize"),
+    getState: () => ipcRenderer.invoke("desktop-pet:get"),
+    setEnabled: (enabled: boolean) =>
+      ipcRenderer.invoke("desktop-pet:enable", enabled),
+    setIgnoreMouse: (ignore: boolean) =>
+      ipcRenderer.invoke("desktop-pet:ignore", ignore),
+    drag: (active: boolean) => ipcRenderer.invoke("desktop-pet:drag", active),
+    ready: () => ipcRenderer.invoke("desktop-pet:ready"),
+    menu: (pets: { id: string; name: string }[], activeId: string | null) =>
+      ipcRenderer.invoke("desktop-pet:menu", pets, activeId),
+    publishActivity: (
+      activity: import("../shared/desktop-pet").DesktopPetActivity,
+    ) => ipcRenderer.invoke("desktop-pet:activity", activity),
+    onState: (
+      listener: (
+        state: import("../shared/desktop-pet").DesktopPetState,
+      ) => void,
+    ) => {
+      const handler = (
+        _: Electron.IpcRendererEvent,
+        state: import("../shared/desktop-pet").DesktopPetState,
+      ) => listener(state);
+      ipcRenderer.on("desktop-pet:state", handler);
+      return () => ipcRenderer.off("desktop-pet:state", handler);
+    },
+    onActivity: (
+      listener: (
+        state: import("../shared/desktop-pet").DesktopPetActivity,
+      ) => void,
+    ) => {
+      const handler = (
+        _: Electron.IpcRendererEvent,
+        state: import("../shared/desktop-pet").DesktopPetActivity,
+      ) => listener(state);
+      ipcRenderer.on("desktop-pet:activity", handler);
+      return () => ipcRenderer.off("desktop-pet:activity", handler);
+    },
+    onPointer: (listener: (point: { x: number; y: number } | null) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, point: { x: number; y: number } | null) => listener(point);
+      ipcRenderer.on("desktop-pet:pointer", handler);
+      return () => ipcRenderer.off("desktop-pet:pointer", handler);
+    },
+    onSelect: (listener: (id: string) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, id: string) =>
+        listener(id);
+      ipcRenderer.on("desktop-pet:select", handler);
+      return () => ipcRenderer.off("desktop-pet:select", handler);
+    },
+  },
   quickAsk: {
     onPrefill: (cb: (payload: { text: string; sourceApp: string }) => void) => {
       const handler = (
@@ -379,30 +399,6 @@ const api = {
     ) => ipcRenderer.invoke("quick-ask:resize", contentHeightPx, anchor),
   },
 
-  notifier: {
-    onMessage: (cb: (msg: unknown) => void) => {
-      const handler = (_e: unknown, msg: unknown) => cb(msg);
-      ipcRenderer.on("notifier:message", handler);
-      return () => ipcRenderer.off("notifier:message", handler);
-    },
-    hide: () => ipcRenderer.invoke("notifier:hide"),
-    openSession: (sessionId: string) =>
-      ipcRenderer.invoke("notifier:open-session", sessionId),
-    approve: (approvalId: string) =>
-      ipcRenderer.invoke("notifier:approve", approvalId),
-    deny: (approvalId: string) =>
-      ipcRenderer.invoke("notifier:deny", approvalId),
-    /**
-     * Fire a demo notifier card so the user can confirm the floating
-     * window appears and clicks register. Call from the main window's
-     * devtools console:
-     *   window.amiba.notifier.demo()                   // chat card
-     *   window.amiba.notifier.demo("approval-pending") // approval card
-     *   window.amiba.notifier.demo("plugin")           // plugin card
-     */
-    demo: (kind?: "chat-completed" | "approval-pending" | "plugin") =>
-      ipcRenderer.invoke("notifier:demo", kind),
-  },
 
   /**
    * Deliver a notification's explicit View action to the primary renderer.

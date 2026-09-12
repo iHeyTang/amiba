@@ -104,7 +104,7 @@ const closeButton = () => screen.getByRole("button", { name: /关闭|Close/ });
 const beginButton = () =>
   screen.getByRole("button", { name: /开始扫码|scanning/i });
 const manualButton = () =>
-  screen.getByRole("button", { name: /手动填写|manually/ });
+  screen.getByRole("button", { name: /高级设置|Advanced:/ });
 const returnToScanButton = () =>
   screen.getByRole("button", { name: /返回扫码|Back to scanning/ });
 
@@ -513,6 +513,7 @@ describe("LarkWizard", () => {
     // Nameless: the preset filled itself in, both entry points stay shut.
     const host = hostWith();
     const { unmount } = render(<LarkWizard host={host} />);
+    typeName("");
     expect(beginButton()).toBeDisabled();
 
     await userEvent.click(manualButton());

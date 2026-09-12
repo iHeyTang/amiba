@@ -1,6 +1,7 @@
-import { Loader2, Lock, Plus } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { ArrowLeft, Loader2, Lock, Plus, QrCode } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import qrcode from "qrcode-generator";
 
 import {
   Button,
@@ -15,25 +16,16 @@ import type { ConnectWizardHost } from "@amiba/dsh-plugin-connector-core/client"
 import { DingtalkMark } from "./brand-mark.js";
 import { dingtalkI18n } from "./i18n.js";
 
-/**
- * Wraps `usePluginT` with this plugin's own i18n overlay (see `./i18n.ts`) —
- * same convention connector-core's own client files (and the lark wizard)
- * use, so overlay-covered keys resolve locally instead of depending on a host
- * `options.connect.*` bundle that no longer carries them.
- */
+type OnboardingView = Awaited<
+  ReturnType<ConnectWizardHost["adapter"]["pollOnboarding"]>
+>;
+
+const ONBOARD_POLL_INTERVAL_MS = 1500;
+
 function useT() {
   return usePluginT(dingtalkI18n);
 }
 
-/**
- * Every failure code `ConnectorCenter#createConnect` can hand back, mapped to
- * this plugin's own translated copy (see `./i18n.ts`). All seven live here
- * rather than only the ones this manual-only wizard is likely to hit: a
- * provider body must be able to translate every failure its own submit path
- * can produce without reaching into another plugin's catalog. An
- * unrecognised message still falls back to the raw string — better a real
- * message than nothing.
- */
 const KNOWN_CREATE_ERRORS: Record<string, string> = {
   agent_preset_required: "options.connect.dsh.error.agent_preset_required",
   provider_not_found: "options.connect.dsh.error.provider_not_found",
@@ -42,6 +34,11 @@ const KNOWN_CREATE_ERRORS: Record<string, string> = {
   grant_not_found: "options.connect.dsh.error.grant_not_found",
   onboarding_not_found: "options.connect.dsh.error.onboarding_not_found",
   onboarding_unsupported: "options.connect.dsh.error.onboarding_unsupported",
+  dingtalk_registration_expired: "options.connect.dsh.onboard.error.expired",
+  dingtalk_registration_failed: "options.connect.dsh.onboard.error.failed",
+  dingtalk_registration_network: "options.connect.dsh.onboard.error.network",
+  dingtalk_registration_invalid: "options.connect.dsh.onboard.error.invalid",
+  dingtalk_registration_api: "options.connect.dsh.onboard.error.api",
 };
 
 function describeError(t: PluginTranslateFn, cause: unknown): string {
@@ -50,48 +47,40 @@ function describeError(t: PluginTranslateFn, cause: unknown): string {
   return key ? t(key) : message;
 }
 
-/**
- * The DingTalk connect screen, registered for the `"dingtalk"` provider and
- * mounted whole into whatever seat the host gives it (the settings dialog
- * today, the composer next). It draws its OWN header, form — connect name and
- * agent preset included, via `host.kit.BasicsFields` — and footer buttons;
- * nothing wraps it. DingTalk has no scan-to-connect flow — this is a manual
- * form only: Client ID, Client Secret, and an opt-in tools switch, submitted
- * through `host.adapter.create`.
- *
- * Depends on nothing from connector-core but the `host` prop (its type
- * aside), so the same screen works in the settings modal and, later, in the
- * composer.
- */
+const KNOWN_STATUS_NOTES: Record<string, string> = {
+  polling: "options.connect.dsh.onboard.note.polling",
+  retrying: "options.connect.dsh.onboard.note.retrying",
+};
+
+function describeStatusNote(t: PluginTranslateFn, note: string): string {
+  const key = KNOWN_STATUS_NOTES[note];
+  return key ? t(key) : note;
+}
+
 export function DingtalkWizard({
   host,
 }: {
   host: ConnectWizardHost;
 }): ReactNode {
   const { t } = useT();
-  // The seat rebuilds `host` on every render, so `submit` reads the adapter
-  // and the `done`/`cancel` callbacks through this ref AT CALL TIME instead
-  // of closing over the render's `host`.
   const hostRef = useRef(host);
   hostRef.current = host;
-
-  // The screen owns its basics: `host.prefill` only SEEDS them (the chat
-  // tool's suggested name/preset), it never keeps owning them.
-  const [name, setName] = useState(host.prefill?.name ?? "");
+  const [name, setName] = useState(host.prefill?.name ?? "钉钉");
   const [preset, setPreset] = useState(host.prefill?.agentPreset ?? "");
-  const [clientId, setClientId] = useState("");
-  const [clientSecret, setClientSecret] = useState("");
+  const [mode, setMode] = useState<"scan" | "manual">("scan");
+  const [onboarding, setOnboarding] = useState<OnboardingView | null>(null);
+  const [beginning, setBeginning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
 
   const clientIdId = useId();
   const clientSecretId = useId();
-
-  // True while this component instance is mounted. `submit` awaits an
-  // adapter call that can outlive the component (the modal closes, or the
-  // whole settings page unmounts, mid-request); checking this ref after the
-  // await stops that stale response from firing `host.done`/`setError` on a
-  // component nobody is looking at.
+  const sessionIdRef = useRef<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollingRef = useRef(false);
+  const sessionContextRef = useRef(0);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -99,6 +88,143 @@ export function DingtalkWizard({
       mountedRef.current = false;
     };
   }, []);
+
+  const clearPollInterval = useCallback(() => {
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const cancelCurrentSession = useCallback(() => {
+    clearPollInterval();
+    const sessionId = sessionIdRef.current;
+    sessionIdRef.current = null;
+    sessionContextRef.current += 1;
+    if (sessionId) {
+      void Promise.resolve()
+        .then(() => hostRef.current.adapter.cancelOnboarding(sessionId))
+        .catch(() => {});
+    }
+    if (mountedRef.current) {
+      setOnboarding(null);
+      setBeginning(false);
+    }
+  }, [clearPollInterval]);
+  useEffect(() => {
+    return () => {
+      cancelCurrentSession();
+    };
+  }, [cancelCurrentSession]);
+
+  function handleModeChange(next: "scan" | "manual") {
+    if (next === mode) return;
+    setMode(next);
+    setError(null);
+    cancelCurrentSession();
+  }
+
+  const poll = useCallback(async () => {
+    if (pollingRef.current) return;
+    const sessionId = sessionIdRef.current;
+    if (!sessionId) return;
+    pollingRef.current = true;
+    try {
+      const view = await hostRef.current.adapter.pollOnboarding(sessionId);
+      if (!mountedRef.current || sessionIdRef.current !== sessionId) return;
+      setOnboarding(view);
+      if (view.state === "pending") return;
+      sessionIdRef.current = null;
+      clearPollInterval();
+      if (view.state === "completed") {
+        if (view.connect) {
+          hostRef.current.done(view.connect);
+          return;
+        }
+        setError(t("options.connect.dsh.onboard.error.generic"));
+        setOnboarding(null);
+      } else {
+        setError(
+          view.error
+            ? describeError(t, new Error(view.error))
+            : t("options.connect.dsh.onboard.error.generic"),
+        );
+        setOnboarding(null);
+      }
+    } catch (cause) {
+      if (!mountedRef.current || sessionIdRef.current !== sessionId) return;
+      cancelCurrentSession();
+      setError(describeError(t, cause));
+    } finally {
+      pollingRef.current = false;
+    }
+  }, [clearPollInterval, cancelCurrentSession, t]);
+
+  async function beginScan() {
+    const current = hostRef.current;
+    const trimmedName = name.trim();
+    if (!trimmedName || !preset.trim()) return;
+    setError(null);
+    setBeginning(true);
+    const sessionContextAtStart = sessionContextRef.current;
+    try {
+      const view = await current.adapter.beginOnboarding({
+        provider: current.providerId,
+        name: trimmedName,
+        agentPreset: preset,
+      });
+      const stale =
+        !mountedRef.current ||
+        sessionContextRef.current !== sessionContextAtStart;
+      if (stale) {
+        if (view.state === "pending") {
+          void Promise.resolve()
+            .then(() => current.adapter.cancelOnboarding(view.sessionId))
+            .catch(() => {});
+        }
+        return;
+      }
+      setOnboarding(view);
+      if (view.state === "pending") {
+        sessionIdRef.current = view.sessionId;
+        clearPollInterval();
+        pollRef.current = setInterval(() => {
+          void poll();
+        }, ONBOARD_POLL_INTERVAL_MS);
+        return;
+      }
+      if (view.state === "completed") {
+        if (view.connect) {
+          current.done(view.connect);
+          return;
+        }
+        setError(t("options.connect.dsh.onboard.error.generic"));
+        setOnboarding(null);
+        return;
+      }
+      if (view.state === "error" || view.state === "cancelled") {
+        setError(
+          view.error
+            ? describeError(t, new Error(view.error))
+            : t("options.connect.dsh.onboard.error.generic"),
+        );
+        setOnboarding(null);
+      }
+    } catch (cause) {
+      if (
+        !mountedRef.current ||
+        sessionContextRef.current !== sessionContextAtStart
+      )
+        return;
+      setError(describeError(t, cause));
+    } finally {
+      if (
+        mountedRef.current &&
+        sessionContextRef.current === sessionContextAtStart
+      )
+        setBeginning(false);
+    }
+  }
 
   async function submit() {
     const current = hostRef.current;
@@ -110,9 +236,8 @@ export function DingtalkWizard({
       !preset.trim() ||
       !trimmedClientId ||
       !trimmedClientSecret
-    ) {
+    )
       return;
-    }
     setSaving(true);
     setError(null);
     try {
@@ -120,9 +245,6 @@ export function DingtalkWizard({
         provider: current.providerId,
         name: trimmedName,
         agentPreset: preset,
-        // The secret leaves this component exactly here and nowhere else —
-        // it is never logged, echoed into an error message, or put in the
-        // DOM outside its own password input.
         config: {
           clientId: trimmedClientId,
           clientSecret: trimmedClientSecret,
@@ -135,35 +257,25 @@ export function DingtalkWizard({
       if (mountedRef.current) setSaving(false);
     }
   }
-
-  // Inherits the retired per-provider dialog's gate: a connect name AND a
-  // chosen agent preset. Without the preset check a submit fired before the
-  // seat's preset list resolved would reach the center only to come back as
-  // `agent_preset_required`.
+  const basicsReady = Boolean(name.trim()) && Boolean(preset.trim());
+  const canBeginScan = basicsReady;
   const canSubmit =
-    Boolean(name.trim()) &&
-    Boolean(preset.trim()) &&
-    Boolean(clientId.trim()) &&
-    Boolean(clientSecret.trim());
-
-  // Handed over on the host rather than imported: each plugin client is its
-  // own bundle, so the shared parts travel with the seat.
+    basicsReady && Boolean(clientId.trim()) && Boolean(clientSecret.trim());
   const { BasicsFields } = host.kit;
 
   return (
     <WizardFrame
       actions={
-        <Button
-          disabled={saving || !canSubmit}
-          onClick={() => void submit()}
-          type="button"
-        >
-          {saving ? <Loader2 className="animate-spin" /> : <Plus />}
-          {t("options.connect.dsh.submit")}
-          {saving ? (
-            <span className="sr-only">{t("options.connect.dsh.loading")}</span>
-          ) : null}
-        </Button>
+        mode === "manual" ? (
+          <Button
+            disabled={saving || !canSubmit}
+            onClick={() => void submit()}
+            type="button"
+          >
+            {saving ? <Loader2 className="animate-spin" /> : <Plus />}
+            {t("options.connect.dsh.submit")}
+          </Button>
+        ) : null
       }
       backLabel={t("options.connect.dsh.wizard.changePlatform")}
       closeLabel={t("options.connect.dsh.close")}
@@ -177,59 +289,158 @@ export function DingtalkWizard({
       iconAppearance="bare"
       onBack={host.back}
       onClose={() => host.cancel()}
-      subtitle={t("options.connect.dsh.dingtalk.subtitle")}
+      subtitle={
+        mode === "scan"
+          ? t("options.connect.dsh.dingtalk.subtitleScan")
+          : t("options.connect.dsh.dingtalk.subtitleManual")
+      }
       title={t("options.connect.dsh.dingtalk.title")}
     >
       <div className="space-y-6">
-        <BasicsFields
-          name={name}
-          onNameChange={setName}
-          onPresetChange={setPreset}
-          preset={preset}
-          presets={host.presets}
-        />
-
-        <section className="space-y-3">
-          <div>
-            <h3 className="text-sm font-semibold">
-              {t("options.connect.dsh.dingtalk.credentials.title")}
-            </h3>
-            <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
-              {t("options.connect.dsh.dingtalk.credentials.description")}
-            </p>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor={clientIdId}>
-                {t("options.connect.dsh.dingtalk.clientId")}
-              </Label>
-              <Input
-                id={clientIdId}
-                onChange={(event) => setClientId(event.target.value)}
-                value={clientId}
-              />
+        <details className="space-y-3">
+          <summary className="cursor-pointer text-sm text-muted-foreground">
+            {t("options.connect.dsh.onboard.customize")}
+          </summary>
+          <BasicsFields
+            name={name}
+            onNameChange={setName}
+            onPresetChange={setPreset}
+            preset={preset}
+            presets={host.presets}
+          />
+        </details>
+        {mode === "scan" ? (
+          <section
+            className="space-y-2"
+            aria-label={t("options.connect.dsh.dingtalk.scan.title")}
+          >
+            <div className="flex min-h-44 items-center justify-center rounded-xl bg-muted/20 px-5 py-5">
+              {onboarding ? (
+                <OnboardingScanPane onboarding={onboarding} t={t} />
+              ) : (
+                <div className="flex flex-col items-center gap-4">
+                  <QrCode
+                    className="h-9 w-9 text-muted-foreground/60"
+                    aria-hidden="true"
+                  />
+                  <p className="max-w-sm text-center text-[13px] text-muted-foreground">
+                    {t("options.connect.dsh.onboard.intro")}
+                  </p>
+                  <Button
+                    disabled={beginning || !canBeginScan}
+                    onClick={() => void beginScan()}
+                    type="button"
+                  >
+                    {beginning ? <Loader2 className="animate-spin" /> : null}
+                    {t("options.connect.dsh.onboard.begin")}
+                  </Button>
+                </div>
+              )}
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={clientSecretId}>
-                {t("options.connect.dsh.dingtalk.clientSecret")}
-              </Label>
-              <Input
-                id={clientSecretId}
-                onChange={(event) => setClientSecret(event.target.value)}
-                type="password"
-                value={clientSecret}
-              />
+            <div className="text-center">
+              <Button
+                className="text-muted-foreground"
+                onClick={() => handleModeChange("manual")}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                {t("options.connect.dsh.onboard.modeManual")}
+              </Button>
             </div>
-          </div>
-        </section>
-
-
+          </section>
+        ) : (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold">
+                {t("options.connect.dsh.dingtalk.credentials.title")}
+              </h3>
+              <Button
+                className="text-muted-foreground"
+                disabled={saving}
+                onClick={() => handleModeChange("scan")}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                <ArrowLeft />
+                {t("options.connect.dsh.onboard.modeScan")}
+              </Button>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor={clientIdId}>
+                  {t("options.connect.dsh.dingtalk.clientId")}
+                </Label>
+                <Input
+                  id={clientIdId}
+                  onChange={(event) => setClientId(event.target.value)}
+                  value={clientId}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={clientSecretId}>
+                  {t("options.connect.dsh.dingtalk.clientSecret")}
+                </Label>
+                <Input
+                  id={clientSecretId}
+                  onChange={(event) => setClientSecret(event.target.value)}
+                  type="password"
+                  value={clientSecret}
+                />
+              </div>
+            </div>
+          </section>
+        )}
       </div>
+
       {error ? (
         <p className="mt-4 rounded-lg bg-destructive/5 px-3 py-2.5 text-[13px] text-destructive">
           {error}
         </p>
       ) : null}
     </WizardFrame>
+  );
+}
+
+function OnboardingScanPane({
+  onboarding,
+  t,
+}: {
+  onboarding: OnboardingView;
+  t: PluginTranslateFn;
+}) {
+  if (onboarding.state === "error") return null;
+
+  if (onboarding.qrUrl) {
+    const qr = qrcode(0, "M");
+    qr.addData(onboarding.qrUrl);
+    qr.make();
+    const svg = qr.createSvgTag({ cellSize: 4, margin: 2 });
+    const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    return (
+      <div className="space-y-3 text-center">
+        <img
+          alt={t("options.connect.dsh.onboard.qrAlt")}
+          className="mx-auto h-40 w-40 rounded bg-white p-2"
+          src={dataUrl}
+        />
+        {onboarding.statusNote ? (
+          <p className="text-[13px] text-muted-foreground">
+            {describeStatusNote(t, onboarding.statusNote)}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center justify-center gap-2 px-2 py-6 text-center text-[13px] text-muted-foreground">
+      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+      <span>
+        {onboarding.statusNote
+          ? describeStatusNote(t, onboarding.statusNote)
+          : t("options.connect.dsh.onboard.waiting")}
+      </span>
+    </div>
   );
 }

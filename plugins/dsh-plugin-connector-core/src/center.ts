@@ -1,5 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { randomUUID } from "node:crypto";
+import type { ResourceCenter } from "@amiba/dsh-plugin-resources";
+import { searchShareableResources, validateSharedResources } from "./conversation-sharing.js";
 
 import type { Context } from "@deepseek-ai/cordis";
 import type {
@@ -9,6 +11,7 @@ import type {
   InboundConversationRef,
   MessageChannelCenter,
   MessageChannelProvider,
+  MessageConversationSettingsInput,
   OutboundMessageEnvelope,
   StoredMessageChannel,
 } from "@amiba/dsh-plugin-messaging-core";
@@ -251,6 +254,17 @@ export class ConnectorCenter {
       supportsOutbound: true,
       deliver: async (channel, envelope) =>
         this.bridgeDeliver(channel, envelope),
+      conversationAccess: async (channel, envelope) => {
+        if (!provider.messaging?.sharedConversations) return "owner";
+        const row = (await this.store.list()).find((item) => item.channelId === channel.id);
+        if (!row?.enabled || row.pairing) throw new Error("connect_not_ready");
+        return envelope.conversation?.kind === "group" || !envelope.sender || !row.owners.includes(envelope.sender) ? "shared" : "owner";
+      },
+      canApprove: async (channel, sender) => {
+        if (!sender) return false;
+        const row = (await this.store.list()).find((item) => item.channelId === channel.id);
+        return Boolean(row?.enabled && !row.pairing && row.owners.includes(sender) && this.live.has(row.id));
+      },
       requestApproval: async (channel, conversation, request) =>
         this.bridgeRequestApproval(channel, conversation, request),
       announceApprovalOutcome: async (channel, conversation, notice) =>
@@ -764,6 +778,39 @@ export class ConnectorCenter {
     };
   }
 
+  async conversationSettings(id: string, conversationKey: string, input: MessageConversationSettingsInput) {
+    const row = (await this.store.list()).find(item => item.id === id);
+    if (!row) throw new Error("connect_not_found");
+    if (!row.channelId) throw new Error("conversation_not_found");
+    return this.messageCenter.conversationSettings(row.channelId, conversationKey, input);
+  }
+
+  async retryFailedReplies(id: string) {
+    const row = (await this.store.list()).find(item => item.id === id);
+    if (!row?.enabled || !row.channelId) throw new Error("connect_unavailable");
+    return this.messageCenter.retryFailedReplies(row.channelId);
+  }
+
+  async searchConversationResources(id: string, key: string, query: string) {
+    const view = await this.conversationSettings(id, key, { action: "status" });
+    if (view.access !== "shared") throw new Error("shared_conversation_required");
+    const resources = this.ctx.reflect.get("amibaResources") as ResourceCenter | undefined;
+    if (!resources) throw new Error("resource_source_unavailable");
+    return searchShareableResources(resources, id, query);
+  }
+
+  shareConversationResources(id: string, key: string, references: string[]) {
+    return this.exclusive(id, async () => {
+      const row = (await this.store.list()).find(item => item.id === id);
+      if (!row?.channelId) throw new Error("connect_not_found");
+      const view = await this.messageCenter.conversationSettings(row.channelId, key, { action: "status" });
+      if (view.access !== "shared") throw new Error("shared_conversation_required");
+      const resources = this.ctx.reflect.get("amibaResources") as ResourceCenter | undefined;
+      const grants = await validateSharedResources(resources, id, references, view.sharedResources);
+      return this.messageCenter.shareConversationResources(row.channelId, key, grants);
+    });
+  }
+
   updateConnect(id: string, input: UpdateConnectInput): Promise<ConnectView> {
     return this.exclusive(id, async () => {
       const row = (await this.store.list()).find((item) => item.id === id);
@@ -1088,6 +1135,7 @@ export class ConnectorCenter {
       }
 
       if (row.pairing) {
+        if (envelope.conversation.kind === "group" && messaging.sharedConversations) { this.recordDrop(connectId); return; }
         // Compare-and-set inside the store's serialized mutation chain: two
         // concurrent first messages can both observe `pairing: true` here, but
         // only one `claimOwner` call wins — the loser sees `pairing: false`
@@ -1098,7 +1146,7 @@ export class ConnectorCenter {
           this.recordDrop(connectId);
           return;
         }
-      } else if (!row.owners.includes(sender)) {
+      } else if (!row.owners.includes(sender) && !messaging.sharedConversations) {
         this.recordDrop(connectId);
         return;
       }

@@ -14,7 +14,6 @@ import type {
 } from "@amiba/app-runtime/platform";
 
 import { mainStore, type StorageChangeMap } from "./storage";
-import { embeddedBrowserController } from "./embedded-browser";
 import { dshRuntime, managedDshPaths } from "./dsh-runtime";
 import {
   loadDshClientBoot,
@@ -85,7 +84,6 @@ export function registerIpcHandlers() {
     paths: managedDshPaths(),
     runtime: dshRuntime,
   });
-  embeddedBrowserController.registerIpc();
 
   // DSH Client Web Shell boot + Electron transport seam. The graph is
   // composed by DSH's client-modules service; Electron only carries it across

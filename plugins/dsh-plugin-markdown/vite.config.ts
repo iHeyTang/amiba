@@ -1,3 +1,4 @@
+import { clientInputs } from "../../scripts/dsh-client-inputs.mjs";
 import { defineConfig } from "vite";
 
 const PLUGIN_ID = "@amiba/dsh-plugin-markdown";
@@ -5,6 +6,7 @@ const PLUGIN_ID = "@amiba/dsh-plugin-markdown";
 // DSH's Web Shell owns these singleton identities. The emitted client bundle
 // resolves them through window.__ModuleLoader__ instead of bundling copies.
 const DSH_CLIENT_EXTERNALS = [
+  "@amiba/ui/plugin",
   "streamdown",
   "react",
   "react/jsx-runtime",
@@ -18,6 +20,7 @@ const DSH_CLIENT_EXTERNALS = [
 ];
 
 export default defineConfig({
+  plugins: [clientInputs()],
   build: {
     // Match the TypeScript target. Vite's default ("modules") includes
     // safari14, which makes esbuild lower optional chaining — and that lowering
@@ -37,7 +40,7 @@ export default defineConfig({
         // DSH registers one factory per entry; relative CJS chunks are not loadable.
         inlineDynamicImports: true,
         exports: "named",
-        paths: { streamdown: "@amiba/dsh-plugin-ui-shell/client" },
+        paths: { "@amiba/ui/plugin": "@amiba/dsh-plugin-ui-shell/client", streamdown: "@amiba/dsh-plugin-ui-shell/client" },
         banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PLUGIN_ID)}, factory: (require) => {`,
         intro: "var module = { exports: {} }; var exports = module.exports;",
         footer: "return module.exports; } });",

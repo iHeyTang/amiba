@@ -19,6 +19,18 @@ export interface WorkbenchViewExtension {
   /** Lower order wins; id breaks ties deterministically. */
   order: number;
   component: ComponentType<WorkbenchViewProps>;
+  /** Mounted alongside the workbench for the elected view, including background sessions.
+   * Owns persistent surfaces; removing/replacing the contribution unmounts it.
+   */
+  host?: ComponentType;
+  tabIcon?: ComponentType<{ resource: WorkbenchResource; className?: string }>;
+  /** Optional action in the workbench header, follows the same election as the view. */
+  toolbar?: ComponentType;
+  /** Resolve a URL using this plugin's resource semantics; null declines it. */
+  resolveUrl?(
+    url: string,
+    resources: readonly WorkbenchResource[],
+  ): WorkbenchResource | null;
   /** Optional persistent navigation entry, removed with the contribution. */
   launcher?: { label(): string; icon?: ComponentType<{ className?: string }> };
 }

@@ -171,3 +171,5 @@ export { ModelDetailsDialog } from "./models/ModelDetailsDialog";
 export { EmptyStateVisualProvider, type EmptyStateVisualRenderer } from "./primitives/empty-state-visual";
 
 export { PresentationRoot, usePresentationCoordinator, useSurfaceActivity, useSurfaceInteraction } from "./primitives/interaction-region";
+
+export { ConversationSubmitProvider } from "./chat/conversation-submit";

@@ -148,3 +148,5 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   ctx.effect(() => () => center.stop(), "amiba-connector-core.center");
   await center.start();
 }
+
+export { activateConnectionWork, inspectConnectionWork, connectionWorkAccess } from "./connection-activation.js";

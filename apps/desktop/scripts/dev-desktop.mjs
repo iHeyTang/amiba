@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process"
 import path from "node:path"
+import { access } from "node:fs/promises"
 import process from "node:process"
 import { fileURLToPath } from "node:url"
 
@@ -49,16 +50,22 @@ console.log(
 
 if (infoOnly) process.exit(0)
 
-const desktopEnv = { ...process.env }
+const { workspacePackages } = await import("./dsh-client-dependencies.mjs")
+const packages = await workspacePackages(workspaceDir)
+const projects = [...packages.values()].filter(pkg => pkg.directory.startsWith(path.join(workspaceDir, "plugins") + path.sep)).map(pkg => pkg.directory)
+// A valid managed runtime can outlive locally deleted lib/ directories.
+const { buildDevelopmentProject } = await import("@amiba/app-runtime/dsh-runtime")
+for (const directory of projects) {
+  try { await access(path.join(directory, "lib/index.js")) }
+  catch { await buildDevelopmentProject(directory) }
+}
+const desktopEnv = { ...process.env, AMIBA_DSH_DEV_PROJECTS: JSON.stringify(projects) }
 if (!desktopEnv.AMIBA_AGENT_RUNTIME) desktopEnv.AMIBA_AGENT_RUNTIME = "dsh"
 if (!desktopEnv.AMIBA_DSH_DEV_PORT) desktopEnv.AMIBA_DSH_DEV_PORT = "15174"
 
-const clientWatcher = spawn(
+const pluginWatcher = spawn(
   process.execPath,
-  // All plugin watchers retain Rollup caches in this one process. Give it
-  // room beyond Node's default 4 GiB without increasing the desktop heap.
   [
-    "--max-old-space-size=8192",
     path.join(desktopDir, "scripts/watch-dsh-clients.mjs"),
   ],
   {
@@ -70,33 +77,32 @@ const clientWatcher = spawn(
 
 const watcherReady = new Promise((resolve, reject) => {
   let output = ""
-  clientWatcher.stdout.setEncoding("utf8")
-  clientWatcher.stdout.on("data", (chunk) => {
+  pluginWatcher.stdout.setEncoding("utf8")
+  pluginWatcher.stdout.on("data", (chunk) => {
     process.stdout.write(chunk)
     output = `${output}${chunk}`.slice(-4096)
     if (output.includes("[desktop:hmr] watching ")) resolve()
   })
-  clientWatcher.once("error", reject)
-  clientWatcher.once("exit", (code, signal) => {
-    reject(new Error(`client watcher exited before readiness (${signal ?? code ?? "unknown"})`))
+  pluginWatcher.once("error", reject)
+  pluginWatcher.once("exit", (code, signal) => {
+    reject(new Error(`plugin watcher exited before readiness (${signal ?? code ?? "unknown"})`))
   })
 })
 
 try {
   await watcherReady
 } catch (error) {
-  if (clientWatcher.exitCode === null) clientWatcher.kill("SIGTERM")
+  if (pluginWatcher.exitCode === null) pluginWatcher.kill("SIGTERM")
   fail(
-    `could not initialize client watcher: ${
+    `could not initialize plugin watcher: ${
       error instanceof Error ? error.message : String(error)
     }`,
-    "See the client build error above.",
+    "See the plugin build error above.",
   )
 }
 
 // Runtime preparation and verification already happened above. Invoke the
-// dev server directly so the package-level `predev` hook does not prepare the
-// same managed runtime a second time on every desktop launch.
+// dev server directly; both public development commands use this launcher.
 const child = spawn(pnpm, ["exec", "electron-vite", "dev"], {
   cwd: desktopDir,
   env: desktopEnv,
@@ -107,14 +113,14 @@ let stopping = false
 function stopTogether(source, code, signal) {
   if (stopping) return
   stopping = true
-  const sibling = source === child ? clientWatcher : child
+  const sibling = source === child ? pluginWatcher : child
   if (sibling.exitCode === null) sibling.kill("SIGTERM")
   process.exitCode = code ?? (signal ? 1 : 0)
 }
 
 for (const [label, processChild] of [
   ["desktop", child],
-  ["client watcher", clientWatcher],
+  ["plugin watcher", pluginWatcher],
 ]) {
   processChild.on("error", (error) => {
     console.error(`[desktop:dev] could not start ${label}: ${error.message}`)
@@ -130,6 +136,6 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
     if (stopping) return
     stopping = true
     if (child.exitCode === null) child.kill(signal)
-    if (clientWatcher.exitCode === null) clientWatcher.kill(signal)
+    if (pluginWatcher.exitCode === null) pluginWatcher.kill(signal)
   })
 }

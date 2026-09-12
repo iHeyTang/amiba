@@ -1,3 +1,4 @@
+export { upsertCompactionTimeline, interruptOpenCompactions } from "./compaction.js"
 export interface DshRpcErrorShape {
   code: string
   message: string

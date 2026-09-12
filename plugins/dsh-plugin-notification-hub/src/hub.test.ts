@@ -47,9 +47,7 @@ describe("AmibaNotificationHub.post", () => {
 
   it("rejects a missing or blank title", () => {
     const { hub } = harness();
-    expect(() =>
-      hub.post({ source: "demo" } as never),
-    ).toThrow();
+    expect(() => hub.post({ source: "demo" } as never)).toThrow();
     expect(() => hub.post({ title: "   ", source: "demo" })).toThrow();
     expect(hub.list()).toHaveLength(0);
   });
@@ -74,15 +72,15 @@ describe("AmibaNotificationHub.post", () => {
 });
 
 describe("AmibaNotificationHub ring", () => {
-  it("retains only the most recent 100 notifications", () => {
+  it("preserves unread notifications beyond the history limit", () => {
     const { hub } = harness();
     for (let index = 0; index < 120; index += 1) {
       hub.post({ title: `notification ${index}`, source: "demo" });
     }
     const retained = hub.list();
-    expect(retained).toHaveLength(100);
-    expect(retained[0]!.title).toBe("notification 20");
-    expect(retained[99]!.title).toBe("notification 119");
+    expect(retained).toHaveLength(120);
+    expect(retained[0]!.title).toBe("notification 0");
+    expect(retained[119]!.title).toBe("notification 119");
   });
 });
 

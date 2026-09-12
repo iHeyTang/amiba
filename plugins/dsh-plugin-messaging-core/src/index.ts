@@ -21,6 +21,7 @@ export const name = "amiba-messaging-core";
 // `agentDefaultModel` service — and treats its absence as "nothing is
 // archived".
 export const inject = [
+  "amibaConversations",
   "agents",
   "agentPresets",
   "sessionPersistence",

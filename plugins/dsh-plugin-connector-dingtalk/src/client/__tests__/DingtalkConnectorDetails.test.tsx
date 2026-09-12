@@ -7,7 +7,7 @@ describe("DingtalkConnectorDetails", () => {
   it("presents the provider overview and capabilities without outlined cards", () => {
     const { container } = render(<DingtalkConnectorDetails />);
     expect(
-      screen.getByText(/Stream Mode robot|Stream Mode 机器人/),
+      screen.getByText(/Bring AI into|把 AI 带进/),
     ).toBeVisible();
     expect(
       screen.getByRole("heading", { name: /Capabilities|可用能力/ }),

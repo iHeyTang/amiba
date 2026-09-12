@@ -216,30 +216,8 @@ export function extractDshClientBootGraph(
   }
   return {
     rev: graph.rev,
-    entries: withoutUnreachableDevChannels(
-      graph.entries.map((entry) => parseEntry(entry, baseUrl)),
-    ),
+    entries: graph.entries.map((entry) => parseEntry(entry, baseUrl)),
   };
-}
-
-/**
- * `@deepseek-ai/dsh-client-hmr` replaces one Cordis fiber at a time. Desktop
- * development consumes the same rebuild stream in its renderer transport and
- * reloads the document instead: swapping the plugin that owns `root` leaves a
- * brief empty slot that makes the official renderer throw. Packaged windows
- * use file:// and open no rebuild stream. The fiber HMR row is therefore
- * dropped from both compositions.
- *
- * Guarded: if some future entry injects it, dropping it would strand that
- * entry waiting on a service ("did not activate"), which is worse than 404
- * noise — so in that case it is kept.
- */
-function withoutUnreachableDevChannels(
-  entries: DshWebBootEntry[],
-): DshWebBootEntry[] {
-  const HMR = "@deepseek-ai/dsh-client-hmr";
-  if (entries.some((entry) => entry.inject?.includes(HMR))) return entries;
-  return entries.filter((entry) => entry.id !== HMR);
 }
 
 /** Start DSH and return its own client composition to the Electron renderer. */

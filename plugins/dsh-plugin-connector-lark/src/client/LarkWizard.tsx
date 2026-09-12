@@ -117,7 +117,7 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
 
   // The screen owns its basics: `host.prefill` only SEEDS them (the chat tool's
   // suggested name/preset), it never keeps owning them.
-  const [name, setName] = useState(host.prefill?.name ?? "");
+  const [name, setName] = useState(host.prefill?.name ?? "飞书");
   const [preset, setPreset] = useState(host.prefill?.agentPreset ?? "");
   const [mode, setMode] = useState<"scan" | "manual">("scan");
   const [onboarding, setOnboarding] = useState<OnboardingView | null>(null);
@@ -441,13 +441,18 @@ export function LarkWizard({ host }: { host: ConnectWizardHost }): ReactNode {
       title={t("options.connect.dsh.lark.title")}
     >
       <div className="space-y-6">
-        <BasicsFields
-          name={name}
-          onNameChange={setName}
-          onPresetChange={setPreset}
-          preset={preset}
-          presets={host.presets}
-        />
+        <details className="space-y-3">
+          <summary className="cursor-pointer text-sm text-muted-foreground">
+            {t("options.connect.dsh.onboard.customize")}
+          </summary>
+          <BasicsFields
+            name={name}
+            onNameChange={setName}
+            onPresetChange={setPreset}
+            preset={preset}
+            presets={host.presets}
+          />
+        </details>
         {mode === "scan" ? (
           <section
             className="space-y-2"

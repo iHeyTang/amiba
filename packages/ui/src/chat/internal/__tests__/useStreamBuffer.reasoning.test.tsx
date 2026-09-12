@@ -77,3 +77,28 @@ it("does not mutate a published reasoning segment before the next flush",()=>{
  act(()=>result.current.applyVerboseToAssistant());
  expect(current()[0].assistantTimeline![0]).toMatchObject({kind:"reasoning",text:"first second"});
 });
+
+
+it("updates compaction in place without mutating published state and settles it before terminal flush", () => {
+  const { stub, current } = makeSessionsStub();
+  const { result } = renderHook(() => useStreamBuffer({ sessions: stub }));
+  act(() => {
+    result.current.prime("a1");
+    result.current.onChunk("before");
+    result.current.onCompaction({ compactionId: "c", status: "running" });
+    result.current.applyVerboseToAssistant();
+  });
+  const published = current()[0].assistantTimeline![1];
+  act(() => {
+    result.current.onCompaction({ compactionId: "c", summary: "saved context" });
+    result.current.onChunk("after");
+    result.current.finishCompactions();
+    result.current.applyVerboseToAssistant();
+  });
+  expect(published).toMatchObject({ compaction: { status: "running" } });
+  expect(current()[0].assistantTimeline).toMatchObject([
+    { kind: "text", text: "before" },
+    { kind: "compaction", compaction: { status: "interrupted", summary: "saved context" } },
+    { kind: "text", text: "after" },
+  ]);
+});

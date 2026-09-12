@@ -1,5 +1,7 @@
+import { clientInputs } from "../../scripts/dsh-client-inputs.mjs";
 import { defineConfig } from "vite";
 export default defineConfig({
+  plugins: [clientInputs()],
   build: {
     target: "es2022",
     outDir: "lib",

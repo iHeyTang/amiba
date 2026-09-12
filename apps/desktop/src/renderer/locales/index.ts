@@ -1,6 +1,6 @@
 /**
  * The message catalog for the Electron windows that boot NO DSH plugin graph:
- * the heads-up notifier and Quick-Ask.
+ * Quick-Ask.
  *
  * Those windows render `@amiba/ui` components, whose `useT()` calls resolve
  * through the realm message registry like everyone else's — but there is no

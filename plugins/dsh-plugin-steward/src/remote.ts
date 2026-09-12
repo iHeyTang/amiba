@@ -1,5 +1,6 @@
 import type { RemoteResult, TypertRemoteContribution } from "@deepseek-ai/dsh-typert-protocol";
 import { z } from "zod";
+import type { ConversationCadence, ConversationView } from "@amiba/dsh-plugin-session-features";
 
 import type { AdoptResult, StewardTask } from "./types.js";
 
@@ -26,11 +27,21 @@ const adoptInputSchema = z.object({ sessionId: z.string(), title: z.string().opt
 
 const stringCodec = { mode: "strict" as const, typeSymbol: "typescript#string", schema: z.string() };
 const booleanCodec = { mode: "strict" as const, typeSymbol: "typescript#boolean", schema: z.boolean() };
+export type ConversationSettingsInput = { action: "status" | "configure" | "new"; cadence?: ConversationCadence };
+const conversationSettingsInput = z.object({ action: z.enum(["status", "configure", "new"]), cadence: z.enum(["daily", "weekly", "manual"]).optional() });
+const conversationViewSchema = z.object({
+  policy: z.object({ cadence: z.enum(["daily", "weekly", "manual"]), timeZone: z.string() }),
+  currentSessionId: z.string().optional(),
+  pendingNewConversation: z.boolean(),
+  history: z.array(z.object({ sessionId: z.string(), createdAt: z.number() })),
+  sharedResources: z.array(z.object({ reference: z.string(), title: z.string() })),
+});
 
 declare module "@deepseek-ai/dsh-typert-protocol" {
   interface TypertRemoteNamespaceMap {
     amibaSteward: {
-      ensureStewardSession(): Promise<RemoteResult<{ sessionId: string }>>;
+      conversationSettings(input: ConversationSettingsInput): Promise<RemoteResult<ConversationView>>;
+      ensureStewardSession(): Promise<RemoteResult<{ sessionId: string; sessionIds?: string[] }>>;
       listTasks(includeDone: boolean): Promise<RemoteResult<StewardTask[]>>;
       adopt(input: { sessionId: string; title?: string }): Promise<RemoteResult<AdoptResult>>;
       closeTask(id: string): Promise<RemoteResult<StewardTask>>;
@@ -38,7 +49,8 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
   }
 
   interface TypertRemoteMap {
-    "amibaSteward/ensureStewardSession": () => Promise<RemoteResult<{ sessionId: string }>>;
+    "amibaSteward/conversationSettings": (input: ConversationSettingsInput) => Promise<RemoteResult<ConversationView>>;
+    "amibaSteward/ensureStewardSession": () => Promise<RemoteResult<{ sessionId: string; sessionIds?: string[] }>>;
     "amibaSteward/listTasks": (includeDone: boolean) => Promise<RemoteResult<StewardTask[]>>;
     "amibaSteward/adopt": (input: { sessionId: string; title?: string }) => Promise<RemoteResult<AdoptResult>>;
     "amibaSteward/closeTask": (id: string) => Promise<RemoteResult<StewardTask>>;
@@ -65,10 +77,13 @@ function descriptor(
 export const AMIBA_STEWARD_REMOTE: TypertRemoteContribution = {
   package: "@amiba/dsh-plugin-steward",
   descriptors: [
+    descriptor("conversationSettings", [{ name: "input", wire: "input", source: "json", codec: { mode: "strict", typeSymbol: "@amiba/steward#conversation-settings-input", schema: conversationSettingsInput } }], {
+      mode: "strict", typeSymbol: "@amiba/steward#conversation-view", schema: conversationViewSchema,
+    }),
     descriptor("ensureStewardSession", [], {
       mode: "strict",
       typeSymbol: "@amiba/steward#session",
-      schema: z.object({ sessionId: z.string() }),
+      schema: z.object({ sessionId: z.string(), sessionIds: z.array(z.string()).optional() }),
     }),
     descriptor(
       "listTasks",

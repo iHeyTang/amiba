@@ -1,3 +1,10 @@
+import { sharedConversationBinding, SHARED_CONVERSATION_FEATURE, installSharedConversationAccess } from "./shared-conversation.js";
+export * from "./shared-conversation.js";
+import z from "@deepseek-ai/schemastery";
+import { ConversationLifecycle } from "./conversations.js";
+import { conversationHistoryTool } from "./conversation-tools.js";
+export * from "./conversations.js";
+export * from "./conversation-history.js";
 import type { Context } from "@deepseek-ai/cordis";
 import type { Agent } from "@deepseek-ai/dsh-agent";
 import type { SessionEvent } from "@deepseek-ai/dsh-session";
@@ -18,6 +25,7 @@ declare module "@deepseek-ai/dsh-session" {
 declare module "@deepseek-ai/cordis" {
   interface Context {
     amibaSessionFeatures: SessionFeatures;
+    amibaConversations: ConversationLifecycle;
   }
 }
 
@@ -42,7 +50,7 @@ export function requiredFeatures(session: {
   id: unknown;
   events: readonly SessionEvent[];
 }): FeatureBinding[] {
-  return session.events.flatMap((event) => {
+  const bindings = session.events.flatMap((event) => {
     if (event.type !== FEATURE_EVENT || event.data.sessionId !== session.id)
       return [];
     const binding = event.data;
@@ -54,6 +62,9 @@ export function requiredFeatures(session: {
       throw new Error("Invalid session feature binding");
     return [binding];
   });
+  if (sharedConversationBinding(session) && !bindings.some(binding => binding.plugin === SHARED_CONVERSATION_FEATURE))
+    bindings.push({ sessionId: String(session.id), plugin: SHARED_CONVERSATION_FEATURE, version: 1 });
+  return bindings;
 }
 
 type Installer = {
@@ -157,9 +168,17 @@ export class SessionFeatures {
 
 export const name = "amiba-session-features";
 export const inject = ["agents", "systemPrompt", "tools"];
-export function apply(ctx: Context): void {
+export interface Config { root?: string }
+export const Config: z<Config> = z.object({ root: z.string() });
+export function apply(ctx: Context, config: Config = {}): void {
+  if (config.root) {
+    const lifecycle = new ConversationLifecycle(config.root);
+    ctx.provide("amibaConversations", lifecycle);
+    ctx.effect(() => ctx.tools.register(conversationHistoryTool(ctx, lifecycle)), "amiba-conversations.history");
+  }
   const features = new SessionFeatures();
   ctx.provide("amibaSessionFeatures", features);
+  ctx.effect(() => features.register(SHARED_CONVERSATION_FEATURE, { version: 1, install: installSharedConversationAccess }), "amiba-conversations.shared-access");
   // DSH dispatches this synchronously inside the publication transaction;
   // a thrown setup error rolls the new/resumed agent back before loop start.
   ctx.on("agent/created", ({ agent }) => {

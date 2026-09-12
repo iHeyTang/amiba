@@ -206,3 +206,23 @@ test("requires local archive plugins to be updated from a new archive", async ()
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("rolls back a plugin package with a missing native entry", async () => {
+  const { root, paths } = await fixture();
+  const original = await readFile(paths.profileManifest, "utf8");
+  try {
+    const manager = new DshProfilePluginManager({ paths,
+      runtime: { ensureManagedProfile: async () => {}, stop: async () => {}, ensureStarted: async () => {} },
+      runCommand: async () => {
+        await writeInstalledBundle(paths);
+        const filename = path.join(paths.profileDir, "node_modules", packageName, "package.json");
+        const manifest = JSON.parse(await readFile(filename, "utf8"));
+        manifest.dsh.native = "./missing.cjs";
+        await writeFile(filename, JSON.stringify(manifest));
+        return { stdout: "", stderr: "" };
+      },
+    });
+    await assert.rejects(manager.installRegistry(packageName), /ENOENT/);
+    assert.equal(await readFile(paths.profileManifest, "utf8"), original);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

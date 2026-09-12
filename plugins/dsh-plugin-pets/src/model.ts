@@ -1,5 +1,6 @@
 import { PetRegistry, type PetConfig } from "@mofli/core";
-import { grovePack } from "@mofli/grove";
+import { grovePack, dimensionOf } from './mofli-capabilities.generated.js';
+export { grovePack };
 export const registry = new PetRegistry().registerPacks(grovePack);
 export interface PetRecord {
   id: string;
@@ -21,11 +22,17 @@ export interface PetInput {
 }
 export function catalog() {
   return {
-    skins: grovePack.skins.map((s) => ({ id: s.id, name: s.name, rig: s.rig })),
+    skins: grovePack.skins.map((s) => ({
+      id: s.id,
+      name: s.name,
+      rig: s.rig,
+      dimension: dimensionOf(grovePack.rigs.find((r) => r.id === s.rig)),
+    })),
     attachments: grovePack.attachments.map((p) => ({
       id: p.attachment.id,
       name: p.name,
       mount: p.attachment.mount,
+      dimension: dimensionOf(p.attachment),
     })),
   };
 }

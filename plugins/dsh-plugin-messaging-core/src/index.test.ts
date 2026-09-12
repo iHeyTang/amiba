@@ -1,9 +1,10 @@
+import { ConversationLifecycle } from "@amiba/dsh-plugin-session-features";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MessageChannelCenter } from "./center.js";
+import { MessageChannelCenter, type MessageChannelProvider } from "./center.js";
 import { MessageCenterStore } from "./store.js";
 
 const roots: string[] = [];
@@ -630,7 +631,7 @@ describe("archived = closed: a bound session that got archived starts fresh", ()
     ).toMatchObject({ conversationKey: "chat-1" });
     expect(
       await center.conversationForSession(channel.id, first.sessionId),
-    ).toBeUndefined();
+    ).toMatchObject({ conversationKey: "chat-1", superseded: true });
 
     // The new session got the same recipe as first-time binding.
     expect(created[1]!.meta).toMatchObject({ agentPreset: "restricted" });
@@ -888,6 +889,39 @@ describe("IM session cwd", () => {
 });
 
 describe("outbound delivery retry", () => {
+  it("manually retries only failed replies in this channel and never revives approvals or archived history", async () => {
+    const { center, reflectServices } = await harness();
+    const deliver = vi.fn<NonNullable<MessageChannelProvider["deliver"]>>(async () => {});
+    center.registerProvider({ id: "manual-retry", name: "Retry", description: "", supportsInbound: true, supportsOutbound: true, deliver });
+    const { channel } = await center.store.create({ provider: "manual-retry", name: "One", sessionId: "session-a" });
+    const { channel: other } = await center.store.create({ provider: "manual-retry", name: "Two", sessionId: "session-a" });
+    await seedDelivery(center, channel.id, "reply");
+    await seedDelivery(center, other.id, "other-reply");
+    await center.store.queueOutbound({ id: "old-approval", channelId: channel.id, sessionId: "session-a", inReplyTo: "approval:old", text: "Approve", createdAt: new Date().toISOString() });
+    await center.store.queueOutbound({ id: "archived", channelId: channel.id, sessionId: "archived-session", inReplyTo: "old-message", text: "Old reply", createdAt: new Date().toISOString() });
+    reflectServices.set("workspaceRegistry", { archivedSessionIds: ["archived-session"] });
+    for (const id of ["reply", "other-reply", "old-approval", "archived"]) await center.store.markDeliveryFailed(id, "offline");
+    expect(await center.retryFailedReplies(channel.id)).toEqual({ retried: 1 });
+    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(deliver.mock.calls[0]?.[1]).toMatchObject({ id: "reply", channelId: channel.id });
+    expect((await center.store.listOutbox()).map(item => item.id).sort()).toEqual(["archived", "old-approval", "other-reply"]);
+    expect(await center.retryFailedReplies(channel.id)).toEqual({ retried: 0 });
+  });
+
+  it("serializes concurrent manual retries and keeps a renewed failure visible", async () => {
+    const { center } = await harness();
+    const deliver = vi.fn<NonNullable<MessageChannelProvider["deliver"]>>(async () => { throw new Error("still offline"); });
+    center.registerProvider({ id: "retry-offline", name: "Retry", description: "", supportsInbound: true, supportsOutbound: true, deliver });
+    const { channel } = await center.store.create({ provider: "retry-offline", name: "One", sessionId: "session-a" });
+    await seedDelivery(center, channel.id, "reply");
+    await center.store.markDeliveryFailed("reply", "offline");
+    await center.retryFailedReplies(channel.id);
+    expect((await center.store.listOutbox())[0]).toMatchObject({ attempts: 1, lastError: "Error: still offline" });
+    deliver.mockResolvedValue(undefined);
+    await Promise.all([center.retryFailedReplies(channel.id), center.retryFailedReplies(channel.id)]);
+    expect(deliver).toHaveBeenCalledTimes(2);
+    expect(await center.store.listOutbox()).toEqual([]);
+  });
   // Mirrors the DELIVERY_MAX_ATTEMPTS constant in center.ts.
   const DELIVERY_MAX_ATTEMPTS = 8;
 
@@ -1157,4 +1191,101 @@ describe("channel approval policy", () => {
       timeoutMs: 600_000,
     });
   });
+});
+
+
+it("manages only registered chat entries and applies settings on the next message", async () => {
+  const { center, reflectServices, created } = await harness();
+  const root = await mkdtemp(join(tmpdir(), "amiba-message-settings-"));
+  roots.push(root);
+  reflectServices.set("amibaConversations", new ConversationLifecycle(root));
+  const { channel, secret } = await center.createChannel({ provider: "webhook", name: "Settings", agentPreset: "standard" });
+  const conversation = { key: "group-a", kind: "group" as const };
+  await expect(center.conversationSettings(channel.id, conversation.key, { action: "status" })).rejects.toThrow("conversation_not_found");
+  expect(created).toHaveLength(0);
+  const first = await center.acceptInbound(channel.id, secret, { id: "first", text: "hello", conversation });
+  const status = await center.conversationSettings(channel.id, conversation.key, { action: "status" });
+  expect(status.currentSessionId).toBe(first.sessionId);
+  await center.conversationSettings(channel.id, conversation.key, { action: "configure", cadence: "manual" });
+  const pending = await center.conversationSettings(channel.id, conversation.key, { action: "new" });
+  expect(pending.pendingNewConversation).toBe(true);
+  expect(created).toHaveLength(1);
+  await expect(center.conversationSettings("another-account", conversation.key, { action: "new" })).rejects.toThrow("conversation_not_found");
+  const second = await center.acceptInbound(channel.id, secret, { id: "second", text: "again", conversation });
+  expect(second.sessionId).not.toBe(first.sessionId);
+  const after = await center.conversationSettings(channel.id, conversation.key, { action: "status" });
+  expect(after.history).toHaveLength(2);
+  expect(after.pendingNewConversation).toBe(false);
+  expect(after.policy).toEqual({ ...status.policy, cadence: "manual" });
+});
+
+it("uses the shared lifecycle for day changes while retaining previous reply routes", async () => {
+  const { center, reflectServices, created, dispose } = await harness();
+  const root = await mkdtemp(join(tmpdir(), "amiba-message-lifecycle-"));
+  roots.push(root);
+  let now = Date.now();
+  const lifecycle = new ConversationLifecycle(root, () => now);
+  reflectServices.set("amibaConversations", lifecycle);
+  const { channel, secret } = await center.createChannel({ provider: "webhook", name: "Daily", agentPreset: "standard" });
+  const conversation = { key: "group-a", kind: "group" as const };
+  const first = await center.acceptInbound(channel.id, secret, { id: "day-1", text: "hello", conversation });
+  now += 48 * 60 * 60 * 1000;
+  const duplicate = await center.acceptInbound(channel.id, secret, { id: "day-1", text: "hello", conversation });
+  expect(duplicate).toMatchObject({ duplicate: true, sessionId: first.sessionId });
+  expect(created).toHaveLength(1);
+  const second = await center.acceptInbound(channel.id, secret, { id: "day-2", text: "hello again", conversation });
+  expect(second.sessionId).not.toBe(first.sessionId);
+  expect(created).toHaveLength(2);
+  expect(await center.conversationForSession(channel.id, first.sessionId)).toMatchObject({ conversationKey: "group-a" });
+  expect(await center.conversationForSession(channel.id, second.sessionId)).toMatchObject({ conversationKey: "group-a" });
+  expect(await center.listConversations(channel.id)).toHaveLength(1);
+  expect(await lifecycle.history({ plugin: "webhook", entry: channel.id, scope: "group-a" })).toHaveLength(2);
+  expect(dispose).not.toHaveBeenCalled();
+});
+
+it("migrates old routes at startup without choosing a superseded session as current", async () => {
+  const { center, reflectServices } = await harness();
+  const root = await mkdtemp(join(tmpdir(), "amiba-route-migration-"));
+  roots.push(root);
+  const lifecycle = new ConversationLifecycle(root);
+  reflectServices.set("amibaConversations", lifecycle);
+  const { channel } = await center.createChannel({ provider: "webhook", name: "Legacy", agentPreset: "standard" });
+  await center.store.bindConversation({ channelId: channel.id, conversationKey: "legacy-chat", kind: "p2p", sessionId: "previous" });
+  await center.store.bindConversation({ channelId: channel.id, conversationKey: "legacy-chat", kind: "p2p", sessionId: "current" });
+  await center.start();
+  const origin = { plugin: "webhook", entry: channel.id, scope: "legacy-chat" };
+  expect((await lifecycle.history(origin)).map((segment) => segment.sessionId).sort()).toEqual(["current", "previous"]);
+  const create = vi.fn();
+  const resolved = await lifecycle.resolve(origin, { create, isClosed: () => false }, undefined, false);
+  expect(resolved.sessionId).toBe("current");
+  expect(create).not.toHaveBeenCalled();
+});
+
+it("starts a fresh restricted segment when a legacy owner conversation becomes shared", async () => {
+  const { center, reflectServices, create } = await harness();
+  const root = await mkdtemp(join(tmpdir(), "amiba-shared-entry-"));
+  roots.push(root);
+  const lifecycle = new ConversationLifecycle(root);
+  reflectServices.set("amibaConversations", lifecycle);
+  let access: "owner" | "shared" = "owner";
+  center.registerProvider({ id: "shared", name: "Shared", description: "test", supportsInbound: true, supportsOutbound: true, conversationAccess: async () => access });
+  const { channel, secret } = await center.createChannel({ provider: "shared", name: "Chat", agentPreset: "standard" });
+  const conversation = { key: "group-a", kind: "group" as const };
+  const first = await center.acceptInbound(channel.id, secret, { id: "owner-message", text: "private context", conversation });
+  access = "shared";
+  const second = await center.acceptInbound(channel.id, secret, { id: "member-message", text: "hello", conversation });
+  expect(second.sessionId).not.toBe(first.sessionId);
+  const sharedScope = JSON.stringify(["shared", "group", "group-a"]);
+  const history = await lifecycle.history({ plugin: "shared", entry: channel.id, scope: sharedScope });
+  expect(history.map(segment => segment.sessionId)).toEqual([second.sessionId]);
+  const options = create.mock.calls[1]![0] as unknown as { seed: Array<{ type: string; data: unknown }> };
+  expect(options.seed).toContainEqual(expect.objectContaining({ type: "amiba/shared-conversation", data: { sessionId: second.sessionId, origin: { plugin: "shared", entry: channel.id, scope: sharedScope } } }));
+  expect(await center.conversationForSession(channel.id, first.sessionId)).toMatchObject({ superseded: true });
+  const grants = [{ reference: "shared-document", title: "Group document" }];
+  await center.shareConversationResources(channel.id, conversation.key, grants);
+  expect(await lifecycle.sharedResources({ plugin: "shared", entry: channel.id, scope: sharedScope })).toEqual(grants);
+  expect(await lifecycle.sharedResources({ plugin: "shared", entry: channel.id, scope: "group-a" })).toEqual([]);
+  await expect(center.shareConversationResources("different-channel", conversation.key, grants)).rejects.toThrow("conversation_not_found");
+  await center.shareConversationResources(channel.id, conversation.key, []);
+  expect(await lifecycle.sharedResources({ plugin: "shared", entry: channel.id, scope: sharedScope })).toEqual([]);
 });

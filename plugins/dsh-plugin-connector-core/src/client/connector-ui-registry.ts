@@ -2,14 +2,23 @@ import { useCallback, useMemo, useSyncExternalStore } from "react";
 import type { ComponentType, ReactNode } from "react";
 
 import type { ConnectAdapter } from "./adapter.js";
+import type { SharedResourceSearch } from "../conversation-sharing.js";
 import type { ConnectWizardKit } from "./wizard-kit.js";
-import type { ConnectView } from "../types.js";
+import type { ConnectView, ConnectDetails } from "../types.js";
+import type { MessageConversationSettingsInput, MessageConversationView } from "../remote.js";
 
 /** Provider-owned settings receive only their explicit public projection. */
 export interface ConnectSettingsHost {
   connect: ConnectView;
   settings: Record<string, unknown>;
   save(patch: Record<string, unknown>): Promise<void>;
+  conversations?: {
+    items: NonNullable<ConnectDetails["messaging"]>["conversations"];
+    manage(key: string, input: MessageConversationSettingsInput): Promise<MessageConversationView>;
+    refresh(): Promise<void>;
+    searchResources?(key: string, query: string): Promise<SharedResourceSearch>;
+    shareResources?(key: string, references: string[]): Promise<MessageConversationView>;
+  };
 }
 
 /** One agent preset offered by the chrome's preset picker. */
@@ -48,6 +57,8 @@ export interface ConnectorUIContribution {
    */
   details?: ComponentType;
   settings?: ComponentType<{ host: ConnectSettingsHost }>;
+  /** Show provider capabilities before optional connection metadata. */
+  settingsFirst?: boolean;
   icon?: ReactNode;
   tagline?: string;
 }

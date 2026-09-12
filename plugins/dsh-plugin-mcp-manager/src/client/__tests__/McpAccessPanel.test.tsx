@@ -76,3 +76,13 @@ it("shows retained approval on its connection detail and permits revocation whil
   fireEvent.click(screen.getByRole("button", { name: /Revoke access|撤销使用/ }));
   await waitFor(() => expect(adapter.revoke).toHaveBeenCalledWith(item.id));
 });
+
+it("uses the current account without a picker or accidentally changing another account",async()=>{
+ const configuration={ownerId:"connector-core",recordId:"here"};
+ const current={...item,audience:"ordinary-agents" as const,connectionId:"elsewhere",configuration:{...configuration,recordId:"other"},state:"ready" as const,connections:[{id:"current",name:"Current",provider:"Feishu",approvalToken:"current-token",configuration},...item.connections]};
+ const adapter:McpAccessAdapter={list:vi.fn(async()=>[current]),approve:vi.fn(async()=>[]),revoke:vi.fn(),retry:vi.fn(),openConnections:vi.fn()};
+ render(<McpAccessPanel adapter={adapter} configuration={configuration}/>);
+ await screen.findByText("Work with information in this account");
+ expect(screen.queryByRole("combobox")).not.toBeInTheDocument();expect(screen.queryByText("Available")).not.toBeInTheDocument();expect(screen.queryByRole("button",{name:"Revoke access"})).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole("button",{name:"Enable these abilities"}));await waitFor(()=>expect(adapter.approve).toHaveBeenCalledWith(item.id,"current","current-token"));
+});

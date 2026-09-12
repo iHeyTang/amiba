@@ -22,12 +22,18 @@ export class PetService {
     const state = JSON.parse(raw) as PetLibrary;
     if (state.version !== 1 || !Array.isArray(state.pets))
       throw new Error("Unsupported pet library");
-    for (const pet of state.pets) registry.resolve(pet.config);
     return state;
   }
   async list() {
     await this.queue;
-    return this.read();
+    return this.compatible(await this.read());
+  }
+  /** Keep newer/local pets on disk so switching package versions never loses them. */
+  private compatible(state: PetLibrary): PetLibrary {
+    const pets = state.pets.filter(pet => {
+      try { registry.resolve(pet.config); return true; } catch { return false; }
+    });
+    return { ...state, pets, activeId: pets.some(pet => pet.id === state.activeId) ? state.activeId : null };
   }
   private mutate(fn: (state: PetLibrary) => void) {
     const run = this.queue.then(async () => {
@@ -37,7 +43,7 @@ export class PetService {
       const temp = join(this.root, `pets.${randomUUID()}.tmp`);
       await writeFile(temp, JSON.stringify(state, null, 2), "utf8");
       await rename(temp, join(this.root, "pets.json"));
-      return state;
+      return this.compatible(state);
     });
     this.queue = run.then(
       () => {},
@@ -68,6 +74,7 @@ export class PetService {
     return this.mutate((s) => {
       if (id && !s.pets.some((p) => p.id === id))
         throw new Error("Pet not found");
+      if (id) registry.resolve(s.pets.find(pet => pet.id === id)!.config);
       s.activeId = id;
     });
   }

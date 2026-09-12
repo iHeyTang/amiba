@@ -1,3 +1,4 @@
+import { PERSONAL_SCOPES } from "./personal.js";
 import { larkMcpTools } from "./mcp-tools.js";
 import {
   Client,
@@ -100,7 +101,7 @@ export interface LarkRegisterAppOptions {
   onStatusChange?: (info: { status: string; interval?: number }) => void;
   appPreset?: { name?: string; desc?: string };
   addons?: {
-    scopes?: { tenant?: string[] };
+    scopes?: { tenant?: string[]; user?: string[] };
     events?: { items?: { tenant?: string[] } };
   };
 }
@@ -234,7 +235,7 @@ function toEnvelope(
 export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProvider {
   return {
     id: "lark",
-    messaging: { ownerPairing: true },
+    messaging: { ownerPairing: true, sharedConversations: true },
     name: "飞书 / Lark",
     description: "Lark/Feishu bot over the official WebSocket long connection.",
     configSchema: larkConfigSchema,
@@ -586,7 +587,12 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
         // covers receiving the event, `im:message:send_as_bot` covers the
         // `client.im.message.create` call `runtime.deliver()` makes.
         addons: {
-          scopes: { tenant: ["im:message", "im:message:send_as_bot"] },
+          scopes: {
+            tenant: ["im:message", "im:message:send_as_bot"],
+            // Register every supported personal capability alongside the bot.
+            // offline_access is an OAuth refresh scope, not an app permission.
+            user: PERSONAL_SCOPES.filter(scope => scope !== "offline_access"),
+          },
           events: { items: { tenant: ["im.message.receive_v1"] } },
         },
       });

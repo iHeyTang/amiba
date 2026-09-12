@@ -1,3 +1,4 @@
+import { registerDingtalkApp } from "./registration.js";
 import { dingtalkMcpTools } from "./mcp-tools.js";
 import { DWClient, GET_TOKEN_URL, TOPIC_CARD, TOPIC_ROBOT } from "dingtalk-stream";
 import type { DWClientDownStream } from "dingtalk-stream";
@@ -7,6 +8,8 @@ import type {
   ConnectorProvider,
   ConnectorRuntime,
   ConnectorStatus,
+  OnboardHandle,
+  OnboardResult,
 } from "@amiba/dsh-plugin-connector-core";
 
 import {
@@ -88,6 +91,7 @@ export interface DingtalkCardCreateResult {
 }
 
 export interface DingtalkDeps {
+  registerApp?(handle: OnboardHandle): Promise<OnboardResult>;
   createClient(config: DingtalkConnectorConfig, handlers: DingtalkClientHandlers): DwLike;
   /** Exchanges an access token via `GET_TOKEN_URL`; rejects on auth failure. Used only for validation. */
   token(config: DingtalkConnectorConfig): Promise<void>;
@@ -270,10 +274,11 @@ export function createDingtalkProvider(
 ): ConnectorProvider {
   return {
     id: "dingtalk",
-    messaging: { ownerPairing: true },
+    messaging: { ownerPairing: true, sharedConversations: true },
     name: "钉钉 / DingTalk",
     description: "DingTalk robot over the official Stream Mode long connection.",
     configSchema: dingtalkConfigSchema,
+    onboard: deps.registerApp ?? registerDingtalkApp,
 
     async validate(config: unknown): Promise<void> {
       const parsed = dingtalkConfigSchema.parse(config);

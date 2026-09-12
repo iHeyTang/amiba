@@ -26,6 +26,7 @@ export function harness(options: { presetAvailable?: boolean; askNoticeDelayMs?:
   type FakeAgent = {
     id: string;
     followup: ReturnType<typeof vi.fn>;
+    whenIdle: ReturnType<typeof vi.fn>;
     /** Mirrors the real `Agent.ctx`: the agent-scoped context setup composes. */
     ctx: FakeAgentCtx;
     session: { id: string; header: Record<string, unknown>; events: Array<Record<string, unknown>> };
@@ -39,6 +40,7 @@ export function harness(options: { presetAvailable?: boolean; askNoticeDelayMs?:
   const makeAgent = (id: string, events: Array<Record<string, unknown>> = [], agentCtx = makeAgentCtx()): FakeAgent => ({
     id,
     followup: vi.fn(),
+    whenIdle: vi.fn(async () => undefined),
     ctx: agentCtx,
     session: { id, header: { id }, events },
   });

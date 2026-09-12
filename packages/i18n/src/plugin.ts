@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 import {
   interpolate,
@@ -7,7 +7,7 @@ import {
   subscribeMessages,
   type MessageLanguage,
 } from "./messages";
-import type { MessageKey } from "./index";
+import { useT, type MessageKey } from "./index";
 
 export type PluginLanguage = MessageLanguage;
 
@@ -28,14 +28,10 @@ export type PluginTranslateFn = (
  * required so a plugin can't ship an overlay that silently falls back to the
  * host (or to the raw key) for a language it forgot to translate.
  */
-export type PluginCatalogOverlay = Record<PluginLanguage, Record<string, string>>;
-
-function currentLanguage(): PluginLanguage {
-  const declared = document.documentElement.lang.toLowerCase();
-  if (declared.startsWith("zh")) return "zh-CN";
-  if (declared.startsWith("en")) return "en";
-  return navigator.language.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
-}
+export type PluginCatalogOverlay = Record<
+  PluginLanguage,
+  Record<string, string>
+>;
 
 /**
  * Non-hook translation core shared by `usePluginT`. Kept separate from the
@@ -89,9 +85,9 @@ export function createPluginTranslator(
 /**
  * Client-safe locale hook for DSH plugins.
  *
- * It intentionally observes only the document-level language contract. This
- * keeps browser plugins independent from Electron and from Amiba's React root
- * while still following the language selected in Appearance settings.
+ * It shares the host language store, including the official locale service
+ * when present. This avoids missing a language change between render and
+ * effect subscription while keeping plugins independent from Electron.
  *
  * ## Plugin catalog overlay (M2 mechanism of record)
  *
@@ -123,7 +119,7 @@ export function usePluginT(overlay?: PluginCatalogOverlay): {
   t: PluginTranslateFn;
   language: PluginLanguage;
 } {
-  const [language, setLanguage] = useState<PluginLanguage>(currentLanguage);
+  const { language } = useT();
   // The host dictionary can arrive AFTER this tree mounted (the shell
   // registers its namespace inside `ctx.inject(["locale"], …)`). Keying the
   // memo on the realm's message-registry revision repaints the host-vocabulary
@@ -134,15 +130,6 @@ export function usePluginT(overlay?: PluginCatalogOverlay): {
     messagesEpoch,
     messagesEpoch,
   );
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => setLanguage(currentLanguage()));
-    observer.observe(document.documentElement, {
-      attributeFilter: ["lang"],
-      attributes: true,
-    });
-    return () => observer.disconnect();
-  }, []);
 
   const t = useMemo<PluginTranslateFn>(
     () => createPluginTranslator(language, overlay),

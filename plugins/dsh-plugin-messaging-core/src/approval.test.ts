@@ -1,3 +1,4 @@
+import { ConversationLifecycle } from "@amiba/dsh-plugin-session-features";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -143,6 +144,7 @@ async function harness(options: { approvalService?: boolean } = {}) {
     logger,
     disposers,
     archivedSessionIds,
+    reflectServices,
     disposeAll: async () => {
       for (const cleanup of disposers.splice(0)) await cleanup();
     },
@@ -1131,4 +1133,42 @@ describe("IM approval sender gate", () => {
       await flushIo();
     },
   );
+});
+
+
+it("delivers an approval answer to the previous day's task after the chat has rolled over", async () => {
+  const { root, center, dispatch, reflectServices, disposeAll } = await harness();
+  let now = Date.now();
+  reflectServices.set("amibaConversations", new ConversationLifecycle(root, () => now));
+  const provider = imProvider();
+  const { sessionId, channelId, secret } = await boundChannel(center, provider);
+  const outcome = dispatch(request(sessionId));
+  await vi.waitFor(() => expect(provider.deliver).toHaveBeenCalled());
+  now += 48 * 60 * 60 * 1000;
+  const second = await center.acceptInbound(channelId, secret, {
+    id: "next-day", text: "new question", sender: "u-1", conversation: { key: "chat-1", kind: "group" },
+  });
+  expect(second.sessionId).not.toBe(sessionId);
+  const answer = await center.acceptInbound(channelId, secret, {
+    id: "answer-old", text: "approve #1", sender: "u-1", conversation: { key: "chat-1", kind: "group" },
+  });
+  expect(answer).toMatchObject({ sessionId, consumedAsApproval: true });
+  await expect(outcome).resolves.toBe("allowed-once");
+  expect((await center.listConversations(channelId))[0]?.sessionId).toBe(second.sessionId);
+  await disposeAll();
+});
+
+it("allows a group member to ask but only the owner to answer a text approval", async () => {
+  const { center, dispatch, followup, disposeAll } = await harness();
+  const provider = imProvider({ canApprove: async (_channel, sender) => sender === "owner" });
+  const { sessionId, channelId, secret } = await boundChannel(center, provider);
+  await center.acceptInbound(channelId, secret, { id: "member-question", text: "help", sender: "member", conversation: { key: "chat-1", kind: "group" } });
+  expect(followup).toHaveBeenCalledTimes(2);
+  const pending = dispatch(request(sessionId));
+  await vi.waitFor(() => expect(provider.deliver).toHaveBeenCalled());
+  await expect(center.acceptInbound(channelId, secret, { id: "member-approval", text: "approve #1", sender: "member", conversation: { key: "chat-1", kind: "group" } })).rejects.toThrow("sender_cannot_approve");
+  const answer = await center.acceptInbound(channelId, secret, { id: "owner-approval", text: "approve #1", sender: "owner", conversation: { key: "chat-1", kind: "group" } });
+  expect(answer.consumedAsApproval).toBe(true);
+  await expect(pending).resolves.toBe("allowed-once");
+  await disposeAll();
 });

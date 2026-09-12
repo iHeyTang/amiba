@@ -111,3 +111,27 @@ test("build marker contains every runtime compatibility dimension", () => {
     arch: "x64",
   })
 })
+
+test("migrates the desktop browser once and preserves removal across restarts", async () => {
+  const { mkdtemp, readFile, writeFile, rm } = await import("node:fs/promises")
+  const { tmpdir } = await import("node:os")
+  const path = await import("node:path")
+  const { ensureManagedDshProfile } = await import("./index")
+  const directory = await mkdtemp(path.join(tmpdir(), "amiba-browser-profile-"))
+  try {
+    const paths = resolveManagedDshRuntimePaths({ surface: "desktop", home: path.join(directory, "home"), runtimeDir: path.join(directory, "runtime") })
+    await ensureManagedDshProfile(paths)
+    const manifest = JSON.parse(await readFile(paths.profileManifest, "utf8"))
+    const browser = "@amiba/dsh-plugin-browser-provider-electron"
+    assert.equal(manifest.dsh.profile.optionalBrowserMigration, 1)
+    assert.ok(manifest.dsh.profile.bundles.includes(browser))
+    assert.match(manifest.dependencies[browser], /^link:/)
+    delete manifest.dependencies[browser]
+    manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter((name: string) => name !== browser)
+    await writeFile(paths.profileManifest, JSON.stringify(manifest))
+    await ensureManagedDshProfile(paths)
+    const restarted = JSON.parse(await readFile(paths.profileManifest, "utf8"))
+    assert.equal(browser in restarted.dependencies, false)
+    assert.equal(restarted.dsh.profile.bundles.includes(browser), false)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})

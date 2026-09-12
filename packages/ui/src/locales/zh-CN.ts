@@ -7,6 +7,12 @@ import type { UiMessages } from "./en";
  */
 export const zhCN: UiMessages = {
   // Generic
+  "sidepanel.compaction.unconfirmed": "压缩状态待确认",
+  "sidepanel.compaction.running": "正在压缩上下文…",
+  "sidepanel.compaction.completed": "上下文已压缩",
+  "sidepanel.compaction.failed": "上下文压缩失败",
+  "sidepanel.compaction.interrupted": "上下文压缩已中断",
+  "sidepanel.compaction.stats": "{items} 条历史记录 · 约 {tokens} tokens",
   "common.add": "添加",
   "common.cancel": "取消",
   "common.back": "返回",
@@ -132,24 +138,6 @@ export const zhCN: UiMessages = {
   "workspacePane.closeTerminalTab": "关闭 {title}",
   "workspacePane.hideTerminalPanel": "收起终端面板",
 
-  // 内置浏览器
-  "embeddedBrowser.title": "浏览器",
-  "embeddedBrowser.open": "打开浏览器",
-  "embeddedBrowser.close": "关闭浏览器",
-  "embeddedBrowser.newTab": "新标签页",
-  "embeddedBrowser.back": "后退",
-  "embeddedBrowser.forward": "前进",
-  "embeddedBrowser.stop": "停止加载",
-  "embeddedBrowser.addressPlaceholder": "输入网址",
-  "embeddedBrowser.openExternal": "在默认浏览器中打开",
-  "embeddedBrowser.emptyTitle": "浏览和验证",
-  "embeddedBrowser.emptyDescription":
-    "Amiba 可以在这里浏览、点击、输入和截图。在上方输入网址即可开始。",
-  "embeddedBrowser.previewPrompt": "要预览正在开发的页面？",
-  "embeddedBrowser.detectDevServer": "检测开发服务器",
-  "embeddedBrowser.detecting": "正在检测…",
-  "embeddedBrowser.noDevServer": "没有检测到本地开发服务器",
-  "embeddedBrowser.agentOperating": "Agent 正在操作",
   "workspacePane.recoveryPoints": "恢复点",
   "workspacePane.recoveryPointsHint": "Agent 修改前自动保存的安全快照。",
   "workspacePane.recoveryTask": "第 {count} 次任务修改前",
@@ -499,8 +487,7 @@ export const zhCN: UiMessages = {
 
   // New tab
   "newtab.greeting": "我可以帮你做什么？",
-  "newtab.subtitle":
-    "搜索网页、阅读页面、处理项目文件、执行命令或安排定时工作 — 把你想做的事告诉我就行。",
+  "newtab.subtitle": "今天想一起做点什么？",
   // Typewriter cycle in the new-tab composer — keep each line short
   // enough to fit on one line at the default composer width (~640px)
   // and concrete enough to suggest a real capability rather than just
