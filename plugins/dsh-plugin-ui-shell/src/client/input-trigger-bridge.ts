@@ -104,6 +104,7 @@ export interface InputDraftSource {
 }
 
 export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
+  bindInputSession(sessionId: string, session: InputQueueSession): () => void;
   inputStateSource(sessionId: string): InputStateSource;
   inputImagesFor(sessionId: string): readonly ComposerAttachment[] | undefined;
   inputImagesSource(sessionId: string): InputImagesSource;
@@ -128,6 +129,10 @@ export function createInputTriggerBridge(
   deps: InputTriggerBridgeDeps,
 ): AmibaInputTriggerBridge {
   const inputStates = new Map<string, InputStateSource>();
+  const inputSessions = new Map<string, { session: InputQueueSession }>();
+  const sessionListeners = new Set<() => void>();
+  const notifyInputSessions = () => { for (const listener of sessionListeners) listener(); };
+
   const imageBindings = new Map<string, { ops: ComposerImageOps }>();
   const imageSources = new Map<string, InputImagesSource>();
   const imageListeners = new Map<string, Set<() => void>>();
@@ -207,12 +212,30 @@ export function createInputTriggerBridge(
   const listeners = new Set<() => void>();
   const notify = () => { for (const listener of listeners) listener(); };
   return {
+    bindInputSession(sessionId, session) {
+      const binding = { session };
+      inputSessions.set(sessionId, binding);
+      notifyInputSessions();
+      let active = true;
+      return () => {
+        if (!active) return;
+        active = false;
+        if (inputSessions.get(sessionId) !== binding) return;
+        inputSessions.delete(sessionId);
+        notifyInputSessions();
+      };
+    },
     inputStateSource(sessionId) {
       let source = inputStates.get(sessionId);
       if (!source) {
         source = createInputStateSource({
           draft: inputDraftSource(sessionId), images: inputImagesSource(sessionId),
-          session: () => deps.sessionFor?.(sessionId), subscribeSessions: deps.subscribeSessions,
+          session: () => inputSessions.get(sessionId)?.session ?? deps.sessionFor?.(sessionId),
+          subscribeSessions: listener => {
+            sessionListeners.add(listener);
+            const off = deps.subscribeSessions(listener);
+            return () => { sessionListeners.delete(listener); off(); };
+          },
         });
         inputStates.set(sessionId, source);
       }

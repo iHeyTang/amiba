@@ -571,7 +571,16 @@ export async function apply(ctx: ClientContext): Promise<void> {
         >,
     });
     const disposeComposerInputs = ctx.reflect.provide("composerInputs", triggerRuntime);
-    ctx.effect(() => ctx.sessions.provide(createInputActionsProvider(triggerRuntime)), "native input actions");
+    ctx.effect(() => {
+      const provider = createInputActionsProvider(triggerRuntime);
+      try {
+        const off = ctx.sessions.provide(provider);
+        return () => { off(); provider.dispose(); };
+      } catch (error) {
+        provider.dispose();
+        throw error;
+      }
+    }, "native input actions");
     // Amiba's own `/` and `@` sources, published through the official
     // registry rather than a private one — so a plugin's `registerSource`
     // and Amiba's own land in the same menu, ranked by the same `order`.

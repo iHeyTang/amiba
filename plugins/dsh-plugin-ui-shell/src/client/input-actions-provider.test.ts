@@ -9,7 +9,16 @@ function fixture() {
     subscribeSessions: () => () => {}, inputTriggers: () => undefined, commandUi: () => undefined,
   });
   const provider = createInputActionsProvider(bridge);
-  const actions = (sessionId: string) => provider.resolve({ sessionId } as never).props!.inputActions as ConversationInputActions;
+  const owners = new Map<string, { sessionId: string; session: object; ctx: object }>();
+  const actions = (sessionId: string) => {
+    let owner = owners.get(sessionId);
+    if (!owner) {
+      owner = { sessionId, session: { getSnapshot: () => ({ queue: [] }), subscribe: () => () => {} },
+        ctx: { effect: (effect: () => () => void) => effect() } };
+      owners.set(sessionId, owner);
+    }
+    return provider.resolve(owner as never).props!.inputActions as ConversationInputActions;
+  };
   const bind = (sessionId: string) => {
     let draft = "initial";
     const edit = vi.fn((text: string) => { draft = text; return true; });
@@ -61,4 +70,44 @@ describe("official input action provider", () => {
     actions("a").submit();
     expect(submit).toHaveBeenCalledTimes(1);
   });
+});
+
+
+it("uses the materializing session before ID lookup and releases owner subscriptions on teardown", () => {
+  const { bridge, provider, bind } = fixture();
+  bind("assembling");
+  bridge.bindImages!("assembling", {
+    getImages: () => [], canAdd: () => true, addImages: () => {}, removeImage: () => {},
+  });
+  const source = bridge.inputStateSource("assembling");
+  const observed: unknown[] = [];
+  const off = source.subscribe(() => observed.push(source.getSnapshot()));
+  expect(source.getSnapshot()).toBeUndefined();
+  function owner(preview: string) {
+    const listeners = new Set<() => void>();
+    let queue = [{ id: preview, messageId: preview, placement: "queued", content: [], preview, text: preview }];
+    const cleanups: (() => void)[] = [];
+    const binding = { sessionId: "assembling", session: {
+      getSnapshot: () => ({ queue }), subscribe(fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn); }; },
+    }, ctx: { effect(effect: () => () => void) { const cleanup = effect(); cleanups.push(cleanup); return cleanup; } } };
+    return { binding, listeners, cleanups, queue: () => queue, update() { queue = []; for (const fn of listeners) fn(); } };
+  }
+  const first = owner("first"), next = owner("replacement");
+  const firstActions = provider.resolve(first.binding as never).props!.inputActions;
+  expect(source.getSnapshot()!.queue).toBe(first.queue());
+  expect(first.listeners.size).toBe(1);
+  expect(provider.resolve(first.binding as never).props!.inputActions).toBe(firstActions);
+  expect(first.cleanups).toHaveLength(1);
+  const start = observed.length;
+  provider.resolve(next.binding as never);
+  expect(observed.slice(start)).not.toContain(undefined);
+  first.cleanups[0]();
+  expect(first.listeners.size).toBe(0);
+  expect(source.getSnapshot()!.queue).toBe(next.queue());
+  next.update();
+  expect(source.getSnapshot()!.queue).toBe(next.queue());
+  provider.dispose();
+  expect(next.listeners.size).toBe(0);
+  expect(source.getSnapshot()).toBeUndefined();
+  off();
 });

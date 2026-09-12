@@ -1056,3 +1056,14 @@ pipelines retain mounted component state.
 - UI 附件入口与注册链路 18 项测试、Shell/UI 类型检查及完整 Desktop 构建通过。真实插件以标准 single 槽优先级覆盖官方默认组件，添加/读取/移除原始图片通过；卸载后恢复默认组件。默认官方文档 drop 与原输入框 drop 同时存在时只暂存一张图，同步上传门禁阻止重复添加。子会话续聊/停止、导航及 renderer 重载回归通过。
 - 首次桌面测试发现已有官方附件组件占用 priority 0，按框架规则将测试插件改为 priority -100；未修改框架冲突规则。最终日志 `/tmp/amiba-attachment-seat-smoke3.log`，截图 `amiba-official-attachment-seat.png` 已查看，原附件条和输入器保留。插件新增的预览区域属于附加展示。
 - useInput 的完整提供仍需按会话拥有草稿生命周期，不能用组件未挂载时的空值假装常驻输入状态。
+
+
+### 输入状态的会话组装时序与生命周期（2026-09-13）
+
+- 官方 InputHub 的 shellFor(binding) 明确在会话作用域可按 ID 查询之前执行。原组合输入状态只通过 sessions.binding(id) 查队列，在标准提供者初始化期间可能缺少会话对象。
+- inputActions 提供者现在使用 resolve(binding) 直接获得的真实 session，通过会话 effect 绑定到输入桥。组合输入状态优先使用这份对象；旧版单独使用桥接的调用方仍保留按 ID 查找的回退。
+- 按会话/作用域对象去重复绑定。替换时先绑定新对象，再清理旧 effect，避免瞬时 undefined；每个绑定的清理令牌只可移除自己。移除插件提供者或作用域销毁时释放订阅，不留下旧队列监听。
+- 新增测试覆盖首次 materialization 尚无法按 ID 查询、非空真实队列身份、重复 resolve、对象替换、不出现瞬时空状态、过期清理、队列变化与 provider.dispose；相关 Shell 测试共 33 项通过。
+- 本项未引入离屏草稿或 useInput 空值替身。完整常驻输入状态仍需处理 native draft、引用、图片及提交生命周期，未据此宣称完整输入兼容。
+
+- 本项验证：Shell 类型检查、完整 Desktop 构建及真实桌面兼容测试通过。日志 `/tmp/amiba-input-session-owner-types2.log`、`/tmp/amiba-input-session-owner-tests.log`、`/tmp/amiba-input-session-owner-build.log`、`/tmp/amiba-input-session-owner-smoke.log`。
