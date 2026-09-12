@@ -746,7 +746,9 @@ try {
       if (process.argv.includes("--queue-draft")) {
         await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_WAIT_FOR_STOP');window.__probeCtx.composerInputs.submitInput('compat-continuable-child');void 0");
         await wait(() => evaluate("Boolean(document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]'))"));
-        await evaluate("window.__queueCodecCalls=0;window.__queueRefOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-queue-ref',trigger:'@',candidates:async()=>[],onPick:()=>({}),matchSpace:(_s,token)=>token==='@queue'?{insert:{source:'compat-queue-ref',ref:'id',label:'Queue引用😀',clipboardText:'queue clip'}}:undefined,codec:{serialize:async ref=>{window.__queueCodecCalls++;return '<queue:'+ref+'>'}}});window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','@queue');void 0");
+        const queueSourceCode="window.__queueCodecCalls=0;window.__queueRefOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-queue-ref',trigger:'@',candidates:async()=>[],onPick:()=>({}),matchSpace:(_s,token)=>token==='@queue'?{insert:{source:'compat-queue-ref',ref:'id',label:'Queue引用😀',clipboardText:'queue clip'}}:undefined,codec:{serialize:async ref=>{window.__queueCodecCalls++;return '<queue:'+ref+'>'}}});void 0";
+        await evaluate(queueSourceCode);
+        await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','@queue');void 0");
         await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
         assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor('compat-continuable-child').onSpace()"),true);
         await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.occurrences.length===1"));
@@ -759,15 +761,29 @@ try {
         await wait(() => evaluate("Boolean(document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]'))"));
         assert.equal(await evaluate("window.__queueCodecCalls"),1);
         await wait(() => evaluate("(async()=>{const values=await window.amiba.storage.get('pendingQueue:compat-continuable-child');const item=values['pendingQueue:compat-continuable-child']?.[0];return item?.draft?.parts.filter(p=>p.kind==='mention').length===1 && item.draft.parts.some(p=>p.kind==='text'&&p.text.includes('literal @[dsh.reference:missing-example')) && item.text.includes('<queue:id>')})()"));
+        if (process.argv.includes("--queue-reload")) {
+          const rootSessionId=await evaluate("window.__compatSessionId");
+          await evaluate("window.__queueReloadBefore=true;void 0");
+          await call("Page.reload",{});
+          await wait(async()=>{try{return await evaluate("!window.__queueReloadBefore && !!window.__probeCtx?.sessions");}catch{return false;}});
+          await evaluate(`window.__compatSessionId=${JSON.stringify(rootSessionId)};window.__probeCtx.layout.openChat();void 0`);
+          await wait(() => evaluate("(async()=>{await window.__probeCtx.sessions.refreshSubagents('compat-continuable-parent');return window.__probeCtx.sessions.list.getSnapshot().subagentsByParent['compat-continuable-parent']?.entries.some(e=>e.kind==='child'&&e.id==='compat-continuable-child')})()"));
+          await evaluate("window.__probeCtx.sessions.open('compat-continuable-child');void 0");
+          await wait(()=>evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child') && document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length===1"));
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft"), "");
+          await evaluate(queueSourceCode);
+          console.log("Full renderer reload restored exactly one pending native queue item and kept the cleared composer empty");
+        }
         await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]').click();void 0");
         await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.draft===${JSON.stringify(queuedDraft.draft)}`));
         assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').occurrences.length"),1);
         await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child',window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft+' edited');void 0");
+        if(process.argv.includes("--queue-reload")) console.log("Restored queue before Send now",await evaluate("({stopVisible:!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]'),codecCalls:window.__queueCodecCalls,queueRows:document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length})"));
         await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=\"Send now\"]').click();void 0");
         const reference=queuedDraft.occurrences[0];
         const expected=(queuedDraft.draft.slice(0,reference.offset)+'<queue:id>'+queuedDraft.draft.slice(reference.offset+reference.length)+' edited').trim();
         await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(expected))));
-        assert.equal(await evaluate("window.__queueCodecCalls"),2);
+        assert.equal(await evaluate("window.__queueCodecCalls"),process.argv.includes("--queue-reload") ? 1 : 2);
         await wait(() => evaluate("!document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
         await evaluate("window.__queueRefOff();void 0");
         console.log("Native queued mixed draft restored its real reference and literal token; edited Send now re-ran the codec and delivered the exact new model payload");

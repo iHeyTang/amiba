@@ -308,6 +308,11 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
         ignoreAbortForSessionRef.current = sid;
         markCurrentAssistantStopped();
         rejectPendingTurn(sid, new DOMException("aborted", "AbortError"));
+      }
+      // After renderer reload the Host may still be running a turn for which
+      // this window has no local busy state. Send now explicitly preempts it;
+      // let the authoritative session treat an already-idle interrupt as a no-op.
+      if (sid) {
         try {
           client.abort(sid);
         } catch (e) {

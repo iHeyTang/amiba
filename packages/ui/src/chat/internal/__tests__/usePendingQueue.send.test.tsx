@@ -210,3 +210,15 @@ describe("queued draft identity", () => {
     expect(args.runChatTurn).toHaveBeenLastCalledWith({text:"queued resolved",attachments:[],draft:document});
   });
 });
+
+it("Send now interrupts the authoritative session even when a reload has no local busy state", async () => {
+  const args=makeArgs({busy:false});
+  const {result}=renderHook(()=>usePendingQueue(args));
+  act(()=>result.current.setQueue([{queueId:"restored",text:"restored payload",attachments:[]}]));
+  await act(async()=>{result.current.sendNow("restored");});
+  expect(args.client.abort).toHaveBeenCalledWith("s1");
+  expect(args.markCurrentAssistantStopped).not.toHaveBeenCalled();
+  expect(args.rejectPendingTurn).not.toHaveBeenCalled();
+  expect(args.runChatTurn).toHaveBeenCalledWith({text:"restored payload",attachments:[]});
+  expect(result.current.queue).toHaveLength(0);
+});

@@ -1217,3 +1217,13 @@ pipelines retain mounted component state.
 - 实际 Host 冷重启后的嵌套父会话拒绝场景验证：首次 codec 已执行，但发送准备失败后恢复原引用及普通文字；切换至父会话实际运行后返回，原草稿仍在；重试再次执行 codec，模型实际收到完整预期文本。没有投递虚构唤醒消息。
 - 最终组合回归 /tmp/amiba-queue-draft-smoke3.log 退出 0，覆盖驻留草稿、动态 Cordis、轨迹正常启停、命令、图片、输入状态、子会话及嵌套 Host 冷重启和插件开发生命周期。首轮探针定位错误地查找输入卡片内的队列（原队列位于 context rail），第二轮用 Markdown 展示文本断言模型原文；修正为原队列位置及实际模型输入证据后通过，未为测试改动产品样式。
 - 尚不声明完整官方队列兼容：原生待发送队列与官方 Host inbox 仍是不同状态来源，队列图片生命周期、离屏完整输入和尚未经过 Composer 解析就被编辑动作暂存的草稿发送语义需继续统一。本轮没有完整刷新恢复排队条目的桌面测试；已验证真实落盘及 JSON 恢复后的编辑，不能替代全部恢复生命周期证据。
+
+
+### 整页刷新后的排队草稿恢复与立即发送（2026-09-13）
+
+- 新增 --queue-reload 探针：真实可续聊子会话仍在生成时，保存含一个真实引用及普通 token 文字的排队消息，然后完整 Page.reload。通过官方目录重新定位原子会话，确认只有一条队列记录、已清空的输入框仍为空；重新注册同名测试引用源后编辑该条目，确认引用和普通文字都正确恢复。
+- 首轮真实验证发现运行状态缺口：Host 中旧生成仍在等待，刷新后的原输入器却没有本地 busy 状态。原 sendNow 以 busy 为中断前提，导致新内容进入 Host 队列等待旧任务，而非立即抢先执行。诊断日志明确显示 stopVisible:false、queueRows:1；Host 未收到旧生成的中断。
+- 原队列“立即发送”现在对有真实 sessionId 的会话始终发出原 client.abort 操作，由官方接口对已空闲会话处理无操作；本地停止标记、拒绝旧 pendingTurn 和 finally 防重仍只在本地 busy 时执行。只读、未准入及引用解析未完成的路径不触发中断；没有修改普通发送、停止按钮或任何 UI/CSS。
+- 新增回归在修复前失败（/tmp/amiba-queue-reload-before.log：1 失败、11 通过），修复后队列及触发管线共 43 项通过（/tmp/amiba-queue-reload-tests.log）。UI 类型检查、完整 Desktop 构建通过（/tmp/amiba-queue-reload-types.log、/tmp/amiba-queue-reload-build.log）。
+- 最终组合桌面验证 /tmp/amiba-queue-reload-smoke2.log 退出 0。刷新后编辑原条目、再次解析引用并点击原 Send now，真实 Host 旧生成被中断，模型收到准确的新文本，队列清空。驻留草稿、动态 Cordis、轨迹正常配置启停、命令、图片、输入状态、子会话及嵌套 Host 冷重启和插件开发生命周期一并通过。
+- 本项补上上一轮缺少的实际 renderer 重载证据。尚未补齐刷新后执行中会话的全部状态：DshChatEngine 的新实例仅在观察到 turn 事件后建立被动运行态，subscribe 初始缺少状态时发出 absent；普通输入器 busy/Stop 的恢复仍需接入权威状态基线，不能把本次队列修正当成这项工作已完成。
