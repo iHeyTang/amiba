@@ -441,21 +441,16 @@ export type ToolCallToolviewOwnerProps = OwnerOf<"tool.call.toolview">;
 //     OWNER share passed at Amiba's own dispatch site, exactly like
 //     `{ locked }` for `conversation.input.plan`, and the seat contract tells
 //     occupants to read the owner share and never subscribe `useInput`.
-//     `session` is already available (`ctx.sessions.binding(id)`, and the
-//     official ConversationSnapshot is real here — its `views`/`chat`/`nodes`
-//     are the documented empty values for a composition with no registered
-//     view Definitions). What blocks adoption is exactly two `InputState`
-//     members: `occurrences` (each entry must address ONE U+FFFC placeholder
-//     in the draft; Amiba's MentionNode projects a multi-character token, so
-//     honouring it means moving that token to the clipboard/model projection
-//     and keeping a side table) and `imageIds` (browser-owned unsent draft
-//     ids; Amiba's attachments are host-staged, so it needs its own id space
-//     in front of that). `draftRev` and a narrowed `phase` follow for free.
-//     Separately, `useInput`/`inputActions` are not currently provided.
-//     Their draft attachment ids must resolve through the same attachment
-//     authority as submission. A full adapter must preserve add/remove/prune,
-//     resolveImage and send/cancel semantics without a second input engine.
-//     Missing that adapter is not proof that one is impossible.
+//     `session` comes from ctx.sessions.binding(id). The native input bridge
+//     now composes real draft/phase/reference state, browser image IDs, and
+//     the actual Host inbox into the exact installed InputState type while
+//     all owners are bound. References use full @label UTF-16 ranges in rc.2,
+//     not the native trigger scanner's single-placeholder coordinates.
+//     Owner dispatch and useInput/inputActions registration remain separate
+//     integration work. An unavailable editor/session must not be masked by
+//     an invented empty complete state; local pending messages are not Host
+//     inbox rows. Full conversation service adoption also requires the same
+//     image authority and native send/cancel semantics.
 // `settings.plugins.tab` is now declared by runtime-inventory. Its real
 // panels preserve the existing inventory filters. `settings.plugin.item`
 // follows the installed package's keyed-by-namespace contract.
@@ -789,3 +784,6 @@ export type AssistantActionOwnerProps = OwnerOf<"conversation.chat.assistant-act
 export type { ConvViewOwnerProps } from "@deepseek-ai/dsh-client-ui-conversation/client";
 
 export type { DirectoryFlowOwnerProps } from "@deepseek-ai/dsh-client-ui-workspace/client";
+
+/** Exact input-state currency of the installed official input region. */
+export type ConversationInputState = OwnerOf<"conversation.input.left">["input"];

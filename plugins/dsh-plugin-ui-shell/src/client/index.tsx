@@ -554,6 +554,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     }, "native composer draft images");
     const triggerRuntime = createInputTriggerBridge({
       images: () => composerImages,
+      sessionFor: sessionId => ctx.sessions.binding(sessionId as never)?.session,
       scopeOf: (sessionId) =>
         ctx.sessions.scope(sessionId as never) as unknown as
           | ClientContext

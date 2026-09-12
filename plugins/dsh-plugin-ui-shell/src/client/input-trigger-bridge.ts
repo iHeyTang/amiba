@@ -26,6 +26,7 @@
  *     hook the official popup shell uses to return focus after a settle.
  */
 
+import { createInputStateSource, type InputStateSource, type InputQueueSession } from "./input-state-source.js";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type {
   CommandPopupController,
@@ -55,6 +56,8 @@ function imageRegistry(value: unknown): ImageRegistry | undefined {
 
 /** Everything the bridge needs from the client root context. */
 export interface InputTriggerBridgeDeps {
+  /** Actual Host inbox state, distinct from the native local pending queue. */
+  sessionFor?(sessionId: string): InputQueueSession | undefined;
   /** Browser image registry implementing the pinned image operations. */
   images?(): unknown;
   /** Resolve a session-scope ctx, or undefined for an unmaterialized session. */
@@ -101,6 +104,7 @@ export interface InputDraftSource {
 }
 
 export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
+  inputStateSource(sessionId: string): InputStateSource;
   inputImagesFor(sessionId: string): readonly ComposerAttachment[] | undefined;
   inputImagesSource(sessionId: string): InputImagesSource;
   pruneInputImages(sessionId: string, ids: readonly ComposerAttachment["id"][]): void;
@@ -122,6 +126,7 @@ export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
 export function createInputTriggerBridge(
   deps: InputTriggerBridgeDeps,
 ): AmibaInputTriggerBridge {
+  const inputStates = new Map<string, InputStateSource>();
   const imageBindings = new Map<string, { ops: ComposerImageOps }>();
   const imageSources = new Map<string, InputImagesSource>();
   const imageListeners = new Map<string, Set<() => void>>();
@@ -201,6 +206,17 @@ export function createInputTriggerBridge(
   const listeners = new Set<() => void>();
   const notify = () => { for (const listener of listeners) listener(); };
   return {
+    inputStateSource(sessionId) {
+      let source = inputStates.get(sessionId);
+      if (!source) {
+        source = createInputStateSource({
+          draft: inputDraftSource(sessionId), images: inputImagesSource(sessionId),
+          session: () => deps.sessionFor?.(sessionId), subscribeSessions: deps.subscribeSessions,
+        });
+        inputStates.set(sessionId, source);
+      }
+      return source;
+    },
     registerDraftImage(file) {
       const registry = imageRegistry(deps.images?.());
       if (!registry) return undefined;

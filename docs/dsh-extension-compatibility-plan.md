@@ -1017,3 +1017,12 @@ pipelines retain mounted component state.
 - 10 项附件、28 项输入管线、25 项桥接及 3 项注册表测试通过（66 项），UI/Shell 类型检查通过。覆盖同次添加/清理同步读取、旧快照不可变、保留普通文件、忙碌期间 prune、元数据变化不重复通知、晚上传清理及绑定替换隔离。
 - 尚未将文字/图片/真实 Host 队列合成官方 InputState 并注册 input/inputActions 提供者；队列恢复及其他剩余兼容项仍在完整目标范围内。
 - `/tmp/amiba-image-source-desktop-build.log` 完整 Desktop 构建退出 0；`/tmp/amiba-image-source-desktop-smoke.log` 的 `--compat --input-state --command-images --child-continuation --child-navigation --child-reload` 退出 0。真实输入器添加图片的同一次调用立即读到 ID；订阅捕获添加和 prune 后的列表，重复读取复用快照且过程中没有暂时解绑的 undefined；上传忙碌中先保留一张再清空，待上传全部结束仍为空，注册资源均已释放。既有原生/扩展图片命令、输入提交、子会话及完整兼容回归同轮通过。
+
+### 原输入状态与真实 Host 队列合成（2026-09-13）
+
+- 从实际官方 conversation.input.left owner 推导 ConversationInputState 类型，合并真实 Lexical 草稿/引用/阶段、同步浏览器 imageIds 和 SessionFace.getSnapshot().queue。严格使用 Host 收件队列；不将本地待发送队列的 ID 或内容冒充官方队列。
+- inputStateSource 按会话缓存稳定数据源。草稿、图片 ID 序列和队列引用未变时复用冻结快照；仅阶段或图片变化不增加文字 draftRev；图片 ID 序列未变时复用其数组。缺少实际编辑器、附件绑定或 SessionFace 时返回 undefined，不合成伪空完整状态。
+- 订阅同时连接草稿、图片和真实会话队列；会话服务更新时重绑队列，旧 owner 的事件不再通知。即使同一 owner 对象经历断开后重新接入，旧订阅回调也被独立绑定标识隔离；取消订阅幂等。
+- 4 项合成状态、25 项输入桥接和 3 项图片注册表测试通过（32 项），UI/Shell 类型检查通过。测试使用有完整 id/messageId/placement/content/preview/text 的 Host 队列行，核对其原对象身份和更新通知。
+- 此步骤为真实 InputZone/公共输入提供者的数据来源，尚未注册 useInput/inputActions 或输入区域扩展入口；未绑定会话的动作语义和队列恢复仍需处理，不能据此宣称完整输入服务已完成。已清理 SDK 注释中过时的单占位引用假设。
+- `/tmp/amiba-combined-input-desktop-build.log` 完整 Desktop 构建退出 0；`/tmp/amiba-combined-input-desktop-smoke.log` 的 `--compat --input-state --command-images --child-continuation --child-navigation --child-reload` 退出 0。真实桌面合成状态读取到原草稿、扩展添加同次调用内的 imageIds 及全部四种输入阶段；queue 与实际 SessionFace 当前队列保持同一引用，重复读取复用快照。既有图片、提交、子会话与完整兼容回归同轮通过。此桌面用例验证真实队列来源，非空队列更新和重新绑定由前述状态测试覆盖，尚不代表完整队列编辑/恢复链路已验证。

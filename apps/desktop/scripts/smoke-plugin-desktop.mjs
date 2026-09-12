@@ -372,9 +372,12 @@ try {
     if (process.argv.includes("--input-state")) {
       await evaluate("window.__inputSource=window.__probeCtx.composerInputs.inputDraftSource(window.__compatSessionId);window.__inputObserved=[];window.__inputOff=window.__inputSource.subscribe(()=>{const s=window.__inputSource.getSnapshot();window.__inputObserved.push(s?{draft:s.draft,phase:s.phase}:null)});window.__initialInput=window.__inputSource.getSnapshot();void 0");
       assert.equal(await evaluate("window.__initialInput.phase"), "plain");
+      await evaluate("window.__wholeInputSource=window.__probeCtx.composerInputs.inputStateSource(window.__compatSessionId);window.__wholeInputObserved=[];window.__wholeInputOff=window.__wholeInputSource.subscribe(()=>{const s=window.__wholeInputSource.getSnapshot();window.__wholeInputObserved.push(s?{draft:s.draft,phase:s.phase,imageIds:s.imageIds,queue:s.queue}:null)});void 0");
+      assert.ok(await evaluate("(()=>{const state=window.__wholeInputSource.getSnapshot();return state!==undefined&&state.draft===window.__initialInput.draft&&state.imageIds.length===0&&state.queue===window.__probeCtx.sessions.binding(window.__compatSessionId).session.getSnapshot().queue&&state===window.__wholeInputSource.getSnapshot()})()"));
       assert.equal(await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'COMPAT_INPUT_读取😀',window.__initialInput.draftRev)"), true);
       await wait(() => evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).some(n=>n.getClientRects().length>0&&n.textContent==='COMPAT_INPUT_读取😀')"));
       assert.equal(await evaluate("window.__inputSource.getSnapshot().draft"), "COMPAT_INPUT_读取😀");
+      assert.equal(await evaluate("window.__wholeInputSource.getSnapshot().draft"), "COMPAT_INPUT_读取😀");
       assert.equal(await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'STALE_INPUT',window.__initialInput.draftRev)"), false);
       assert.equal(await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'')"), true);
       await wait(() => evaluate("window.__inputSource.getSnapshot().draft===''") );
@@ -432,7 +435,7 @@ try {
       await evaluate(`window.__extensionImage=window.__draftImageRegistry.createDraftImages([new File([Uint8Array.from(atob(${JSON.stringify(imageData)}),c=>c.charCodeAt(0))],'extension-image.png',{type:'image/png'})])[0];void 0`);
       assert.equal(await evaluate("window.__probeCtx.composerInputs.addInputImages(window.__compatSessionId,[window.__extensionImage.id,'missing-draft-id'])"), false);
       assert.equal(await evaluate("window.__draftImageRegistry.draftImages([window.__extensionImage.id]).length"), 1);
-      assert.deepEqual(await evaluate("(()=>{const bridge=window.__probeCtx.composerInputs;bridge.setInputDraft(window.__compatSessionId,'/compat-image extension');return [bridge.addInputImages(window.__compatSessionId,[window.__extensionImage.id]),bridge.submitInput(window.__compatSessionId),bridge.inputImagesFor(window.__compatSessionId)[0]?.id===window.__extensionImage.id]})()"), [true,false,true]);
+      assert.deepEqual(await evaluate("(()=>{const bridge=window.__probeCtx.composerInputs;bridge.setInputDraft(window.__compatSessionId,'/compat-image extension');return [bridge.addInputImages(window.__compatSessionId,[window.__extensionImage.id]),bridge.submitInput(window.__compatSessionId),bridge.inputImagesFor(window.__compatSessionId)[0]?.id===window.__extensionImage.id,bridge.inputStateSource(window.__compatSessionId).getSnapshot()?.imageIds[0]===window.__extensionImage.id]})()"), [true,false,true,true]);
       await wait(() => evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).some(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')&&!n.disabled)"));
       assert.equal(await evaluate("window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId)[0].id===window.__extensionImage.id"), true);
       assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"), true);
@@ -461,6 +464,11 @@ try {
       console.log("Official image command received original staged bytes through native composer and consumed its draft attachments");
       if(process.argv.includes("--input-state")) {
         assert.deepEqual(await evaluate("Array.from(new Set(window.__inputObserved.filter(Boolean).map(s=>s.phase))).sort()"), ["adjudicating","claimed","plain","submitting"]);
+        assert.deepEqual(await evaluate("Array.from(new Set(window.__wholeInputObserved.filter(Boolean).map(s=>s.phase))).sort()"), ["adjudicating","claimed","plain","submitting"]);
+        assert.ok(await evaluate("window.__wholeInputObserved.some(s=>s?.imageIds.length===1)"));
+        assert.ok(await evaluate("window.__wholeInputSource.getSnapshot().queue===window.__probeCtx.sessions.binding(window.__compatSessionId).session.getSnapshot().queue"));
+        await evaluate("window.__wholeInputOff();void 0");
+        console.log("Combined input state reported native draft, synchronous image IDs and all four phases with the actual Host inbox projection");
         await evaluate("window.__inputOff();void 0");
         console.log("Real command input published all four official phases through the native input subscription");
       }
