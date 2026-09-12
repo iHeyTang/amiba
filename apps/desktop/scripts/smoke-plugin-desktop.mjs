@@ -380,6 +380,22 @@ try {
       await wait(() => evaluate("window.__inputSource.getSnapshot().draft===''") );
       assert.ok(await evaluate("window.__inputObserved.some(s=>s?.draft==='COMPAT_INPUT_读取😀')"));
       console.log("Real editor input snapshot, subscription, public write and stale revision rejection verified");
+      // Exercise the public submit binding in the real editor, including a
+      // synchronous write before React has committed updated Composer props.
+      await evaluate(`window.__inputSubmissions=[];window.__submitClaim={token:'/compat-submit ',submit:async(args)=>{window.__inputSubmissions.push(args);await new Promise(resolve=>{window.__finishInputSubmit=resolve});return {kind:'success',text:'COMPAT_INPUT_SUBMIT_OK'}}};window.__submitSourceOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-submit-source',trigger:'/',order:-100,candidates:async()=>[],onPick:()=>({claim:window.__submitClaim}),matchEnter:async(_session,line)=>line.startsWith('/compat-submit ')?{claim:window.__submitClaim}:undefined});void 0`);
+      assert.deepEqual(await evaluate("(()=>{const bridge=window.__probeCtx.composerInputs;return [bridge.setInputDraft(window.__compatSessionId,'/compat-submit initial'),bridge.submitInput(window.__compatSessionId),bridge.submitInput(window.__compatSessionId)]})()"), [true,true,false]);
+      await wait(() => evaluate("window.__inputSource.getSnapshot().phase==='claimed'"));
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      assert.deepEqual(await evaluate("(()=>{const bridge=window.__probeCtx.composerInputs;return [bridge.setInputDraft(window.__compatSessionId,'/compat-submit 最新😀'),bridge.submitInput(window.__compatSessionId),bridge.submitInput(window.__compatSessionId)]})()"), [true,true,false]);
+      await wait(() => evaluate("window.__inputSubmissions.length===1&&typeof window.__finishInputSubmit==='function'"));
+      assert.deepEqual(await evaluate("window.__inputSubmissions"), ["最新😀"]);
+      assert.equal(await evaluate("window.__inputSource.getSnapshot().phase"), "submitting");
+      await evaluate("window.__finishInputSubmit();void 0");
+      await wait(() => evaluate("window.__inputSource.getSnapshot().phase==='plain'&&window.__inputSource.getSnapshot().draft===''") );
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"), false);
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-unbound-session')"), false);
+      await evaluate("window.__submitSourceOff();void 0");
+      console.log("Public input submission used the latest real editor draft, rejected duplicates and empty/unbound submissions, and settled through the native command path");
     }
     if (process.argv.includes("--command-images")) {
       const imagePath = path.join(profile, "command-image.png");

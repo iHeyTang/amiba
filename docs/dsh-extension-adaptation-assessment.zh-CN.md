@@ -22,7 +22,7 @@
 | 12 | `conversation.hero.brand.mark` | 新版契约，待验证 | 属于新版品牌替换入口；只能在用户主动选择替换时采用，默认品牌不变。 |
 | 13 | `conversation.hero.workspace` | 只能按组件分别适配 | 这是已有界面的替换入口。可复用服务或增加可选展示，但默认能力和样式必须保留。 |
 | 14 | `conversation.hero.workspace.directoryFlow` | 已接入，首页插件实测通过 | 打开、选择、取消、重开及旧回调隔离已实测；保留首页路径写入。默认原生组件至系统对话框接口的链路已验证（系统返回值用测试替身）；浏览器选择器读取、创建、选择及局部样式已在桌面 Web 渲染器实测；独立 Web 部署另核对。 |
-| 15 | `conversation.input.attachments` | 新版契约，待验证 | 需要统一草稿附件身份、预览、移除及提交语义，不能直接混用 Host staging ID。 |
+| 15 | `conversation.input.attachments` | rc.2 已有契约，可以适配，尚未完成 | 实际 npm rc.2 已注册此插槽。官方描述包含浏览器 File、草稿 ID 和 previewUrl；需桥接现有附件上传、移除与成功消费，不能混用 Host staging ID。 |
 | 16 | `conversation.input.dock` | 可以设计适配，尚未验证 | 需要真实引用占位偏移、草稿图片 ID、版本与提交阶段；不替换现有 Lexical 输入器。 |
 | 17 | `conversation.input.left` | 可以设计适配，尚未验证 | 需要真实引用占位偏移、草稿图片 ID、版本与提交阶段；不替换现有 Lexical 输入器。 |
 | 18 | `conversation.input.model` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |

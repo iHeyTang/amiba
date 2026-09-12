@@ -974,3 +974,16 @@ pipelines retain mounted component state.
 - 返回 true 仅表示进入原输入器提交判定，不表示 Host 已接受或模型已完成。只读、附件忙碌、现有发送条件不满足、提交已在进行及错误/过期会话回调均返回 false。最新绑定卸载后不可再提交，旧绑定清理不覆盖新绑定。
 - 60 项编辑器/输入管线和 18 项桥接测试、UI/Shell 类型检查通过。新增用例在同一 act 中写入并提交，确认只发送一次最新内容；原异步取消与命令生命周期回归通过。此步未改样式或布局，未重复完整桌面构建。
 - 这是原编辑器提交端，仍需接到官方 inputActions 的唯一提供者；附件 ID、图片操作及其他全量兼容项仍未完成。
+
+### 草稿附件契约复核（2026-09-13）
+
+- 直接复核实际 npm rc.2 的 `dsh-client-ui-conversation/lib/client.js` 及 `contract/slots.d.ts`：`conversation.input.attachments` 已由 composer.bar 注册，并非只有新版才存在。已修正评估表第 15 行，后续以实际包为准。
+- 官方 ComposerAttachment 持有 browser File、DraftAttachmentId 和 previewUrl；Conversation.createDraftImages 先验证整个批次 MIME，再注册图片；draftImages 保留请求顺序并跳过已释放 ID，serializeDraftImages 对缺失 ID 拒绝。releaseDraftImage 删除注册项并释放 object URL。
+- 适配必须保留浏览器草稿与 Host 暂存附件的独立身份，并接通成功消费、移除和会话释放；不能把 Host staging ID 填入官方 imageIds，也不能以缩略图代替原 File。此处为已确认的接入约束，尚未完成附件桥接。
+
+### 扩展提交入口的真实桌面验证（2026-09-13）
+
+- `--input-state` 新增通过实际 Shell composerInputs 调用的桌面用例：同一次浏览器事件先写入再提交，首次进入官方命令判定；再次同步写入中文/Emoji 参数并提交，官方 claim 收到最新文本。两阶段均断言紧接的重复提交被拒绝。
+- 命令夹具保持待完成 Promise，核对真实 submitting 阶段后才释放；成功后原编辑器清空并回到 plain。空草稿以及未绑定会话的提交均拒绝。夹具只注册测试命令，不调用外部模型。
+- `/tmp/amiba-input-submit-desktop-build.log` 完整 Desktop 构建退出 0；`/tmp/amiba-input-submit-desktop-smoke.log` 的 `--compat --input-state --command-images --child-continuation --child-navigation --child-reload` 退出 0。新增入口用例、原图命令、全部四种输入阶段、真实子会话执行与取消、只读/重载、现有设置/目录/Markdown/插件生命周期回归同轮通过。
+- 覆盖前一步产品提交入口改动；本步没有改产品样式、布局或发送行为。官方唯一 input/inputActions 提供者、草稿附件映射和剩余全量兼容项仍待完成。
