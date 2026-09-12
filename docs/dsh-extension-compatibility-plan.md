@@ -31,7 +31,7 @@ are required in addition to new-plugin tests.
 | Plugin settings tabs | implementation + focused tests + real Desktop file: integration passed; visual review pending | Real localized tabs/panels; existing inventory and filters preserved; unload falls back |
 | Plugin config cards/forms | keyed cards plus three built-in forms implemented; controller/UI tests, real Host save/reset and visual review passed | Host config read/write, actual schema, existing settings preserved |
 | Sidebar additive actions | implementation + focused tests + real Desktop wide/narrow/unload passed | Correct owner, no empty wrapper, collapsed/expanded behavior |
-| Workspace/directory selection | Home/project surfaces wired; 17 focused tests and Desktop Home/project smoke passed; default native/browser interaction open | Open/cancel/picked/error lifecycle, one workspace mutation authority |
+| Workspace/directory selection | Home/project surfaces wired; 17 focused tests and Desktop Home/project smoke passed; native IPC bridge verified with OS boundary stub; browser picker open | Open/cancel/picked/error lifecycle, one workspace mutation authority |
 | Session export | native plugin enabled + dialog adapted/tested; actual Desktop ZIP saved; ordinary Web download verification pending | Native command download on Web/Desktop without duplicate existing action |
 | Official session open from no-selection | implemented; 17 focused tests + real Desktop plugin open passed | Explicit opens follow the existing Amiba path; startup restore stays suppressed. Clear and direct-child navigation need separate audit |
 | Existing header/model/plan/command/reference extensions | open | Regression tests plus dependency/owner audit |
@@ -256,3 +256,18 @@ The final full smoke passed (`/tmp/amiba-directory-project-verified.log`), inclu
 all previous Home/settings/view/export/HMR checks. The project-pane screenshot was
 visually inspected. Default OS picker interaction and browser-picker rendering
 remain separate open checks; fixture-occupant success does not prove those.
+
+
+### Default native directory bridge verified
+
+The Desktop smoke now removes the test Home occupant and clicks the existing
+chooser again, exercising the installed official native component, its optional
+Amiba callback, preload, and `workspace:choose-directory` main IPC. A temporary
+native fixture replaces only `dialog.showOpenDialog` for directory requests and
+records its options; it restores the original function on disposal/HMR.
+
+The recorded defaultPath equals the prior Home selection, the options include
+openDirectory, the returned path reaches the Home control, and session IDs remain
+unchanged. Full regression smoke passed (`/tmp/amiba-default-native-picker-smoke.log`).
+This verifies the production bridge, not a human interaction with the OS window.
+The browser directory picker still requires activation, rendering and style checks.
