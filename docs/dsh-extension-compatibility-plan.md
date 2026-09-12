@@ -1078,3 +1078,16 @@ pipelines retain mounted component state.
 
 - 真实桌面已验证 Host 日志中的 command/run → command/done：插件收到原始参数、执行中状态、完成结果及真实 CommandNode 对象。整页 renderer 重载后覆盖原结果只显示一份，卸载恢复原生结果；输入、附件、子会话续聊/停止、导航及其他兼容回归通过。
 - 日志：`/tmp/amiba-command-rows-ui-tests3.log`（52）、`/tmp/amiba-command-rows-tests.log`（1）、`/tmp/amiba-command-rows-types4.log`、`/tmp/amiba-command-rows-ui-types2.log`、`/tmp/amiba-command-rows-build2.log`、`/tmp/amiba-command-rows-smoke2.log`。`amiba-command-row.png` 截图已查看。
+
+
+### 动态 Cordis 业务区域（2026-09-13）
+
+- 真实桌面探针证实，官方动态运行器已可加载 Client 包，但 Amiba 的原生 cordis_run 语义卡片覆盖了官方 Run 卡片，缺少其子区域渲染位置。这是展示适配缺口，不是动态代码不能运行。
+- 保留原生工具卡片及折叠行为，在其下方附加 `tool.view.cordis`。owner 使用真实结果 metadata 的 Plugin/Package/Run ID；entryKey 遵守官方 `${pluginId}.${packageId}` 规则。真实动态包仍通过官方 Guard 的 key:self 注册，不提供绕过 Guard 的入口。
+- 使用官方 session 的工具结果树决定同一包的最新成功卡片，并与本页 loaded 列表精确匹配 activation。停止后撤销业务区；失败、过期、缺失元数据及无会话来源时不制造 owner。递归覆盖嵌套 tool result。
+- 原工具视图 45 项加业务区 3 项测试通过，涵盖最新归属、失败/缺失数据、运行实例不符、停止更新及订阅清理。真实 Host 定义、Client 运行器加载、交互、元数据归属、停止及样式清理已通过桌面验证；未据此证明双端 handler RPC、版本升级或崩溃回退全部完成。
+
+- 构建与类型检查通过。探针通过官方 define 创建包、startUserRun 加载、Guard key:self 注册，使用真实生成的 run identity 构造测试工具结果；不是生产模型自主触发 cordis_run 的测试。已查看 `amiba-cordis-business.png`，原生 Run module 卡片、折叠过程和输入器保留。
+- 验证日志：`/tmp/amiba-cordis-business-types2.log`、`/tmp/amiba-cordis-business-tests.log`（48 项）、`/tmp/amiba-cordis-business-build.log`、`/tmp/amiba-cordis-business-smoke6.log`。早期探针失败分别暴露了测试脚本错误导入 React、未展开原折叠组、原卡片缺少子区域以及测试 ctx 未声明 remote 依赖；正式适配仅补充缺少的业务区域。
+
+- 组合回归 `/tmp/amiba-cordis-business-smoke7.log` 通过，包含动态业务区、命令历史重载、标准输入动作、命令图片、子会话续聊/停止/导航/重载及此前兼容检查。

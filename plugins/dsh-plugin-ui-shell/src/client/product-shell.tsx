@@ -1,3 +1,4 @@
+import { CordisBusiness, type CordisPackages } from "./cordis-business.js";
 import { useCommandRows } from "./command-rows.js";
 import { InputRegion } from "./input-region.js";
 import { TurnTail, TurnText, useTurnTailAnchors } from "./turn-tail.js";
@@ -161,6 +162,7 @@ export type AmibaShellSlot =
   | "conversation.input.overlay"
   | "conversation.input.dock"
   | "conversation.composer.dock"
+  | "tool.view.cordis"
   | "conversation.chat.commandview"
   | "conversation.input.attachments"
   | "conversation.input.left"
@@ -355,6 +357,7 @@ function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string)
 
 interface ProductShellProps {
   renderSlotChain: PropsRenderSlots<AmibaShellSlot>["renderSlotChain"];
+  cordisPackages: CordisPackages;
   commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
   conversationSource: (sessionId: string) => import("@deepseek-ai/dsh-client-runtime/client").SessionFace | undefined;
     fileMentions: import("@deepseek-ai/dsh-client-ui-conversation/client").ChatFileMentions["forClosing"];
@@ -410,6 +413,7 @@ export function AmibaProductShell(props: ProductShellProps): ReactElement {
 
 function ProductShellInner({
   renderSlotChain,
+  cordisPackages,
   commandRowKeys,
   conversationSource,
   fileMentions,
@@ -633,13 +637,16 @@ function ProductShellInner({
         entryKey: request.owner.toolName,
         fallback: renderOfficialToolFallback(request.owner, request.fallback),
       });
-      return renderSlot(
+      const row = renderSlot(
         "amiba.tool.execution",
         { ...request.owner, fallback },
         { fallback },
       );
+      return request.owner.toolName === "cordis_run" ? <>{row}<CordisBusiness owner={request.owner}
+        source={conversationSource(sessions.activeId)} packages={cordisPackages}
+        render={owner => renderSlot("tool.view.cordis", owner, { entryKey: `${owner.pluginId}.${owner.packageId}` })} /></> : row;
     },
-    [renderSlot],
+    [renderSlot, conversationSource, sessions.activeId, cordisPackages],
   );
 
   // Amiba's KEYED per-question seat. Dispatched once per pending request with

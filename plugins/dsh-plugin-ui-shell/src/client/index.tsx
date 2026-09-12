@@ -267,6 +267,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     workbenchSource: ContributionsSource<WorkbenchViewExtension>;
     directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
     conversationViews: ContributionsSource<ConversationViewEntry>;
+    cordisPackages: import("./cordis-business.js").CordisPackages;
     commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
     conversationSource: (sessionId: string) => import("@deepseek-ai/dsh-client-runtime/client").SessionFace | undefined;
     fileMentions: import("@deepseek-ai/dsh-client-ui-conversation/client").ChatFileMentions["forClosing"];
@@ -301,6 +302,7 @@ function AmibaRoot({
   workbenchSource,
   directoryFlows,
   conversationViews,
+  cordisPackages,
   commandRowKeys,
   conversationSource,
   fileMentions,
@@ -325,6 +327,7 @@ function AmibaRoot({
       openSettingsSection={openSettingsSection}
       renderSlot={renderSlot}
       renderSlotChain={renderSlotChain}
+      cordisPackages={cordisPackages}
       commandRowKeys={commandRowKeys}
       conversationSource={conversationSource}
       fileMentions={fileMentions}
@@ -650,6 +653,20 @@ export async function apply(ctx: ClientContext): Promise<void> {
           directoryFlows,
           conversationViews,
           fileMentions: (owner: import("@deepseek-ai/dsh-client-ui-conversation/client").TurnTailOwnerProps) => ctx.get("chatFileMentions")?.forClosing(owner),
+          cordisPackages: (() => {
+            const empty: readonly import("./cordis-business.js").CordisBusinessOwner[] = [];
+            const runner = () => ctx.get("dynamicCordisRunner" as never) as unknown as import("./cordis-business.js").CordisPackages | undefined;
+            return {
+              getSnapshot: () => runner()?.getSnapshot() ?? empty,
+              subscribe: (listener: () => void) => {
+                const fiber = ctx.inject(["dynamicCordisRunner" as never], scope => {
+                  scope.effect(() => runner()?.subscribe(listener) ?? (() => {}), "Cordis loaded packages");
+                  listener();
+                });
+                return () => { fiber.dispose(); };
+              },
+            };
+          })(),
           commandRowKeys: (() => {
             let version = -1;
             let keys: readonly string[] = [];
@@ -782,6 +799,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "conversation.input.overlay": { kind: "list", scope: "session" },
           "conversation.input.dock": { kind: "list", scope: "session" },
           "conversation.composer.dock": { kind: "list", scope: "session" },
+          "tool.view.cordis": { kind: "keyed", scope: "session" },
           "conversation.chat.commandview": { kind: "keyed", scope: "session" },
           "conversation.input.attachments": { kind: "single", scope: "session-maybe" },
           "conversation.input.left": { kind: "list", scope: "session" },
