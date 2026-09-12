@@ -199,3 +199,16 @@ Integration evidence and remaining requirements:
   existing development-project authority. Keep those caller actions, use real
   Host workspace adoption for the contributed flow, and do not fabricate owner
   callbacks or silently replace a project/session mutation path.
+
+### Native directory picker request isolation
+
+Pinned `dsh-client-ui-directory-picker-native@0.1.1-rc.2` now captures callbacks
+per open cycle and discards results after close/reopen or unmount. Re-renders and
+React StrictMode do not launch duplicate pickers; synchronous picker exceptions
+reach the owner's error callback instead of escaping the React effect.
+
+The test executes the real installed component extracted from the package bundle.
+The same six cases against the unpatched managed runtime reproduced five failures;
+all six pass with the patch, alongside the five directory-flow controller tests.
+Surface integration, starting-directory preservation and real Desktop interaction
+remain open; this patch alone does not establish directory-flow compatibility.
