@@ -21,6 +21,7 @@ type WorkspaceChange =
   | { kind: "unbound"; sessionId: string };
 
 interface AmibaBridgeApi {
+  appUpdates: NonNullable<import("@amiba/app-runtime/platform").PlatformAdapter["appUpdates"]>;
   desktopPet: import("../shared/desktop-pet").DesktopPetBridge;
   embeddedPage: {
     request(
