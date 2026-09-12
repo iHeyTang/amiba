@@ -211,3 +211,36 @@ it("feeds the official produced-files selector real turn data across rebuilds", 
   expect(select({turn:instance.snapshot("chat").timeline.turns.get(2),seq})).toBeNull();
   expect(select(owner())).toEqual(["made.txt"]);
 });
+
+for (const mode of ["history", "live"]) {
+  for (const closeStep of [true, false]) {
+    it(`${mode} derives interrupted prose from the actual ${closeStep ? "step" : "turn"} boundary after retry and block correction`, () => {
+      const instance = engine();
+      const input = [
+        event("turn/start", 1), event("step/start", 2),
+        event("assistant/chunk", 3, { chunk: { type: "text-delta", index: 0, text: "discarded.txt" } }),
+        event("llm/retry", 4),
+        event("assistant/chunk", 5, { chunk: { type: "text-delta", index: 0, text: "draft.txt" } }),
+        event("assistant/chunk", 6, { chunk: { type: "block-end", index: 0, block: { type: "text", text: "corrected.txt" } } }),
+        event("assistant/chunk", 7, { chunk: { type: "reasoning-delta", index: 1, text: "private.txt" } }),
+        ...(closeStep ? [event("step/end", 8)] : []),
+        event("turn/end", 9, { reason: { kind: "blocked" } }),
+      ];
+      if (mode === "history") instance.replaceWindow(input, false);
+      else for (const row of input) { instance.append(row); instance.flush(); }
+      instance.flush();
+      const readFinal = () => instance.snapshot("chat").timeline.turns.get(1).data.get("turn-tail").closing.finalNode;
+      const final = readFinal();
+      expect(final.interrupted).toBe(true);
+      expect(final.messageId).toBeUndefined();
+      expect(final.step).toBe(1);
+      expect(final.seq).toBe((closeStep ? 8 : 9) - 0.9);
+      expect(final.blocks).toEqual([
+        { kind: "text", text: "corrected.txt" },
+        { kind: "reasoning", text: "private.txt" },
+      ]);
+      instance.rebuildRegistry(); instance.flush();
+      expect(readFinal()).toEqual(final);
+    });
+  }
+}

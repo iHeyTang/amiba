@@ -544,3 +544,18 @@ share a source sequence. Extracted reasoning receives no prose attribution.
   with the disclosure expanded and actual file contents open in the workbench.
 - Synthetic interrupted finals, historical/reopen Desktop coverage, custom
   Markdown transforms and standalone Web/remote behavior remain open.
+
+### Interrupted-final contract verified against the installed assembler
+
+Four additional integration cases replay real official definitions through the
+installed ConversationNodeAssembler, in both history and live modes, with either
+a step boundary or only a turn boundary. All 12 headless integration cases pass.
+
+The interrupted final has no message ID and uses the actual boundary sequence
+minus the official 0.9 offset. Retry discards earlier chunks; block-end can
+replace the accumulated text. Registry rebuild preserves this final node.
+Consequently the prose adapter must read the actual final node, compare complete
+step text against its final text blocks, and avoid inferring attribution solely
+from a step number or the visible delta text. Production code must not recreate
+the synthetic offset. This establishes the contract; interrupted prose mapping
+is still unimplemented and is not marked supported.
