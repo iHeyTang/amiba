@@ -80,6 +80,7 @@ export interface InputDraftSource {
 }
 
 export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
+  submitInput(sessionId: string): boolean;
   /** Live editor projection; absent until that session has an attached editor. */
   inputDraftFor(sessionId: string): ReturnType<NonNullable<TriggerEditorOps["readInputDraft"]>> | undefined;
   inputDraftSource(sessionId: string): InputDraftSource;
@@ -95,6 +96,7 @@ export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
 export function createInputTriggerBridge(
   deps: InputTriggerBridgeDeps,
 ): AmibaInputTriggerBridge {
+  const submitters = new Map<string, { submit: () => boolean }>();
   const editors = new Map<string, { ops: TriggerEditorOps }>();
   const draftListeners = new Map<string, Set<() => void>>();
   const draftSourcesBySession = new Map<string, InputDraftSource>();
@@ -125,6 +127,12 @@ export function createInputTriggerBridge(
   const listeners = new Set<() => void>();
   const notify = () => { for (const listener of listeners) listener(); };
   return {
+    bindSubmit(sessionId, submit) {
+      const binding = { submit };
+      submitters.set(sessionId, binding);
+      return () => { if (submitters.get(sessionId) === binding) submitters.delete(sessionId); };
+    },
+    submitInput: (sessionId) => submitters.get(sessionId)?.submit() ?? false,
     inputDraftSource,
     setInputDraft: (sessionId, text, expectedRevision) => editors.get(sessionId)?.ops.setInputDraft?.(text, expectedRevision) ?? false,
     inputDraftFor: (sessionId) => editors.get(sessionId)?.ops.readInputDraft?.(),

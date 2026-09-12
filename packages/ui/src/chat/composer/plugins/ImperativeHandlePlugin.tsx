@@ -10,6 +10,7 @@ export interface RichComposerHandle {
   consumeMentionTrigger(): void
   focus(): void
   select(): void
+  getValue(): string
   getTextarea(): HTMLTextAreaElement | null
 }
 
@@ -18,6 +19,7 @@ export function ImperativeHandlePlugin({ handleRef }: { handleRef: Ref<RichCompo
   useImperativeHandle(
     handleRef,
     (): RichComposerHandle => ({
+      getValue: () => editor.getEditorState().read(() => $getRoot().getTextContent()),
       focus: () => editor.focus(),
       openMention: () => {
         if (!editor.isEditable()) return

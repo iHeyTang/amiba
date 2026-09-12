@@ -143,6 +143,7 @@ export interface TriggerEditorOps {
  * runtime.
  */
 export interface ComposerTriggerRuntime {
+  bindSubmit?(sessionId: string, submit: () => boolean): () => void;
   /** Official source objects projected onto an editor without a DSH session. */
   draftSources?(): readonly import("@amiba/extension-sdk").InputTriggerSource[];
   /**

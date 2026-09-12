@@ -182,6 +182,8 @@ export interface ComposerProps {
    * override (e.g. `value.trim() || hasReadyAttachments`).
    */
   canSubmit?: boolean;
+  /** Re-evaluate admission for an imperative draft write before React commits. */
+  canSubmitDraft?: (draft: string) => boolean;
 
   /** Disable the whole composer (textarea + buttons). */
   disabled?: boolean;
@@ -424,6 +426,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       busy = false,
       onAbort,
       canSubmit,
+      canSubmitDraft,
       disabled = false,
       placeholder = "Send a message…",
       // `rows` stays in the public ComposerProps for the 5 consumers, but
@@ -509,25 +512,30 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     //   3. official Enter adjudication for a `/`-leading draft,
     //   4. ordinary send with `@[...]` expansion.
     // Abort / stop / queue branches do NOT route through here.
-    const resolvingMentionRef = useRef<AbortController | null>(null);
+    const resolvingMentionRef = useRef<(AbortController & { draft: string; sessionId?: string; attachments: UseComposerAttachmentsResult["attachments"] | undefined }) | null>(null);
     const commandAttemptRef = useRef<object | null>(null);
     const currentDraftRef = useRef({ value, sessionId: permissionSessionId });
     currentDraftRef.current = { value, sessionId: permissionSessionId };
-    useEffect(() => () => {
+    useEffect(() => {
       const attempt = resolvingMentionRef.current;
-      if (!attempt) return;
+      if (!attempt || (attempt.draft === value && attempt.sessionId === permissionSessionId &&
+        attempt.attachments === attachments?.attachments && !disabled)) return;
       attempt.abort();
       resolvingMentionRef.current = null;
       trigger.setAttemptInFlight(false);
     }, [value, permissionSessionId, disabled, attachments?.attachments]);
+    useEffect(() => () => {
+      resolvingMentionRef.current?.abort();
+      resolvingMentionRef.current = null;
+    }, []);
     useEffect(() => {
       commandAttemptRef.current = null;
       trigger.setAttemptInFlight(false);
       return () => { commandAttemptRef.current = null; };
     }, [permissionSessionId]);
-    const handleSend = useCallback(async () => {
+    const handleSend = useCallback(async (draft = value) => {
       if (disabled || commandAttemptRef.current || resolvingMentionRef.current) return;
-      const handled = routeSubmit(value, {
+      const handled = routeSubmit(draft, {
         send: () => {},
         ctx: slashUiActions ?? {},
         claim: {
@@ -554,7 +562,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   trigger.setAttemptInFlight(false);
                   if (currentDraftRef.current.sessionId !== sessionId) return;
                   if (outcome.kind === "success") {
-                    if (currentDraftRef.current.value === value) {
+                    if (innerRef.current?.getValue() === draft) {
                       trigger.claims.release();
                       onChange("");
                     }
@@ -578,7 +586,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         },
       });
       if (handled) return; // command claim or UI action took it, don't send
-      const attempt = new AbortController();
+      const attempt = Object.assign(new AbortController(), { draft, sessionId: permissionSessionId, attachments: attachments?.attachments });
       resolvingMentionRef.current = attempt;
       trigger.setAttemptInFlight(true);
       try {
@@ -587,7 +595,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         // `{ claim }` arm and `undefined` act, exactly as upstream's
         // `onAdjudicated` does — `'handled'` means the source dealt with it.
         const controller = trigger.controller;
-        const trimmed = value.trim();
+        const trimmed = draft.trim();
         if (controller !== undefined && trimmed.startsWith("/")) {
           let outcome;
           try {
@@ -612,7 +620,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         let finalText: string;
         try {
           finalText = await expandMentionsAsync(
-            value,
+            draft,
             providerRegistry.all,
             trigger.resolver,
             attempt.signal,
@@ -649,6 +657,27 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // Default canSubmit if not provided.
     const effectiveCanSubmit =
       canSubmit !== undefined ? canSubmit : !!value.trim();
+
+    const submitBindingRef = useRef<{ sessionId: string | undefined; submit: () => boolean }>({ sessionId: permissionSessionId, submit: () => false });
+    submitBindingRef.current = {
+      sessionId: permissionSessionId,
+      submit: () => {
+        const draft = innerRef.current?.getValue();
+        if (draft === undefined || disabled || commandAttemptRef.current || resolvingMentionRef.current ||
+          attachments?.attachmentBusy || attachments?.attachmentUploading) return false;
+        const admitted = canSubmitDraft?.(draft) ?? (canSubmit === undefined ? !!draft.trim() : effectiveCanSubmit);
+        if (!admitted) return false;
+        void handleSend(draft);
+        return true;
+      },
+    };
+    useEffect(() => {
+      if (!permissionSessionId || !triggerRuntime?.bindSubmit) return;
+      return triggerRuntime.bindSubmit(permissionSessionId, () => {
+        const binding = submitBindingRef.current;
+        return binding.sessionId === permissionSessionId && binding.submit();
+      });
+    }, [permissionSessionId, triggerRuntime]);
 
     // Resolve placeholder. String form is verbatim; typewriter form runs
     // the cycling effect (pausing automatically as soon as the user types

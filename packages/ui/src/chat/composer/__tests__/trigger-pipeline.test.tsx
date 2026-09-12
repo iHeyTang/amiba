@@ -206,6 +206,7 @@ function ControlledComposer(props: {
   mentionProviders?: React.ComponentProps<typeof Composer>["mentionProviders"];
   valueRef?: { current: string };
   filePicker?: () => Promise<void>;
+  submitOptions?: Pick<React.ComponentProps<typeof Composer>, "busy" | "disabled" | "canSubmit" | "canSubmitDraft" | "onAbort">;
   editDraft?: { current: (text: string) => void };
   initialAttachments?: import("@amiba/app-runtime/core").Attachment[];
   attachmentsRef?: { current: import("../../useComposerAttachments").UseComposerAttachmentsResult | undefined };
@@ -218,6 +219,7 @@ function ControlledComposer(props: {
   if (props.valueRef) props.valueRef.current = value;
   return (
     <Composer
+      {...props.submitOptions}
       attachments={props.filePicker ? { ...attachments, openFilePicker: props.filePicker } : props.initialAttachments ? attachments : undefined}
       inputOverlay={
         props.seat && props.controller ? props.seat(props.controller) : undefined
@@ -656,4 +658,50 @@ it("isolates a new session's submitting phase from an older command settlement",
   await act(async()=>completions[1]({kind:"success"}));
   expect(controller.ops!.readInputDraft!().phase).toBe("plain");
   expect(valueRef.current).toBe("");
+});
+
+
+describe("bound native submission", () => {
+  it("submits a synchronous public draft write using the latest editor value", async () => {
+    const controller=controllerDouble(fixtureSource());
+    let submit!:()=>boolean;
+    const runtime:ComposerTriggerRuntime={...runtimeFor(controller),bindSubmit:(_id,callback)=>{submit=callback;return ()=>{};}};
+    const onSubmit=vi.fn();
+    render(<ControlledComposer initial="" sessionId="s1" controller={controller} runtime={runtime} onSubmit={onSubmit}
+      submitOptions={{canSubmit:false,canSubmitDraft:draft=>!!draft.trim()}}/>);
+    await waitFor(()=>expect(controller.ops).not.toBeNull());
+    act(()=>{
+      expect(controller.ops!.setInputDraft!("fresh synchronous draft")).toBe(true);
+      expect(submit()).toBe(true);
+      expect(submit()).toBe(false);
+    });
+    await waitFor(()=>expect(onSubmit).toHaveBeenCalledWith("fresh synchronous draft"));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([{disabled:true}, {canSubmit:false}, {busy:true,canSubmit:false}])("honors admission without invoking Stop %j", async options => {
+    const controller=controllerDouble(fixtureSource());
+    let submit!:()=>boolean;
+    const onAbort=vi.fn();
+    const onSubmit=vi.fn();
+    const runtime:ComposerTriggerRuntime={...runtimeFor(controller),bindSubmit:(_id,callback)=>{submit=callback;return ()=>{};}};
+    render(<ControlledComposer initial="draft" sessionId="s1" controller={controller} runtime={runtime} onSubmit={onSubmit} submitOptions={{...options,onAbort}}/>);
+    await waitFor(()=>expect(submit).toBeDefined());
+    expect(submit()).toBe(false);
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onAbort).not.toHaveBeenCalled();
+  });
+
+  it("rejects an old session callback after switching sessions", async () => {
+    const controller=controllerDouble(fixtureSource());
+    const callbacks=new Map<string,()=>boolean>();
+    const runtime:ComposerTriggerRuntime={...runtimeFor(controller),bindSubmit:(id,callback)=>{callbacks.set(id,callback);return ()=>{};}};
+    const onSubmit=vi.fn();
+    const props={initial:"draft",controller,runtime,onSubmit};
+    const {rerender}=render(<ControlledComposer {...props} sessionId="s1"/>);
+    await waitFor(()=>expect(callbacks.has("s1")).toBe(true));
+    rerender(<ControlledComposer {...props} sessionId="s2"/>);
+    expect(callbacks.get("s1")!()).toBe(false);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
 });

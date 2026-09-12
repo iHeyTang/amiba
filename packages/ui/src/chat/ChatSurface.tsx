@@ -1986,6 +1986,7 @@ export default function ChatSurface({
   // state. Most hosts still choose one branch or the other; Quick Ask opts
   // into the persistent dock path so React keeps this exact subtree mounted
   // while the first session is created or New chat returns to empty.
+  const canSubmitDraft = (text: string) => !readOnly && text.trim().length > 0 && !attachmentUploading && !attachmentBusy;
   const composerNode = (
     <Composer
       ref={composerRef}
@@ -2003,8 +2004,9 @@ export default function ChatSurface({
         // send has no user words to anchor the turn, and rather than the app
         // inventing a stand-in downstream, sending is simply not enabled
         // until something is typed.
-        !readOnly && input.trim().length > 0 && !attachmentUploading && !attachmentBusy
+        canSubmitDraft(input)
       }
+      canSubmitDraft={canSubmitDraft}
       contextRail={
         pendingSourceApp || pendingQueue.length > 0 ? (
           <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">

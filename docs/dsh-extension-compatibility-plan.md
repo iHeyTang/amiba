@@ -966,3 +966,11 @@ pipelines retain mounted component state.
 - 63 项编辑器/输入管线/图片序列化与 17 项桥接测试通过，UI/Shell 类型检查通过。新增真实桌面 `--input-state` 验证读取、订阅、写入与过期版本拒绝，并与图片命令一起核对四种公开阶段。
 - 本步骤仍未替代官方唯一 input/inputActions 提供者；图片 ID、队列、完整官方提交动作桥接等仍在原目标范围内。
 - `/tmp/amiba-input-phase-build.log` 完整 Desktop 构建退出 0；`/tmp/amiba-input-phase-smoke.log` 的 `--compat --input-state --command-images --child-continuation --child-navigation --child-reload` 退出 0。真实桌面读取/订阅/写入及过期版本拒绝通过，原图片命令经订阅实际发布四个阶段；子会话发送、停止、只读、重载和既有完整兼容回归同轮通过。覆盖了前几步未重复桌面构建的输入投影、写入及异步生命周期组合。
+
+### 扩展提交入口连接原发送路径（2026-09-13）
+
+- 新增 `bindSubmit` / `submitInput(sessionId)`，将会话地址映射到当前 Composer 的真实提交回调。回调经过原命令路由、提交判定和引用展开，再调用原 onSubmit；不会另起一套发送器，也不会将空草稿提交转成 Stop。
+- 原发送条件抽成可对指定草稿求值的函数，ChatSurface 原按钮与扩展提交共同使用。扩展调用读取 Lexical 最新的持久化文本，覆盖“同一次事件先 setInputDraft 再 submit”而 React 属性尚未提交的情况；异步取消按本次捕获草稿校验，避免把这次正常属性同步误当用户修改。
+- 返回 true 仅表示进入原输入器提交判定，不表示 Host 已接受或模型已完成。只读、附件忙碌、现有发送条件不满足、提交已在进行及错误/过期会话回调均返回 false。最新绑定卸载后不可再提交，旧绑定清理不覆盖新绑定。
+- 60 项编辑器/输入管线和 18 项桥接测试、UI/Shell 类型检查通过。新增用例在同一 act 中写入并提交，确认只发送一次最新内容；原异步取消与命令生命周期回归通过。此步未改样式或布局，未重复完整桌面构建。
+- 这是原编辑器提交端，仍需接到官方 inputActions 的唯一提供者；附件 ID、图片操作及其他全量兼容项仍未完成。

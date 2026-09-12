@@ -332,3 +332,20 @@ it("routes public draft writes to the current session editor and reports absence
   dispose();
   expect(bridge.setInputDraft("s1","detached")).toBe(false);
 });
+
+
+it("routes submission only to the latest live binding for the addressed session", () => {
+  const bridge=bridgeOver(scopeDouble());
+  expect(bridge.submitInput("s1")).toBe(false);
+  const old=vi.fn(()=>true);
+  const current=vi.fn(()=>true);
+  const oldOff=bridge.bindSubmit!("s1",old);
+  const off=bridge.bindSubmit!("s1",current);
+  oldOff();
+  expect(bridge.submitInput("s2")).toBe(false);
+  expect(bridge.submitInput("s1")).toBe(true);
+  expect(current).toHaveBeenCalledOnce();
+  expect(old).not.toHaveBeenCalled();
+  off();
+  expect(bridge.submitInput("s1")).toBe(false);
+});
