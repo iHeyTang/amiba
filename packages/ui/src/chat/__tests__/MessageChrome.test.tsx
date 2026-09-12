@@ -1440,3 +1440,20 @@ it("renders reasoning-tool-reasoning in timeline order without a merged first th
  expect(tool.compareDocumentPosition(after)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
  expect(screen.queryByText("before toolafter tool")).toBeNull();
 });
+
+
+it("adds actions only for the completed canonical assistant and preserves empty-slot DOM", () => {
+  const messages: UiMessage[] = [{ uiId:"bubble-id", role:"assistant", content:"Answer", assistantMessageId:"canonical-id" }];
+  const {container, rerender}=render(<MessageTurns messages={messages}/>);
+  const baseline=container.innerHTML;
+  rerender(<MessageTurns messages={messages} assistantActions={()=>null}/>);
+  expect(container.innerHTML).toBe(baseline);
+  const action=vi.fn((id:string)=><button>Action for {id}</button>);
+  rerender(<MessageTurns messages={messages} assistantActions={action}/>);
+  expect(screen.getByRole("button",{name:"Action for canonical-id"})).toBeInTheDocument();
+  expect(action).toHaveBeenCalledWith("canonical-id");
+  rerender(<MessageTurns messages={[{...messages[0]!,streaming:true}]} assistantActions={action}/>);
+  expect(screen.queryByRole("button",{name:"Action for canonical-id"})).not.toBeInTheDocument();
+  rerender(<MessageTurns messages={[{...messages[0]!,assistantMessageId:undefined}]} assistantActions={action}/>);
+  expect(screen.queryByRole("button",{name:"Action for canonical-id"})).not.toBeInTheDocument();
+});
