@@ -22,8 +22,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [feat/amiba-distribution]
-    tags: ['v*']
+    branches: [main]
 
 permissions:
   contents: read
@@ -35,6 +34,7 @@ concurrency:
 
 jobs:
   plan:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ciPlan } from './ci-plan.mjs';
+import { ciPlan as createPlan } from './ci-plan.mjs';
+const ciPlan = options => createPlan({ ref: 'refs/heads/main', ...options });
 test('CI uses a native runner for each architecture and defaults to test builds', () => {
   const plan = ciPlan({ version: '0.1.0' });
   assert.equal(plan.matrix.include.length, 3);
@@ -8,13 +9,15 @@ test('CI uses a native runner for each architecture and defaults to test builds'
   assert.equal(plan.publish, false);
   assert.equal(plan.matrix.include.find(row => row.target === 'win32-x64').runner, 'windows-2022');
 });
-test('CI validates release tags and prevents publishing disabled test updates', () => {
+test('CI rejects non-main refs and prevents publishing disabled test updates', () => {
   assert.throws(() => ciPlan({ ref: 'refs/tags/v1.0.0', version: '0.1.0' }));
   assert.throws(() => ciPlan({ version: '0.1.0', inputs: { publish_draft: 'true' } }));
   const plan = ciPlan({ version: '0.1.0', inputs: { target: 'win32-x64', mode: 'release', publish_draft: 'true' } });
   assert.equal(plan.matrix.include.length, 1);
   assert.equal(plan.publish, true);
-  assert.equal(ciPlan({ version: '0.1.0', ref: 'refs/tags/v0.1.0' }).mode, 'release');
+  for (const ref of ['refs/heads/feat/amiba-distribution', 'refs/tags/v0.1.0', '']) {
+    assert.throws(() => ciPlan({ version: '0.1.0', ref }), /only runs on main/);
+  }
 });
 
 test('installer verification reuses only a Windows artifact and cannot publish it', () => {

@@ -1,6 +1,6 @@
 # Amiba 桌面分发
 
-当前发布代码位于 `feat/amiba-distribution` 独立工作区。发布仓库默认从 Git origin 读取（当前为 `iHeyTang/amiba`），CDN 和签名由发布者配置；没有内置第三方 GitHub 代理。
+发布仓库默认从 Git origin 读取（当前为 `iHeyTang/amiba`），CDN 和签名由发布者配置；没有内置第三方 GitHub 代理。
 
 ## 本地构建
 
@@ -55,13 +55,13 @@ macOS 自动更新必须签名；面向公开分发还需 Apple Developer ID 和
 也可在本机触发云端 Windows 构建：
 
 ```sh
-gh workflow run desktop-release.yml --repo iHeyTang/amiba --ref feat/amiba-distribution \
+gh workflow run desktop-release.yml --repo iHeyTang/amiba --ref main \
   -f target=win32-x64 -f mode=release -f publish_draft=true
 ```
 
-合并后将 `--ref` 改为 `main`。首次运行不需要本机 Windows 虚拟机。
+手动运行时选择 `main` 分支。首次运行不需要本机 Windows 虚拟机。
 
-推送 `v<桌面 package.json 版本>` 标签会触发所有架构的 release 构建并上传草稿；版本不匹配会失败。当前验证分支 `feat/amiba-distribution` 的普通 push 自动执行 test 构建。
+仅 `main` 分支的 push 自动执行三个架构的 test 构建。其他分支和标签的 push 均不触发；手动选择非 `main` 引用时所有作业跳过。创建 Release 草稿需在 `main` 手动运行并设置 `mode=release`、`publish_draft=true`，Release 版本取自桌面 package.json。
 
 构建后校验更新清单的版本、目标架构和 SHA-512，运行内置 Node 与 Electron 原生 PTY。Mac 额外校验 DMG 和 ZIP；Windows 在临时 CI 机器里静默安装 EXE 后检查安装结果。安装包生成后即保存 Artifacts，运行检查失败时也保留文件便于排查；只有检查通过才允许上传 Release。上传 Release 时先验证所有目标文件，再顺序上传，草稿绑定实际构建提交。CI 上传后再次下载草稿资产，并按原构建记录检查 SHA-512。
 
