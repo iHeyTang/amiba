@@ -110,6 +110,64 @@ describe("SessionsStore with DSH sessions", () => {
     reopened.teardown();
   });
 
+  it("retains a child address discovered during an older index refresh", async () => {
+    mocks.extra = [{ sessionId: "catalog-child", updatedAt: 10, running: false, blank: false, title: "Child" }];
+    const store = new SessionsStore();
+    await store.initialize();
+    let release!: () => void;
+    mocks.listGate = new Promise<void>((resolve) => { release = resolve; });
+    const refresh = store.refresh();
+    await Promise.resolve();
+    await Promise.resolve();
+    mocks.listGate = undefined;
+    const address = { parentSessionId: "dsh-1", childSessionId: "catalog-child", mode: "one-shot" as const };
+    await store.openTab("catalog-child", address);
+    release();
+    await refresh;
+    expect(store.getSnapshot().sessions.find((row) => row.id === "catalog-child")?.subagentAddress).toEqual(address);
+    await store.openTab("dsh-1");
+    mocks.history.mockClear();
+    await store.switchToTab("catalog-child");
+    expect(mocks.history.mock.calls).toEqual([["catalog-child", { subagent: address, maxMessages: 200 }]]);
+    store.teardown();
+  });
+
+  it("keeps an open child address when another window broadcasts an older row", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    const address = { parentSessionId: "dsh-1", childSessionId: "catalog-child", mode: "continuable" as const };
+    await store.openTab("catalog-child", address);
+    const listener = mocks.watch.mock.calls.at(-1)![1];
+    listener({ "sessions.index": { newValue: [{
+      id: "catalog-child", title: "Updated elsewhere", updatedAt: 50,
+    }] } });
+    expect(store.getSnapshot().sessions.find((row) => row.id === "catalog-child")).toMatchObject({
+      title: "Updated elsewhere", subagentAddress: address, parentSessionId: "dsh-1",
+    });
+    store.teardown();
+  });
+
+  it("accepts explicit incoming child metadata instead of retaining an obsolete address", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    const address = { parentSessionId: "dsh-1", childSessionId: "catalog-child", mode: "one-shot" as const };
+    await store.openTab("catalog-child", address);
+    const listener = mocks.watch.mock.calls.at(-1)![1];
+    const updated = { ...address, mode: "continuable" as const };
+    listener({ "sessions.index": { newValue: [{
+      id: "catalog-child", updatedAt: 50, subagentAddress: updated, parentSessionId: "dsh-1",
+    }] } });
+    expect(store.getSnapshot().sessions.find((row) => row.id === "catalog-child")?.subagentAddress).toEqual(updated);
+    listener({ "sessions.index": { newValue: [{
+      id: "catalog-child", updatedAt: 60, parentSessionId: "different-parent",
+    }] } });
+    expect(store.getSnapshot().sessions.find((row) => row.id === "catalog-child")).toMatchObject({
+      parentSessionId: "different-parent",
+    });
+    expect(store.getSnapshot().sessions.find((row) => row.id === "catalog-child")?.subagentAddress).toBeUndefined();
+    store.teardown();
+  });
+
   it("does not open a child when the supplied address names a different session", async () => {
     const store = new SessionsStore();
     await store.initialize();

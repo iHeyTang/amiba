@@ -899,3 +899,9 @@ pipelines retain mounted component state.
   survive a complete renderer reload. The child screenshot was visually reviewed;
   original layout and native disabled styling remain. This is renderer restart,
   not cold Host/Agent recovery. Actual continuation remains open.
+
+### 子会话地址在列表同步期间的保留（2026-09-13）
+
+- 先用回归用例复现两种地址丢失：列表刷新读取旧 sidecar 后，用户才打开目录子会话；以及另一窗口广播含同一子会话但不含地址的旧列表。原实现两个用例均失败。
+- 外部列表合并现在保留已确认的子会话地址及直接父 ID，仍接受标题等字段更新。显式传入的新地址或不同父 ID 不会被本地旧地址覆盖。此修改不涉及界面、样式或正常根会话运输。
+- 37 个会话存储/平台适配测试与 app-runtime 类型检查通过；覆盖刷新竞态后切换回子会话仍使用 subagent.history、旧广播保留地址、显式新元数据覆盖旧值。此项为状态层验证，不替代实际可续聊执行及冷 Host 恢复验证。

@@ -349,7 +349,20 @@ export class SessionsStore {
     const retained = this.state.sessions.filter(
       (session) => open.has(session.id) && !known.has(session.id),
     );
-    this.commit({ sessions: retained.length ? [...retained, ...next] : next });
+    // Catalog addresses are discovered separately from the root history index.
+    // An older index (including another window's snapshot) may contain the row
+    // without that address. Its absence must not change the child's transport
+    // or read-only mode. An explicit incoming address/parent remains authoritative.
+    const current = new Map(this.state.sessions.map((session) => [session.id, session]));
+    const merged = next.map((session) => {
+      const address = current.get(session.id)?.subagentAddress;
+      if (!address || session.subagentAddress ||
+        (session.parentSessionId && session.parentSessionId !== address.parentSessionId)) {
+        return session;
+      }
+      return { ...session, subagentAddress: { ...address }, parentSessionId: address.parentSessionId };
+    });
+    this.commit({ sessions: retained.length ? [...retained, ...merged] : merged });
     for (const [id, activityAt] of this.pendingUnread) {
       if (!known.has(id)) continue;
       this.pendingUnread.delete(id);
