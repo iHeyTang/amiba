@@ -288,3 +288,13 @@ export async function proxyDshClientFetch(
     body: new Uint8Array(await response.arrayBuffer()),
   };
 }
+
+
+/** Restrict the preload download handoff to the currently managed export endpoint. */
+export function resolveDshSessionDownloadUrl(rawUrl: string, baseUrl: string): URL {
+  const target = new URL(rawUrl, baseUrl);
+  if (target.origin !== new URL(baseUrl).origin || target.pathname !== "/api/session.export" || target.username || target.password) {
+    throw new Error("DSH download refused a non-session-export URL.");
+  }
+  return target;
+}

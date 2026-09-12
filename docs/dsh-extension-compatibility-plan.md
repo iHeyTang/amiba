@@ -1,7 +1,9 @@
 # DSH extension compatibility implementation
 
 Base: `main` at `3cbcaaa2dbf4b9036c43c5e0a175bcdcccaefecb`.
-Branch: `feat/dsh-extension-compat-isolated`.
+Initial branch: `feat/dsh-extension-compat-isolated` (merged).
+Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
+Main and the other task's personal menu, external-message and update changes are preserved.
 
 ## Required invariants
 
@@ -26,11 +28,11 @@ are required in addition to new-plugin tests.
 
 | Scope | Status | Acceptance |
 | --- | --- | --- |
-| Plugin settings tabs | implementation + focused tests passed; visual/runtime verification pending | Real localized tabs/panels; existing inventory and filters preserved; unload falls back |
+| Plugin settings tabs | implementation + focused tests + real Desktop file: integration passed; visual review pending | Real localized tabs/panels; existing inventory and filters preserved; unload falls back |
 | Plugin config cards/forms | keyed cards implemented/tested; generic form work open | Host config read/write, actual schema, existing settings preserved |
-| Sidebar additive actions | implementation + focused tests passed; visual/runtime verification pending | Correct owner, no empty wrapper, collapsed/expanded behavior |
+| Sidebar additive actions | implementation + focused tests + real Desktop wide/narrow/unload passed | Correct owner, no empty wrapper, collapsed/expanded behavior |
 | Workspace/directory selection | open | Open/cancel/picked/error lifecycle, one workspace mutation authority |
-| Session export | native plugin enabled + dialog adapted/tested; actual download verification pending | Native command download on Web/Desktop without duplicate existing action |
+| Session export | native plugin enabled + dialog adapted/tested; actual Desktop ZIP saved; ordinary Web download verification pending | Native command download on Web/Desktop without duplicate existing action |
 | Existing header/model/plan/command/reference extensions | open | Regression tests plus dependency/owner audit |
 | Official component styles | open | Scoped compatibility assets; no changes to Amiba tokens or global defaults |
 | Message actions | open | Exact MessageId, no arbitrary turn-to-message mapping, existing bubbles preserved |
@@ -82,3 +84,18 @@ completed-turn surface. No bubble split or arbitrary first/last UI id is needed.
 - Code Mode children now reach occupied toolviews in live and restored sessions.
 - Ordinary tool rows remain byte-identical with an unoccupied toolview.
 - Removing all plugin tabs restores the inventory DOM and preserves its filter.
+
+### Desktop transport follow-up
+
+Real file-renderer smoke revealed two origin assumptions requiring pinned patches:
+settings classified file: as remote despite the managed loopback transport, and
+session ZIP anchors retained the unresolvable dsh.internal hostname. Both patches
+use the explicit desktop transport URL only on file: pages; ordinary Web origin
+classification is unchanged. Connection authority tests cover local, remote and
+missing transports. Real Desktop file: integration passed: Host namespaces were read, tabs/cards rendered
+and unloaded, footer wide/narrow updated, and a nonempty ZIP with PK signature was
+saved while preserving the product page. The file download uses a narrowly validated
+preload handoff to Electron's native downloader; no request-header override remains.
+Ordinary Web retains the official browser anchor path.
+
+- Final full Desktop build and production dependency verification passed after the native download handoff; 14 download/boot boundary tests passed.

@@ -73,6 +73,7 @@ const api = {
   windowChrome: getWindowChrome(process.platform),
 
   dshClient: {
+    download: (url: string) => ipcRenderer.invoke("dsh-client:download", url),
     boot: () => ipcRenderer.invoke("dsh-client:boot"),
     fetch: (request: {
       url: string;

@@ -35,6 +35,7 @@ interface AmibaBridgeApi {
     standaloneTitleBar?: boolean;
   };
   dshClient: {
+    download(url: string): Promise<void>;
     boot(): Promise<{
       baseUrl: string;
       graph: {

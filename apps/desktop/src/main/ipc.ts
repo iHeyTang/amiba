@@ -18,6 +18,7 @@ import { dshRuntime, managedDshPaths } from "./dsh-runtime";
 import {
   loadDshClientBoot,
   proxyDshClientFetch,
+  resolveDshSessionDownloadUrl,
   type DshProxyRequest,
 } from "./dsh-client-boot";
 import { dshDiagnostics } from "./dsh-diagnostics";
@@ -94,6 +95,14 @@ export function registerIpcHandlers() {
     (_event, request: DshProxyRequest) =>
       proxyDshClientFetch(dshRuntime, request),
   );
+
+  ipcMain.handle("dsh-client:download", async (event, rawUrl: string) => {
+    const { baseUrl } = await dshRuntime.ensureStarted();
+    const target = resolveDshSessionDownloadUrl(rawUrl, baseUrl);
+    // Native downloads have no file-page Origin or cross-site fetch metadata.
+    // The Host still enforces its normal authority checks and streams the ZIP.
+    event.sender.session.downloadURL(target.href, { headers: { Origin: target.origin } });
+  });
 
   // The Plugins Client contribution owns the product workflow. Electron only
   // supplies the native file picker and the process boundary required to run

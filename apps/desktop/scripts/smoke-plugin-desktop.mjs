@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile, readFile, mkdir, symlink } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile, readdir, mkdir, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import http from "node:http";
@@ -20,7 +20,7 @@ async function port() {
 const debugPort = await port(),
   dshPort = await port();
 const author = process.argv.includes("--author");
-const native = process.argv.includes("--native");
+const native = process.argv.includes("--native") || process.argv.includes("--compat");
 const { workspacePackages } = await import("./dsh-client-dependencies.mjs");
 const authorProjects = author ? [...(await workspacePackages(root)).values()].filter(pkg => pkg.directory.startsWith(path.join(root, "plugins") + path.sep)).map(pkg => pkg.directory) : undefined;
 const env = {
@@ -61,7 +61,8 @@ async function wait(check) {
       throw new Error("App exited: " + logs.slice(-5000));
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  if (socket?.readyState === 1) logs += JSON.stringify(await evaluate("(async()=>({hmr:Array.from(window.__probeCtx?.loader.entries()??[]).filter(e=>e.options.name.includes('hmr')||e.options.name.includes('probe')).map(e=>({name:e.options.name,state:e.fiber?.state,inject:e.fiber?.inject})),frames:window.__probeFrames?.map(s=>{try{const f=JSON.parse(s);return {type:f.type,id:f.id,rev:f.rev}}catch{return s}}),diagnostics:(await window.amiba.agentDiagnostics.logs({limit:100})).entries.filter(e=>/PROBE|hmr|error/i.test(e.message))}))()").catch(String));
+  if (socket?.readyState === 1) logs += JSON.stringify(await evaluate("(async()=>({hmr:Array.from(window.__probeCtx?.loader.entries()??[]).filter(e=>e.options.name.includes('hmr')||e.options.name.includes('probe')).map(e=>({name:e.options.name,state:e.fiber?.state,inject:e.fiber?.inject})),frames:window.__probeFrames?.map(s=>{try{const f=JSON.parse(s);return {type:f.type,id:f.id,rev:f.rev}}catch{return s}}),diagnostics:(await window.amiba.agentDiagnostics.logs({limit:100})).entries.filter(e=>/PROBE|DOWNLOAD|hmr|error/i.test(e.message))}))()").catch(String));
+  logs += "\nNative events: " + await readFile(path.join(profile,"native-events.jsonl"),"utf8").catch(String);
   throw new Error("App UI timeout: " + logs.slice(-18000) + "\nCLI: " + cliLogs);
 }
 function call(method, params = {}) {
@@ -99,7 +100,7 @@ try {
   socket = new WebSocket(target.webSocketDebuggerUrl);
   socket.on("message", (bytes) => {
     const message = JSON.parse(String(bytes));
-    if (!message.id) { if (message.method === "Runtime.consoleAPICalled" || message.method === "Runtime.exceptionThrown" || message.method === "Log.entryAdded" || (message.method === "Network.responseReceived" && message.params.response.url.includes("dsh-plugin-probe"))) logs += JSON.stringify(message.params) + "\n"; return; }
+    if (!message.id) { if (message.method?.startsWith("Browser.download") || message.method === "Network.loadingFailed" || message.method === "Runtime.consoleAPICalled" || message.method === "Runtime.exceptionThrown" || message.method === "Log.entryAdded" || (message.method === "Network.responseReceived" && /dsh-plugin-probe|session.export/.test(message.params.response.url))) logs += JSON.stringify(message.params) + "\n"; return; }
     const request = pending.get(message.id);
     if (!request) return;
     pending.delete(message.id);
@@ -122,12 +123,13 @@ try {
   await writeFile(path.join(project, "tsconfig.build.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", rootDir: "src", outDir: "lib", skipLibCheck: true }, include: ["src"] }));
   await writeFile(path.join(project, "vite.config.mjs"), `export default { build: { emptyOutDir:false, lib: {entry:'src/client.ts',formats:['cjs'],fileName:()=> 'client.js'}, rollupOptions: {output: {banner:'window.__ModuleLoader__.load({id:"dsh-plugin-probe",factory:(require)=>{const module={exports:{}};const exports=module.exports;',footer:'return module.exports;}});'}}}}`);
   const hostSource = version => `export function apply(ctx: any) { ctx.effect(() => { console.log('AMIBA_PROBE_HOST_${version}'); return () => console.log('AMIBA_PROBE_DISPOSE_${version}'); }); }`;
-  const clientSource = version => `${process.argv.includes("--compat") ? "export const inject = [\"slots\", \"settingsScope\", \"layout\"];" : ""}export function apply(ctx: any) { (window as any).__probeCtx=ctx; ctx.effect(() => { const node=document.createElement('div');node.id='amiba-plugin-probe';node.textContent='client-${version}';document.body.append(node);return ()=>node.remove(); }); }`;
+  const clientSource = version => `${process.argv.includes("--compat") ? "export const inject = [\"slots\", \"settingsScope\", \"layout\", \"sessions\", \"sessionLogDownload\"];" : ""}export function apply(ctx: any) { (window as any).__probeCtx=ctx; ctx.effect(() => { const node=document.createElement('div');node.id='amiba-plugin-probe';node.textContent='client-${version}';document.body.append(node);return ()=>node.remove(); }); }`;
   const nativeEvents = path.join(profile, "native-events.jsonl");
-  const nativeSource = version => `import {appendFileSync} from 'node:fs';export function create(){appendFileSync(${JSON.stringify(nativeEvents)},'native-start-${version}\\n');return {call(){return 'native-${version}'},rendererCall(){return 'native-${version}'},dispose(){appendFileSync(${JSON.stringify(nativeEvents)},'native-stop-${version}\\n')}}}`;
+  const nativeSource = version => `import {appendFileSync} from 'node:fs';${process.argv.includes("--compat") ? "import {session} from 'electron';" : ""}export function create(){appendFileSync(${JSON.stringify(nativeEvents)},'native-start-${version}\\n');${process.argv.includes("--compat") ? `const save=(_event,item)=>{item.setSavePath(${JSON.stringify(path.join(profile,"downloads"))}+'/'+item.getFilename());item.on('done',(_event,state)=>appendFileSync(${JSON.stringify(nativeEvents)},'download-'+state+' '+item.getReceivedBytes()+'/'+item.getTotalBytes()+' '+item.getSavePath()+'\\n'));};session.defaultSession.on('will-download',save);` : ""}return {call(){return 'native-${version}'},rendererCall(){return 'native-${version}'},dispose(){${process.argv.includes("--compat") ? "session.defaultSession.removeListener('will-download',save);" : ""}appendFileSync(${JSON.stringify(nativeEvents)},'native-stop-${version}\\n')}}}`;
+
   if (native) {
     await writeFile(path.join(project, "src/native.ts"), nativeSource(1));
-    await writeFile(path.join(project, "vite.native.config.mjs"), `export default {build:{emptyOutDir:false,lib:{entry:'src/native.ts',formats:['cjs'],fileName:()=> 'native.cjs'},rollupOptions:{external:['node:fs']}}}`);
+    await writeFile(path.join(project, "vite.native.config.mjs"), `export default {build:{emptyOutDir:false,lib:{entry:'src/native.ts',formats:['cjs'],fileName:()=> 'native.cjs'},rollupOptions:{external:['node:fs','electron']}}}`);
   }
   const source = version => native ? `export const inject=['amibaRuntimeGateway']; export async function apply(ctx:any) { let lease:string|undefined;let disposed=false;ctx.effect(()=>async()=>{disposed=true;if(lease)await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease})});lease=await ctx.amibaRuntimeGateway.call('amiba_native_attach',{packageName:'dsh-plugin-probe',instanceId:'probe-'+Date.now()});if(disposed){await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease});return}console.log('AMIBA_PROBE_HOST_${version}'); }` : hostSource(version);
   await writeFile(path.join(project, "src/index.ts"), source(1));
@@ -179,10 +181,37 @@ try {
     await wait(() => evaluate("Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility probe')"));
     await evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(n=>n.textContent==='Compatibility probe').click()");
     await wait(() => evaluate("document.querySelector('[role=tabpanel]:not([hidden])')?.textContent.includes('COMPAT_TAB_CONTENT')"));
-    await evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(n=>/Configurable|可配置/.test(n.textContent)).click()");
+    await evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(n=>/Configuration|配置/.test(n.textContent)).click()");
     await wait(() => evaluate("document.querySelector('[role=tabpanel]:not([hidden])')?.textContent.includes('COMPAT_CONFIG_CARD')"));
+    await evaluate("window.__probeCtx.layout.openChat()");
+    await wait(() => evaluate("/COMPAT_FOOTER_(WIDE|NARROW)/.test(document.body.textContent)"));
+    const wasWide = await evaluate("document.body.textContent.includes('COMPAT_FOOTER_WIDE')");
+    await evaluate("window.__probeCtx.layout.toggleSidebar()");
+    await wait(() => evaluate(`document.body.textContent.includes(${JSON.stringify(wasWide ? 'COMPAT_FOOTER_NARROW' : 'COMPAT_FOOTER_WIDE')})`));
+    await evaluate("window.__probeCtx.layout.toggleSidebar();window.__probeCtx.layout.openSettings('plugins')");
     await evaluate("window.__compatDisposers.forEach(dispose=>dispose());delete window.__compatDisposers");
     await wait(() => evaluate("!document.body.textContent.includes('COMPAT_TAB_CONTENT') && !document.querySelector('[role=tablist]')"));
+    const downloads = path.join(profile, "downloads");
+    await mkdir(downloads, { recursive: true });
+    // The native fixture saves via Electron DownloadItem, avoiding a save dialog.
+    await evaluate(`(async () => {
+      const ctx = window.__probeCtx;
+      const id = await ctx.sessions.create({cwd:${JSON.stringify(profile)}});
+      ctx.layout.openChat();
+      ctx.sessions.open(id);
+      await ctx.sessionLogDownload.download(id);
+      const state = ctx.sessionLogDownload.store.getSnapshot().bySession[id];
+      if (state.status !== 'success') throw new Error(JSON.stringify(state));
+    })()`);
+    const zip = await wait(async () => {
+      const files = await readdir(downloads);
+      return files.find(name => name.endsWith('.zip'));
+    });
+    const bytes = await readFile(path.join(downloads, zip));
+    assert.equal(bytes.subarray(0, 2).toString(), "PK", "browser must save a ZIP, not an HTML error");
+    assert.ok(bytes.length > 22, "ZIP must include the session archive");
+    assert.ok(await evaluate("Boolean(document.querySelector('[data-amiba-product-shell]'))"), "download must preserve the product page");
+    console.log("Native session ZIP download passed on Desktop file: with an actual saved archive.");
     console.log("Compatibility slots passed: real plugin tab selection, Host-keyed config card, removal and inventory fallback.");
   }
   await evaluate("window.__probePoll=setInterval(()=>window.amiba.agentDiagnostics.status().catch(()=>{}),50)");
