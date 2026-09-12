@@ -1,3 +1,4 @@
+import { useCommandRows } from "./command-rows.js";
 import { InputRegion } from "./input-region.js";
 import { TurnTail, TurnText, useTurnTailAnchors } from "./turn-tail.js";
 import { DirectoryChooserContext, type DirectoryChooser } from "@amiba/ui";
@@ -160,6 +161,7 @@ export type AmibaShellSlot =
   | "conversation.input.overlay"
   | "conversation.input.dock"
   | "conversation.composer.dock"
+  | "conversation.chat.commandview"
   | "conversation.input.attachments"
   | "conversation.input.left"
   | "conversation.input.right"
@@ -353,6 +355,7 @@ function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string)
 
 interface ProductShellProps {
   renderSlotChain: PropsRenderSlots<AmibaShellSlot>["renderSlotChain"];
+  commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
   conversationSource: (sessionId: string) => import("@deepseek-ai/dsh-client-runtime/client").SessionFace | undefined;
     fileMentions: import("@deepseek-ai/dsh-client-ui-conversation/client").ChatFileMentions["forClosing"];
   directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
@@ -407,6 +410,7 @@ export function AmibaProductShell(props: ProductShellProps): ReactElement {
 
 function ProductShellInner({
   renderSlotChain,
+  commandRowKeys,
   conversationSource,
   fileMentions,
   directoryFlows,
@@ -507,6 +511,8 @@ function ProductShellInner({
     return { home: bind(directoryFlows.home, homeDirectory.available), workspace: bind(directoryFlows.workspace, workspaceDirectory.available) };
   }, [directoryFlows, homeDirectory.available, workspaceDirectory.available, platform]);
   const viewEntries = useSyncExternalStore(conversationViews.subscribe, conversationViews.getSnapshot, conversationViews.getSnapshot);
+  const commandRows = useCommandRows(sessions.activeId ? conversationSource(sessions.activeId) : undefined,
+    owner => renderSlot("conversation.chat.commandview", owner, { entryKey: owner.node.name ?? "", fallback: null }), commandRowKeys);
   const turnTailAnchors = useTurnTailAnchors(sessions.activeId ? conversationSource(sessions.activeId) : undefined);
   // Host-side session changes (a plugin creating a task session, a blank
   // session getting its first turn) reach the official list live; re-read
@@ -838,6 +844,7 @@ function ProductShellInner({
                 inputLeft: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.input.left", owner)} />,
                 inputRight: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.input.right", owner)} />,
                 messageText: (runtimeTurn, children, openFile, timeline) => <TurnText timeline={timeline} source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} fileMentions={fileMentions}>{children}</TurnText>,
+                timelineRows: commandRows,
                 turnTailAnchors,
                 turnTail: (runtimeTurn, openFile) => <TurnTail source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} render={owner => renderSlotChain("conversation.chat.turnTail", owner)} />,
                 assistantActions: (messageId) => renderSlot("conversation.chat.assistant-actions", { messageId: messageId as import("@amiba/extension-sdk").AssistantActionOwnerProps["messageId"] }),

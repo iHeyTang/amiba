@@ -1694,6 +1694,7 @@ export function UserStickyBubble({
 export function MessageTurns({
   messageText,
   turnTail,
+  timelineRows,
   turnTailAnchors,
   openTurnFile,
   assistantActions,
@@ -1708,6 +1709,7 @@ export function MessageTurns({
   messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
   assistantActions?: (messageId: string) => ReactNode;
   turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
+  timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[];
   turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
   openTurnFile?: (path: string) => void;
   messages: UiMessage[];
@@ -1734,7 +1736,8 @@ export function MessageTurns({
     userOrdinal: number;
   };
   // Presentation-only anchors never enter the session store or submission history.
-  const anchoredMessages = [...messages];
+  const replacedMessages = new Set((timelineRows ?? []).flatMap(row => row.replaceMessageId ? [row.replaceMessageId] : []));
+  const anchoredMessages = messages.filter(message => !replacedMessages.has(message.uiId));
   const presentTurns = new Set(messages.filter(message => message.role === "assistant").map(message => message.runtimeTurn));
   for (const anchor of [...(turnTailAnchors ?? [])].sort((a, b) => a.endSeq - b.endSeq)) {
     if (presentTurns.has(anchor.runtimeTurn)) continue;
@@ -1743,6 +1746,15 @@ export function MessageTurns({
     anchoredMessages.splice(next < 0 ? anchoredMessages.length : next, 0, {
       uiId: `turn-tail-anchor:${anchor.runtimeTurn}`, role: "assistant", content: "",
       runtimeTurn: anchor.runtimeTurn, runtimeSeq: anchor.endSeq,
+    });
+  }
+  const extensionRows = new Map<string, ReactNode>();
+  for (const row of [...(timelineRows ?? [])].sort((a, b) => a.seq - b.seq)) {
+    const id = `extension-row:${row.id}`;
+    extensionRows.set(id, row.content);
+    const next = anchoredMessages.findIndex(message => message.runtimeSeq !== undefined && message.runtimeSeq > row.seq);
+    anchoredMessages.splice(next < 0 ? anchoredMessages.length : next, 0, {
+      uiId: id, role: "assistant", content: "", runtimeSeq: row.seq,
     });
   }
   const lastMessageForTurn = new Map<number, string>();
@@ -1795,17 +1807,17 @@ export function MessageTurns({
             for (const message of item.messages) lastItemForMessage.set(message.uiId, index);
           } else lastItemForMessage.set(item.id.slice("boundary:".length), index);
         });
-        const tailsAfter = new Map<number, number[]>();
+        const extrasAfter = new Map<number, ReactNode[]>();
+        const appendExtra = (index: number, node: ReactNode) => extrasAfter.set(index, [...(extrasAfter.get(index) ?? []), node]);
         let previousItem = -1;
         for (const message of turn.replies) {
           previousItem = Math.max(previousItem, lastItemForMessage.get(message.uiId) ?? -1);
+          if (extensionRows.has(message.uiId)) appendExtra(previousItem, <Fragment key={message.uiId}>{extensionRows.get(message.uiId)}</Fragment>);
           if (message.role !== "assistant" || message.streaming || message.runtimeTurn === undefined ||
               lastMessageForTurn.get(message.runtimeTurn) !== message.uiId) continue;
-          tailsAfter.set(previousItem, [...(tailsAfter.get(previousItem) ?? []), message.runtimeTurn]);
+          if (openTurnFile && turnTail) appendExtra(previousItem, <Fragment key={`tail:${message.runtimeTurn}`}>{turnTail(message.runtimeTurn, openTurnFile)}</Fragment>);
         }
-        const renderTailsAfter = (index: number) => openTurnFile && turnTail
-          ? tailsAfter.get(index)?.map(runtimeTurn => <Fragment key={runtimeTurn}>{turnTail(runtimeTurn, openTurnFile)}</Fragment>)
-          : null;
+        const renderTailsAfter = (index: number) => extrasAfter.get(index);
         if (!turn.user && replyItems.length === 0) {
           return <Fragment key={`empty-turns-${i}`}>{renderTailsAfter(-1)}</Fragment>;
         }

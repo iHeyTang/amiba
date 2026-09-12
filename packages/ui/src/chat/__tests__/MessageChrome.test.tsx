@@ -1604,3 +1604,58 @@ it("maps historical draft-only prose without inserting a display row or changing
   rerender(<WorkspaceTextMentionsContext.Provider value={resolve}><Bubble m={sourced}/></WorkspaceTextMentionsContext.Provider>);
   expect(screen.getByRole("button",{name:"Historical file"})).toBeInTheDocument();
 });
+
+
+it("places command extensions between native turns without storing messages or adding empty markup", () => {
+  const messages: UiMessage[] = [
+    { uiId: "u1", role: "user", content: "first", runtimeSeq: 10 },
+    { uiId: "a1", role: "assistant", content: "answer", runtimeSeq: 12 },
+    { uiId: "u2", role: "user", content: "second", runtimeSeq: 20 },
+  ];
+  const { container, rerender } = render(<MessageTurns messages={messages} />);
+  const baseline = container.innerHTML;
+  const rows = [{ id: "before", seq: 5, content: null }, { id: "between", seq: 15, content: null }];
+  rerender(<MessageTurns messages={messages} timelineRows={rows} />);
+  expect(container.innerHTML).toBe(baseline);
+  rerender(<MessageTurns messages={messages} timelineRows={rows.map(row => ({ ...row, content: <button>{row.id}</button> }))} />);
+  const first = container.querySelector('[data-conversation-user-turn="u1"]')!;
+  expect(first.textContent).toContain("between");
+  expect(container.firstElementChild?.textContent).toBe("before");
+  expect(first.compareDocumentPosition(screen.getByText("second")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(messages).toHaveLength(3);
+  rerender(<MessageTurns messages={[]} timelineRows={[{ id: "only", seq: 1, content: <button>standalone command</button> }]} />);
+  expect(container.children).toHaveLength(1);
+  expect(container.firstElementChild?.tagName).toBe("BUTTON");
+});
+
+
+it("keeps native execution grouping unchanged around an unoccupied command row", () => {
+  const messages: UiMessage[] = [
+    { uiId: "request", role: "user", content: "work", runtimeSeq: 1 },
+    { uiId: "call1", role: "assistant", content: "", runtimeSeq: 10, toolProgress: [{ tool: "bash", toolCallId: "one", status: "completed", args: { command: "echo one" } }] },
+    { uiId: "call2", role: "assistant", content: "", runtimeSeq: 30, toolProgress: [{ tool: "bash", toolCallId: "two", status: "completed", args: { command: "echo two" } }] },
+  ];
+  const { container, rerender } = render(<MessageTurns messages={messages} />);
+  const before = container.innerHTML;
+  rerender(<MessageTurns messages={messages} timelineRows={[{ id: "middle", seq: 20, content: null }]} />);
+  expect(container.innerHTML).toBe(before);
+  rerender(<MessageTurns messages={messages} timelineRows={[{ id: "middle", seq: 20, content: <span>command during execution</span> }]} />);
+  expect(screen.getByText("command during execution")).toBeInTheDocument();
+});
+
+
+it("upgrades one durable command result and restores it when the plugin unregisters", () => {
+  const messages: UiMessage[] = [
+    { uiId: "dsh:command:c1:input", role: "user", content: "/probe", runtimeSeq: 10 },
+    { uiId: "dsh:command:c1:result", role: "assistant", content: "native result", runtimeSeq: 12 },
+  ];
+  const { container, rerender } = render(<MessageTurns messages={messages} />);
+  const baseline = container.innerHTML;
+  rerender(<MessageTurns messages={messages} timelineRows={[{ id: "command:c1", seq: 10, replaceMessageId: "dsh:command:c1:result", content: <span>plugin result</span> }]} />);
+  expect(screen.getByText("plugin result")).toBeInTheDocument();
+  expect(screen.queryByText("native result")).toBeNull();
+  expect(screen.getByText("/probe")).toBeInTheDocument();
+  expect(messages).toHaveLength(2);
+  rerender(<MessageTurns messages={messages} />);
+  expect(container.innerHTML).toBe(baseline);
+});

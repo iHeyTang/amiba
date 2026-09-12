@@ -267,6 +267,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     workbenchSource: ContributionsSource<WorkbenchViewExtension>;
     directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
     conversationViews: ContributionsSource<ConversationViewEntry>;
+    commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
     conversationSource: (sessionId: string) => import("@deepseek-ai/dsh-client-runtime/client").SessionFace | undefined;
     fileMentions: import("@deepseek-ai/dsh-client-ui-conversation/client").ChatFileMentions["forClosing"];
     reportMarkdown: (sessionId:string, capabilities:MarkdownCapabilities[]) => Promise<void>;
@@ -300,6 +301,7 @@ function AmibaRoot({
   workbenchSource,
   directoryFlows,
   conversationViews,
+  commandRowKeys,
   conversationSource,
   fileMentions,
   surfaces,
@@ -323,6 +325,7 @@ function AmibaRoot({
       openSettingsSection={openSettingsSection}
       renderSlot={renderSlot}
       renderSlotChain={renderSlotChain}
+      commandRowKeys={commandRowKeys}
       conversationSource={conversationSource}
       fileMentions={fileMentions}
       sessionsBridge={sessionsBridge}
@@ -647,6 +650,22 @@ export async function apply(ctx: ClientContext): Promise<void> {
           directoryFlows,
           conversationViews,
           fileMentions: (owner: import("@deepseek-ai/dsh-client-ui-conversation/client").TurnTailOwnerProps) => ctx.get("chatFileMentions")?.forClosing(owner),
+          commandRowKeys: (() => {
+            let version = -1;
+            let keys: readonly string[] = [];
+            return {
+              getSnapshot: () => {
+                const next = ctx.slots.getVersion("conversation.chat.commandview");
+                if (version !== next) {
+                  version = next;
+                  keys = ctx.slots.entriesOfSlot("conversation.chat.commandview").flatMap(entry =>
+                    typeof entry.options.key === "string" ? [entry.options.key] : []);
+                }
+                return keys;
+              },
+              subscribe: (listener: () => void) => ctx.slots.subscribe("conversation.chat.commandview", listener),
+            };
+          })(),
           conversationSource: (sessionId: string) => ctx.get("sessions")?.binding(sessionId as import("@deepseek-ai/dsh-client-runtime/client").SessionId)?.session,
           surfaces,
           reportMarkdown,
@@ -763,6 +782,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "conversation.input.overlay": { kind: "list", scope: "session" },
           "conversation.input.dock": { kind: "list", scope: "session" },
           "conversation.composer.dock": { kind: "list", scope: "session" },
+          "conversation.chat.commandview": { kind: "keyed", scope: "session" },
           "conversation.input.attachments": { kind: "single", scope: "session-maybe" },
           "conversation.input.left": { kind: "list", scope: "session" },
           "conversation.input.right": { kind: "list", scope: "session" },

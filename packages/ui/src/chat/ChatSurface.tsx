@@ -330,6 +330,7 @@ export interface ChatSurfaceProps {
     assistantActions?: (messageId: string) => ReactNode;
     turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
     messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
+    timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[];
     turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
     toolView?: ToolCallSeatRenderer;
     /**
@@ -2276,6 +2277,7 @@ export default function ChatSurface({
                           assistantActions={slots?.assistantActions}
                           messageText={slots?.messageText}
                           turnTail={slots?.turnTail}
+                          timelineRows={slots?.timelineRows}
                           turnTailAnchors={slots?.turnTailAnchors}
                           openTurnFile={path => {
                             if (path === ".") {

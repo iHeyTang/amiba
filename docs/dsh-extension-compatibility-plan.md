@@ -1067,3 +1067,14 @@ pipelines retain mounted component state.
 - 本项未引入离屏草稿或 useInput 空值替身。完整常驻输入状态仍需处理 native draft、引用、图片及提交生命周期，未据此宣称完整输入兼容。
 
 - 本项验证：Shell 类型检查、完整 Desktop 构建及真实桌面兼容测试通过。日志 `/tmp/amiba-input-session-owner-types2.log`、`/tmp/amiba-input-session-owner-tests.log`、`/tmp/amiba-input-session-owner-build.log`、`/tmp/amiba-input-session-owner-smoke.log`。
+
+
+### 按命令名分派的官方命令结果入口（2026-09-13）
+
+- 接入 `conversation.chat.commandview` keyed/session 槽，entryKey 使用原节点 name（缺失为官方规定的空串）。从真实 Chat order/nodes 读取可见命令，保持原 CommandNode 引用；manual-compaction 使用官方投影已经关联的数据，不凭邻近序号猜测压缩关联。
+- 展示锚点仅用于 MessageTurns 的渲染，不写 session 消息存储，也不进入发送历史。按引擎 anchorSeq 定位到现有消息/工具展示组之间；保留工具折叠组整体，发生在组内的命令展示附加在组后，尚不提供拆开折叠过程的精确内部位置。
+- 原历史转换已将 command/run、command/done 映射为命令输入和结果消息。因此只为当前 keyed 槽赢家生成展示锚点，并隐藏同一 commandId 的原结果展示，避免历史重载后重复；命令输入与存储数据保持。卸载或无注册时不生成锚点，恢复原生结果和样式。
+- 消息 UI 52 项、命令投影 1 项测试通过；UI/Shell 类型检查通过。测试覆盖空入口无额外 DOM、独立命令、两轮会话之间的位置、原工具折叠组不变、原参数及明确压缩关联。
+
+- 真实桌面已验证 Host 日志中的 command/run → command/done：插件收到原始参数、执行中状态、完成结果及真实 CommandNode 对象。整页 renderer 重载后覆盖原结果只显示一份，卸载恢复原生结果；输入、附件、子会话续聊/停止、导航及其他兼容回归通过。
+- 日志：`/tmp/amiba-command-rows-ui-tests3.log`（52）、`/tmp/amiba-command-rows-tests.log`（1）、`/tmp/amiba-command-rows-types4.log`、`/tmp/amiba-command-rows-ui-types2.log`、`/tmp/amiba-command-rows-build2.log`、`/tmp/amiba-command-rows-smoke2.log`。`amiba-command-row.png` 截图已查看。
