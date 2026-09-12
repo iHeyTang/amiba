@@ -1091,3 +1091,12 @@ pipelines retain mounted component state.
 - 验证日志：`/tmp/amiba-cordis-business-types2.log`、`/tmp/amiba-cordis-business-tests.log`（48 项）、`/tmp/amiba-cordis-business-build.log`、`/tmp/amiba-cordis-business-smoke6.log`。早期探针失败分别暴露了测试脚本错误导入 React、未展开原折叠组、原卡片缺少子区域以及测试 ctx 未声明 remote 依赖；正式适配仅补充缺少的业务区域。
 
 - 组合回归 `/tmp/amiba-cordis-business-smoke7.log` 通过，包含动态业务区、命令历史重载、标准输入动作、命令图片、子会话续聊/停止/导航/重载及此前兼容检查。
+
+
+### 动态 Cordis 双端调用与版本切换验证（2026-09-13）
+
+- 将业务区探针扩展为真实 Host + Client 双端包。Host 使用官方 harness.handle 注册带内部计数器的方法，Client 按钮通过 host.call 发送中文/Emoji 参数；计数和回传文本均来自 Host，未在 Client 模拟返回。
+- 验证运行中错误 run ID 返回 stale-run；停止后原 ID 返回 plugin-not-running。同一 Package 重启获得新 run ID，旧 ID 被拒绝，新 Host 闭包计数重新从 1 开始；旧工具卡片不承载新 activation。
+- 通过真实 define(existing Plugin) 创建第二个不可变 Package，使用 startUserRun(mode:update) 切换双端代码。新卡片显示 v2 界面，RPC 返回 Host-v2，只有一份业务组件；前一版本 run ID 返回 stale-run。历史工具记录保留。
+- 组合 Desktop 回归通过，日志 `/tmp/amiba-cordis-rpc-update-smoke.log`；包含命令历史重载、标准输入动作、图片和子会话续聊/停止/导航/重载。初次双端/重启验证日志 `/tmp/amiba-cordis-rpc-smoke.log` 也通过。本轮使用已构建产品，仅扩展探针与评估记录。
+- 仍未把这些证据当成模型发起审批全流程、故意抛错后的界面回退或 Host 冷重启持久化已通过的证明；这些边界分别继续核对。

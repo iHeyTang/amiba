@@ -71,7 +71,7 @@
 | 61 | `sidebar.workspaces.directoryFlow` | 已接入，项目操作实测通过 | 真实插件创建项目、取消添加、添加目录及会话路径绑定均通过；保留项目 ID 和原有路径规范化。默认原生链路已验证（系统返回值用测试替身）；浏览器选择器读取、创建、选择及局部样式已在桌面 Web 渲染器实测；独立 Web 部署另核对。 |
 | 62 | `tool.call.images` | 新版契约，待验证 | 需要新版工具图片数据和资源解析接口。 |
 | 63 | `tool.call.toolview` | 已部分支持，可继续补齐 | 嵌套 subCalls 已实现；轨迹 inspect 尚缺，不能用打开文件冒充。 |
-| 64 | `tool.view.cordis` | 浏览器业务区域已接入并实测 | 原生 cordis_run 卡片保留，附加当前页面已加载实例的业务区域；按真实 Plugin/Package/Run ID 匹配，仅最新成功卡片承载。真实 Host 定义、官方 Client 加载、点击交互、停止及样式清理已实测；双端 RPC、升级和崩溃回退仍需分项验证。 |
+| 64 | `tool.view.cordis` | 浏览器业务区域已接入并实测 | 原生 cordis_run 卡片保留，附加当前页面已加载实例的业务区域；按真实 Plugin/Package/Run ID 匹配，仅最新成功卡片承载。真实 Host 定义、官方 Client 加载、点击交互、Client→Host RPC、停止及样式清理、同包重启、版本升级和旧实例拒绝已实测；崩溃回退仍需验证。 |
 
 ## 不只涉及 UI 槽位的边界
 

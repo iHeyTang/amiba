@@ -373,6 +373,7 @@ try {
     if (process.argv.includes("--cordis-business")) {
       const definition = JSON.parse(await readFile(path.join(profile, "cordis-definition.json"), "utf8"));
       assert.equal(definition.sessionId, await evaluate("window.__compatSessionId"));
+      assert.equal(definition.hasHostHalf, true);
       await evaluate(`window.__cordisDefinition=${JSON.stringify(definition)};void 0`);
       assert.ok(await evaluate("!!window.__probeCtx.get('dynamicCordisRunner')"));
       await evaluate("window.__probeCtx.get('dynamicCordisRunner').startUserRun({agentId:window.__compatSessionId,pluginId:window.__cordisDefinition.pluginId,packageId:window.__cordisDefinition.packageId,mode:'run',hasClientHalf:true})");
@@ -384,13 +385,47 @@ try {
       assert.deepEqual(await evaluate("(()=>{const n=document.querySelector('[data-compat-dynamic]');return {pluginId:n.dataset.plugin,packageId:n.dataset.package,pluginRunId:n.dataset.run}})()"), {pluginId:definition.pluginId,packageId:definition.packageId,pluginRunId:loaded.pluginRunId});
       await evaluate("document.querySelector('[data-compat-dynamic]').click();void 0");
       await wait(() => evaluate("document.body.textContent.includes('COMPAT_DYNAMIC 1')"));
+      assert.equal(await evaluate("document.querySelector('[data-compat-dynamic]').dataset.hostEcho"), "RPC_中文😀");
+      const wrongRun = await evaluate(`window.__probeCtx.remote.dynamicCordisRunner.invoke(${JSON.stringify(definition.pluginId)},${JSON.stringify(loaded.pluginRunId+'-stale')},'increment',{})`);
+      assert.equal(wrongRun.ok, true);
+      assert.equal(wrongRun.value.code, "stale-run");
       await writeFile(path.join(tmpdir(), "amiba-cordis-business.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
       assert.ok(await evaluate("Array.from(document.querySelectorAll('style[data-dyn]')).some(n=>n.dataset.dyn===window.__cordisDefinition.pluginId)"));
       const stopped = await evaluate("window.__probeCtx.remote.dynamicCordisRunner.stopFromPanel(window.__compatSessionId,window.__cordisDefinition.pluginId)");
       assert.equal(stopped.ok, true);
       await wait(() => evaluate("!document.querySelector('[data-compat-dynamic]')&&!window.__probeCtx.get('dynamicCordisRunner').isLoaded(window.__cordisDefinition.pluginId)"));
       assert.ok(await evaluate("!Array.from(document.querySelectorAll('style[data-dyn]')).some(n=>n.dataset.dyn===window.__cordisDefinition.pluginId)"));
-      console.log("Real dynamic Cordis package rendered an interactive self-owned tool view and stopped with Client and style cleanup");
+      const afterStop = await evaluate(`window.__probeCtx.remote.dynamicCordisRunner.invoke(${JSON.stringify(definition.pluginId)},${JSON.stringify(loaded.pluginRunId)},'increment',{})`);
+      assert.equal(afterStop.ok, true);
+      assert.equal(afterStop.value.code, "plugin-not-running");
+      await evaluate("window.__probeCtx.get('dynamicCordisRunner').startUserRun({agentId:window.__compatSessionId,pluginId:window.__cordisDefinition.pluginId,packageId:window.__cordisDefinition.packageId,mode:'run',hasClientHalf:true})");
+      const restarted = await wait(() => evaluate("window.__probeCtx.get('dynamicCordisRunner').getSnapshot().find(row=>row.pluginId===window.__cordisDefinition.pluginId)"));
+      assert.notEqual(restarted.pluginRunId, loaded.pluginRunId);
+      const oldRun = await evaluate(`window.__probeCtx.remote.dynamicCordisRunner.invoke(${JSON.stringify(definition.pluginId)},${JSON.stringify(loaded.pluginRunId)},'increment',{})`);
+      assert.equal(oldRun.value.code, "stale-run");
+      const freshRun = await evaluate(`window.__probeCtx.remote.dynamicCordisRunner.invoke(${JSON.stringify(definition.pluginId)},${JSON.stringify(restarted.pluginRunId)},'increment',{text:'fresh'})`);
+      assert.deepEqual(freshRun.value, {ok:true,value:{count:1,text:'fresh',origin:'Host'}});
+      assert.ok(await evaluate("!document.querySelector('[data-compat-dynamic]')"), "an earlier tool result must not host a new activation");
+      await writeFile(path.join(profile, "cordis-update"), "update");
+      const nextDefinition = await wait(async () => { try { return JSON.parse(await readFile(path.join(profile, "cordis-next-definition.json"), "utf8")); } catch { return undefined; } });
+      assert.equal(nextDefinition.pluginId, definition.pluginId);
+      assert.notEqual(nextDefinition.packageId, definition.packageId);
+      await evaluate(`window.__probeCtx.get('dynamicCordisRunner').startUserRun({agentId:window.__compatSessionId,pluginId:${JSON.stringify(nextDefinition.pluginId)},packageId:${JSON.stringify(nextDefinition.packageId)},mode:'update',hasClientHalf:true})`);
+      const upgraded = await wait(() => evaluate(`window.__probeCtx.get('dynamicCordisRunner').getSnapshot().find(row=>row.packageId===${JSON.stringify(nextDefinition.packageId)})`));
+      assert.notEqual(upgraded.pluginRunId, restarted.pluginRunId);
+      await writeFile(path.join(profile, "cordis-next-card.json"), JSON.stringify({pluginRunId:upgraded.pluginRunId}));
+      await wait(() => evaluate("(()=>{for(const button of document.querySelectorAll('[data-execution-summary] > button[aria-expanded=false]'))button.click();return document.body.textContent.includes('COMPAT_DYNAMIC_V2 0')})()"));
+      assert.equal(await evaluate("document.querySelectorAll('[data-compat-dynamic]').length"), 1);
+      assert.equal(await evaluate("document.querySelector('[data-compat-dynamic]').dataset.package"), nextDefinition.packageId);
+      await evaluate("document.querySelector('[data-compat-dynamic]').click();void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_DYNAMIC_V2 1')"));
+      const updatedHost = await evaluate(`window.__probeCtx.remote.dynamicCordisRunner.invoke(${JSON.stringify(definition.pluginId)},${JSON.stringify(upgraded.pluginRunId)},'increment',{text:'updated'})`);
+      assert.deepEqual(updatedHost.value, {ok:true,value:{count:2,text:'updated',origin:'Host-v2'}});
+      const obsolete = await evaluate(`window.__probeCtx.remote.dynamicCordisRunner.invoke(${JSON.stringify(definition.pluginId)},${JSON.stringify(restarted.pluginRunId)},'increment',{})`);
+      assert.equal(obsolete.value.code, "stale-run");
+      await evaluate("window.__probeCtx.remote.dynamicCordisRunner.stopFromPanel(window.__compatSessionId,window.__cordisDefinition.pluginId)");
+      await wait(() => evaluate("!window.__probeCtx.get('dynamicCordisRunner').isLoaded(window.__cordisDefinition.pluginId)"));
+      console.log("Dynamic Cordis Client-to-Host RPC preserved Unicode, rejected stopped/stale runs and isolated Host state after restart and package update; native cards and cleanup remained intact");
     }
     if (process.argv.includes("--command-rows")) {
       await evaluate("window.__commandRowOff=window.__probeCtx.slots.register({name:'conversation.chat.commandview',key:'compat-row',id:'compat-command-row'},props=>{window.__commandRowOwner=props;return window.__probeCreateElement('div',{'data-compat-command-row':''},props.node.outcome?.text??'COMPAT_COMMAND_EXECUTING')});void 0");
