@@ -1,3 +1,4 @@
+import { registerConversationNodes } from "@deepseek-ai/dsh-client-ui-conversation/headless";
 import { createDirectoryFlow, type DirectoryFlow } from "./directory-flow.js";
 import { createConversationViewSource, type ConversationViewEntry } from "./conversation-view-source.js";
 import { CONVERSATION_ENTRY_REMOTE } from "../conversation-remote.js";
@@ -560,6 +561,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // before `ui-input-trigger` has provided the service, and an eager call
     // would silently register nothing at all — the built-in skills and
     // session groups would simply never appear in-session.
+    const conversationDataFiber = ctx.inject(["conversationEvents", "conversationViews"], (scope) => {
+      registerConversationNodes(scope);
+    });
     const sourcesFiber = ctx.inject(["inputTriggers"], (scope) => {
       scope.effect(
         () => triggerRuntime.registerSources(officialTriggerSources()),
@@ -888,6 +892,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       void localeFiber.dispose();
       void messagesFiber.dispose();
       disposeMessageCatalog();
+      void conversationDataFiber.dispose();
       void sourcesFiber.dispose();
       void disposeComposerInputs();
       for (const dispose of disposeWorkbench) dispose();

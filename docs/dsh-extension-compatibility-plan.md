@@ -322,3 +322,41 @@ This proves a headless extraction is feasible at registration time. It does not
 prove complete event projection: external helpers used during event processing
 must still be included, tested, packaged and wired before adding the render seat.
 No turn-tail compatibility is claimed from this prerequisite test alone.
+
+### Headless conversation module integrated (Desktop verification pending)
+
+Added a pinned `ui-conversation/headless` ESM export. Its exact lexical dependency
+closure is selected with the TypeScript symbol checker from the original bundle;
+the only import is the official client runtime. No React, DOM, root slots or
+composer state is included. The shell statically bundles this export and registers
+its data definitions/target through a scoped conversationEvents/conversationViews
+fiber, disposing it with the shell.
+
+Five tests pass, including exact standalone/source identity and real history/live
+projection. Tests run the actual official ConversationNodeAssembler and conversion
+helpers extracted by the same dependency traversal, without engine substitutes.
+They verify turn/start/end, step boundaries, closing seq/message ID and reference
+identity between the chat node and timeline TurnLocation. Shell typecheck passed.
+A complete Desktop build is running; actual plugin loading, lifecycle and regression
+checks are still required. The turn-tail render seat is not yet implemented.
+
+Headless follow-up: declared the actual runtime module in `dsh.client.external`
+after the bundle verifier rejected its missing arrival dependency. The shell's
+own production build now passes. Seven source/engine tests pass, including tool
+call/result preservation across registry rebuild and history replacement, and
+absence of a footer on an unfinished turn. A fresh complete Desktop build is
+running. The smoke now checks the real mounted definitions and reads the chat
+timeline through a plugin view's actual useSession hook.
+
+Headless Desktop verification completed: full production build and actual
+`--compat` smoke passed (`/tmp/amiba-headless-desktop-smoke.log`). The probe
+asserts registered assistant-step / turn-tail definitions and the chat target,
+then reads the real session chat timeline/node store through a contributed view's
+useSession hook. Existing Home/project directory, settings, native ZIP, view,
+HMR and detach checks pass. The stock conversation page remains disabled.
+
+Next render prerequisite: Amiba groups bubbles by user messages, which must not
+be treated as engine turn numbers. Carry the exact event turn number through
+live/history message projection before mapping footer render sites, including
+completed tool-only replies. The headless module alone is not a completed footer
+adapter.

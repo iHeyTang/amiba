@@ -228,6 +228,7 @@ try {
     console.log("Default native picker passed installed component, platform callback and main IPC with preserved defaultPath (OS dialog response stubbed).");
 
     }
+    assert.ok(await evaluate("window.__probeCtx.get('conversationEvents').entries().some(d=>d.kind==='turn-tail') && window.__probeCtx.get('conversationEvents').entries().some(d=>d.kind==='assistant-step') && window.__probeCtx.get('conversationViews').entries().some(d=>d.target==='chat')"), "headless official data definitions and chat target must be mounted");
     // Real SlotCore + module-loader + renderer integration on the file: surface.
     const namespace = await evaluate(`(async () => {
       const ctx = window.__probeCtx;
@@ -335,12 +336,13 @@ try {
       window.__compatViewOff = window.__probeCtx.slots.register({
         name:'conversation.view', id:'compat-view', label:'Compatibility view',
         inject: (sessionId) => ({injectedSessionId:sessionId}),
-      }, ({sessionId,injectedSessionId}) => 'COMPAT_VIEW:' + sessionId + ':' + injectedSessionId);
+      }, ({sessionId,injectedSessionId,useSession}) => { window.__compatChatSnapshot=useSession(s=>s.chat); return 'COMPAT_VIEW:' + sessionId + ':' + injectedSessionId; });
     })()`);
     await wait(() => evaluate("Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility view')"));
     await evaluate("window.__nativeChatNode=document.querySelector('main[role=tabpanel]');Array.from(document.querySelectorAll('[role=tab]')).find(n=>n.textContent==='Compatibility view').click()");
     await wait(() => evaluate("document.body.textContent.includes('COMPAT_VIEW:'+window.__compatSessionId+':'+window.__compatSessionId)"));
     assert.ok(await evaluate("window.__nativeChatNode.isConnected && window.__nativeChatNode.hidden"), "native chat stays mounted while viewing plugin");
+    assert.ok(await evaluate("Array.isArray(window.__compatChatSnapshot.timeline.turnOrder) && window.__compatChatSnapshot.timeline.turns instanceof Map && typeof window.__compatChatSnapshot.nodes.values==='function'"), "a real session must expose the headless chat snapshot to plugin views");
     await writeFile(path.join(tmpdir(), "amiba-conversation-plugin-view.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
     await evaluate("window.__compatViewOff();delete window.__compatViewOff");
     await wait(() => evaluate("window.__nativeChatNode.isConnected && !window.__nativeChatNode.hidden && !document.body.textContent.includes('COMPAT_VIEW:') && !Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility view')"));

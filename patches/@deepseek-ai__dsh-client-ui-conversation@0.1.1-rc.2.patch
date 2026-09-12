@@ -1,0 +1,1776 @@
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -27,7 +27,11 @@
+       "default": "./lib/client.js"
+     },
+     "./src/*": "./src/*",
+-    "./package.json": "./package.json"
++    "./package.json": "./package.json",
++    "./headless": {
++      "types": "./lib/types/headless.d.ts",
++      "default": "./lib/headless.js"
++    }
+   },
+   "dsh": {
+     "client": {
+diff --git a/lib/headless.js b/lib/headless.js
+new file mode 100644
+--- /dev/null
++++ b/lib/headless.js
+@@ -0,0 +1,1748 @@
++import * as _deepseek_ai_dsh_client_runtime_client from "@deepseek-ai/dsh-client-runtime/client";
++
++function usageOutputTokens(usage) {
++			if (typeof usage !== "object" || usage === null) return null;
++			const value = usage.outputTokens;
++			return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
++		}
++
++function assistantStepReading(node) {
++			const timing = node.timing;
++			return {
++				ttftMs: timing !== void 0 && timing.stepStartTime !== null && timing.firstTokenTime !== null ? Math.max(0, timing.firstTokenTime - timing.stepStartTime) : null,
++				decodeMs: timing !== void 0 && timing.firstTokenTime !== null ? Math.max(0, timing.completedTime - timing.firstTokenTime) : null,
++				outputTokens: usageOutputTokens(node.usage)
++			};
++		}
++
++function deriveTurnMetrics(nodes) {
++			const folds = /* @__PURE__ */ new Map();
++			for (const node of nodes) {
++				if (node.kind !== "assistant") continue;
++				const reading = assistantStepReading(node);
++				let fold = folds.get(node.turn);
++				if (fold === void 0) {
++					fold = {
++						firstStep: node.step,
++						firstStepTtftMs: reading.ttftMs,
++						decodeMs: 0,
++						outputTokens: 0,
++						sampled: false
++					};
++					folds.set(node.turn, fold);
++				} else if (node.step < fold.firstStep) {
++					fold.firstStep = node.step;
++					fold.firstStepTtftMs = reading.ttftMs;
++				}
++				if (reading.decodeMs !== null && reading.outputTokens !== null) {
++					fold.decodeMs += reading.decodeMs;
++					fold.outputTokens += reading.outputTokens;
++					fold.sampled = true;
++				}
++			}
++			const metrics = /* @__PURE__ */ new Map();
++			for (const [turn, fold] of folds) {
++				const entry = {};
++				if (fold.firstStepTtftMs !== null) entry.ttftMs = fold.firstStepTtftMs;
++				if (fold.sampled && fold.decodeMs > 0) entry.tokensPerSecond = fold.outputTokens / (fold.decodeMs / 1e3);
++				if (entry.ttftMs !== void 0 || entry.tokensPerSecond !== void 0) metrics.set(turn, entry);
++			}
++			return metrics;
++		}
++
++const CHAT_SYNTHETIC_SEQ_OFFSETS = {
++			interruptedAssistant: -.9,
++			interruptedFollowup: -.8,
++			maxTokensNotice: .05,
++			finalizedFollowup: .1
++		};
++
++function contextLocation(context) {
++			return context.start?.location ?? context.matches[0]?.location ?? { kind: "unresolved" };
++		}
++
++function chatNode(context, kind, anchorSeq, data, options = {}) {
++			return {
++				key: context.key,
++				kind,
++				id: context.id,
++				target: "chat",
++				anchorSeq,
++				location: options.location ?? contextLocation(context),
++				visibility: options.visibility ?? "visible",
++				data
++			};
++		}
++
++function initialState(turn, step) {
++			return {
++				turn,
++				step,
++				blocks: [],
++				firstVisibleSeq: void 0,
++				firstVisibleTime: void 0,
++				firstTokenTime: void 0,
++				hidden: false,
++				final: void 0,
++				usage: void 0
++			};
++		}
++
++function compactBlocks(blocks) {
++			return blocks.filter((block) => block !== void 0);
++		}
++
++function hasVisibleContent(blocks) {
++			return blocks.some((block) => {
++				if (block.kind === "tool-call") return false;
++				if (block.kind === "text" || block.kind === "reasoning") return block.text.trim() !== "";
++				return true;
++			});
++		}
++
++function hasInterruptionEvidence(blocks) {
++			return blocks.some((block) => {
++				if (block.kind === "text" || block.kind === "reasoning") return block.text.trim() !== "";
++				return true;
++			});
++		}
++
++function resetForRetry(state) {
++			return {
++				...initialState(state.turn, state.step),
++				firstTokenTime: state.firstTokenTime,
++				hidden: true
++			};
++		}
++
++function updateChunk(state, match) {
++			if (match.event.type !== "assistant/chunk") return state;
++			const chunk = match.event.data.chunk;
++			const blocks = [...state.blocks];
++			switch (chunk.type) {
++				case "block-start":
++					blocks[chunk.index] = (0, _deepseek_ai_dsh_client_runtime_client.emptyAssistantBlock)(chunk.blockType);
++					break;
++				case "text-delta": {
++					const previous = blocks[chunk.index];
++					blocks[chunk.index] = {
++						kind: "text",
++						text: (previous?.kind === "text" ? previous.text : "") + chunk.text
++					};
++					break;
++				}
++				case "reasoning-delta": {
++					const previous = blocks[chunk.index];
++					blocks[chunk.index] = {
++						kind: "reasoning",
++						text: (previous?.kind === "reasoning" ? previous.text : "") + chunk.text
++					};
++					break;
++				}
++				case "tool-call-delta": {
++					const previous = blocks[chunk.index];
++					const base = previous?.kind === "tool-call" ? previous : {
++						kind: "tool-call",
++						callId: "",
++						name: "",
++						argsRaw: ""
++					};
++					blocks[chunk.index] = {
++						kind: "tool-call",
++						callId: base.callId || String(chunk.id),
++						name: chunk.name ?? base.name,
++						argsRaw: base.argsRaw + chunk.argumentsDelta
++					};
++					break;
++				}
++				case "block-end":
++					blocks[chunk.index] = (0, _deepseek_ai_dsh_client_runtime_client.toAssistantBlock)(chunk.block);
++					break;
++				case "usage": return {
++					...state,
++					usage: chunk.usage
++				};
++				default: return state;
++			}
++			const visible = hasVisibleContent(compactBlocks(blocks));
++			const firstToken = (0, _deepseek_ai_dsh_client_runtime_client.isTokenDelta)(chunk);
++			return {
++				...state,
++				blocks,
++				hidden: visible ? false : state.hidden,
++				...visible && state.firstVisibleSeq === void 0 ? {
++					firstVisibleSeq: match.event.seq,
++					firstVisibleTime: match.event.time
++				} : {},
++				...firstToken && state.firstTokenTime === void 0 ? { firstTokenTime: match.event.time } : {}
++			};
++		}
++
++function closedBoundary(location) {
++			if (location.kind === "step" && location.step.status === "closed" && location.step.end !== void 0) return location.step.end;
++			if ((location.kind === "step" || location.kind === "turn") && location.turn.status === "closed" && location.turn.end !== void 0) return location.turn.end;
++		}
++
++function finalNode(state, context) {
++			const final = state.final;
++			if (final?.event.type === "assistant/message") {
++				const event = final.event;
++				return {
++					kind: "assistant",
++					seq: event.seq,
++					messageId: event.data.message.id,
++					time: event.time,
++					turn: state.turn,
++					step: state.step,
++					blocks: (0, _deepseek_ai_dsh_client_runtime_client.toAssistantBlocks)(event.data.message.content),
++					usage: event.data.usage,
++					timing: {
++						stepStartTime: context.start?.event.time ?? null,
++						firstTokenTime: state.firstTokenTime ?? null,
++						completedTime: event.time
++					},
++					...event.data.interrupted === true ? { interrupted: true } : {}
++				};
++			}
++			const location = context.start?.location ?? context.matches.at(-1)?.location;
++			const boundary = location === void 0 ? void 0 : closedBoundary(location);
++			const blocks = compactBlocks(state.blocks);
++			if (boundary === void 0 || !hasInterruptionEvidence(blocks)) return void 0;
++			return {
++				kind: "assistant",
++				seq: boundary.seq + CHAT_SYNTHETIC_SEQ_OFFSETS.interruptedAssistant,
++				time: boundary.time,
++				turn: state.turn,
++				step: state.step,
++				blocks,
++				interrupted: true
++			};
++		}
++
++function fallbackState$4(context) {
++			let state;
++			for (const match of context.matches) {
++				if (match.event.type === "assistant/chunk") {
++					state ??= initialState(match.event.data.turn, match.event.data.step);
++					state = updateChunk(state, match);
++					continue;
++				}
++				if (match.event.type === "assistant/message") {
++					state ??= initialState(match.event.data.turn, match.event.data.step);
++					state = {
++						...state,
++						blocks: (0, _deepseek_ai_dsh_client_runtime_client.toAssistantBlocks)(match.event.data.message.content),
++						hidden: false,
++						final: match,
++						usage: match.event.data.usage
++					};
++					continue;
++				}
++				if (match.event.type === "llm/retry" && state !== void 0) state = resetForRetry(state);
++			}
++			return state;
++		}
++
++function projectAssistant(context) {
++			const state = context.state ?? fallbackState$4(context);
++			if (state === void 0) return void 0;
++			const settled = finalNode(state, context);
++			const blocks = settled?.blocks ?? compactBlocks(state.blocks);
++			const visible = hasVisibleContent(blocks);
++			const status = settled?.interrupted === true ? "interrupted" : settled === void 0 ? "running" : "settled";
++			const anchorSeq = settled?.seq ?? state.firstVisibleSeq ?? context.matches[0]?.event.seq ?? 0;
++			const time = settled?.time ?? state.firstVisibleTime ?? context.matches[0]?.event.time ?? 0;
++			return {
++				anchorSeq,
++				visible,
++				settled,
++				data: {
++					status,
++					turn: state.turn,
++					step: state.step,
++					blocks,
++					time,
++					...state.usage === void 0 ? {} : { usage: state.usage },
++					...settled === void 0 ? {} : { finalNode: settled }
++				}
++			};
++		}
++
++const assistantDefinition = {
++			kind: "assistant-step",
++			target: "chat",
++			match: (event) => {
++				if (event.type === "step/start") return {
++					id: `${event.data.turn}:${event.data.step}`,
++					role: "start"
++				};
++				if (event.type === "assistant/chunk" || event.type === "assistant/message" && (0, _deepseek_ai_dsh_client_runtime_client.isAppendSurfaceEvent)(event)) return {
++					id: `${event.data.turn}:${event.data.step}`,
++					role: "update"
++				};
++				if (event.type === "llm/retry") return {
++					id: `${event.data.turn}:${event.data.step}`,
++					role: "update"
++				};
++				return null;
++			},
++			start: (_context, match) => {
++				if (match.event.type !== "step/start") throw new Error("assistant-step start requires step/start");
++				return initialState(match.event.data.turn, match.event.data.step);
++			},
++			update: (context, match) => {
++				if (match.event.type === "assistant/chunk") return updateChunk(context.state, match);
++				if (match.event.type === "assistant/message") return {
++					...context.state,
++					blocks: (0, _deepseek_ai_dsh_client_runtime_client.toAssistantBlocks)(match.event.data.message.content),
++					hidden: false,
++					final: match,
++					usage: match.event.data.usage
++				};
++				if (match.event.type === "llm/retry") return resetForRetry(context.state);
++				return context.state;
++			},
++			publication: (match) => {
++				if (match.event.type === "step/start") return "none";
++				if (match.event.type !== "assistant/chunk") return "immediate";
++				const type = match.event.data.chunk.type;
++				return type === "usage" || type === "finish" ? "none" : "animation-frame";
++			},
++			buildLocationData: (context, scope) => {
++				if (scope !== "step") return null;
++				const projected = projectAssistant(context);
++				if (projected === void 0) return null;
++				return {
++					kind: "step",
++					turn: projected.data.turn,
++					step: projected.data.step,
++					key: "assistant-step",
++					value: projected.data
++				};
++			},
++			buildViewNode: (context) => {
++				const projected = projectAssistant(context);
++				if (projected === void 0) return null;
++				if (projected.settled === void 0 && !projected.visible) {
++					const state = context.state ?? fallbackState$4(context);
++					if (state === void 0) return null;
++					const current = context.current.get("chat");
++					if (!state.hidden || current === void 0 || current === null) return null;
++				}
++				return chatNode(context, "assistant-step", projected.anchorSeq, projected.data, { visibility: projected.settled?.interrupted === true || projected.visible ? "visible" : "hidden" });
++			}
++		};
++
++function registerAssistantConversationNode(ctx) {
++			ctx.conversationEvents.register(assistantDefinition);
++		}
++
++function isSettledTool(block) {
++			return "kind" in block;
++		}
++
++function isRunningTool(block) {
++			return !isSettledTool(block);
++		}
++
++const EMPTY_KEYS = [];
++
++const EMPTY_TURNS = [];
++
++const EMPTY_LIST = [];
++
++function sameReferences$1(left, right) {
++			return left.length === right.length && left.every((value, index) => value === right[index]);
++		}
++
++var MutableChatNodeStore = class {
++			byKey = /* @__PURE__ */ new Map();
++			valuesCache = EMPTY_LIST;
++			valuesDirty = false;
++			get(key) {
++				return this.byKey.get(key);
++			}
++			values() {
++				if (this.valuesDirty) {
++					this.valuesCache = [...this.byKey.values()];
++					this.valuesDirty = false;
++				}
++				return this.valuesCache;
++			}
++			replace(nodes) {
++				this.byKey.clear();
++				for (const node of nodes) this.byKey.set(node.key, node);
++				this.valuesCache = [...this.byKey.values()];
++				this.valuesDirty = false;
++			}
++			upsert(nodes) {
++				let changed = false;
++				for (const node of nodes) {
++					if (this.byKey.get(node.key) === node) continue;
++					this.byKey.set(node.key, node);
++					changed = true;
++				}
++				if (changed) this.valuesDirty = true;
++			}
++		};
++
++var MutableChatLocationIndex = class {
++			turns = /* @__PURE__ */ new Map();
++			steps = /* @__PURE__ */ new Map();
++			getTurn(turn) {
++				return this.turns.get(turn) ?? EMPTY_KEYS;
++			}
++			getStep(turn, step) {
++				return this.steps.get(stepKey(turn, step)) ?? EMPTY_KEYS;
++			}
++			rebuild(order, store) {
++				const turns = /* @__PURE__ */ new Map();
++				const steps = /* @__PURE__ */ new Map();
++				for (const key of order) {
++					const location = store.get(key)?.location;
++					if (location === void 0) continue;
++					const coordinates = locationCoordinates(location);
++					if (coordinates.turn === void 0) continue;
++					const turnKeys = turns.get(coordinates.turn) ?? [];
++					turnKeys.push(key);
++					turns.set(coordinates.turn, turnKeys);
++					if (coordinates.step === void 0) continue;
++					const step = stepKey(coordinates.turn, coordinates.step);
++					const stepKeys = steps.get(step) ?? [];
++					stepKeys.push(key);
++					steps.set(step, stepKeys);
++				}
++				this.turns = updateIndex(this.turns, turns);
++				this.steps = updateIndex(this.steps, steps);
++			}
++			/** Invalidate aggregate readers when member data changes without moving. */
++			touch(nodes) {
++				const turns = /* @__PURE__ */ new Set();
++				const steps = /* @__PURE__ */ new Set();
++				for (const node of nodes) {
++					const coordinates = locationCoordinates(node.location);
++					if (coordinates.turn === void 0 || !this.turns.get(coordinates.turn)?.includes(node.key)) continue;
++					turns.add(coordinates.turn);
++					if (coordinates.step !== void 0) steps.add(stepKey(coordinates.turn, coordinates.step));
++				}
++				for (const turn of turns) {
++					const keys = this.turns.get(turn);
++					if (keys === void 0) continue;
++					this.turns.set(turn, [...keys]);
++				}
++				for (const step of steps) {
++					const keys = this.steps.get(step);
++					if (keys === void 0) continue;
++					this.steps.set(step, [...keys]);
++				}
++			}
++		};
++
++function updateIndex(previous, nextMutable) {
++			const next = /* @__PURE__ */ new Map();
++			const keys = new Set([...previous.keys(), ...nextMutable.keys()]);
++			for (const key of keys) {
++				const before = previous.get(key) ?? EMPTY_KEYS;
++				const candidate = nextMutable.get(key) ?? EMPTY_KEYS;
++				const value = sameReferences$1(before, candidate) ? before : candidate;
++				if (candidate.length > 0) next.set(key, value);
++			}
++			return next;
++		}
++
++function stepKey(turn, step) {
++			return `${turn}:${step}`;
++		}
++
++function locationCoordinates(location) {
++			if (location.kind === "step") return {
++				turn: location.turn.turn,
++				step: location.step.step
++			};
++			if (location.kind === "turn") return { turn: location.turn.turn };
++			return {};
++		}
++
++function orderedVisible(nodes) {
++			return nodes.filter((node) => node.visibility === "visible").sort((left, right) => left.anchorSeq - right.anchorSeq || left.key.localeCompare(right.key));
++		}
++
++function referenceMessageSeq(node) {
++			const candidate = node;
++			return candidate.kind === "user" || candidate.kind === "steering" ? candidate.data.seq : void 0;
++		}
++
++function followingRecall(node) {
++			const candidate = node;
++			if (candidate.kind !== "context") return void 0;
++			return {
++				messageSeq: candidate.data.seq - 1,
++				labels: (0, _deepseek_ai_dsh_client_runtime_client.sessionRecallLabels)(candidate.data.source)
++			};
++		}
++
++function withReferenceLabels(node, labels) {
++			const candidate = node;
++			if (candidate.kind !== "user" && candidate.kind !== "steering") return node;
++			const current = candidate.data.referenceLabels ?? EMPTY_KEYS;
++			const hasLabels = Object.hasOwn(candidate.data, "referenceLabels");
++			if (sameReferences$1(current, labels) && hasLabels === labels.length > 0) return node;
++			const data = { ...candidate.data };
++			if (labels.length === 0) delete data.referenceLabels;
++			else data.referenceLabels = labels;
++			return {
++				...candidate,
++				data
++			};
++		}
++
++var ReferenceLabelProjector = class {
++			messagesBySeq = /* @__PURE__ */ new Map();
++			labelsByMessageSeq = /* @__PURE__ */ new Map();
++			replace(nodes) {
++				this.messagesBySeq.clear();
++				this.labelsByMessageSeq.clear();
++				for (const node of nodes) {
++					const messageSeq = referenceMessageSeq(node);
++					if (messageSeq !== void 0) this.messagesBySeq.set(messageSeq, node.key);
++					const recall = followingRecall(node);
++					if (recall !== void 0 && recall.labels.length > 0) this.labelsByMessageSeq.set(recall.messageSeq, recall.labels);
++				}
++				return nodes.map((node) => {
++					const messageSeq = referenceMessageSeq(node);
++					return messageSeq === void 0 ? node : withReferenceLabels(node, this.labelsByMessageSeq.get(messageSeq) ?? EMPTY_KEYS);
++				});
++			}
++			apply(upserts, store) {
++				const byKey = new Map(upserts.map((node) => [node.key, node]));
++				const affected = /* @__PURE__ */ new Set();
++				for (const node of upserts) {
++					const messageSeq = referenceMessageSeq(node);
++					if (messageSeq !== void 0) {
++						this.messagesBySeq.set(messageSeq, node.key);
++						affected.add(messageSeq);
++					}
++					const recall = followingRecall(node);
++					if (recall === void 0) continue;
++					const current = this.labelsByMessageSeq.get(recall.messageSeq);
++					if (recall.labels.length === 0) this.labelsByMessageSeq.delete(recall.messageSeq);
++					else this.labelsByMessageSeq.set(recall.messageSeq, current !== void 0 && sameReferences$1(current, recall.labels) ? current : recall.labels);
++					affected.add(recall.messageSeq);
++				}
++				for (const messageSeq of affected) {
++					const key = this.messagesBySeq.get(messageSeq);
++					if (key === void 0) continue;
++					const node = byKey.get(key) ?? store.get(key);
++					if (node === void 0) continue;
++					byKey.set(key, withReferenceLabels(node, this.labelsByMessageSeq.get(messageSeq) ?? EMPTY_KEYS));
++				}
++				return [...byKey.values()];
++			}
++		};
++
++const EMPTY_CONTRIBUTION = {
++			anchorSeq: 0,
++			nodes: EMPTY_LIST,
++			partial: null,
++			running: null
++		};
++
++function legacyContribution(raw) {
++			const node = raw;
++			if (raw.visibility !== "visible" && node.kind !== "assistant-step") return EMPTY_CONTRIBUTION;
++			switch (node.kind) {
++				case "user":
++				case "steering":
++				case "context":
++				case "command":
++				case "compaction":
++				case "turn-error":
++				case "turn-max-tokens":
++				case "unknown": return {
++					anchorSeq: node.anchorSeq,
++					nodes: [node.data],
++					partial: null,
++					running: null
++				};
++				case "assistant-step": {
++					const data = node.data;
++					if (data.status === "running") {
++						if (raw.visibility !== "visible") return EMPTY_CONTRIBUTION;
++						return {
++							anchorSeq: node.anchorSeq,
++							nodes: EMPTY_LIST,
++							partial: {
++								turn: data.turn,
++								step: data.step,
++								blocks: data.blocks
++							},
++							running: null
++						};
++					}
++					return {
++						anchorSeq: node.anchorSeq,
++						nodes: data.finalNode === void 0 ? EMPTY_LIST : [data.finalNode],
++						partial: null,
++						running: null
++					};
++				}
++				case "tool-call": {
++					const root = node.data.root;
++					return isRunningTool(root) ? {
++						anchorSeq: node.anchorSeq,
++						nodes: EMPTY_LIST,
++						partial: null,
++						running: root
++					} : {
++						anchorSeq: node.anchorSeq,
++						nodes: [root],
++						partial: null,
++						running: null
++					};
++				}
++				case "manual-compaction": {
++					const data = node.data;
++					return {
++						anchorSeq: node.anchorSeq,
++						nodes: data.compaction === null ? [data.command] : [data.command, data.compaction],
++						partial: null,
++						running: null
++					};
++				}
++				case "model-retry": return {
++					anchorSeq: node.anchorSeq,
++					nodes: node.data.attempts,
++					partial: null,
++					running: null
++				};
++				case "turn-tail": return EMPTY_CONTRIBUTION;
++				default: return EMPTY_CONTRIBUTION;
++			}
++		}
++
++function sameContribution(left, right) {
++			return left !== void 0 && left.anchorSeq === right.anchorSeq && left.partial?.blocks === right.partial?.blocks && left.partial?.turn === right.partial?.turn && left.partial?.step === right.partial?.step && left.running === right.running && sameReferences$1(left.nodes, right.nodes);
++		}
++
++var LegacySliceBuilder = class {
++			contributions = /* @__PURE__ */ new Map();
++			finalizedContributions = /* @__PURE__ */ new Map();
++			runningContributions = /* @__PURE__ */ new Map();
++			partialContributions = /* @__PURE__ */ new Map();
++			finalized = EMPTY_LIST;
++			runningCalls = EMPTY_LIST;
++			partial = null;
++			timeline;
++			turnTimings = /* @__PURE__ */ new Map();
++			turnEnds = /* @__PURE__ */ new Map();
++			replace(nodes, timeline) {
++				this.contributions.clear();
++				this.finalizedContributions.clear();
++				this.runningContributions.clear();
++				this.partialContributions.clear();
++				for (const node of nodes) {
++					const contribution = legacyContribution(node);
++					this.contributions.set(node.key, contribution);
++					this.indexContribution(node.key, contribution);
++				}
++				this.rebuildFinalized();
++				this.rebuildRunning();
++				this.rebuildPartial();
++				this.updateTimeline(timeline);
++				return this.snapshot();
++			}
++			apply(upserts, timeline) {
++				let finalizedChanged = false;
++				let runningChanged = false;
++				let partialChanged = false;
++				for (const node of upserts) {
++					const contribution = legacyContribution(node);
++					const previous = this.contributions.get(node.key);
++					if (sameContribution(previous, contribution)) continue;
++					finalizedChanged ||= finalizedContributionChanged(previous, contribution);
++					runningChanged ||= runningContributionChanged(previous, contribution);
++					partialChanged ||= partialContributionChanged(previous, contribution);
++					this.contributions.set(node.key, contribution);
++					this.indexContribution(node.key, contribution);
++				}
++				if (finalizedChanged) this.rebuildFinalized();
++				if (runningChanged) this.rebuildRunning();
++				if (partialChanged) this.rebuildPartial();
++				this.updateTimeline(timeline);
++				return this.snapshot();
++			}
++			indexContribution(key, contribution) {
++				updateContributionIndex(this.finalizedContributions, key, contribution, contribution.nodes.length > 0);
++				updateContributionIndex(this.runningContributions, key, contribution, contribution.running !== null);
++				updateContributionIndex(this.partialContributions, key, contribution, contribution.partial !== null);
++			}
++			rebuildFinalized() {
++				const finalized = [...this.finalizedContributions.values()].flatMap((value) => value.nodes).sort((left, right) => left.seq - right.seq);
++				if (!sameReferences$1(this.finalized, finalized)) this.finalized = finalized;
++			}
++			rebuildRunning() {
++				const runningCalls = [...this.runningContributions.values()].sort((left, right) => left.anchorSeq - right.anchorSeq).flatMap((value) => value.running === null ? [] : [value.running]);
++				if (!sameReferences$1(this.runningCalls, runningCalls)) this.runningCalls = runningCalls;
++			}
++			rebuildPartial() {
++				const partial = [...this.partialContributions.values()].sort((left, right) => left.anchorSeq - right.anchorSeq).findLast((value) => value.partial !== null)?.partial ?? null;
++				if (this.partial?.blocks !== partial?.blocks || this.partial?.turn !== partial?.turn || this.partial?.step !== partial?.step) this.partial = partial;
++			}
++			updateTimeline(timeline) {
++				if (this.timeline === timeline) return;
++				this.timeline = timeline;
++				const turnTimings = /* @__PURE__ */ new Map();
++				const turnEnds = /* @__PURE__ */ new Map();
++				for (const turn of timeline.turns.values()) {
++					if (turn.start !== void 0) turnTimings.set(turn.turn, {
++						startTime: turn.start.time,
++						...turn.end === void 0 ? {} : { endTime: turn.end.time }
++					});
++					if (turn.end !== void 0) turnEnds.set(turn.turn, turn.end.seq);
++				}
++				this.turnTimings = turnTimings;
++				this.turnEnds = turnEnds;
++			}
++			snapshot() {
++				return {
++					nodes: this.finalized,
++					turnTimings: this.turnTimings,
++					turnEnds: this.turnEnds,
++					partial: this.partial,
++					runningCalls: this.runningCalls
++				};
++			}
++		};
++
++function updateContributionIndex(index, key, contribution, present) {
++			if (present) index.set(key, contribution);
++			else index.delete(key);
++		}
++
++function finalizedContributionChanged(previous, next) {
++			const previousNodes = previous?.nodes ?? EMPTY_LIST;
++			return !sameReferences$1(previousNodes, next.nodes) || (previousNodes.length > 0 || next.nodes.length > 0) && previous?.anchorSeq !== next.anchorSeq;
++		}
++
++function runningContributionChanged(previous, next) {
++			return previous?.running !== next.running || (previous.running !== null || next.running !== null) && previous.anchorSeq !== next.anchorSeq;
++		}
++
++function partialContributionChanged(previous, next) {
++			return previous?.partial?.blocks !== next.partial?.blocks || previous?.partial?.turn !== next.partial?.turn || previous?.partial?.step !== next.partial?.step || ((previous?.partial ?? null) !== null || next.partial !== null) && previous?.anchorSeq !== next.anchorSeq;
++		}
++
++var ChatSnapshotBuilder = class {
++			store = new MutableChatNodeStore();
++			locations = new MutableChatLocationIndex();
++			legacy = new LegacySliceBuilder();
++			referenceLabels = new ReferenceLabelProjector();
++			order = EMPTY_KEYS;
++			empty;
++			constructor() {
++				this.empty = this.snapshot({
++					turnOrder: EMPTY_TURNS,
++					turns: /* @__PURE__ */ new Map()
++				});
++			}
++			replace(input) {
++				const nodes = this.referenceLabels.replace(input.nodes);
++				this.store.replace(nodes);
++				this.order = orderedVisible(nodes).map((node) => node.key);
++				this.locations.rebuild(this.order, this.store);
++				return this.snapshot(input.timeline, this.legacy.replace(nodes, input.timeline));
++			}
++			apply(input) {
++				const upserts = this.referenceLabels.apply(input.upserts, this.store);
++				let structural = false;
++				const contentOnly = [];
++				for (const node of upserts) {
++					const previous = this.store.get(node.key);
++					const nodeStructural = previous === void 0 || previous.anchorSeq !== node.anchorSeq || previous.visibility !== node.visibility || locationIdentity(previous.location) !== locationIdentity(node.location);
++					structural ||= nodeStructural;
++					if (!nodeStructural) contentOnly.push(node);
++				}
++				this.store.upsert(upserts);
++				if (structural) {
++					const next = orderedVisible(this.store.values()).map((node) => node.key);
++					this.order = sameReferences$1(this.order, next) ? this.order : next;
++					this.locations.rebuild(this.order, this.store);
++				}
++				this.locations.touch(contentOnly);
++				return this.snapshot(input.timeline, this.legacy.apply(upserts, input.timeline));
++			}
++			snapshot(timeline, legacy = this.legacy.replace(EMPTY_LIST, timeline)) {
++				return {
++					order: this.order,
++					nodes: this.store,
++					locations: this.locations,
++					timeline,
++					legacy
++				};
++			}
++		};
++
++function locationIdentity(location) {
++			const coordinates = locationCoordinates(location);
++			return `${location.kind}:${coordinates.turn ?? ""}:${coordinates.step ?? ""}`;
++		}
++
++const chatViewDefinition = {
++			target: "chat",
++			create: () => new ChatSnapshotBuilder()
++		};
++
++function registerChatConversationView(ctx) {
++			ctx.conversationViews.register(chatViewDefinition);
++		}
++
++const COMPACT_PLUGIN = "compact";
++
++function commandFromRun(match) {
++			if (match.event.type !== "command/run") throw new Error("command start requires command/run");
++			const data = match.event.data;
++			return {
++				kind: "command",
++				seq: match.event.seq,
++				time: match.event.time,
++				commandId: data.commandId,
++				name: data.name,
++				args: data.args ?? null,
++				outcome: null
++			};
++		}
++
++function commandFromDone(match, previous) {
++			if (match.event.type !== "command/done") throw new Error("command update requires command/done");
++			const data = match.event.data;
++			const sourceEventSeq = data.kind === "success" && data.sourceEventSeq !== void 0 && Number.isSafeInteger(data.sourceEventSeq) && data.sourceEventSeq >= 0 ? data.sourceEventSeq : void 0;
++			return {
++				kind: "command",
++				seq: previous?.seq ?? match.event.seq,
++				time: previous?.time ?? match.event.time,
++				commandId: data.commandId,
++				name: previous?.name ?? null,
++				args: previous?.args ?? null,
++				outcome: {
++					kind: data.kind,
++					...data.text === void 0 ? {} : { text: data.text },
++					...sourceEventSeq === void 0 ? {} : { sourceEventSeq }
++				}
++			};
++		}
++
++function compactSource(event) {
++			if (event.type !== "user/message" || !(0, _deepseek_ai_dsh_client_runtime_client.isReplacementSurfaceEvent)(event)) return void 0;
++			const source = event.data.source;
++			if (source.kind !== "plugin" || source.plugin !== COMPACT_PLUGIN || typeof source.compactionId !== "string") return void 0;
++			return {
++				compactionId: source.compactionId,
++				...source.sourceCommandId === void 0 ? {} : { sourceCommandId: source.sourceCommandId }
++			};
++		}
++
++function compactSummary(match, checkpoint) {
++			let summary = null;
++			let shadowedItemCount = null;
++			let shadowedTokenCount = null;
++			if (match?.event.type === "compaction/summary") {
++				const data = match.event.data;
++				if (Array.isArray(data.summary)) {
++					const text = data.summary.map((block) => block.type === "text" ? block.text : "").join("");
++					summary = text.trim() === "" ? null : text;
++				}
++				shadowedItemCount = Array.isArray(data.shadowedSeqs) && data.shadowedSeqs.every((seq) => Number.isSafeInteger(seq) && seq >= 0) ? data.shadowedSeqs.length : null;
++				shadowedTokenCount = Number.isSafeInteger(data.shadowedTokenCount) && data.shadowedTokenCount >= 0 ? data.shadowedTokenCount : null;
++			}
++			return {
++				kind: "compaction",
++				seq: checkpoint.event.seq,
++				time: checkpoint.event.time,
++				summary,
++				summaryEventSeq: match?.event.seq ?? null,
++				shadowedItemCount,
++				shadowedTokenCount
++			};
++		}
++
++function fallbackState$3(context) {
++			const done = context.matches.find((match) => match.event.type === "command/done");
++			const checkpoint = context.matches.find((match) => compactSource(match.event) !== void 0);
++			const summary = context.matches.find((match) => match.event.type === "compaction/summary");
++			if (checkpoint === void 0) return done === void 0 ? void 0 : { command: commandFromDone(done) };
++			const source = compactSource(checkpoint.event);
++			if (source?.sourceCommandId === void 0) return done === void 0 ? void 0 : { command: commandFromDone(done) };
++			return {
++				command: done === void 0 ? {
++					kind: "command",
++					seq: checkpoint.event.seq,
++					time: checkpoint.event.time,
++					commandId: source.sourceCommandId,
++					name: "compact",
++					args: null,
++					outcome: null
++				} : {
++					...commandFromDone(done),
++					name: "compact"
++				},
++				checkpoint,
++				...summary === void 0 ? {} : { summary }
++			};
++		}
++
++function updateCompactionState(state, match) {
++			if (match.event.type === "compaction/summary") return {
++				...state,
++				summary: match
++			};
++			if (compactSource(match.event) !== void 0) return {
++				...state,
++				checkpoint: match
++			};
++			return state;
++		}
++
++const commandDefinition = {
++			kind: "command",
++			target: "chat",
++			match: (event) => {
++				if (event.type === "command/run") return {
++					id: String(event.data.commandId),
++					role: "start"
++				};
++				if (event.type === "command/done") return {
++					id: String(event.data.commandId),
++					role: "update"
++				};
++				const checkpoint = compactSource(event);
++				if (checkpoint?.sourceCommandId !== void 0) return {
++					id: String(checkpoint.sourceCommandId),
++					role: "update"
++				};
++				if (event.type === "compaction/start" || event.type === "compaction/summary" || event.type === "compaction/end") {
++					if (event.data.sourceCommandId !== void 0) return {
++						id: String(event.data.sourceCommandId),
++						role: "update"
++					};
++				}
++				return null;
++			},
++			start: (_context, match) => ({ command: commandFromRun(match) }),
++			update: (context, match) => {
++				if (match.event.type === "command/done") return {
++					...context.state,
++					command: commandFromDone(match, context.state.command)
++				};
++				return updateCompactionState(context.state, match);
++			},
++			buildViewNode: (context) => {
++				const state = context.state ?? fallbackState$3(context);
++				if (state === void 0) return null;
++				if (state.command.name !== "compact") return chatNode(context, "command", state.command.seq, state.command);
++				const compaction = state.checkpoint === void 0 ? null : compactSummary(state.summary, state.checkpoint);
++				const data = {
++					command: state.command,
++					compaction
++				};
++				return chatNode(context, "manual-compaction", compaction?.seq ?? state.command.seq, data);
++			}
++		};
++
++function registerCommandConversationNode(ctx) {
++			ctx.conversationEvents.register(commandDefinition);
++		}
++
++function fallbackState$2(context) {
++			const summary = context.matches.find((match) => match.event.type === "compaction/summary");
++			const checkpoint = context.matches.find((match) => compactSource(match.event) !== void 0);
++			return {
++				...summary === void 0 ? {} : { summary },
++				...checkpoint === void 0 ? {} : { checkpoint }
++			};
++		}
++
++const compactionDefinition = {
++			kind: "compaction",
++			target: "chat",
++			match: (event) => {
++				const checkpoint = compactSource(event);
++				if (checkpoint !== void 0 && checkpoint.sourceCommandId === void 0) return {
++					id: checkpoint.compactionId,
++					role: "update"
++				};
++				if (event.type === "compaction/start" || event.type === "compaction/summary" || event.type === "compaction/end") {
++					if (event.data.sourceCommandId !== void 0) return null;
++					const compactionId = event.data.compactionId;
++					if (typeof compactionId !== "string" || compactionId === "") return null;
++					return {
++						id: compactionId,
++						role: event.type === "compaction/start" ? "start" : "update"
++					};
++				}
++				return null;
++			},
++			start: () => ({}),
++			update: (context, match) => updateCompactionState(context.state, match),
++			buildViewNode: (context) => {
++				const state = context.state ?? fallbackState$2(context);
++				if (state.checkpoint === void 0) return null;
++				const marker = compactSummary(state.summary, state.checkpoint);
++				return chatNode(context, "compaction", marker.seq, marker);
++			}
++		};
++
++function registerCompactionConversationNode(ctx) {
++			ctx.conversationEvents.register(compactionDefinition);
++		}
++
++const unknownFallbackDefinition = {
++			kind: "unknown-surface",
++			target: "chat",
++			match: (event) => (0, _deepseek_ai_dsh_client_runtime_client.isAppendSurfaceEvent)(event) ? {
++				id: String(event.seq),
++				role: "start"
++			} : null,
++			start: (_context, match) => ({
++				kind: "unknown",
++				seq: match.event.seq,
++				time: match.event.time,
++				type: match.event.type,
++				data: match.event.data
++			}),
++			update: (context) => context.state,
++			buildViewNode: (context) => context.state === void 0 ? null : chatNode(context, "unknown", context.state.seq, context.state)
++		};
++
++function registerUnknownConversationFallback(ctx) {
++			ctx.conversationEvents.registerFallback(unknownFallbackDefinition);
++		}
++
++function applySplice(previous, splice) {
++			const pending = [...previous?.state.pending ?? []];
++			const claimed = new Set(previous?.state.claimed ?? []);
++			const removed = pending.splice(splice.start, splice.removedCount ?? 0, ...splice.inserted);
++			for (const identity of splice.inserted) claimed.delete(identity.id);
++			if (splice.target === "next-step" && splice.outcome !== "canceled") for (const identity of removed) claimed.add(identity.id);
++			return {
++				pending,
++				claimed
++			};
++		}
++
++function inboxDefinition(target) {
++			const kind = `inbox-${target}`;
++			return {
++				kind,
++				match: (event) => event.type === "agent/inbox/spliced" && event.data.target === target ? {
++					id: String(event.seq),
++					role: "start"
++				} : null,
++				start: (_context, match, reader) => {
++					if (match.event.type !== "agent/inbox/spliced") throw new Error(`${kind} start requires agent/inbox/spliced`);
++					return applySplice(reader.previous(kind), match.event.data);
++				},
++				update: (context) => context.state,
++				publication: () => "none"
++			};
++		}
++
++const nextTurnInboxDefinition = inboxDefinition("next-turn");
++
++const nextStepInboxDefinition = inboxDefinition("next-step");
++
++function registerInboxConversationNodes(ctx) {
++			ctx.conversationEvents.register(nextTurnInboxDefinition);
++			ctx.conversationEvents.register(nextStepInboxDefinition);
++		}
++
++function isCompactionCheckpoint(event) {
++			if (event.type !== "user/message" || !(0, _deepseek_ai_dsh_client_runtime_client.isReplacementSurfaceEvent)(event)) return false;
++			const source = event.data.source;
++			return source.kind === "plugin" && source.plugin === "compact";
++		}
++
++const messageDefinition = {
++			kind: "input-message",
++			target: "chat",
++			match: (event) => event.type === "user/message" && (0, _deepseek_ai_dsh_client_runtime_client.isAppendSurfaceEvent)(event) && !isCompactionCheckpoint(event) ? {
++				id: String(event.data.id),
++				role: "start"
++			} : null,
++			start: (_context, match, reader) => {
++				if (match.event.type !== "user/message") throw new Error("input-message start requires user/message");
++				const event = match.event;
++				if (event.data.source.kind !== "user") return {
++					kind: "context",
++					seq: event.seq,
++					time: event.time,
++					content: event.data.content,
++					source: event.data.source,
++					provenance: (0, _deepseek_ai_dsh_client_runtime_client.contextProvenance)(event.data.source),
++					form: (0, _deepseek_ai_dsh_client_runtime_client.contextForm)(event.data.source)
++				};
++				return reader.previous("inbox-next-step")?.state.claimed.has(String(event.data.id)) === true ? {
++					kind: "steering",
++					messageId: event.data.id,
++					seq: event.seq,
++					time: event.time,
++					content: event.data.content,
++					source: event.data.source
++				} : {
++					kind: "user",
++					seq: event.seq,
++					time: event.time,
++					content: event.data.content,
++					source: event.data.source
++				};
++			},
++			update: (context) => context.state,
++			buildViewNode: (context) => {
++				if (context.state === void 0) return null;
++				return chatNode(context, context.state.kind, context.state.seq, context.state);
++			}
++		};
++
++function registerMessageConversationNode(ctx) {
++			ctx.conversationEvents.register(messageDefinition);
++		}
++
++function scheduledNode(match) {
++			if (match.event.type !== "llm/retry") return void 0;
++			return {
++				kind: "model-retry",
++				seq: match.event.seq,
++				time: match.event.time,
++				retryState: "scheduled",
++				...match.event.data
++			};
++		}
++
++function isClosed(location) {
++			return location.kind === "step" && location.step.status === "closed" || (location.kind === "step" || location.kind === "turn") && location.turn.status === "closed";
++		}
++
++const retryDefinition = {
++			kind: "model-retry",
++			target: "chat",
++			match: (event) => {
++				if (event.type === "llm/retry") {
++					const retryId = event.data.retryId;
++					if (typeof retryId !== "string" || retryId === "") return null;
++					return {
++						id: retryId,
++						role: event.data.retry === 1 ? "start" : "update"
++					};
++				}
++				if (event.type === "llm/retry-started") {
++					const retryId = event.data.retryId;
++					return typeof retryId === "string" && retryId !== "" ? {
++						id: retryId,
++						role: "update"
++					} : null;
++				}
++				return null;
++			},
++			start: (_context, match) => {
++				const node = scheduledNode(match);
++				if (node === void 0) throw new Error("model-retry start requires a valid llm/retry event");
++				return {
++					turn: node.turn,
++					step: node.step,
++					attempts: [node]
++				};
++			},
++			update: (context, match) => {
++				if (match.event.type === "llm/retry") {
++					const node = scheduledNode(match);
++					return node === void 0 ? context.state : {
++						...context.state,
++						attempts: [...context.state.attempts, node]
++					};
++				}
++				if (match.event.type !== "llm/retry-started") return context.state;
++				const retry = match.event.data.retry;
++				return {
++					...context.state,
++					attempts: context.state.attempts.map((attempt) => attempt.retry === retry ? {
++						...attempt,
++						retryState: "started"
++					} : attempt)
++				};
++			},
++			buildViewNode: (context) => {
++				if (context.state === void 0 || context.state.attempts.length === 0) return null;
++				const location = context.start?.location ?? context.matches[0]?.location ?? { kind: "unresolved" };
++				const stateAttempts = context.state.attempts;
++				const attempts = stateAttempts.map((attempt, index) => index === stateAttempts.length - 1 && attempt.retryState === "scheduled" && isClosed(location) ? {
++					...attempt,
++					retryState: "cancelled"
++				} : attempt);
++				const current = attempts.at(-1);
++				if (current === void 0) return null;
++				const data = {
++					attempts,
++					current
++				};
++				return chatNode(context, "model-retry", attempts[0]?.seq ?? current.seq, data);
++			}
++		};
++
++function registerRetryConversationNode(ctx) {
++			ctx.conversationEvents.register(retryDefinition);
++		}
++
++const MAX_DEPTH = 256;
++
++const projectedBlocks = /* @__PURE__ */ new WeakMap();
++
++function jsonArguments(value) {
++			return JSON.stringify(value);
++		}
++
++function rootCall(match) {
++			if (match.event.type !== "tool/call") throw new Error("tool-call start requires tool/call");
++			return {
++				callId: String(match.event.data.callId),
++				name: match.event.data.name,
++				argsRaw: match.event.data.arguments,
++				turn: match.event.data.turn,
++				step: match.event.data.step,
++				time: match.event.time,
++				callView: match.view?.for === "call" ? match.view.view : null,
++				subCalls: []
++			};
++		}
++
++function rootResult(match, previous) {
++			if (match.event.type !== "tool/result") return void 0;
++			const result = match.event.data.message.content[0];
++			return {
++				kind: "tool-result",
++				seq: match.event.seq,
++				time: match.event.time,
++				callId: String(match.event.data.message.source.callId),
++				call: previous === void 0 ? null : {
++					name: previous.name,
++					argsRaw: previous.argsRaw
++				},
++				callTime: previous?.time ?? null,
++				content: result.content,
++				isError: result.isError === true,
++				...match.event.data.error === void 0 ? {} : { error: match.event.data.error },
++				meta: match.event.data.meta,
++				callView: previous?.callView ?? null,
++				resultView: match.view?.for === "result" ? match.view.view : null,
++				subCalls: []
++			};
++		}
++
++function childCall(match, data) {
++			return {
++				callId: data.subCallId,
++				name: data.name,
++				argsRaw: jsonArguments(data.arguments),
++				turn: locationTurn(match),
++				step: locationStep(match),
++				time: match.event.time,
++				callView: null,
++				subCalls: []
++			};
++		}
++
++function childResult(match, data, previous) {
++			return {
++				kind: "tool-result",
++				seq: match.event.seq,
++				time: match.event.time,
++				callId: data.subCallId,
++				call: {
++					name: data.name,
++					argsRaw: jsonArguments(data.arguments)
++				},
++				callTime: previous?.time ?? null,
++				content: data.content ?? [],
++				isError: data.isError === true,
++				callView: null,
++				resultView: null,
++				subCalls: []
++			};
++		}
++
++function locationTurn(match) {
++			return match.location.kind === "step" || match.location.kind === "turn" ? match.location.turn.turn : 0;
++		}
++
++function locationStep(match) {
++			return match.location.kind === "step" ? match.location.step.step : 0;
++		}
++
++function acceptsEdge(state, parent, child) {
++			if (parent === child || state.parents.has(child)) return false;
++			let cursor = parent;
++			let parentDepth = 0;
++			const ancestors = /* @__PURE__ */ new Set();
++			while (cursor !== void 0) {
++				if (cursor === child || ancestors.has(cursor)) return false;
++				ancestors.add(cursor);
++				parentDepth++;
++				cursor = state.parents.get(cursor);
++			}
++			const pending = [{
++				callId: child,
++				depth: 1
++			}];
++			const descendants = /* @__PURE__ */ new Set();
++			let subtreeDepth = 0;
++			for (const candidate of pending) {
++				if (descendants.has(candidate.callId)) return false;
++				descendants.add(candidate.callId);
++				subtreeDepth = Math.max(subtreeDepth, candidate.depth);
++				for (const nested of state.children.get(candidate.callId) ?? []) pending.push({
++					callId: nested.callId,
++					depth: candidate.depth + 1
++				});
++			}
++			return parentDepth + subtreeDepth <= MAX_DEPTH;
++		}
++
++function updateDispatch(state, match) {
++			const event = match.event;
++			if (event.type !== "tool/code-dispatch-start" && event.type !== "tool/code-dispatch") return state;
++			const data = event.data;
++			const parentCallId = String(data.parentCallId);
++			const subCallId = String(data.subCallId);
++			const siblings = state.children.get(parentCallId) ?? [];
++			const index = siblings.findIndex((candidate) => candidate.callId === subCallId);
++			if (event.type === "tool/code-dispatch-start") {
++				if (index >= 0 || !acceptsEdge(state, parentCallId, subCallId)) return state;
++				const children = new Map(state.children);
++				children.set(parentCallId, [...siblings, childCall(match, data)]);
++				const parents = new Map(state.parents);
++				parents.set(subCallId, parentCallId);
++				return {
++					...state,
++					children,
++					parents
++				};
++			}
++			if (index < 0 && !acceptsEdge(state, parentCallId, subCallId)) return state;
++			const settled = childResult(match, data, index < 0 ? void 0 : siblings[index]);
++			const children = new Map(state.children);
++			children.set(parentCallId, index < 0 ? [...siblings, settled] : siblings.map((child, at) => at === index ? settled : child));
++			const parents = new Map(state.parents);
++			if (index < 0) parents.set(subCallId, parentCallId);
++			return {
++				...state,
++				children,
++				parents
++			};
++		}
++
++function projectBlock(block, state, interruptedAt, visited = /* @__PURE__ */ new Set(), depth = 1) {
++			if (visited.has(block.callId) || depth > MAX_DEPTH) return {
++				...block,
++				subCalls: []
++			};
++			const nextVisited = new Set(visited);
++			nextVisited.add(block.callId);
++			const children = (state.children.get(block.callId) ?? block.subCalls).map((child) => projectBlock(child, state, interruptedAt, nextVisited, depth + 1));
++			const interruptionSeq = "kind" in block ? void 0 : interruptedAt?.seq;
++			const interruptionTime = "kind" in block ? void 0 : interruptedAt?.time;
++			const cached = projectedBlocks.get(block);
++			if (cached !== void 0 && cached.interruptionSeq === interruptionSeq && cached.interruptionTime === interruptionTime && sameReferences(cached.children, children)) return cached.value;
++			const projected = "kind" in block || interruptedAt === void 0 ? sameReferences(block.subCalls, children) ? block : {
++				...block,
++				subCalls: children
++			} : {
++				kind: "tool-result",
++				seq: interruptedAt.seq + CHAT_SYNTHETIC_SEQ_OFFSETS.interruptedFollowup,
++				time: interruptedAt.time,
++				callId: block.callId,
++				call: {
++					name: block.name,
++					argsRaw: block.argsRaw
++				},
++				callTime: block.time,
++				content: [],
++				isError: true,
++				error: {
++					name: "Interrupted",
++					code: "interrupted"
++				},
++				callView: block.callView,
++				resultView: null,
++				subCalls: children
++			};
++			projectedBlocks.set(block, {
++				children,
++				interruptionSeq,
++				interruptionTime,
++				value: projected
++			});
++			return projected;
++		}
++
++function sameReferences(left, right) {
++			return left.length === right.length && left.every((value, index) => value === right[index]);
++		}
++
++function interruption(context) {
++			const location = context.start?.location;
++			if (location?.kind === "step" && location.step.status === "closed") return location.step.end;
++			if ((location?.kind === "step" || location?.kind === "turn") && location.turn.status === "closed") return location.turn.end;
++		}
++
++function fallbackState$1(context) {
++			const match = context.matches.find((candidate) => candidate.event.type === "tool/result");
++			const root = match === void 0 ? void 0 : rootResult(match);
++			if (root === void 0) return void 0;
++			let state = {
++				root,
++				children: /* @__PURE__ */ new Map(),
++				parents: /* @__PURE__ */ new Map()
++			};
++			for (const candidate of context.matches) state = updateDispatch(state, candidate);
++			return state;
++		}
++
++const toolDefinition = {
++			kind: "tool-call",
++			target: "chat",
++			match: (event) => {
++				if (event.type === "tool/call") return {
++					id: String(event.data.callId),
++					role: "start"
++				};
++				if (event.type === "tool/result" && (0, _deepseek_ai_dsh_client_runtime_client.isAppendSurfaceEvent)(event)) return {
++					id: String(event.data.message.source.callId),
++					role: "update"
++				};
++				if (event.type === "tool/code-dispatch-start" || event.type === "tool/code-dispatch") {
++					const rootCallId = event.data.rootCallId;
++					return typeof rootCallId === "string" && rootCallId !== "" ? {
++						id: rootCallId,
++						role: "update"
++					} : null;
++				}
++				return null;
++			},
++			start: (_context, match) => ({
++				root: rootCall(match),
++				children: /* @__PURE__ */ new Map(),
++				parents: /* @__PURE__ */ new Map()
++			}),
++			update: (context, match) => {
++				if (match.event.type === "tool/result") {
++					const result = rootResult(match, "kind" in context.state.root ? void 0 : context.state.root);
++					return result === void 0 ? context.state : {
++						...context.state,
++						root: result
++					};
++				}
++				return updateDispatch(context.state, match);
++			},
++			buildViewNode: (context) => {
++				const state = context.state ?? fallbackState$1(context);
++				if (state === void 0) return null;
++				const projected = projectBlock(state.root, state, interruption(context));
++				return chatNode(context, "tool-call", context.start?.event.seq ?? ("kind" in state.root ? state.root.seq : context.matches[0]?.event.seq ?? 0), { root: projected });
++			}
++		};
++
++function registerToolConversationNode(ctx) {
++			ctx.conversationEvents.register(toolDefinition);
++		}
++
++function lastStep$1(context) {
++			const location = context.start?.location ?? context.matches[0]?.location;
++			if (location?.kind !== "turn" && location?.kind !== "step") return 0;
++			return location.turn.steps.at(-1)?.step ?? 0;
++		}
++
++function failureFrom(match) {
++			if (match.event.type !== "turn/end" || match.event.data.reason.kind !== "error") return void 0;
++			const failure = match.event.data.reason.error;
++			return {
++				seq: match.event.seq,
++				time: match.event.time,
++				message: (0, _deepseek_ai_dsh_client_runtime_client.displayFailureMessage)(failure),
++				code: failure.code
++			};
++		}
++
++function fallbackState(context) {
++			const end = context.matches.find((match) => failureFrom(match) !== void 0);
++			if (end?.event.type !== "turn/end") return void 0;
++			const failure = failureFrom(end);
++			if (failure === void 0) return void 0;
++			return {
++				turn: end.event.data.turn,
++				failure
++			};
++		}
++
++const turnErrorDefinition = {
++			kind: "turn-error",
++			target: "chat",
++			match: (event) => {
++				if (event.type === "turn/start") return {
++					id: String(event.data.turn),
++					role: "start"
++				};
++				if (event.type === "turn/end" && event.data.reason.kind === "error") return {
++					id: String(event.data.turn),
++					role: "update"
++				};
++				return null;
++			},
++			start: (_context, match) => {
++				if (match.event.type !== "turn/start") throw new Error("turn-error start requires turn/start");
++				return { turn: match.event.data.turn };
++			},
++			update: (context, match) => {
++				const failure = failureFrom(match);
++				return failure === void 0 ? context.state : {
++					...context.state,
++					failure
++				};
++			},
++			buildViewNode: (context) => {
++				const state = context.state ?? fallbackState(context);
++				if (state?.failure === void 0) return null;
++				const failure = state.failure;
++				const node = {
++					kind: "turn-error",
++					seq: failure.seq,
++					time: failure.time,
++					turn: state.turn,
++					step: lastStep$1(context),
++					message: failure.message,
++					...failure.code === void 0 ? {} : { code: failure.code }
++				};
++				return chatNode(context, "turn-error", node.seq, node);
++			}
++		};
++
++function registerTurnErrorConversationNode(ctx) {
++			ctx.conversationEvents.register(turnErrorDefinition);
++		}
++
++function lastStep(context) {
++			const location = context.start?.location ?? context.matches[0]?.location;
++			if (location?.kind !== "turn" && location?.kind !== "step") return 0;
++			return location.turn.steps.at(-1)?.step ?? 0;
++		}
++
++function noticeAnchor(context, seq) {
++			const location = context.start?.location ?? context.matches[0]?.location;
++			if (location?.kind !== "turn" && location?.kind !== "step") return seq;
++			const closing = location.turn.data.get("turn-tail")?.closing;
++			return closing === null || closing === void 0 ? seq : closing.finalNode.seq + CHAT_SYNTHETIC_SEQ_OFFSETS.maxTokensNotice;
++		}
++
++function stateFrom(match) {
++			if (match.event.type !== "turn/end" || match.event.data.reason.kind !== "max-tokens") return void 0;
++			return {
++				turn: match.event.data.turn,
++				seq: match.event.seq,
++				time: match.event.time
++			};
++		}
++
++const turnMaxTokensDefinition = {
++			kind: "turn-max-tokens",
++			target: "chat",
++			match: (event) => {
++				if (event.type === "turn/end" && event.data.reason.kind === "max-tokens") return {
++					id: String(event.data.turn),
++					role: "start"
++				};
++				return null;
++			},
++			start: (_context, match) => {
++				const state = stateFrom(match);
++				if (state === void 0) throw new Error("turn-max-tokens start requires a max-tokens turn/end");
++				return state;
++			},
++			update: (context) => context.state,
++			buildViewNode: (context) => {
++				const state = context.state;
++				if (state === void 0) return null;
++				const node = {
++					kind: "turn-max-tokens",
++					seq: state.seq,
++					time: state.time,
++					turn: state.turn,
++					step: lastStep(context)
++				};
++				return chatNode(context, "turn-max-tokens", noticeAnchor(context, state.seq), node);
++			}
++		};
++
++function registerTurnMaxTokensConversationNode(ctx) {
++			ctx.conversationEvents.register(turnMaxTokensDefinition);
++		}
++
++function hasTextAssistant(event) {
++			return event.type === "assistant/message" && (0, _deepseek_ai_dsh_client_runtime_client.isAppendSurfaceEvent)(event) && (0, _deepseek_ai_dsh_client_runtime_client.toAssistantBlocks)(event.data.message.content).some((block) => block.kind === "text" && block.text.trim() !== "");
++		}
++
++function chunkHasText(event) {
++			if (event.type !== "assistant/chunk") return false;
++			const chunk = event.data.chunk;
++			if (chunk.type === "text-delta") return chunk.text.trim() !== "";
++			return chunk.type === "block-end" && chunk.block.type === "text" && chunk.block.text.trim() !== "";
++		}
++
++function turnCoordinates(event) {
++			if (event.type === "assistant/message" || event.type === "assistant/chunk" || event.type === "step/end") return {
++				turn: event.data.turn,
++				step: event.data.step
++			};
++			if (event.type === "llm/retry") return {
++				turn: event.data.turn,
++				step: event.data.step
++			};
++		}
++
++function closingAnchor(context) {
++			let anchor = context.matches.find((match) => match.event.type === "turn/end")?.event.seq ?? context.start?.event.seq ?? context.matches[0]?.event.seq ?? 0;
++			const steps = /* @__PURE__ */ new Map();
++			for (const match of context.matches) {
++				const event = match.event;
++				if (event.type === "turn/end") continue;
++				const coordinates = turnCoordinates(event);
++				if (coordinates?.step === void 0) continue;
++				const previous = steps.get(coordinates.step) ?? {
++					streamedText: false,
++					finalized: false
++				};
++				if (event.type === "assistant/chunk") {
++					steps.set(coordinates.step, {
++						...previous,
++						streamedText: previous.streamedText || chunkHasText(event)
++					});
++					continue;
++				}
++				if (event.type === "assistant/message") {
++					steps.set(coordinates.step, {
++						streamedText: false,
++						finalized: true
++					});
++					if (hasTextAssistant(event)) anchor = event.seq + CHAT_SYNTHETIC_SEQ_OFFSETS.finalizedFollowup;
++					continue;
++				}
++				if (event.type === "llm/retry") {
++					steps.set(coordinates.step, {
++						streamedText: false,
++						finalized: false
++					});
++					continue;
++				}
++				if (event.type === "step/end" && previous.streamedText && !previous.finalized) anchor = event.seq + CHAT_SYNTHETIC_SEQ_OFFSETS.interruptedFollowup;
++			}
++			return anchor;
++		}
++
++function turnLocation(context) {
++			const location = context.start?.location ?? context.matches[0]?.location;
++			return location?.kind === "turn" || location?.kind === "step" ? location.turn : void 0;
++		}
++
++function hasText(data) {
++			return data.finalNode !== void 0 && data.blocks.some((block) => block.kind === "text" && block.text.trim() !== "");
++		}
++
++function tailData(context) {
++			const end = context.state?.end ?? context.matches.find((match) => match.event.type === "turn/end");
++			if (end?.event.type !== "turn/end") return null;
++			const turn = turnLocation(context);
++			if (turn === void 0) return null;
++			const finalized = turn.steps.map((step) => step.data.get("assistant-step")).filter((candidate) => candidate !== void 0).filter((candidate) => candidate.finalNode !== void 0).sort((left, right) => left.finalNode.seq - right.finalNode.seq);
++			const closing = finalized.findLast(hasText) ?? null;
++			let latestTranscriptSeq = finalized.at(-1)?.finalNode.seq;
++			for (const match of context.matches) {
++				const event = match.event;
++				const candidate = event.type === "tool/call" || event.type === "tool/result" && (0, _deepseek_ai_dsh_client_runtime_client.isAppendSurfaceEvent)(event) || event.type === "turn/end" && event.data.reason.kind === "error" || event.type === "llm/retry" ? event.seq : void 0;
++				if (candidate !== void 0 && (latestTranscriptSeq === void 0 || candidate > latestTranscriptSeq)) latestTranscriptSeq = candidate;
++			}
++			const metrics = deriveTurnMetrics(finalized.map((candidate) => candidate.finalNode)).get(end.event.data.turn);
++			return {
++				turn: end.event.data.turn,
++				seq: end.event.seq,
++				time: end.event.time,
++				closing,
++				branchUnavailable: closing === null || latestTranscriptSeq !== closing.finalNode.seq,
++				...metrics?.ttftMs === void 0 ? {} : { ttftMs: metrics.ttftMs },
++				...metrics?.tokensPerSecond === void 0 ? {} : { tokensPerSecond: metrics.tokensPerSecond }
++			};
++		}
++
++const turnTailDefinition = {
++			kind: "turn-tail",
++			target: "chat",
++			match: (event) => {
++				if (event.type === "turn/start") return {
++					id: String(event.data.turn),
++					role: "start"
++				};
++				if (event.type === "turn/end") return {
++					id: String(event.data.turn),
++					role: "update"
++				};
++				if (event.type === "tool/call" || event.type === "tool/result") return {
++					id: String(event.data.turn),
++					role: "update"
++				};
++				const coordinates = turnCoordinates(event);
++				if (coordinates !== void 0) return {
++					id: String(coordinates.turn),
++					role: "update"
++				};
++				return null;
++			},
++			start: (_context, match) => {
++				if (match.event.type !== "turn/start") throw new Error("turn-tail start requires turn/start");
++				return { turn: match.event.data.turn };
++			},
++			update: (context, match) => match.event.type === "turn/end" ? {
++				...context.state,
++				end: match
++			} : context.state,
++			publication: (match) => match.event.type === "turn/end" ? "immediate" : "none",
++			buildLocationData: (context, scope) => {
++				if (scope !== "turn") return null;
++				const value = tailData(context);
++				return value === null ? null : {
++					kind: "turn",
++					turn: value.turn,
++					key: "turn-tail",
++					value
++				};
++			},
++			buildViewNode: (context) => {
++				const data = turnLocation(context)?.data.get("turn-tail");
++				return data === void 0 ? null : chatNode(context, "turn-tail", closingAnchor(context), data);
++			}
++		};
++
++function registerTurnTailConversationNode(ctx) {
++			ctx.conversationEvents.register(turnTailDefinition);
++		}
++
++function registerConversationNodes(ctx) {
++			registerInboxConversationNodes(ctx);
++			registerMessageConversationNode(ctx);
++			registerAssistantConversationNode(ctx);
++			registerToolConversationNode(ctx);
++			registerCommandConversationNode(ctx);
++			registerCompactionConversationNode(ctx);
++			registerRetryConversationNode(ctx);
++			registerTurnErrorConversationNode(ctx);
++			registerTurnMaxTokensConversationNode(ctx);
++			registerTurnTailConversationNode(ctx);
++			registerUnknownConversationFallback(ctx);
++			registerChatConversationView(ctx);
++		}
++
++export { registerConversationNodes };
+diff --git a/lib/types/headless.d.ts b/lib/types/headless.d.ts
+new file mode 100644
+--- /dev/null
++++ b/lib/types/headless.d.ts
+@@ -0,0 +1,2 @@
++import type { Context } from "@deepseek-ai/cordis";
++export declare function registerConversationNodes(ctx: Context): void;
