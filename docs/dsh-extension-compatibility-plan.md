@@ -779,3 +779,20 @@ pipelines retain mounted component state.
   wire envelopes/receipts and no-RPC checks for one-shot or image input.
   These are RPC primitives only. Chat engine dispatch, mux subscription readiness,
   UI controls and end-to-end Desktop verification are still outstanding.
+
+### Chat engine child stop dispatch (2026-09-12)
+
+- ProductShell now supplies a stable chat-client resolver that reads the latest
+  native or official child address without recreating the chat engine on tab
+  changes. Continuable child abort calls subagent.interrupt; it does not call
+  ordinary session.cancel, create a session or require parent availability.
+  One-shot and mismatched addresses cannot fall through to root cancellation.
+- All 17 chat engine tests and app-runtime/shell typechecks passed. Existing
+  ordinary cancellation remains covered. Desktop visual/runtime verification has
+  not yet run for this group of child changes.
+- Sending is still open. Host events.mux emits initial subscribed frames only for
+  attached sessions, while a cold catalog child may attach during continuation.
+  Reusing waitUntilSubscribed(child) before subagent.prompt can therefore deadlock.
+  The send integration must establish mux readiness without requiring preexisting
+  child attachment, and propagate unavailable-parent errors rather than waiting
+  forever. Do not claim that current child prompt dispatch is complete.

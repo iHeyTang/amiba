@@ -14,7 +14,7 @@ import type {
   UserQuestionAnswerItem,
   UserQuestionRequest,
 } from "../protocol/index.js";
-import type { AgentAttachmentsAdapter } from "../platform/index.js";
+import type { AgentAttachmentsAdapter, AgentSubagentAddress } from "../platform/index.js";
 import { shortId } from "../utils/index.js";
 
 import { DshAmibaEventBridge } from "./amiba-event-bridge.js";
@@ -39,6 +39,8 @@ interface SessionState extends ChatRuntimeState {
 
 export interface DshChatEngineOptions {
   client: DshApiClient;
+  /** Current durable navigation address, including children whose parent is cold. */
+  resolveSubagent?: (sessionId: string) => AgentSubagentAddress | undefined;
   attachments?: AgentAttachmentsAdapter;
   resolveSession?: (
     payload: SubmitPayload,
@@ -617,7 +619,13 @@ export class DshChatEngineClient implements ChatEngineClient {
   }
 
   abort(sessionId: string): void {
-    void this.options.client.cancel(sessionId).catch(() => {});
+    const address = this.options.resolveSubagent?.(sessionId);
+    if (address) {
+      if (address.childSessionId !== sessionId || address.mode === "one-shot") return;
+      void this.options.client.subagentInterrupt({ ...address, mode: "continuable" }).catch(() => {});
+    } else {
+      void this.options.client.cancel(sessionId).catch(() => {});
+    }
     this.states.get(sessionId)?.controller?.abort();
   }
 

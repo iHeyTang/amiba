@@ -30,6 +30,39 @@ function payload(overrides: Partial<SubmitPayload> = {}): SubmitPayload {
 }
 
 describe("DshChatEngineClient", () => {
+  it("stops a continuable child through its retained parent without resuming either Agent", () => {
+    const cancel = vi.fn();
+    const subagentInterrupt = vi.fn(async () => ({ accepted: true as const }));
+    const client = { cancel, subagentInterrupt } as unknown as DshApiClient;
+    const address = { parentSessionId: "cold-parent", childSessionId: "child", mode: "continuable" as const };
+    const engine = new DshChatEngineClient({ client, resolveSubagent: () => address });
+    engine.abort("child");
+    expect(subagentInterrupt).toHaveBeenCalledWith(address);
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
+  it.each(["one-shot", "mismatched"])("does not fall back to root cancellation for a %s child address", (kind) => {
+    const cancel = vi.fn();
+    const subagentInterrupt = vi.fn();
+    const client = { cancel, subagentInterrupt } as unknown as DshApiClient;
+    const engine = new DshChatEngineClient({ client, resolveSubagent: () => ({
+      parentSessionId: "parent", childSessionId: kind === "mismatched" ? "other" : "child",
+      mode: kind === "one-shot" ? "one-shot" : "continuable",
+    }) });
+    engine.abort("child");
+    expect(subagentInterrupt).not.toHaveBeenCalled();
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
+  it("keeps ordinary cancellation for sessions without a catalog address", () => {
+    const cancel = vi.fn(async () => ({ accepted: true as const }));
+    const subagentInterrupt = vi.fn();
+    const engine = new DshChatEngineClient({ client: { cancel, subagentInterrupt } as unknown as DshApiClient, resolveSubagent: () => undefined });
+    engine.abort("root");
+    expect(cancel).toHaveBeenCalledWith("root");
+    expect(subagentInterrupt).not.toHaveBeenCalled();
+  });
+
   it("runs slash commands directly through DSH without an Electron engine", async () => {
     const subscribed: DshMuxEnvelope = {
       rpcId: "subscription",

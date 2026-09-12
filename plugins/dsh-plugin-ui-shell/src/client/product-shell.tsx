@@ -317,9 +317,10 @@ function productCapabilities(): ChatSurfaceCapabilities {
   };
 }
 
-function createChatClient(dshClient: DshApiClient): DshChatEngineClient {
+function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string) => AgentSubagentAddress | undefined): DshChatEngineClient {
   return new DshChatEngineClient({
     client: dshClient,
+    resolveSubagent,
     attachments: getPlatform().agentAttachments,
     resolveSession: async (payload) => {
       const platform = getPlatform();
@@ -485,7 +486,11 @@ function ProductShellInner({
     useOfficialSessions,
   });
   const { open: settingsOpen, close: closeSettings } = settings;
-  const client = useMemo(() => createChatClient(dshClient), [dshClient]);
+  const sessions = useSessions();
+  const childAddressSource = useRef<(id: string) => AgentSubagentAddress | undefined>(() => undefined);
+  childAddressSource.current = (id) => sessions.sessions.find((session) => session.id === id)?.subagentAddress
+    ?? conversationSource(id)?.getSnapshot().subagent?.address;
+  const client = useMemo(() => createChatClient(dshClient, (id) => childAddressSource.current(id)), [dshClient]);
   const capabilities = useMemo(productCapabilities, []);
   const homeDirectory = useSyncExternalStore(directoryFlows.home.subscribe, directoryFlows.home.getSnapshot, directoryFlows.home.getSnapshot);
   const workspaceDirectory = useSyncExternalStore(directoryFlows.workspace.subscribe, directoryFlows.workspace.getSnapshot, directoryFlows.workspace.getSnapshot);
@@ -496,7 +501,6 @@ function ProductShellInner({
     return { home: bind(directoryFlows.home, homeDirectory.available), workspace: bind(directoryFlows.workspace, workspaceDirectory.available) };
   }, [directoryFlows, homeDirectory.available, workspaceDirectory.available, platform]);
   const viewEntries = useSyncExternalStore(conversationViews.subscribe, conversationViews.getSnapshot, conversationViews.getSnapshot);
-  const sessions = useSessions();
   const turnTailAnchors = useTurnTailAnchors(sessions.activeId ? conversationSource(sessions.activeId) : undefined);
   // Host-side session changes (a plugin creating a task session, a blank
   // session getting its first turn) reach the official list live; re-read
