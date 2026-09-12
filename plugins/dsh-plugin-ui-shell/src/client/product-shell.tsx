@@ -1,3 +1,4 @@
+import type { ConversationViewEntry } from "./conversation-view-source.js";
 import { SurfaceProvider } from "./surface-provider.js";
 import type { SurfaceSelections } from "./surface-selections.js";
 import { renderOfficialToolFallback } from "./official-toolviews.js";
@@ -150,6 +151,7 @@ export type AmibaShellSlot =
   | "amiba.workbench.panel"
   | "conversation.input.plan"
   | "conversation.input.overlay"
+  | "conversation.view"
   | "conversation.chat.assistant-actions"
   | "tool.call.toolview";
 
@@ -336,6 +338,7 @@ function createChatClient(dshClient: DshApiClient): DshChatEngineClient {
 }
 
 interface ProductShellProps {
+  conversationViews: ContributionsSource<ConversationViewEntry>;
   surfaces: SurfaceSelections;
   dshClient: DshApiClient;
   openSettingsSection: (sectionId: string) => void;
@@ -385,6 +388,7 @@ export function AmibaProductShell(props: ProductShellProps): ReactElement {
 }
 
 function ProductShellInner({
+  conversationViews,
   dshClient,
   openSettingsSection,
   renderSlot,
@@ -468,6 +472,7 @@ function ProductShellInner({
   const { open: settingsOpen, close: closeSettings } = settings;
   const client = useMemo(() => createChatClient(dshClient), [dshClient]);
   const capabilities = useMemo(productCapabilities, []);
+  const viewEntries = useSyncExternalStore(conversationViews.subscribe, conversationViews.getSnapshot, conversationViews.getSnapshot);
   const sessions = useSessions();
   // Host-side session changes (a plugin creating a task session, a blank
   // session getting its first turn) reach the official list live; re-read
@@ -743,6 +748,8 @@ function ProductShellInner({
               itemMenuItems={sessionMenuItemList}
               messageSourceLabel={messageSourceLabel}
               slots={{
+                conversationViews: viewEntries,
+                conversationView: (id) => renderSlot("conversation.view", {}, { only: id }),
                 emptyState: (
                   <HomeView
                     triggerRuntime={triggerRuntime}

@@ -423,18 +423,12 @@ export type {
  *                  and the inline detail fold belongs to the very row an
  *                  occupant replaces.
  *
- * `subCalls: []` on the block is the FAITHFUL value here, not a stub:
- * upstream's builder emits `[]` for every ROOT call and fills children only
- * from `tool/code-dispatch-start` / `tool/code-dispatch`. Those events exist
- * only under Code Mode, whose `run_code` transport requires a mounted
- * `ctx.codeRuntime`; Amiba's bundles compose no code runtime and no plugin
- * requests one, so its sessions emit neither event and every call is a root.
+ * `block.subCalls` carries Code Mode dispatch children from live events and
+ * restored history. Calls without dispatch events have an empty array.
  */
 export type ToolCallToolviewOwnerProps = OwnerOf<"tool.call.toolview">;
 
-// Official seats deliberately NOT adopted (recorded so authors know why
-// these names resolve to no render site here; `tool.call.toolview` was on
-// this list in Phase 3 and is now adopted above). The rule:
+// Official adoption requirements and recently resolved gaps. The rule:
 // an official name may only be taken when its official owner contract can
 // be supplied faithfully — an official key with a divergent owner is worse
 // than a vendor key, because entries written against the upstream types
@@ -457,13 +451,11 @@ export type ToolCallToolviewOwnerProps = OwnerOf<"tool.call.toolview">;
 //     and keeping a side table) and `imageIds` (browser-owned unsent draft
 //     ids; Amiba's attachments are host-staged, so it needs its own id space
 //     in front of that). `draftRev` and a narrowed `phase` follow for free.
-//     SEPARATELY, and permanently unless upstream splits the interface: a
-//     faithful `sessions.provide` for `useInput`/`inputActions` is NOT
-//     possible — three of five `InputActions` members (`addImages`,
-//     `removeImage`, `pruneImages`) traffic in `DraftAttachmentId`s minted and
-//     resolved by the `conversation` service, which Amiba must not own (it
-//     bundles send/cancel/loadOlder/updateQueue/resolveImage, all of which
-//     Amiba implements through its own engine).
+//     Separately, `useInput`/`inputActions` are not currently provided.
+//     Their draft attachment ids must resolve through the same attachment
+//     authority as submission. A full adapter must preserve add/remove/prune,
+//     resolveImage and send/cancel semantics without a second input engine.
+//     Missing that adapter is not proof that one is impossible.
 // `settings.plugins.tab` is now declared by runtime-inventory. Its real
 // panels preserve the existing inventory filters. `settings.plugin.item`
 // follows the installed package's keyed-by-namespace contract.
@@ -475,8 +467,8 @@ export type ToolCallToolviewOwnerProps = OwnerOf<"tool.call.toolview">;
 //     canonical MessageId. Installed rc.2 selects the last finalized step
 //     with nonblank prose, including interrupted synthetic steps (which have
 //     no message identity and therefore no actions). The merged Amiba bubble
-//     is not a blocker: adoption needs this exact closing-step projection,
-//     carried through live events and history, without changing the bubble.
+//     is not a blocker: this projection is now carried through live events
+//     and history to the action render site, without changing the bubble.
 
 export interface SurfaceActivitySnapshot {
   sessionId: string;
@@ -792,3 +784,6 @@ export interface WorkbenchPanelOwner {
 
 /** Canonical closing-message identity supplied to completed-turn actions. */
 export type AssistantActionOwnerProps = OwnerOf<"conversation.chat.assistant-actions">;
+
+/** Additive conversation view; inspect handoff fields are optional. */
+export type { ConvViewOwnerProps } from "@deepseek-ai/dsh-client-ui-conversation/client";

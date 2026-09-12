@@ -33,12 +33,13 @@ are required in addition to new-plugin tests.
 | Sidebar additive actions | implementation + focused tests + real Desktop wide/narrow/unload passed | Correct owner, no empty wrapper, collapsed/expanded behavior |
 | Workspace/directory selection | open | Open/cancel/picked/error lifecycle, one workspace mutation authority |
 | Session export | native plugin enabled + dialog adapted/tested; actual Desktop ZIP saved; ordinary Web download verification pending | Native command download on Web/Desktop without duplicate existing action |
+| Official session navigation from no-selection | open | Distinguish explicit plugin open from boot restore without overriding Amiba selection |
 | Existing header/model/plan/command/reference extensions | open | Regression tests plus dependency/owner audit |
 | Official component styles | open | Scoped compatibility assets; no changes to Amiba tokens or global defaults |
 | Message actions | open | Exact MessageId, no arbitrary turn-to-message mapping, existing bubbles preserved |
 | Turn tail/deliverables | open | Real turn/step/business data and unchanged default rendering |
 | Input zones | open | Correct reference offsets, draft images, revisions and submission phases |
-| Chat/command/workflow nodes and views | open | Official data and callbacks, independent lifecycle, existing presentation retained |
+| Chat/command/workflow nodes and views | additive conversation views implemented; focused tests, real Desktop registration/session injection/unload and screenshot review passed; nodes/commands/workflows open | Official data and callbacks, independent lifecycle, existing presentation retained |
 | Tool subcalls/inspect | subcalls implemented; 26 runtime + 7 UI tests passed; inspect open | Real dispatch tree and trajectory target; no fabricated empty children |
 | Dynamic Cordis UI | open | Plugin/package/run ownership and disposal, current tools preserved |
 | Latest additive contracts | open | Versioned compatibility assessment and implementation where semantics can be preserved |
@@ -99,3 +100,19 @@ preload handoff to Electron's native downloader; no request-header override rema
 Ordinary Web retains the official browser anchor path.
 
 - Final full Desktop build and production dependency verification passed after the native download handoff; 14 download/boot boundary tests passed.
+
+### Conversation view integration fixture
+
+The first Desktop probe created and exported a session but opened it only through
+`ctx.sessions.open`. Amiba deliberately clears official selection while its own
+selection is empty, so no active conversation was displayed and the view tab did
+not appear. The view probe now uses the existing `amiba:open-session` navigation
+path to establish the product session. This does not validate generic official
+`ctx.sessions.open` from the home screen; that compatibility gap remains open.
+
+- Conversation views: 2 UI tests and 1 metadata-source test passed; shell and SDK
+  typechecks passed. Full Desktop production build passed. Real installed-plugin
+  smoke passed with actual session props/inject, mounted native chat and unload
+  fallback. Screenshots reviewed after dismissing the export dialog; the native
+  composer returns without residual tabs. Existing plugin HMR/detach checks and
+  actual ZIP download also passed in the same run.

@@ -198,7 +198,8 @@ try {
       const ctx = window.__probeCtx;
       const id = await ctx.sessions.create({cwd:${JSON.stringify(profile)}});
       ctx.layout.openChat();
-      ctx.sessions.open(id);
+      window.dispatchEvent(new CustomEvent("amiba:open-session", {detail:{sessionId:id}}));
+      window.__compatSessionId = id;
       await ctx.sessionLogDownload.download(id);
       const state = ctx.sessionLogDownload.store.getSnapshot().bySession[id];
       if (state.status !== 'success') throw new Error(JSON.stringify(state));
@@ -212,6 +213,24 @@ try {
     assert.ok(bytes.length > 22, "ZIP must include the session archive");
     assert.ok(await evaluate("Boolean(document.querySelector('[data-amiba-product-shell]'))"), "download must preserve the product page");
     console.log("Native session ZIP download passed on Desktop file: with an actual saved archive.");
+    await wait(() => evaluate("Boolean(document.querySelector('[role=dialog]'))"));
+    await evaluate("Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).find(n=>n.textContent==='Close'||n.textContent==='关闭').click()");
+    await wait(() => evaluate("!document.querySelector('[role=dialog]')"));
+    await evaluate(`(() => {
+      window.__compatViewOff = window.__probeCtx.slots.register({
+        name:'conversation.view', id:'compat-view', label:'Compatibility view',
+        inject: (sessionId) => ({injectedSessionId:sessionId}),
+      }, ({sessionId,injectedSessionId}) => 'COMPAT_VIEW:' + sessionId + ':' + injectedSessionId);
+    })()`);
+    await wait(() => evaluate("Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility view')"));
+    await evaluate("window.__nativeChatNode=document.querySelector('main[role=tabpanel]');Array.from(document.querySelectorAll('[role=tab]')).find(n=>n.textContent==='Compatibility view').click()");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_VIEW:'+window.__compatSessionId+':'+window.__compatSessionId)"));
+    assert.ok(await evaluate("window.__nativeChatNode.isConnected && window.__nativeChatNode.hidden"), "native chat stays mounted while viewing plugin");
+    await writeFile(path.join(tmpdir(), "amiba-conversation-plugin-view.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+    await evaluate("window.__compatViewOff();delete window.__compatViewOff");
+    await wait(() => evaluate("window.__nativeChatNode.isConnected && !window.__nativeChatNode.hidden && !document.body.textContent.includes('COMPAT_VIEW:') && !Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility view')"));
+    await writeFile(path.join(tmpdir(), "amiba-conversation-native-view.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+    console.log("Conversation view passed: actual session props/injection, selection, preserved native chat and unload fallback.");
     console.log("Compatibility slots passed: real plugin tab selection, Host-keyed config card, removal and inventory fallback.");
   }
   await evaluate("window.__probePoll=setInterval(()=>window.amiba.agentDiagnostics.status().catch(()=>{}),50)");

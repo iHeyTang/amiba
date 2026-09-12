@@ -1,3 +1,4 @@
+import { createConversationViewSource, type ConversationViewEntry } from "./conversation-view-source.js";
 import { CONVERSATION_ENTRY_REMOTE } from "../conversation-remote.js";
 import { createConversationPreparer } from "./conversation-submit.js";
 import { ConversationSubmitProvider } from "@amiba/ui/plugin";
@@ -260,6 +261,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     markdownSource: ContributionsSource<MarkdownExtension>;
     surfaces: SurfaceSelections;
     workbenchSource: ContributionsSource<WorkbenchViewExtension>;
+    conversationViews: ContributionsSource<ConversationViewEntry>;
     reportMarkdown: (sessionId:string, capabilities:MarkdownCapabilities[]) => Promise<void>;
     prepareConversation: (sessionId: string) => Promise<string>;
   };
@@ -289,6 +291,7 @@ function AmibaRoot({
   messageSources,
   markdownSource,
   workbenchSource,
+  conversationViews,
   surfaces,
   reportMarkdown,
   prepareConversation,
@@ -316,6 +319,7 @@ function AmibaRoot({
       sessionListGroups={sessionListGroups}
       sessionItemMenuItems={sessionItemMenuItems}
       surfaces={surfaces}
+      conversationViews={conversationViews}
       messageSources={messageSources}
       useOfficialSessions={useSessions}
       useOfficialWorkspaces={useWorkspaces}
@@ -581,6 +585,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     );
     const markdownSource = createMarkdownSource(ctx.slots);
     const workbenchSource = createWorkbenchSource(ctx.slots);
+    const conversationViews = createConversationViewSource(ctx.slots);
     const surfaces = createSurfaceSelections(ctx.slots, getPlatform().storage);
     const disposeRoot = ctx.slots.register(
       {
@@ -594,6 +599,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           dshClient,
           markdownSource,
           workbenchSource,
+          conversationViews,
           surfaces,
           reportMarkdown,
           prepareConversation,
@@ -715,6 +721,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // projection. Declaring it on this root instead is legal and the
           // same pattern the adopted conversation.* seats use; only the
           // declaration site differs, never the key/kind/scope/owner.
+          "conversation.view": { kind: "list", scope: "session" },
           "conversation.chat.assistant-actions": { kind: "list", scope: "session" },
           "tool.call.toolview": { kind: "keyed", scope: "session" },
           // Amiba's keyed question seat: one entry per question id (a

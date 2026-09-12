@@ -1,3 +1,4 @@
+import { ConversationViewRegion, type ConversationViewEntry } from "./ConversationViewRegion";
 import { createToolNavigation } from "./bubble/tool-navigation";
 import type { WorkbenchPanelOwner } from "@amiba/extension-sdk";
 import type { MessageNoticeRenderer } from "./bubble/Bubble";
@@ -195,6 +196,8 @@ export interface FullScreenChatViewProps {
      * contributes.
      */
     headerActions?: ReactNode;
+    conversationViews?: readonly ConversationViewEntry[];
+    conversationView?: (id: string) => ReactNode;
     /** Additive controls in the active chat header action cluster. */
     headerAfter?: ReactNode;
     /** Frame-wide overlay for chat modules; entries opt into pointer events. */
@@ -969,7 +972,7 @@ function FullScreenChatViewInner({
                 )}
                 seamless
               />
-              <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <ConversationViewRegion sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
                 <ChatSurface
                   messagesMaxWidth={messagesWidth}
                   client={client}
@@ -981,7 +984,7 @@ function FullScreenChatViewInner({
                   triggerRuntime={triggerRuntime}
                   messageSourceLabel={messageSourceLabel}
                 />
-              </main>
+              </ConversationViewRegion>
             </PrimaryWorkspaceView>
             <PrimaryWorkspaceView
               active={pluginWorkspaceActive}
