@@ -1136,3 +1136,13 @@ pipelines retain mounted component state.
 - 真实官方触发源插入含中文、Emoji、分隔符的引用，经过会话切换和完整 renderer reload 后逐字段验证身份；第二会话普通草稿也独立恢复，两边显式清空均保留。截图 amiba-resident-reference-draft.png 已查看，原输入器和引用样式保持。
 - 草稿源、RichComposerEditor、触发管线及待发送队列共 49 项测试通过（/tmp/amiba-resident-draft-tests5.log）；UI 类型检查通过（types5），完整 Desktop 构建通过（build4）。最终组合桌面回归 /tmp/amiba-resident-draft-smoke3.log 退出 0，涵盖本项、动态 Cordis、正常轨迹配置启停、命令、输入状态、图片和子会话续聊/停止/导航/重载。
 - 本项补齐原生文本与引用的生命周期，没有改变附件策略或 UI 样式。官方 useInput、离屏 inputActions、图片驻留及队列恢复仍未全部接通；不据此声明完整输入兼容。
+
+
+### 完整输入服务的转换边界与引用编码修正（2026-09-13）
+
+- 再次核对实际 rc.2 的 input/contract.d.ts 与 client.js：inputActions.setDraft 接受完整可见文本，机器通过 draft-changed 的 diff scan 保留未编辑的引用。SessionStandardProps.useInput 是非空的 SnapshotSelectorHook；只有 SessionMaybeStandardProps 允许状态为空。因此不能给所有会话提供一个离屏时返回 undefined 的 hook，或把公开文本直接存进原生 token 源来宣称兼容。
+- 当前 $setInputDraft 通过可见/原生坐标映射，编辑引用内部时仅解散命中的引用。后续离屏写入必须保留相同语义，并区分普通文本和引用节点；当前 parseTokens 会把识别到的合法 token 解释为引用，单纯将任意公开字符串交给它不是通用的纯文本写入接口。完整驻留输入还需统一 occurrence 身份、draftRev、命令 phase 及图片/队列状态。
+- 本轮复现引用 payload 的反斜杠编码缺陷：token 扫描器把原始反斜杠及后一字符当作转义对，最后字段以反斜杠结尾会吞掉闭合方括号，反斜杠后换行同样导致匹配失败。新增 4 个 Windows 路径/换行/百分号及分隔符/Emoji 用例在修复前全部失败（/tmp/amiba-reference-backslash-before.log）。
+- 编码器新增 %5C，解码在 %25 之前执行，避免将原有字面 %5C 二次解码。旧合法原始反斜杠路径和已有百分号转义仍有回归覆盖。UI 展示与操作路径未改。
+- 相关序列化、驻留草稿、真实 Lexical 编辑操作与触发管线合计 88 项测试通过（/tmp/amiba-reference-backslash-tests.log），UI 类型检查通过（/tmp/amiba-reference-backslash-types.log）。桌面驻留草稿探针改为携带尾反斜杠的真实官方引用，并从同一个 expectedReference 对象生成浏览器注册及重载后的逐字段断言。
+- 完整 Desktop 构建通过（/tmp/amiba-reference-backslash-build.log），最终组合桌面回归退出 0（/tmp/amiba-reference-backslash-smoke.log）。真实引用的路径和 clipboardText 末尾均含反斜杠，会话切换及 renderer 重载后逐字段一致；命令、图片、轨迹正常配置启停、动态 Cordis、子会话和插件开发生命周期回归均通过。此结果证明编码及现有链路，不代表完整离屏输入服务已实现。

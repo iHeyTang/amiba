@@ -523,7 +523,8 @@ try {
       const otherCwd = path.join(profile,"draft-other");
       await mkdir(otherCwd,{recursive:true});
       const otherId = await evaluate(`window.__probeCtx.sessions.create({cwd:${JSON.stringify(otherCwd)}})`);
-      const sourceCode = `window.__draftReferenceOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-resident-ref',trigger:'@',order:-100,candidates:async()=>[],onPick:()=>({}),matchSpace:(_session,token)=>token==='@keep'?{insert:{source:'compat-resident-ref',ref:'file|id]',label:'引用😀',clipboardText:'clip|]😀'}}:undefined,codec:{serialize:ref=>'<resident>'+ref+'</resident>'}});void 0`;
+      const expectedReference = {source:'compat-resident-ref',ref:'C:\\file|id]\\',label:'引用😀',clipboardText:'clip|]😀\\'};
+      const sourceCode = `window.__draftReferenceOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-resident-ref',trigger:'@',order:-100,candidates:async()=>[],onPick:()=>({}),matchSpace:(_session,token)=>token==='@keep'?{insert:${JSON.stringify(expectedReference)}}:undefined,codec:{serialize:ref=>'<resident>'+ref+'</resident>'}});void 0`;
       await evaluate(sourceCode);
       await wait(() => evaluate("Boolean(window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId))"));
       await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'@keep');void 0");
@@ -531,7 +532,6 @@ try {
       assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor(window.__compatSessionId).onSpace()"),true);
       await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.occurrences.length===1"));
       const originalDraft = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
-      const expectedReference = {source:'compat-resident-ref',ref:'file|id]',label:'引用😀',clipboardText:'clip|]😀'};
       assert.deepEqual(Object.fromEntries(Object.keys(expectedReference).map(k=>[k,originalDraft.occurrences[0][k]])),expectedReference);
       await evaluate(`window.__otherDraftFrames=[];window.__otherDraftOff=window.__probeCtx.composerInputs.inputDraftSource(${JSON.stringify(otherId)}).subscribe(()=>window.__otherDraftFrames.push(window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft));window.__probeCtx.sessions.open(${JSON.stringify(otherId)});void 0`);
       await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft===''`));
