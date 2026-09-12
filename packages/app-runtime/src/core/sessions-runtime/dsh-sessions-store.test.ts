@@ -136,6 +136,36 @@ describe("SessionsStore with DSH sessions", () => {
     store.teardown();
   });
 
+  it("cancels an in-flight history open when deselected from Home", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    let release!: (value: unknown) => void;
+    mocks.history.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const opening = store.openTab("dsh-1");
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    await store.deselect();
+    release({events:[]});
+    await opening;
+    expect(store.getSnapshot().activeId).toBe("");
+    expect(store.getSnapshot().openTabIds).toEqual(["dsh-1"]);
+    store.teardown();
+  });
+
+  it("cancels an unknown-session metadata lookup before it can select a tab", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    let release!: () => void;
+    mocks.listGate = new Promise(resolve => { release = resolve; });
+    const opening = store.openTab("dsh-blank");
+    await Promise.resolve();
+    await store.deselect();
+    release();
+    await opening;
+    expect(store.getSnapshot().activeId).toBe("");
+    expect(store.getSnapshot().openTabIds).toEqual([]);
+    store.teardown();
+  });
+
   beforeEach(() => {
     mocks.watch.mockClear();
     mocks.storage = {};

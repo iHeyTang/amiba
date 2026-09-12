@@ -648,3 +648,22 @@ started from the existing marker without a patch digest, ran locked npm ci,
 applied the reviewed patches from clean files and completed the production
 Desktop bundle. The resulting marker contains patchSetHash. No manual cache
 repair was used for this validation.
+
+### Cancel native session opens before their asynchronous work completes
+
+Two regression tests first reproduced late reopening after deselect: one while
+history was pending from Home, and one while an unlisted session's metadata was
+pending. Native navigation now assigns its cancellation token before metadata
+lookup or outgoing flush, carries that token into activation and checks it after
+each loading boundary. Deselect invalidates pending opens even when the current
+visible state is already Home. Tabs committed before cancellation remain open;
+a canceled metadata lookup cannot append a new tab or select it.
+
+All 21 session-store tests and Shell typecheck passed. The full production
+Desktop build passed and reused the same patched dependency tree, verifying
+the positive cache-reuse path after the preceding legacy-cache migration.
+The installed-plugin --compat --reopen-prose run passed without manual window
+recovery: official clear/reopen, history reload, ZIP, files, directories, settings,
+HMR and detach. Artificially delayed metadata/history cancellation is covered
+by the state-store regressions; the Desktop run verifies normal plugin routing.
+No UI layout or style code changed for this fix.

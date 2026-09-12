@@ -380,7 +380,8 @@ export class SessionsStore {
    * load its messages. ``activeId`` is per-window in-memory state, so
    * no persistence is involved — the commit is purely local.
    */
-  private async activateOpen(id: string): Promise<void> {
+  private async activateOpen(id: string, token = ++this.switchToken): Promise<void> {
+    if (token !== this.switchToken) return;
     if (!id) {
       // Returning to Home is a UI state transition, so publish it before
       // waiting for the outgoing session's best-effort persistence. This is
@@ -388,7 +389,6 @@ export class SessionsStore {
       // cancellation/flush can be slow, but it must never leave the
       // composer visually attached to the conversation the user just left.
       const flush = this.flushActiveBeforeSwitch();
-      ++this.switchToken;
       this.commit({ activeId: "", activeMessages: [] });
       await flush;
       return;
@@ -398,7 +398,7 @@ export class SessionsStore {
       return;
     }
     await this.flushActiveBeforeSwitch();
-    const token = ++this.switchToken;
+    if (token !== this.switchToken) return;
     const next = await loadMessages(id);
     if (token !== this.switchToken) return;
     this.commit({ activeId: id, activeMessages: next });
@@ -432,18 +432,20 @@ export class SessionsStore {
    * row to select.
    */
   deselect = async (): Promise<void> => {
-    if (!this.state.activeId) return;
+    // Also cancel a pending open when Home is still the visible state.
     await this.activateOpen("");
   };
 
   openTab = async (id: string): Promise<void> => {
     if (!id) return;
+    const token = ++this.switchToken;
     if (!this.state.sessions.some((session) => session.id === id)) {
       // Open-by-id may target a session the history index dropped (a host-
       // or plugin-created session with no user turn yet). Surface its real
       // identity — the agent preset it already runs, its title — before it
       // becomes active, or the composer would treat it as a fresh draft.
       const meta = await loadSessionMeta(id);
+      if (token !== this.switchToken) return;
       if (meta) this.commit({ sessions: [meta, ...this.state.sessions] });
     }
     if (!this.state.openTabIds.includes(id)) {
@@ -451,7 +453,7 @@ export class SessionsStore {
       const nextTabs = [...this.state.openTabIds, id];
       this.commit({ openTabIds: nextTabs });
     }
-    await this.activateOpen(id);
+    await this.activateOpen(id, token);
   };
 
   closeTab = async (id: string): Promise<void> => {
