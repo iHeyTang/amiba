@@ -1118,3 +1118,11 @@ pipelines retain mounted component state.
 - 官方工具行 45 项、定位状态 2 项、视图区域及工具入口 10 项测试通过；Shell/UI 类型检查和完整 Desktop 构建通过。真实官方编译包经 ModuleLoader 与 Cordis 注册后，使用 Host 中真实工具结果验证选中 pkg-2 而非旧 pkg-1。卸载后原编辑器对象、草稿、卡片高度、字体及未泄漏的主题变量均已验证。
 - 日志：/tmp/amiba-trajectory-shell-tests.log（原工具行 45 项通过；新增 hook 测试缺少 jsdom 标记已修正）、/tmp/amiba-trajectory-shell-tests2.log（2 项）、/tmp/amiba-trajectory-ui-tests.log（10 项）、/tmp/amiba-trajectory-types2.log、/tmp/amiba-trajectory-ui-types.log、/tmp/amiba-trajectory-build2.log、/tmp/amiba-trajectory-smoke2.log。截图 amiba-trajectory-inspection.png 已查看。
 - 桌面测试由测试端加载官方原包，再通过 ctx.plugin 注册。它证明真实组件、数据、定位和清理，不等同于完整插件配置启用、安装依赖图或所有新版轨迹扩展已经验证。默认 bundle 中 ui-trajectory 仍禁用，避免自行增加默认视图。下一步须验证可选插件通过正常 Host 配置进入 Client 图的路径。
+
+### 官方轨迹插件的正常配置启停（2026-09-13）
+
+- 新增隔离 profile 的 Host Loader 测试：通过 loader.create 添加实际官方 ui-trajectory 条目，通过 loader.remove 移除。不修改 bundled 配置，不在测试端注入官方 JS；插件包来自正常 Host 图和浏览器启动加载。
+- 初次动态添加后 Host 图已出现 trajectory，但浏览器不消费图变化。复核实际 rc.2 的 dsh-client-hmr，graph 分支明确不处理，仅 rebuilt 分支热更新已有条目。这是官方刷新生效机制，不是轨迹组件的依赖失败。
+- 重新加载 renderer 后，真实 trajectory Client fiber 启动，官方会话根 ui-conversation 仍不在 Host 图中。原工具折叠组按现有默认状态恢复；测试展开后点击工具扩展 inspect，官方轨迹选中实际 pkg-2 调用并显示原结果，局部字号为 13px。
+- 正常移除条目并重新加载后，轨迹视图消失，唯一 Amiba 根页面及原 Chat 恢复。此路径验证配置和启动依赖，不声称新插件可以免刷新启用，也不将其当作跨刷新未发送草稿持久化的证据；输入状态持久化仍在完整输入适配范围内。上一项免刷新 ctx.plugin 卸载的原编辑器/草稿保留证据仍成立。
+- 最终组合回归 /tmp/amiba-trajectory-loader-smoke5.log 退出 0，包含命令历史重载、输入状态、图片、子会话续聊/停止/导航/重载、产出文件、配置及清理。早期日志 1/3 验证了需刷新，日志 2 暴露测试 Host 未声明 clientModules 注入（已修正），日志 4 暴露重载后测试未展开原工具折叠组（已修正）。本轮仅扩展验证脚本和文档，复用已通过构建的生产代码。
