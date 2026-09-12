@@ -97,6 +97,7 @@ jobs:
       - name: Smoke test packaged runtime and installer
         run: node scripts/release/smoke-package.mjs ${{ matrix.target }}
       - name: Save installers and update metadata
+        if: always() && hashFiles('apps/desktop/dist/**/release-manifest.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: amiba-${{ matrix.target }}

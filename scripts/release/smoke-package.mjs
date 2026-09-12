@@ -1,8 +1,7 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { validateMetadata } from './artifacts.mjs';
 
@@ -22,8 +21,20 @@ let resources;
 let electron;
 if (process.platform === 'win32') {
   assert.equal(process.env.GITHUB_ACTIONS, 'true', 'Silent installer testing is restricted to disposable CI runners');
-  const installDir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'amiba-install-')), 'Amiba');
-  run(path.join(output, `Amiba-${version}-win-x64.exe`), ['/S', `/D=${installDir}`], process.env, 300000);
+  const installDir = path.join(process.env.LOCALAPPDATA, 'Programs', 'Amiba');
+  console.log(`Installing into the normal per-user location: ${installDir}`);
+  await new Promise((resolve, reject) => {
+    const child = spawn(path.join(output, `Amiba-${version}-win-x64.exe`), ['/S', `/D=${installDir}`], { stdio: 'inherit' });
+    const started = Date.now();
+    const progress = setInterval(() => {
+      const entries = fs.existsSync(installDir) ? fs.readdirSync(installDir) : [];
+      console.log(`Installer running for ${Math.round((Date.now() - started) / 1000)}s; installed entries: ${entries.join(', ') || '(none)'}`);
+    }, 30000);
+    const timeout = setTimeout(() => { child.kill(); reject(new Error('NSIS installation exceeded 15 minutes')); }, 900000);
+    const cleanup = () => { clearInterval(progress); clearTimeout(timeout); };
+    child.once('error', error => { cleanup(); reject(error); });
+    child.once('exit', code => { cleanup(); code === 0 ? resolve() : reject(new Error(`NSIS installer exited ${code}`)); });
+  });
   electron = path.join(installDir, 'Amiba.exe');
   resources = path.join(installDir, 'resources');
   assert.ok(fs.existsSync(electron), 'NSIS must install the application executable');
