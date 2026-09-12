@@ -38,7 +38,7 @@ export function useWorkspaceFileOpener(): WorkspaceFileOpener | undefined {
 }
 
 export interface WorkspaceTextMention { open(): void; label: string; title: string; }
-export const WorkspaceTextMentionsContext = createContext<((seq:number,value:string)=>WorkspaceTextMention|undefined)|undefined>(undefined);
+export const WorkspaceTextMentionsContext = createContext<((seq:number|undefined,value:string,runtimeStep?:number)=>WorkspaceTextMention|undefined)|undefined>(undefined);
 const MarkdownTextSources = createContext<readonly TextSourceRange[]>([]);
 export function WorkspaceMarkdown({sources=[],...props}: ComponentProps<typeof ChatMarkdown> & {sources?:readonly TextSourceRange[]}) {
   return <MarkdownTextSources.Provider value={props.mode === "static" ? sources : []}><ChatMarkdown {...props}/></MarkdownTextSources.Provider>;
@@ -165,7 +165,7 @@ export function WorkspaceInlineCode({
   const start=position?.start?.offset,end=position?.end?.offset;
   const source = typeof start === "number" && typeof end === "number"
     ? sources.find(range=>range.start<=start && end<=range.end) : undefined;
-  const mention = source && text ? mentions?.(source.runtimeSeq,text) : undefined;
+  const mention = source && text ? mentions?.(source.runtimeSeq,text,source.runtimeStep) : undefined;
   const link = text ? parseWorkspaceFileLink(text) : null;
   const code = (
     <code data-streamdown="inline-code" className={className} {...props}>

@@ -11,9 +11,9 @@ it("preserves final attribution after the native result join and outer whitespac
     {start:0,end:7,runtimeSeq:10},{start:9,end:25,runtimeSeq:20},
   ]);
 });
-it("keeps unknown streaming spans unlinked and declines ambiguous source transformations",()=>{
+it("retains pending step identity for the owner to verify and declines ambiguous transformations",()=>{
   const source=timelineTextSource({kind:"text",id:"merged",text:"same same",sourceRanges:[{start:0,end:4,runtimeStep:1},{start:5,end:9,runtimeStep:2,runtimeSeq:40}]});
-  expect(source.sources).toEqual([{start:5,end:9,runtimeSeq:40}]);
+  expect(source.sources).toEqual([{start:0,end:4,runtimeStep:1},{start:5,end:9,runtimeStep:2,runtimeSeq:40}]);
   expect(sliceTextSources(source,"same")).toEqual([]);
   expect(sliceTextSources(source,"same same")).toEqual(source.sources);
 });

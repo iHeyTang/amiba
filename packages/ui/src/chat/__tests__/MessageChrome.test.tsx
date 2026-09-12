@@ -1519,7 +1519,7 @@ it("inserts unrepresented closed-turn tails by engine sequence without stored me
 
 
 it("resolves only finalized prose ranges while retaining existing explicit path links", () => {
-  const open=vi.fn(),resolve=vi.fn((seq:number,value:string)=>seq===20 && value==="same.txt"?{open:()=>open("out/same.txt"),label:"Open produced file",title:"out/same.txt"}:undefined);
+  const open=vi.fn(),resolve=vi.fn((seq:number|undefined,value:string)=>seq===20 && value==="same.txt"?{open:()=>open("out/same.txt"),label:"Open produced file",title:"out/same.txt"}:undefined);
   const message:UiMessage={uiId:"merged",role:"assistant",content:"Earlier `same.txt`\n\nFinal `same.txt` and `src/existing.ts`",assistantTimeline:[
     {kind:"text",id:"earlier",text:"Earlier `same.txt`\n\n",runtimeSeq:10},
     {kind:"text",id:"final",text:"Final `same.txt` and `src/existing.ts`",runtimeSeq:20},
@@ -1537,7 +1537,7 @@ it("resolves only finalized prose ranges while retaining existing explicit path 
 });
 
 it("keeps final file mentions scoped through condensed tool/assistant rendering", () => {
-  const resolve=vi.fn((seq:number,value:string)=>seq===12 && value==="file.txt"?{open:()=>{},label:"Final file",title:"file.txt"}:undefined);
+  const resolve=vi.fn((seq:number|undefined,value:string)=>seq===12 && value==="file.txt"?{open:()=>{},label:"Final file",title:"file.txt"}:undefined);
   const message:UiMessage={uiId:"with-tool",role:"assistant",content:"Before `file.txt`Final `file.txt`",toolProgress:[{tool:"bash",toolCallId:"c",status:"completed"}],assistantTimeline:[
     {kind:"text",id:"before",text:"Before `file.txt`",runtimeSeq:3},
     {kind:"tool",id:"tool",toolCallId:"c"},
@@ -1561,7 +1561,7 @@ it("retains closing-message file links inside folded narration without altering 
   rerender(<WorkspaceTextMentionsContext.Provider value={()=>undefined}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider>);
   expandProcess();
   expect(container.innerHTML).toBe(baseline);
-  const resolve=(seq:number,value:string)=>seq===12 && value==="file.txt"?{open:()=>{},label:"Open final file",title:"file.txt"}:undefined;
+  const resolve=(seq:number|undefined,value:string)=>seq===12 && value==="file.txt"?{open:()=>{},label:"Open final file",title:"file.txt"}:undefined;
   rerender(<WorkspaceTextMentionsContext.Provider value={resolve}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider>);
   expect(screen.getAllByRole("button",{name:"Open final file"})).toHaveLength(2);
 });
@@ -1570,11 +1570,24 @@ it("retains closing-message file links inside folded narration without altering 
 it("keeps prose file links after inline thinking cleanup and leaves extracted thinking inert", () => {
   const text="Before `one.txt`<think>private `secret.txt`</think>\n\n\nAfter `two.txt`";
   const message:UiMessage={uiId:"thought-tags",role:"assistant",content:text,assistantTimeline:[{kind:"text",id:"final",text,runtimeSeq:40}]};
-  const resolver=(seq:number,value:string)=>seq===40?{open:()=>{},label:"Open "+value,title:value}:undefined;
+  const resolver=(seq:number|undefined,value:string)=>seq===40?{open:()=>{},label:"Open "+value,title:value}:undefined;
   const {container}=render(<WorkspaceTextMentionsContext.Provider value={resolver}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider>);
   expect(screen.getByRole("button",{name:"Open one.txt"})).toBeInTheDocument();
   expect(screen.getByRole("button",{name:"Open two.txt"})).toBeInTheDocument();
   expandProcess();
   for(const button of Array.from(container.querySelectorAll('button[aria-expanded="false"]')))fireEvent.click(button);
   expect(screen.queryByRole("button",{name:"Open secret.txt"})).toBeNull();
+});
+
+it("passes pending step identity through native prose but never enables streaming links", () => {
+  const text="Done <think>private</think>`file.txt`";
+  const message:UiMessage={uiId:"interrupted",role:"assistant",content:text,assistantTimeline:[
+    {kind:"text",id:"pending",text,sourceRanges:[{start:0,end:text.length,runtimeStep:2}]},
+  ]};
+  const resolve=vi.fn((seq:number|undefined,value:string,step?:number)=>seq===undefined && step===2 ? {open:vi.fn(),label:"Interrupted file",title:value}:undefined);
+  const {rerender}=render(<WorkspaceTextMentionsContext.Provider value={resolve}><Bubble m={{...message,streaming:true}}/></WorkspaceTextMentionsContext.Provider>);
+  expect(screen.queryByRole("button",{name:"Interrupted file"})).toBeNull();
+  rerender(<WorkspaceTextMentionsContext.Provider value={resolve}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider>);
+  expect(screen.getByRole("button",{name:"Interrupted file"})).toBeInTheDocument();
+  expect(resolve).toHaveBeenCalledWith(undefined,"file.txt",2);
 });

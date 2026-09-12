@@ -1,6 +1,6 @@
 import { splitThinkingFromBody } from "./internal/helpers";
 import type { AssistantTimelineItem } from "@amiba/app-runtime/protocol";
-export type TextSourceRange = {start:number;end:number;runtimeSeq:number};
+export type TextSourceRange = {start:number;end:number;runtimeSeq?:number;runtimeStep?:number};
 export type SourcedText = {text:string;sources:TextSourceRange[]};
 /** Translate only a uniquely identified contiguous slice; never match repeated prose by guess. */
 export function sliceTextSources(original:SourcedText, displayed:string): TextSourceRange[] {
@@ -9,13 +9,13 @@ export function sliceTextSources(original:SourcedText, displayed:string): TextSo
   if (at<0 || at!==original.text.lastIndexOf(displayed)) return [];
   return original.sources.flatMap(range=>{
     const start=Math.max(range.start,at),end=Math.min(range.end,at+displayed.length);
-    return end>start?[{start:start-at,end:end-at,runtimeSeq:range.runtimeSeq}]:[];
+    return end>start?[{...range,start:start-at,end:end-at}]:[];
   });
 }
 export function timelineTextSource(item:Extract<AssistantTimelineItem,{kind:"text"}>): SourcedText {
   return {text:item.text,sources:item.runtimeSeq!==undefined
     ? [{start:0,end:item.text.length,runtimeSeq:item.runtimeSeq}]
-    : (item.sourceRanges??[]).flatMap(range=>range.runtimeSeq===undefined?[]:[{start:range.start,end:range.end,runtimeSeq:range.runtimeSeq}])};
+    : (item.sourceRanges??[]).map(range=>({...range}))};
 }
 export function joinTextSources(items:readonly SourcedText[], separator:string): SourcedText {
   let text="";const sources:TextSourceRange[]=[];
@@ -24,7 +24,7 @@ export function joinTextSources(items:readonly SourcedText[], separator:string):
     for(const range of item.sources){
       const next={...range,start:range.start+text.length,end:range.end+text.length};
       const previous=sources.at(-1);
-      if(previous && previous.runtimeSeq===next.runtimeSeq && previous.end===next.start) sources[sources.length-1]={...previous,end:next.end};
+      if(previous && previous.runtimeSeq===next.runtimeSeq && previous.runtimeStep===next.runtimeStep && previous.end===next.start) sources[sources.length-1]={...previous,end:next.end};
       else sources.push(next);
     }
     text+=item.text;
@@ -35,7 +35,7 @@ export function joinTextSources(items:readonly SourcedText[], separator:string):
 function sliceAt(source:SourcedText,start:number,end:number):SourcedText {
   return {text:source.text.slice(start,end),sources:source.sources.flatMap(range=>{
     const from=Math.max(start,range.start),to=Math.min(end,range.end);
-    return to>from?[{start:from-start,end:to-start,runtimeSeq:range.runtimeSeq}]:[];
+    return to>from?[{...range,start:from-start,end:to-start}]:[];
   })};
 }
 /** Follow the existing thinking extractor's exact retained slices and whitespace rules. */

@@ -1,3 +1,4 @@
+import type { AssistantTimelineItem } from "@amiba/app-runtime/protocol";
 import { WorkspaceTextMentionsContext } from "@amiba/ui";
 import type { ChatFileMentions } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -75,15 +76,28 @@ export function useTurnTailAnchors(source?: ObservableSnapshot<ConversationSnaps
 
 
 /** The native Markdown renderer supplies the exact source sequence of each code span. */
-export function TurnText({source,runtimeTurn,openFile,fileMentions,children}:{
+export function TurnText({source,runtimeTurn,openFile,fileMentions,children,timeline}:{
   source?:ObservableSnapshot<ConversationSnapshot>;
   runtimeTurn?:number;
   openFile:(path:string)=>void;
   fileMentions:ChatFileMentions["forClosing"];
   children:ReactNode;
+  timeline?:readonly AssistantTimelineItem[];
 }) {
   const snapshot=useConversationSnapshot(source);
   const owner=runtimeTurn===undefined?null:turnTailOwner(snapshot,runtimeTurn,openFile);
   const mentions=owner?fileMentions(owner):undefined;
-  return <WorkspaceTextMentionsContext.Provider value={(seq,value)=>owner?.seq===seq?mentions?.resolve(value):undefined}>{children}</WorkspaceTextMentionsContext.Provider>;
+  const interruptedStep = matchingInterruptedStep(owner, timeline);
+  return <WorkspaceTextMentionsContext.Provider value={(seq,value,step)=>owner && (seq!==undefined ? owner.seq===seq : step!==undefined && step===interruptedStep) ? mentions?.resolve(value):undefined}>{children}</WorkspaceTextMentionsContext.Provider>;
+}
+
+/** Authorize pending text only against the official synthetic final's complete text. */
+export function matchingInterruptedStep(owner:TurnTailOwnerProps|null, timeline:readonly AssistantTimelineItem[] = []):number|undefined {
+  const final = owner?.turn.data.get("turn-tail")?.closing?.finalNode;
+  if (!final || final.messageId !== undefined || final.interrupted !== true) return undefined;
+  const expected = final.blocks.filter(block=>block.kind === "text").map(block=>block.text).join("");
+  const actual = timeline.flatMap(item=>item.kind !== "text" ? [] : (item.sourceRanges??[])
+    .filter(range=>range.runtimeStep === final.step && range.runtimeSeq === undefined)
+    .map(range=>item.text.slice(range.start,range.end))).join("");
+  return expected && actual === expected ? final.step : undefined;
 }

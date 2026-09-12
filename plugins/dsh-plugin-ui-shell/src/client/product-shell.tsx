@@ -808,7 +808,7 @@ function ProductShellInner({
                 // bridge) and renders nothing while none is current, which is also
                 // why the home/draft composer keeps Amiba's own trigger menu.
                 inputOverlay: renderSlot("conversation.input.overlay", {}),
-                messageText: (runtimeTurn, children, openFile) => <TurnText source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} fileMentions={fileMentions}>{children}</TurnText>,
+                messageText: (runtimeTurn, children, openFile, timeline) => <TurnText timeline={timeline} source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} fileMentions={fileMentions}>{children}</TurnText>,
                 turnTailAnchors,
                 turnTail: (runtimeTurn, openFile) => <TurnTail source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} render={owner => renderSlotChain("conversation.chat.turnTail", owner)} />,
                 assistantActions: (messageId) => renderSlot("conversation.chat.assistant-actions", { messageId: messageId as import("@amiba/extension-sdk").AssistantActionOwnerProps["messageId"] }),

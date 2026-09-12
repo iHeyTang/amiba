@@ -559,3 +559,26 @@ step text against its final text blocks, and avoid inferring attribution solely
 from a step number or the visible delta text. Production code must not recreate
 the synthetic offset. This establishes the contract; interrupted prose mapping
 is still unimplemented and is not marked supported.
+
+### Live synthetic interrupted prose connected
+
+Native text source ranges now preserve pending step identity through joining,
+trimming, thinking extraction and folded narration. The message wrapper receives
+the original assistant timeline. For a closed turn with an official interrupted
+final and no message ID, it compares all pending text of the actual final step
+with the final node's complete text blocks before consulting the original file
+resolver. It uses the actual owner sequence, never a reconstructed offset.
+Finalized ranges still require an exact sequence match. Streaming Markdown
+remains unlinked, and removed/retried or corrected text cannot gain attribution
+from a step number alone. Existing text and layout remain unchanged.
+
+- 52 UI tests and 7 adapter tests passed; Shell typecheck passed.
+- Full Desktop production build passed. The installed-plugin smoke's new
+  --interrupted-prose variant emits real Host chunks and boundaries with no
+  assistant/message event. It asserts the actual fractional final sequence and
+  missing message ID, opens the real file from prose, expands folded narration
+  and checks both links. The screenshot was reviewed. Settings, directory, ZIP,
+  produced-file row, HMR and unload checks passed in the same run.
+- Historical draft-only replies still lack source metadata in the history
+  projector. Reopen coverage and that metadata bridge remain required, along
+  with custom Markdown transforms, standalone Web and the broader open ledger.

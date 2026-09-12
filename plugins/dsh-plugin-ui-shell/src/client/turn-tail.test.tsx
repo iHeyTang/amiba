@@ -3,7 +3,7 @@ import { WorkspaceTextMentionsContext } from "@amiba/ui";
 import React from "react";
 import { act, cleanup, render, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { TurnTail, TurnText, turnTailOwner, useTurnTailAnchors } from "./turn-tail";
+import { TurnTail, TurnText, matchingInterruptedStep, turnTailOwner, useTurnTailAnchors } from "./turn-tail";
 afterEach(cleanup);
 function fixture(closing: number | null = 12) {
   const data = {
@@ -131,4 +131,38 @@ it("resolves prose only for the closing sequence and drops the resolver without 
   expect(provider.mock.calls[0][0].turn).toBe(f.turn);
   rerender(<TurnText runtimeTurn={7} openFile={open} fileMentions={provider}><Consumer/></TurnText>);
   expect(resolve?.(12,"same.txt")).toBeUndefined();
+});
+
+it("verifies complete pending step text against the actual synthetic final before resolving", () => {
+  const final:any={seq:14.1,step:2,interrupted:true,blocks:[{kind:"text",text:"First `file.txt`"},{kind:"reasoning",text:"private.txt"},{kind:"text",text:"Last `file.txt`"}]};
+  const data={seq:15,closing:{finalNode:final}};
+  const turn:any={turn:7,status:"closed",data:{get:()=>data}};
+  const snapshot:any={chat:{timeline:{turns:new Map([[7,turn]])}}};
+  const timeline:any[]=[
+    {kind:"text",id:"a",text:"discarded First `file.txt`",sourceRanges:[{start:10,end:26,runtimeStep:2}]},
+    {kind:"reasoning",id:"thought",text:"private.txt"},
+    {kind:"text",id:"b",text:"Last `file.txt`",sourceRanges:[{start:0,end:15,runtimeStep:2}]},
+  ];
+  const owner=turnTailOwner(snapshot,7,vi.fn())!;
+  expect(matchingInterruptedStep(owner,timeline)).toBe(2);
+  expect(matchingInterruptedStep(owner,timeline.slice(0,1))).toBeUndefined();
+  const provider=vi.fn((_owner:any)=>({resolve:(value:string)=>({label:value,title:value,open:vi.fn()})}));
+  let resolve:React.ContextType<typeof WorkspaceTextMentionsContext>;
+  function Consumer(){resolve=React.useContext(WorkspaceTextMentionsContext);return "unchanged";}
+  const source={getSnapshot:()=>snapshot,subscribe:()=>()=>{}};
+  const {rerender}=render(<TurnText source={source} runtimeTurn={7} timeline={timeline} openFile={vi.fn()} fileMentions={provider}><Consumer/></TurnText>);
+  expect(resolve?.(undefined,"file.txt",2)?.title).toBe("file.txt");
+  expect(resolve?.(undefined,"file.txt",1)).toBeUndefined();
+  expect(resolve?.(undefined,"file.txt")).toBeUndefined();
+  expect(resolve?.(12,"file.txt",2)).toBeUndefined();
+  expect(provider.mock.calls[0][0].seq).toBe(final.seq);
+  final.blocks[0].text="corrected.txt";
+  rerender(<TurnText source={source} runtimeTurn={7} timeline={timeline} openFile={vi.fn()} fileMentions={provider}><Consumer/></TurnText>);
+  expect(resolve?.(undefined,"file.txt",2)).toBeUndefined();
+  final.blocks[0].text="First `file.txt`";
+  final.messageId="actual-message";
+  expect(matchingInterruptedStep(owner,timeline)).toBeUndefined();
+  delete final.messageId;
+  timeline[0].sourceRanges=[];
+  expect(matchingInterruptedStep(owner,timeline)).toBeUndefined();
 });

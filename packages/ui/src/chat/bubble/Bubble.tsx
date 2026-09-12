@@ -1704,7 +1704,7 @@ export function MessageTurns({
   onRestoreBeforeTurn,
   restorableTurnOrdinals,
 }: {
-  messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void)=>ReactNode;
+  messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
   assistantActions?: (messageId: string) => ReactNode;
   turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
   turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
@@ -1857,7 +1857,7 @@ export function MessageTurns({
                   suppressTrace={item.suppressTrace}
                   suppressRunBoundary={item.suppressRunBoundary}
                   onOpenAgentDestination={onOpenAgentDestination}
-                />, openTurnFile)
+                />, openTurnFile, item.message.assistantTimeline)
                   : <Bubble
                   m={item.message}
                   suppressTrace={item.suppressTrace}
