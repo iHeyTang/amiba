@@ -9,6 +9,9 @@ const target = process.argv[2] || `${process.platform}-${process.arch}`;
 const { repo, channel } = releaseSettings(process.env, target);
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'apps/desktop/package.json')));
 const tag = `v${pkg.version}`;
+const localHead = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' });
+const releaseCommit = process.env.AMIBA_RELEASE_COMMIT || localHead.stdout?.trim();
+if (!/^[a-f0-9]{40}$/.test(releaseCommit || '')) throw new Error('Cannot resolve release source commit');
 const dir = path.join(root, 'apps/desktop/dist', target);
 const metadata = metadataName(target);
 const names = verifiedArtifacts(dir, target, pkg.version).filter(name => name !== metadata);
@@ -22,6 +25,6 @@ const run = (args, capture = false) => {
 const releases = JSON.parse(run(['release', 'list', '--repo', repo, '--limit', '100', '--json', 'tagName,isDraft'], true));
 const existing = releases.find(r => r.tagName === tag);
 if (existing && !existing.isDraft) throw new Error(`${tag} is already published. Increment the version.`);
-if (!existing) run(['release', 'create', tag, '--repo', repo, '--draft', '--title', tag, '--notes', `Amiba ${pkg.version}`]);
+if (!existing) run(['release', 'create', tag, '--repo', repo, '--draft', '--target', releaseCommit, '--title', tag, '--notes', `Amiba ${pkg.version}`]);
 run(['release', 'upload', tag, '--repo', repo, ...names.map(name => path.join(dir, name)), path.join(dir, metadata), '--clobber']);
 console.log(`Uploaded ${target} to draft ${repo} ${tag}. Publish only after all three targets and CDN sync are verified.`);

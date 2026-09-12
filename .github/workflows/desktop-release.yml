@@ -1,0 +1,134 @@
+name: Desktop build and release
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Build target
+        type: choice
+        options: [all, win32-x64, darwin-x64, darwin-arm64]
+        default: all
+      mode:
+        description: Test packages or release packages (macOS release requires signing secrets)
+        type: choice
+        options: [test, release]
+        default: test
+      publish_draft:
+        description: Upload release packages to a GitHub Release draft
+        type: boolean
+        default: false
+  push:
+    branches: [feat/amiba-distribution]
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      mode: ${{ steps.plan.outputs.mode }}
+      publish: ${{ steps.plan.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+      - id: plan
+        run: node scripts/release/ci-plan.mjs
+
+  build:
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      AMIBA_GITHUB_REPOSITORY: ${{ github.repository }}
+      AMIBA_UPDATE_URLS: ${{ vars.AMIBA_UPDATE_URLS }}
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          architecture: ${{ matrix.arch }}
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Verify release tooling
+        run: node --experimental-strip-types --test scripts/release/*.test.mjs apps/desktop/src/main/__tests__/app-updates.test.mjs packages/app-runtime/scripts/dsh-runtime/process-tools.test.mjs
+      - name: Build test installers
+        if: needs.plan.outputs.mode == 'test'
+        run: pnpm release:build ${{ matrix.target }} --local-only
+      - name: Build Windows release
+        if: needs.plan.outputs.mode == 'release' && matrix.target == 'win32-x64'
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: pnpm release:build win32-x64 --allow-unsigned
+      - name: Build signed macOS release
+        if: needs.plan.outputs.mode == 'release' && startsWith(matrix.target, 'darwin-')
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: pnpm release:build ${{ matrix.target }}
+      - name: Save installers and update metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: amiba-${{ matrix.target }}
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            apps/desktop/dist/${{ matrix.target }}/Amiba-*
+            apps/desktop/dist/${{ matrix.target }}/latest-*.yml
+            apps/desktop/dist/${{ matrix.target }}/release-manifest.json
+
+  release:
+    needs: [plan, build]
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      AMIBA_GITHUB_REPOSITORY: ${{ github.repository }}
+      AMIBA_RELEASE_COMMIT: ${{ github.sha }}
+      GH_TOKEN: ${{ github.token }}
+      BUILD_MATRIX: ${{ needs.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: amiba-*
+          path: release-downloads
+      - name: Validate all artifacts and upload sequentially
+        run: node scripts/release/ci-upload.mjs
