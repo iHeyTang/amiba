@@ -997,3 +997,13 @@ pipelines retain mounted component state.
 
 - 注册表新增整批 MIME 验证、URL 分配中途失败回滚、原始字节与顺序验证、已释放 ID 序列化拒绝和 dispose 后拒绝创建测试；3 项通过，合计相关测试 54 项。前述“官方唯一 input 提供者”是官方完整 ui-conversation 启动后的约束，不能误写成 Amiba 当前已存在该提供者；当前仅有原生 composerInputs 桥接，后续需建立真实 provider。
 - 修正后的 `/tmp/amiba-draft-image-registry-desktop-build.log` 完整构建退出 0，`/tmp/amiba-draft-image-registry-desktop-smoke.log` 的 `--compat --input-state --command-images --child-continuation --child-navigation --child-reload` 退出 0。真实 PNG 经原文件输入上传，确认兼容注册表持有原 File、正确大小和 blob 预览，读取 File 全部字节与上传数据一致；原命令成功后注册项消失。既有图片命令、输入提交、子会话执行与停止、只读/重载及完整兼容回归同轮通过。
+
+### 扩展草稿图片进入原附件流程（2026-09-13）
+
+- 新增会话绑定的 inputImagesFor/addInputImages/removeInputImage，通过原 Composer 和附件 hook 操作已有卡片及上传函数。扩展创建的 File 和 DraftAttachmentId 保留，不再重复注册；Host staging ID 仍独立。
+- 添加前核对全部 ID 均能按请求顺序解析；缺失 ID、没有输入器、只读、提交判定/命令执行中、上传或手动附件忙碌时拒绝，不释放调用方未被接受的图片。空批次遵守相同接入条件。旧绑定卸载不移除新绑定，过期会话回调不操作新会话。
+- 浏览器注册的原生持有者按注册表实例和草稿 ID 计数；重复 ID 或不同会话共享图片时，最后一个持有者释放后才释放预览。绑定不改变原文件类型支持。
+- 扩展附件在等待 session ID 前建立原生待上传芯片，允许同一次操作立即移除；lookup 失败或输入器卸载释放资源。上传计数同步更新，扩展添加后立即 submit 不会因 React 尚未刷新 busy 属性而发送空附件；并发原生上传在全部结束前保持 busy。
+- 8 项附件、28 项输入管线、23 项桥接及 3 项注册表测试通过（62 项），UI/Shell 类型检查通过。新增冻结判定测试使用斜杠草稿触发实际 adjudication；最初普通文字未触发该回调，已修正测试输入。
+- 这是内部会话附件桥接，尚未注册完整官方 input/inputActions 提供者。同步完整 imageIds 快照、pruneImages、队列恢复及其他全量兼容项仍待完成。
+- `/tmp/amiba-input-images-desktop-build.log` 完整 Desktop 构建退出 0；`/tmp/amiba-input-images-desktop-smoke.log` 的 `--compat --input-state --command-images --child-continuation --child-navigation --child-reload` 退出 0。扩展用浏览器 File 创建草稿，通过 addInputImages 进入原卡片；混入缺失 ID 整批拒绝且保留原草稿；添加后立即 submit 返回 false，上传完成后原命令收到正确文件名和全部 base64 原图，成功消费对应草稿。立即添加后移除验证没有残留卡片及浏览器注册项。原输入提交、原生图片上传、子会话执行/停止/只读/重载及既有完整兼容回归同轮通过。

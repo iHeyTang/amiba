@@ -654,6 +654,24 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       [],
     );
 
+    const imageBindingRef = useRef({ sessionId: permissionSessionId, attachments, disabled });
+    imageBindingRef.current = { sessionId: permissionSessionId, attachments, disabled };
+    useEffect(() => {
+      if (!permissionSessionId || !triggerRuntime?.bindImages || !attachments) return;
+      const current = () => imageBindingRef.current.sessionId === permissionSessionId ? imageBindingRef.current : undefined;
+      const writable = () => {
+        const binding = current();
+        return !!binding && !binding.disabled && !commandAttemptRef.current && !resolvingMentionRef.current;
+      };
+      return triggerRuntime.bindImages(permissionSessionId, {
+        getImages: () => current()?.attachments?.draftImages ?? [],
+        canAdd: () => writable() && !current()?.attachments?.attachmentBusy &&
+          !current()?.attachments?.attachmentUploading && !!current()?.attachments?.canAddDraftImages?.(),
+        addImages: images => current()?.attachments?.addDraftImages?.(images),
+        removeImage: id => { if (writable()) current()?.attachments?.removeDraftImage?.(id); },
+      });
+    }, [permissionSessionId, triggerRuntime, attachments?.draftImages]);
+
     // Default canSubmit if not provided.
     const effectiveCanSubmit =
       canSubmit !== undefined ? canSubmit : !!value.trim();
@@ -664,7 +682,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       submit: () => {
         const draft = innerRef.current?.getValue();
         if (draft === undefined || disabled || commandAttemptRef.current || resolvingMentionRef.current ||
-          attachments?.attachmentBusy || attachments?.attachmentUploading) return false;
+          attachments?.attachmentBusy || attachments?.attachmentUploading ||
+          (attachments?.canAddDraftImages && !attachments.canAddDraftImages())) return false;
         const admitted = canSubmitDraft?.(draft) ?? (canSubmit === undefined ? !!draft.trim() : effectiveCanSubmit);
         if (!admitted) return false;
         void handleSend(draft);

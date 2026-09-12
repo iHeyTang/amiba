@@ -29,7 +29,7 @@ import {
   readFileAsAttachment,
   type Attachment,
 } from "@amiba/app-runtime/core"
-import type { ComposerTriggerRuntime } from "./composer/triggers/contracts"
+import type { ComposerTriggerRuntime, ComposerDraftImageRegistration } from "./composer/triggers/contracts"
 import type { ComposerAttachment } from "@amiba/extension-sdk"
 import { useT } from "@amiba/i18n"
 import { Button } from "../primitives"
@@ -39,6 +39,7 @@ import { Plus } from "lucide-react"
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -74,6 +75,9 @@ export interface UseComposerAttachmentsResult {
   attachments: Attachment[]
   /** Browser-owned images only; never Host staging IDs. */
   draftImages?: readonly ComposerAttachment[]
+  canAddDraftImages?(): boolean
+  addDraftImages?(images: readonly ComposerDraftImageRegistration[]): void
+  removeDraftImage?(id: ComposerAttachment["id"]): void
   setAttachments: Dispatch<SetStateAction<Attachment[]>>
   /** True while any chip is still uploading. */
   attachmentUploading: boolean
@@ -132,6 +136,7 @@ export function useComposerAttachments(
 ): UseComposerAttachmentsResult {
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const mounted = useRef(true)
+  const uploads = useRef(0)
   const draftImages = useRef(new Map<string, NonNullable<ReturnType<NonNullable<ComposerTriggerRuntime["registerDraftImage"]>>>>())
   useEffect(() => {
     const retained = new Set(attachments.map(a => a.uiId))
@@ -163,13 +168,19 @@ export function useComposerAttachments(
   )
 
   const addFiles = useCallback(
-    async (files: File[]) => {
+    async (files: File[], supplied?: readonly ComposerDraftImageRegistration[]) => {
       if (files.length === 0) return
+      uploads.current += 1
       setAttachmentBusy(true)
       setAttachmentError(null)
       const pendingUiIds: string[] = []
+      const transferred = new Set<ComposerDraftImageRegistration>()
       try {
-        const sessionId = await opts.getSessionId()
+        let sessionId: string | undefined
+        if (!supplied) {
+          sessionId = await opts.getSessionId()
+          if (!mounted.current) return
+        }
         const errors: string[] = []
         const pending: Attachment[] = files.map((f) => ({
           uiId: shortId("att"),
@@ -181,10 +192,13 @@ export function useComposerAttachments(
         }))
         pendingUiIds.push(...pending.map((p) => p.uiId))
         for (let i = 0; i < pending.length; i += 1) {
-          if (!mounted.current || pending[i].kind !== "image" || !opts.registerDraftImage) continue
+          if (!mounted.current || pending[i].kind !== "image") continue
           try {
-            const registration = opts.registerDraftImage(files[i])
-            if (registration) draftImages.current.set(pending[i].uiId, registration)
+            const registration = supplied?.[i] ?? opts.registerDraftImage?.(files[i])
+            if (registration) {
+              draftImages.current.set(pending[i].uiId, registration)
+              transferred.add(registration)
+            }
           } catch (error) {
             // Native attachment formats remain available even when the
             // pinned official image registry cannot represent that MIME.
@@ -192,6 +206,8 @@ export function useComposerAttachments(
           }
         }
         setAttachments((prev) => [...prev, ...pending])
+        if (sessionId === undefined) sessionId = await opts.getSessionId()
+        if (!mounted.current) return
         for (let i = 0; i < files.length; i += 1) {
           const f = files[i]
           const uiId = pending[i].uiId
@@ -219,7 +235,11 @@ export function useComposerAttachments(
           prev.filter((a) => !pendingUiIds.includes(a.uiId)),
         )
       } finally {
-        setAttachmentBusy(false)
+        for (const registration of supplied ?? []) {
+          if (!transferred.has(registration)) registration.release()
+        }
+        uploads.current -= 1
+        setAttachmentBusy(uploads.current > 0)
       }
     },
     [opts],
@@ -232,6 +252,20 @@ export function useComposerAttachments(
       return prev.filter((a) => a.uiId !== uiId)
     })
   }, [])
+
+  const canAddDraftImages = useCallback(() => mounted.current && uploads.current === 0, [])
+  const addDraftImages = useCallback((images: readonly ComposerDraftImageRegistration[]) => {
+    void addFiles(images.map(image => image.image.file), images)
+  }, [addFiles])
+  const removeDraftImage = useCallback((id: ComposerAttachment["id"]) => {
+    for (const [uiId, registration] of draftImages.current) {
+      if (registration.image.id === id) removeAttachment(uiId)
+    }
+  }, [removeAttachment])
+  const visibleDraftImages = useMemo(() => attachments.flatMap(a => {
+    const registered = draftImages.current.get(a.uiId)
+    return registered ? [registered.image] : []
+  }), [attachments])
 
   const clearAttachments = useCallback(() => {
     setAttachments((prev) => {
@@ -337,10 +371,10 @@ export function useComposerAttachments(
 
   return {
     attachments,
-    draftImages: attachments.flatMap(a => {
-      const registered = draftImages.current.get(a.uiId)
-      return registered ? [registered.image] : []
-    }),
+    draftImages: visibleDraftImages,
+    canAddDraftImages,
+    addDraftImages,
+    removeDraftImage,
     setAttachments,
     attachmentUploading,
     attachmentBusy,

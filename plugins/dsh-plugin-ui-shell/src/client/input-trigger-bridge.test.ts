@@ -382,3 +382,67 @@ describe("official browser draft image registrations", () => {
     expect(bridge.registerDraftImage!({} as File)).toBeUndefined();
   });
 });
+
+describe("session-scoped draft image operations", () => {
+  function setup() {
+    const image = { kind: "image" as const, id: "draft-one" as never, file: {} as File, previewUrl: "blob:one" };
+    const releaseDraftImage = vi.fn();
+    const bridge = createInputTriggerBridge({
+      images: () => registry,
+      scopeOf: () => undefined, subscribeSessions: () => () => {},
+      inputTriggers: () => undefined, commandUi: () => undefined,
+    });
+    const registry = {
+      createDraftImages: () => [image],
+      draftImages: (ids: readonly string[]) => ids.flatMap(id => id === image.id ? [image] : []),
+      releaseDraftImage,
+    };
+    const received: Array<{ image: typeof image; release(): void }> = [];
+    const ops = {
+      getImages: () => received.map(item => item.image), canAdd: vi.fn(() => true),
+      addImages: vi.fn((images: typeof received) => received.push(...images)), removeImage: vi.fn(),
+    };
+    return { bridge, image, releaseDraftImage, received, ops };
+  }
+  it("rejects missing IDs as a whole batch and never releases caller-owned images on rejection", () => {
+    const { bridge, image, ops, releaseDraftImage } = setup();
+    expect(bridge.addInputImages("unbound", [image.id])).toBe(false);
+    const off = bridge.bindImages!("s1", ops);
+    expect(bridge.addInputImages("s1", [image.id, "missing" as never])).toBe(false);
+    expect(ops.addImages).not.toHaveBeenCalled();
+    ops.canAdd.mockReturnValue(false);
+    expect(bridge.addInputImages("s1", [image.id])).toBe(false);
+    expect(releaseDraftImage).not.toHaveBeenCalled();
+    off();
+    expect(bridge.inputImagesFor("s1")).toBeUndefined();
+  });
+  it("retains duplicate/shared IDs until their last native owner releases them", () => {
+    const { bridge, image, ops, received, releaseDraftImage } = setup();
+    bridge.bindImages!("s1", ops);
+    bridge.bindImages!("s2", ops);
+    expect(bridge.addInputImages("s1", [image.id, image.id])).toBe(true);
+    expect(bridge.addInputImages("s2", [image.id])).toBe(true);
+    expect(received.map(item => item.image)).toEqual([image, image, image]);
+    received[0].release();
+    received[0].release();
+    received[1].release();
+    expect(releaseDraftImage).not.toHaveBeenCalled();
+    received[2].release();
+    expect(releaseDraftImage).toHaveBeenCalledTimes(1);
+    expect(releaseDraftImage).toHaveBeenCalledWith(image.id);
+  });
+  it("uses the latest binding, isolates sessions, and ignores stale binding cleanup", () => {
+    const { bridge, image, ops } = setup();
+    const old = bridge.bindImages!("s1", ops);
+    const replacement = { ...ops, removeImage: vi.fn(), getImages: () => [image] };
+    const current = bridge.bindImages!("s1", replacement);
+    old();
+    expect(bridge.inputImagesFor("s1")).toEqual([image]);
+    bridge.removeInputImage("s1", image.id);
+    bridge.removeInputImage("s2", image.id);
+    expect(replacement.removeImage).toHaveBeenCalledTimes(1);
+    expect(ops.removeImage).not.toHaveBeenCalled();
+    current();
+    expect(bridge.addInputImages("s1", [image.id])).toBe(false);
+  });
+});

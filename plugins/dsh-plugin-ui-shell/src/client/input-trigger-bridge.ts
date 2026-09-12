@@ -29,6 +29,8 @@
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type {
   CommandPopupController,
+  ComposerImageOps,
+  ComposerDraftImageRegistration,
   ComposerTriggerController,
   ComposerTriggerRuntime,
   TriggerEditorOps,
@@ -39,6 +41,17 @@ import type {
   InputTriggerSource,
   SubmitOutcome,
 } from "@amiba/extension-sdk";
+
+interface ImageRegistry {
+  createDraftImages(files: readonly File[]): readonly ComposerAttachment[];
+  draftImages?(ids: readonly ComposerAttachment["id"][]): readonly ComposerAttachment[];
+  releaseDraftImage(id: ComposerAttachment["id"]): void;
+}
+function imageRegistry(value: unknown): ImageRegistry | undefined {
+  const registry = value as Partial<ImageRegistry> | undefined;
+  return typeof registry?.createDraftImages === "function" && typeof registry.releaseDraftImage === "function"
+    ? registry as ImageRegistry : undefined;
+}
 
 /** Everything the bridge needs from the client root context. */
 export interface InputTriggerBridgeDeps {
@@ -83,6 +96,9 @@ export interface InputDraftSource {
 }
 
 export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
+  inputImagesFor(sessionId: string): readonly ComposerAttachment[] | undefined;
+  addInputImages(sessionId: string, ids: readonly ComposerAttachment["id"][]): boolean;
+  removeInputImage(sessionId: string, id: ComposerAttachment["id"]): void;
   submitInput(sessionId: string): boolean;
   /** Live editor projection; absent until that session has an attached editor. */
   inputDraftFor(sessionId: string): ReturnType<NonNullable<TriggerEditorOps["readInputDraft"]>> | undefined;
@@ -99,6 +115,21 @@ export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
 export function createInputTriggerBridge(
   deps: InputTriggerBridgeDeps,
 ): AmibaInputTriggerBridge {
+  const imageBindings = new Map<string, { ops: ComposerImageOps }>();
+  const leases = new WeakMap<object, Map<ComposerAttachment["id"], number>>();
+  const retain = (registry: ImageRegistry, image: ComposerAttachment): ComposerDraftImageRegistration => {
+    let counts = leases.get(registry);
+    if (!counts) { counts = new Map(); leases.set(registry, counts); }
+    counts.set(image.id, (counts.get(image.id) ?? 0) + 1);
+    let live = true;
+    return { image, release() {
+      if (!live) return;
+      live = false;
+      const count = (counts.get(image.id) ?? 1) - 1;
+      if (count > 0) counts.set(image.id, count);
+      else { counts.delete(image.id); registry.releaseDraftImage(image.id); }
+    } };
+  };
   const submitters = new Map<string, { submit: () => boolean }>();
   const editors = new Map<string, { ops: TriggerEditorOps }>();
   const draftListeners = new Map<string, Set<() => void>>();
@@ -131,22 +162,29 @@ export function createInputTriggerBridge(
   const notify = () => { for (const listener of listeners) listener(); };
   return {
     registerDraftImage(file) {
-      const conversation = deps.images?.() as Partial<{
-        createDraftImages(files: readonly File[]): readonly ComposerAttachment[];
-        releaseDraftImage(id: ComposerAttachment["id"]): void;
-      }> | undefined;
-      if (typeof conversation?.createDraftImages !== "function" ||
-          typeof conversation.releaseDraftImage !== "function") return undefined;
-      const release = conversation.releaseDraftImage.bind(conversation);
-      const image = conversation.createDraftImages([file])[0];
-      if (!image) return undefined;
-      let live = true;
-      return { image, release() {
-        if (!live) return;
-        live = false;
-        release(image.id);
-      } };
+      const registry = imageRegistry(deps.images?.());
+      if (!registry) return undefined;
+      const image = registry.createDraftImages([file])[0];
+      return image ? retain(registry, image) : undefined;
     },
+    bindImages(sessionId, ops) {
+      const binding = { ops };
+      imageBindings.set(sessionId, binding);
+      return () => { if (imageBindings.get(sessionId) === binding) imageBindings.delete(sessionId); };
+    },
+    inputImagesFor: sessionId => imageBindings.get(sessionId)?.ops.getImages(),
+    addInputImages(sessionId, ids) {
+      const binding = imageBindings.get(sessionId);
+      if (!binding?.ops.canAdd()) return false;
+      if (ids.length === 0) return true;
+      const registry = imageRegistry(deps.images?.());
+      if (!registry?.draftImages) return false;
+      const images = registry.draftImages(ids);
+      if (images.length !== ids.length || images.some((image, i) => image.id !== ids[i])) return false;
+      binding.ops.addImages(images.map(image => retain(registry, image)));
+      return true;
+    },
+    removeInputImage: (sessionId, id) => imageBindings.get(sessionId)?.ops.removeImage(id),
     bindSubmit(sessionId, submit) {
       const binding = { submit };
       submitters.set(sessionId, binding);

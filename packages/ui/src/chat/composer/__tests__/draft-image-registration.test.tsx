@@ -103,3 +103,53 @@ describe("native attachment registration in the official browser registry", () =
     expect(registration.release).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("extension-created draft images", () => {
+  it("stages the supplied original File without creating a second browser identity", async () => {
+    successfulRead();
+    const registration = registry();
+    const original = new File(["original"], "extension.png", { type: "image/png" });
+    const supplied = registration.registerDraftImage(original);
+    registration.registerDraftImage.mockClear();
+    const { result } = renderHook(() => useComposerAttachments({ getSessionId: () => "session", ...registration }));
+    act(() => {
+      expect(result.current.canAddDraftImages!()).toBe(true);
+      result.current.addDraftImages!([supplied]);
+      expect(result.current.canAddDraftImages!()).toBe(false);
+    });
+    await waitFor(() => expect(result.current.attachmentBusy).toBe(false));
+    expect(registration.registerDraftImage).not.toHaveBeenCalled();
+    expect(result.current.draftImages).toEqual([supplied.image]);
+    expect(storage.read).toHaveBeenCalledWith(original, expect.objectContaining({ sessionId: "session" }));
+    act(() => result.current.removeDraftImage!(supplied.image.id));
+    expect(result.current.attachments).toEqual([]);
+    expect(registration.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("can remove a supplied image immediately while session lookup is pending", async () => {
+    successfulRead();
+    const supplied = registry().registerDraftImage(new File(["bytes"], "extension.png", { type: "image/png" }));
+    let resolve!: (id: string) => void;
+    const session = new Promise<string>(done => { resolve = done; });
+    const { result } = renderHook(() => useComposerAttachments({ getSessionId: () => session }));
+    act(() => {
+      result.current.addDraftImages!([supplied]);
+      result.current.removeDraftImage!(supplied.image.id);
+    });
+    expect(result.current.attachments).toEqual([]);
+    expect(supplied.release).toHaveBeenCalledTimes(1);
+    await act(async () => { resolve("session"); });
+    await waitFor(() => expect(result.current.attachmentBusy).toBe(false));
+    expect(result.current.attachments).toEqual([]);
+    expect(supplied.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases supplied images if session lookup fails", async () => {
+    const supplied = registry().registerDraftImage(new File(["bytes"], "extension.png", { type: "image/png" }));
+    const { result } = renderHook(() => useComposerAttachments({ getSessionId: async () => { throw new Error("no session"); } }));
+    act(() => result.current.addDraftImages!([supplied]));
+    await waitFor(() => expect(result.current.attachmentBusy).toBe(false));
+    expect(result.current.attachments).toEqual([]);
+    expect(supplied.release).toHaveBeenCalledTimes(1);
+  });
+});

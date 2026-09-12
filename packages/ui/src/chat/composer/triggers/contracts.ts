@@ -143,9 +143,22 @@ export interface TriggerEditorOps {
  * `@amiba/dsh-plugin-ui-shell`; `undefined` on every surface without a plugin
  * runtime.
  */
+export interface ComposerDraftImageRegistration {
+  image: ComposerAttachment;
+  release(): void;
+}
+
+export interface ComposerImageOps {
+  getImages(): readonly ComposerAttachment[];
+  canAdd(): boolean;
+  addImages(images: readonly ComposerDraftImageRegistration[]): void;
+  removeImage(id: ComposerAttachment["id"]): void;
+}
+
 export interface ComposerTriggerRuntime {
+  bindImages?(sessionId: string, ops: ComposerImageOps): () => void;
   /** Register an original browser image in the official runtime registry. */
-  registerDraftImage?(file: File): { image: ComposerAttachment; release(): void } | undefined;
+  registerDraftImage?(file: File): ComposerDraftImageRegistration | undefined;
   bindSubmit?(sessionId: string, submit: () => boolean): () => void;
   /** Official source objects projected onto an editor without a DSH session. */
   draftSources?(): readonly import("@amiba/extension-sdk").InputTriggerSource[];

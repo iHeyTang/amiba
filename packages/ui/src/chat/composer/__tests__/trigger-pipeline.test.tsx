@@ -705,3 +705,37 @@ describe("bound native submission", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });
+
+it("guards image additions for disabled, busy, and stale session bindings", async () => {
+  const controller = controllerDouble(fixtureSource());
+  const bindings = new Map<string, import("../triggers/contracts").ComposerImageOps>();
+  const runtime: ComposerTriggerRuntime = { ...runtimeFor(controller), bindImages: (id, ops) => { bindings.set(id, ops); return () => {}; } };
+  const attachmentsRef = { current: undefined as import("../../useComposerAttachments").UseComposerAttachmentsResult | undefined };
+  const initialAttachments: import("@amiba/app-runtime/core").Attachment[] = [];
+  const props = { initial: "draft", controller, runtime, onSubmit: vi.fn(), attachmentsRef, initialAttachments };
+  const { rerender } = render(<ControlledComposer {...props} sessionId="s1"/>);
+  await waitFor(() => expect(bindings.has("s1")).toBe(true));
+  expect(bindings.get("s1")!.canAdd()).toBe(true);
+  act(() => attachmentsRef.current!.setAttachmentBusy(true));
+  expect(bindings.get("s1")!.canAdd()).toBe(false);
+  act(() => attachmentsRef.current!.setAttachmentBusy(false));
+  rerender(<ControlledComposer {...props} sessionId="s1" submitOptions={{ disabled: true }}/>);
+  expect(bindings.get("s1")!.canAdd()).toBe(false);
+  rerender(<ControlledComposer {...props} sessionId="s2"/>);
+  expect(bindings.get("s1")!.canAdd()).toBe(false);
+  expect(bindings.get("s2")!.canAdd()).toBe(true);
+});
+
+it("blocks image additions during native adjudication", async () => {
+  const controller = controllerDouble(fixtureSource());
+  let settle!: (outcome: PickOutcome) => void;
+  controller.adjudicate = () => new Promise(resolve => { settle = resolve; });
+  let images!: import("../triggers/contracts").ComposerImageOps;
+  const runtime: ComposerTriggerRuntime = { ...runtimeFor(controller), bindImages: (_id, ops) => { images = ops; return () => {}; } };
+  render(<ControlledComposer initial="/extension" sessionId="s1" controller={controller} runtime={runtime} onSubmit={() => {}} initialAttachments={[]}/>);
+  await waitFor(() => expect(controller.tracked.length).toBeGreaterThan(0));
+  act(() => screen.getByRole("button", { name: /send/iu }).click());
+  expect(images.canAdd()).toBe(false);
+  await act(async () => settle(undefined));
+  expect(images.canAdd()).toBe(true);
+});

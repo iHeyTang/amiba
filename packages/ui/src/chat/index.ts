@@ -176,6 +176,8 @@ export {
   officialTriggerSources,
 } from "./composer/providers/dsh-sources";
 export type {
+  ComposerImageOps,
+  ComposerDraftImageRegistration,
   ComposerTriggerController,
   ComposerTriggerRuntime,
   TriggerEditorOps,
