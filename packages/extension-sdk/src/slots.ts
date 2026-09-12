@@ -95,10 +95,8 @@ export type { SettingsSectionOwnerProps } from "@deepseek-ai/dsh-client-ui-setti
  * The rest of the official settings vocabulary, re-exported from the same
  * canonical home so a plugin author types against the SDK instead of reaching
  * into `@deepseek-ai/dsh-client-ui-settings`. Amiba declares and dispatches
- * six of these seats on its ui-shell root (see the declaration-anchor note in
- * the module doc); `SettingsPluginsTabOwnerProps` is exported for
- * completeness only — the seat is NOT declared here, see the not-adopted
- * record near the bottom of this file.
+ * these seats on its ui-shell root (see the declaration-anchor note in
+ * the module doc); runtime-inventory owns `settings.plugins.tab`.
  *
  *   - `SettingsTriggerOwnerProps` — `{ wide: boolean }`, the sidebar column
  *     state. Amiba's sidebar knows it (its settings row lives in the same
@@ -791,3 +789,6 @@ export interface WorkbenchPanelOwner {
   inspectToolCall(callId: string): boolean;
   renderMarkdown(text: string): ReturnType<typeof import("@amiba/markdown").ChatMarkdown>;
 }
+
+/** Canonical closing-message identity supplied to completed-turn actions. */
+export type AssistantActionOwnerProps = OwnerOf<"conversation.chat.assistant-actions">;

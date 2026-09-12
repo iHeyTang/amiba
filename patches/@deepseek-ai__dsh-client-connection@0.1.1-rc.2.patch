@@ -1,0 +1,15 @@
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -10279,7 +10279,11 @@
+ 			};
+ 			const handle = {
+ 				api,
+-				isLoopback: pageLocation === void 0 || isLoopbackHostname(pageLocation.hostname),
++				// Amiba's file renderer transports RPCs to the managed Host authority.
++				// Web pages retain upstream's page-origin classification.
++				isLoopback: pageLocation?.protocol === "file:" && typeof globalThis.__AMIBA_DSH_TRANSPORT_URL__ === "string"
++					? isLoopbackHostname(new URL(globalThis.__AMIBA_DSH_TRANSPORT_URL__).hostname)
++					: pageLocation === void 0 || isLoopbackHostname(pageLocation.hostname),
+ 				hostDescription: {
+ 					getSnapshot: () => description,
+ 					subscribe: (listener) => {

@@ -125,6 +125,9 @@ catalogs:
       version: 3.18.1
 
 patchedDependencies:
+  '@deepseek-ai/dsh-client-connection@0.1.1-rc.2':
+    hash: hqhf33tdaj43mc2gjoets52ahy
+    path: patches/@deepseek-ai__dsh-client-connection@0.1.1-rc.2.patch
   '@deepseek-ai/dsh-session@0.1.1-rc.2':
     hash: nj3dy5kmrqzqkoeeuoxyhewj2m
     path: patches/@deepseek-ai__dsh-session@0.1.1-rc.2.patch
@@ -10458,7 +10461,7 @@ snapshots:
   '@deepseek-ai/dsh-api-gateway@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-client-connection@0.1.1-rc.2)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/dsh-typert-registry@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))':
     dependencies:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
-      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(sop2isheuv3f476g4hqkkx7fpa)
+      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(patch_hash=hqhf33tdaj43mc2gjoets52ahy)(sop2isheuv3f476g4hqkkx7fpa)
       '@deepseek-ai/dsh-invariants': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)
       '@deepseek-ai/dsh-typert-protocol': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/dsh-typert-registry': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))
@@ -10520,7 +10523,7 @@ snapshots:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
       '@deepseek-ai/dsh-invariants': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)
 
-  '@deepseek-ai/dsh-client-connection@0.1.1-rc.2(sop2isheuv3f476g4hqkkx7fpa)':
+  '@deepseek-ai/dsh-client-connection@0.1.1-rc.2(patch_hash=hqhf33tdaj43mc2gjoets52ahy)(sop2isheuv3f476g4hqkkx7fpa)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
       '@deepseek-ai/dsh-attachment': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))
@@ -10541,7 +10544,7 @@ snapshots:
     dependencies:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
       '@deepseek-ai/dsh-api-remotes': 0.1.1-rc.2(mxrl6z4ctiiwck6nby5j745iee)
-      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(sop2isheuv3f476g4hqkkx7fpa)
+      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(patch_hash=hqhf33tdaj43mc2gjoets52ahy)(sop2isheuv3f476g4hqkkx7fpa)
       '@deepseek-ai/dsh-client-runtime': 0.1.1-rc.2(xvdn44eaoatwqkhobhlerif4ry)
       '@deepseek-ai/dsh-client-ui-settings': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-api-remotes@0.1.1-rc.2(mxrl6z4ctiiwck6nby5j745iee))(@deepseek-ai/dsh-client-connection@0.1.1-rc.2)(@deepseek-ai/dsh-client-runtime@0.1.1-rc.2(xvdn44eaoatwqkhobhlerif4ry))(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/dsh-settings@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/schemastery@3.18.1))
       '@deepseek-ai/dsh-invariants': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)
@@ -10554,7 +10557,7 @@ snapshots:
       '@deepseek-ai/dsh-agent': 0.1.1-rc.2(udayyy5w7mghbycljmo7i4yvrm)
       '@deepseek-ai/dsh-api-remotes': 0.1.1-rc.2(mxrl6z4ctiiwck6nby5j745iee)
       '@deepseek-ai/dsh-attachment': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))
-      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(sop2isheuv3f476g4hqkkx7fpa)
+      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(patch_hash=hqhf33tdaj43mc2gjoets52ahy)(sop2isheuv3f476g4hqkkx7fpa)
       '@deepseek-ai/dsh-commands': 0.1.1-rc.2(3q5w5gzaeycj56e5u7hdzh7uru)
       '@deepseek-ai/dsh-host-apiproxy': 0.1.1-rc.2(oysbkdntiziiotlyqcwpf5pjnq)
       '@deepseek-ai/dsh-invariants': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)
@@ -10591,7 +10594,7 @@ snapshots:
       '@deepseek-ai/dsh-api-remotes': 0.1.1-rc.2(mxrl6z4ctiiwck6nby5j745iee)
       '@deepseek-ai/dsh-attachment': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/dsh-brand': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))
-      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(sop2isheuv3f476g4hqkkx7fpa)
+      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(patch_hash=hqhf33tdaj43mc2gjoets52ahy)(sop2isheuv3f476g4hqkkx7fpa)
       '@deepseek-ai/dsh-client-locale': 0.1.1-rc.2(6zrjpfuhwwyekwie5rhg7w3by4)
       '@deepseek-ai/dsh-client-runtime': 0.1.1-rc.2(xvdn44eaoatwqkhobhlerif4ry)
       '@deepseek-ai/dsh-client-ui-input-trigger': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-client-locale@0.1.1-rc.2(6zrjpfuhwwyekwie5rhg7w3by4))(@deepseek-ai/dsh-client-runtime@0.1.1-rc.2(xvdn44eaoatwqkhobhlerif4ry))(@deepseek-ai/dsh-file-reference@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-agent@0.1.1-rc.2(udayyy5w7mghbycljmo7i4yvrm))(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/dsh-typert-protocol@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))))(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))
@@ -10632,7 +10635,7 @@ snapshots:
   : dependencies:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
       '@deepseek-ai/dsh-api-remotes': 0.1.1-rc.2(mxrl6z4ctiiwck6nby5j745iee)
-      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(sop2isheuv3f476g4hqkkx7fpa)
+      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(patch_hash=hqhf33tdaj43mc2gjoets52ahy)(sop2isheuv3f476g4hqkkx7fpa)
       '@deepseek-ai/dsh-client-locale': 0.1.1-rc.2(6zrjpfuhwwyekwie5rhg7w3by4)
       '@deepseek-ai/dsh-client-runtime': 0.1.1-rc.2(xvdn44eaoatwqkhobhlerif4ry)
       '@deepseek-ai/dsh-client-ui-settings': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-api-remotes@0.1.1-rc.2(mxrl6z4ctiiwck6nby5j745iee))(@deepseek-ai/dsh-client-connection@0.1.1-rc.2)(@deepseek-ai/dsh-client-runtime@0.1.1-rc.2(xvdn44eaoatwqkhobhlerif4ry))(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/dsh-settings@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/schemastery@3.18.1))
@@ -10643,7 +10646,7 @@ snapshots:
     dependencies:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
       '@deepseek-ai/dsh-api-remotes': 0.1.1-rc.2(mxrl6z4ctiiwck6nby5j745iee)
-      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(sop2isheuv3f476g4hqkkx7fpa)
+      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(patch_hash=hqhf33tdaj43mc2gjoets52ahy)(sop2isheuv3f476g4hqkkx7fpa)
       '@deepseek-ai/dsh-client-runtime': 0.1.1-rc.2(xvdn44eaoatwqkhobhlerif4ry)
       '@deepseek-ai/dsh-invariants': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)
       '@deepseek-ai/dsh-settings': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/schemastery@3.18.1)
@@ -10667,7 +10670,7 @@ snapshots:
     dependencies:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
       '@deepseek-ai/dsh-api-remotes': 0.1.1-rc.2(mxrl6z4ctiiwck6nby5j745iee)
-      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(sop2isheuv3f476g4hqkkx7fpa)
+      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(patch_hash=hqhf33tdaj43mc2gjoets52ahy)(sop2isheuv3f476g4hqkkx7fpa)
       '@deepseek-ai/dsh-client-locale': 0.1.1-rc.2(6zrjpfuhwwyekwie5rhg7w3by4)
       '@deepseek-ai/dsh-client-runtime': 0.1.1-rc.2(xvdn44eaoatwqkhobhlerif4ry)
       '@deepseek-ai/dsh-client-ui-settings': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-api-remotes@0.1.1-rc.2(mxrl6z4ctiiwck6nby5j745iee))(@deepseek-ai/dsh-client-connection@0.1.1-rc.2)(@deepseek-ai/dsh-client-runtime@0.1.1-rc.2(xvdn44eaoatwqkhobhlerif4ry))(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/dsh-settings@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.1))(@deepseek-ai/schemastery@3.18.1))
@@ -10681,7 +10684,7 @@ snapshots:
     dependencies:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
       '@deepseek-ai/dsh-api-remotes': 0.1.1-rc.2(mxrl6z4ctiiwck6nby5j745iee)
-      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(sop2isheuv3f476g4hqkkx7fpa)
+      '@deepseek-ai/dsh-client-connection': 0.1.1-rc.2(patch_hash=hqhf33tdaj43mc2gjoets52ahy)(sop2isheuv3f476g4hqkkx7fpa)
       '@deepseek-ai/dsh-client-locale': 0.1.1-rc.2(6zrjpfuhwwyekwie5rhg7w3by4)
       '@deepseek-ai/dsh-client-runtime': 0.1.1-rc.2(xvdn44eaoatwqkhobhlerif4ry)
       '@deepseek-ai/dsh-client-ui-conversation': 0.1.1-rc.2(4qa4lls4tvnurzcyp72egc673a)
@@ -16367,14 +16370,14 @@ snapshots:
       '@internationalized/date': 3.12.4
       '@internationalized/number': 3.6.8
       '@internationalized/string': 3.2.10
-      '@react-types/shared': 3.36.1(react@19.3.0)
+      '@react-types/shared': 3.36.1(react@18.3.1)
       '@swc/helpers': 0.5.23
       aria-hidden: 1.2.6
       clsx: 2.1.1
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
-      react-stately: 3.50.0(react@19.3.0)
-      use-sync-external-store: 1.7.0(react@19.3.0)
+      react-stately: 3.50.0(react@18.3.1)
+      use-sync-external-store: 1.7.0(react@18.3.1)
 
   react-aria@3.52.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
     dependencies:
