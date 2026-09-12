@@ -562,6 +562,33 @@ export class DshApiClient {
     )
   }
 
+  subagentPrompt(
+    address: AgentSubagentAddress & { mode: "continuable" },
+    content: DshPromptContentPart[],
+    options: { clientTimeZone?: string; signal?: AbortSignal } = {},
+  ): Promise<{ messageId: string }> {
+    if (address.mode !== "continuable") return Promise.reject(new Error("One-shot subagents cannot receive follow-up prompts"))
+    if (content.some((part) => part.type === "image")) return Promise.reject(new Error("Image input is unavailable for subagent continuations"))
+    return this.call("subagent.prompt", {
+      parentSessionId: address.parentSessionId,
+      childSessionId: address.childSessionId,
+      mode: address.mode,
+      content,
+      ...(options.clientTimeZone ? { clientTimeZone: options.clientTimeZone } : {}),
+    }, options.signal)
+  }
+
+  subagentInterrupt(
+    address: AgentSubagentAddress & { mode: "continuable" },
+  ): Promise<{ accepted: true }> {
+    if (address.mode !== "continuable") return Promise.reject(new Error("One-shot subagents do not support continuation interrupts"))
+    return this.call("subagent.interrupt", {
+      parentSessionId: address.parentSessionId,
+      childSessionId: address.childSessionId,
+      mode: address.mode,
+    })
+  }
+
   models(sessionId: string, signal?: AbortSignal): Promise<{
     current: { provider: string; model: string; reasoningEffort?: string }
     routable: boolean

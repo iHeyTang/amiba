@@ -764,3 +764,18 @@ pipelines retain mounted component state.
   instead need subagent.prompt/subagent.interrupt; one-shot children must honor the
   official read-only semantics. Its mux subscription behavior also needs checking.
   Public openSubagent intent from Home remains distinct from marked public open.
+
+### Addressed continuation RPCs and confirmed limits (2026-09-12)
+
+- Added exact `subagent.prompt` and `subagent.interrupt` client RPCs carrying
+  parent, child and continuable mode. Prompt returns the official opaque string
+  MessageId and carries optional browser timezone and AbortSignal; it does not
+  use root session creation, model selection or ordinary prompt/stop methods.
+- Checked actual rc.2 Session.prompt/cancel and API declarations: one-shot children
+  are read-only and uncancellable through this interface; child image prompts are
+  rejected by the official client. Added the same defensive checks and recorded
+  these version-specific limitations in the assessment table.
+- All 14 DshApiClient tests and app-runtime typecheck passed, including exact
+  wire envelopes/receipts and no-RPC checks for one-shot or image input.
+  These are RPC primitives only. Chat engine dispatch, mux subscription readiness,
+  UI controls and end-to-end Desktop verification are still outstanding.

@@ -9,6 +9,46 @@ function jsonResponse(value: unknown): Response {
 }
 
 describe("DshApiClient", () => {
+  it("routes child continuation and interruption through the exact direct-parent address", async () => {
+    const calls: Array<{ method: string; payload: unknown }> = [];
+    const client = new DshApiClient({
+      baseUrl: "http://dsh.test",
+      fetch: (async (_url, init) => {
+        const body = JSON.parse(String(init?.body));
+        calls.push({ method: body.method, payload: body.payload });
+        return jsonResponse({ type: "server-response", rpcId: body.rpcId, result: {
+          ok: true, value: body.method === "subagent.prompt" ? { messageId: "message-child" } : { accepted: true },
+        } });
+      }) as typeof fetch,
+    });
+    const address = { parentSessionId: "parent", childSessionId: "child", mode: "continuable" as const };
+    const content = [{ type: "text" as const, text: "Continue" }];
+    await expect(client.subagentPrompt(address, content, { clientTimeZone: "Asia/Shanghai" })).resolves.toEqual({ messageId: "message-child" });
+    await expect(client.subagentInterrupt(address)).resolves.toEqual({ accepted: true });
+    expect(calls).toEqual([
+      { method: "subagent.prompt", payload: { ...address, content, clientTimeZone: "Asia/Shanghai" } },
+      { method: "subagent.interrupt", payload: address },
+    ]);
+  });
+
+  it("does not send continuation RPCs for one-shot children even from untyped callers", async () => {
+    const fetch = vi.fn();
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", fetch });
+    const address = { parentSessionId: "parent", childSessionId: "child", mode: "one-shot" };
+    await expect(client.subagentPrompt(address as never, [])).rejects.toThrow("One-shot");
+    await expect(client.subagentInterrupt(address as never)).rejects.toThrow("One-shot");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("matches the pinned official client's rejection of child image prompts", async () => {
+    const fetch = vi.fn();
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", fetch });
+    await expect(client.subagentPrompt({ parentSessionId: "parent", childSessionId: "child", mode: "continuable" }, [
+      { type: "image", mediaType: "image/png", data: "aW1hZ2U=", name: "image.png" },
+    ])).rejects.toThrow("Image input is unavailable");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("uses native DSH RPC envelopes", async () => {
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as { rpcId: string; method: string; payload: unknown }
