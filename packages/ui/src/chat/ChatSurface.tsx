@@ -1,3 +1,4 @@
+import { deleteUnretainedAttachments } from "./internal/attachment-ownership";
 import { useSessionComposerDraft } from "./use-session-composer-draft";
 import { useConversationSubmitHandoff } from "./useConversationSubmitHandoff";
 import { usePrepareConversationSubmit } from "./conversation-submit";
@@ -44,7 +45,6 @@ import { shortId } from "@amiba/app-runtime/utils";
 import {
   attachmentToBadge,
   classify,
-  deleteAttachmentFile,
   formatBytesShort,
   formatFileAttachmentsForPrompt,
   getAgentPresets,
@@ -560,7 +560,9 @@ export default function ChatSurface({
   // them under a transient composer id while the home surface is active;
   // only `runChatTurn()` may mint the real conversation id.
   const draftUploadSessionRef = useRef(shortId("draft"));
+  const queuedAttachmentsRef = useRef<Attachment[]>([]);
   const att = useComposerAttachments({
+    isAttachmentRetained: id => queuedAttachmentsRef.current.some(a => a.attachmentId === id),
     registerDraftImage: triggerRuntime?.registerDraftImage,
     getSessionId: () => sessions.activeId || draftUploadSessionRef.current,
   });
@@ -851,6 +853,7 @@ export default function ChatSurface({
     cancelEdit: cancelQueueEdit,
     remove: removePendingQueueItem,
   } = queueHook;
+  queuedAttachmentsRef.current = pendingQueue.flatMap(q => q.attachments);
   const queueDrainRef = useRef({ sessionId: sessions.activeId, drain: queueHook.drainHead });
   queueDrainRef.current = { sessionId: sessions.activeId, drain: queueHook.drainHead };
 
@@ -1292,9 +1295,7 @@ export default function ChatSurface({
     const assistantUiId = stream.getCurrentAssistantUiId() ?? null;
     stream.reset();
     setPendingQueue((pq) => {
-      for (const q of pq) {
-        for (const a of q.attachments) void deleteAttachmentFile(a);
-      }
+      deleteUnretainedAttachments(pq.flatMap(q => q.attachments), attachments);
       return [];
     });
     // Errors wipe the queue, so the paused flag (if any) is meaningless now.
@@ -1531,7 +1532,7 @@ export default function ChatSurface({
         setError(null);
         // Same fire-and-forget GC as `newChat` — the composer-time
         // attachments belonged to the session we're leaving.
-        for (const a of attachments) void deleteAttachmentFile(a);
+        deleteUnretainedAttachments(attachments, pendingQueue.flatMap(q => q.attachments));
         setAttachments([]);
         setAttachmentError(null);
         // The "from <App>" source hint belongs to the hand-off prompt
@@ -1904,7 +1905,7 @@ export default function ChatSurface({
     resetQuestions();
     // Drop any composer-time attachments and unlink their on-disk files —
     // they were tied to the old session and won't be referenced again.
-    for (const a of attachments) void deleteAttachmentFile(a);
+    deleteUnretainedAttachments(attachments, pendingQueue.flatMap(q => q.attachments));
     setAttachments([]);
     setAttachmentError(null);
     pendingWorkspacePathRef.current = null;

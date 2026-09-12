@@ -3,7 +3,6 @@ import { getPlatform } from "@amiba/app-runtime/platform";
 import { useT } from "@amiba/i18n";
 import { shortId } from "@amiba/app-runtime/utils";
 import {
-  deleteAttachmentFile,
   useSessions,
   type Attachment,
   type ChatEngineClient,
@@ -13,6 +12,7 @@ import type { ComposerDraftDocument } from "../composer-draft-document";
 import type { ComposerDraftSource } from "../composer-draft-store";
 
 import { pickSendText } from "./pickSendText";
+import { deleteUnretainedAttachments } from "./attachment-ownership";
 
 /** One user turn waiting while the model is still streaming the previous reply. */
 export interface PendingChatTurn {
@@ -331,6 +331,12 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       if (!item) return;
 
       prepareItem(item, (item) => {
+        const original = queueRef.current.find(q => q.queueId === queueId);
+        deleteUnretainedAttachments(original?.attachments ?? [], [
+          ...queueRef.current.filter(q => q.queueId !== queueId).flatMap(q => q.attachments),
+          ...item.attachments,
+          ...(editingThisOne ? [] : attachments),
+        ]);
         // The item is about to fire — remove it from the visible queue
         // now so the chip doesn't linger during the handoff.
         setQueue((prev) => prev.filter((q) => q.queueId !== queueId));
@@ -501,20 +507,21 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   const remove = useCallback(
     (queueId: string): void => {
       cancelResolution();
-      setQueue((prev) => {
-        const hit = prev.find((q) => q.queueId === queueId);
-        if (hit) {
-          for (const a of hit.attachments) void deleteAttachmentFile(a);
-        }
-        return prev.filter((q) => q.queueId !== queueId);
-      });
+      const hit = queueRef.current.find(q => q.queueId === queueId);
+      const remaining = queueRef.current.filter(q => q.queueId !== queueId);
+      const clearsComposer = editingQueueId === queueId;
+      deleteUnretainedAttachments(
+        [...(hit?.attachments ?? []), ...(clearsComposer ? attachments : [])],
+        [...remaining.flatMap(q => q.attachments), ...(clearsComposer ? [] : attachments)],
+      );
+      queueRef.current = remaining;
+      setQueue(prev => prev.filter(q => q.queueId !== queueId));
       // If we just deleted the row that was being edited, drop edit
       // mode so the composer doesn't keep a ghost reference to a
       // vanished item.
       if (editingQueueId === queueId) {
         setEditingQueueId(null);
         setInput("");
-        for (const a of attachments) void deleteAttachmentFile(a);
         setAttachments([]);
       }
     },
@@ -576,7 +583,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     if (editingQueueId == null) return;
     setEditingQueueId(null);
     setInput("");
-    for (const a of attachments) void deleteAttachmentFile(a);
+    deleteUnretainedAttachments(attachments, queueRef.current.flatMap(q => q.attachments));
     setAttachments([]);
   }, [editingQueueId, attachments, setInput, setAttachments]);
 

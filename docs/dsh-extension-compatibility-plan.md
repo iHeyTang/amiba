@@ -1275,3 +1275,13 @@ pipelines retain mounted component state.
 - 最终完整 Desktop 构建通过（/tmp/amiba-stashed-queue-build3.log）。新增 --queue-stash 使用真实引用源和普通 token 文字，点击原 Edit 暂存未提交草稿，再发送编辑项并等待原自动出队。实际模型日志逐字匹配 codec 输出和普通文字，调用次数准确。首轮探针同时添加前后缀，按原最小差异规则解散了引用；改为两次独立编辑后通过，未改变产品编辑规则。
 - 最终组合回归 /tmp/amiba-stashed-queue-smoke2.log 退出 0，覆盖离屏草稿、排队及刷新恢复、运行状态、命令/图片、动态 Cordis、轨迹、子会话及嵌套 Host 冷重启、插件安装/HMR/卸载。原编辑器与卡片尺寸、样式检查继续通过，无 JSX 或 CSS 变更。
 - JSON 测试覆盖新暂存标记持久化，桌面验证覆盖真实暂存后的自动出队；不将旧版本无标记记录猜测为待解析草稿。队列图片所有权及清理、完整 Host inbox 对齐、完整离屏输入和官方 useInput 仍需适配，不代表全部队列兼容。
+
+### 队列和输入框共享附件的文件清理（2026-09-13）
+
+- 实际问题：Edit 复制 Attachment 对象但共享 attachmentId。原 cancelEdit、图片移除、会话切换直接调用文件删除，会破坏仍留在队列中的原文件；删除编辑项又可能对同一文件重复删除。
+- 增加 deleteUnretainedAttachments，按 Host staging ID 核对保留的队列与输入框附件，并对一次清理去重。取消编辑保留队列原附件、释放新添附件；删除行保留其他行及未清空输入框的文件；提交编辑后的附件列表释放弃用的旧文件，保留本次发送使用的文件。
+- 原 useComposerAttachments 增加可选队列所有权查询，图片移除及清空仍更新原 UI 和浏览器注册，仅在队列没有持有同一文件时删除 Host 文件。无队列的调用方保持原行为。ChatSurface 的切换会话、新建会话及错误清理分别保留仍被队列或输入框持有的附件。没有改动 JSX 或 CSS。
+- 队列、附件所有权和真实 Composer 触发管线共 59 项测试通过（/tmp/amiba-queue-files-tests2.log）；UI 类型检查通过（/tmp/amiba-queue-files-types2.log）。完整 Desktop 构建通过（/tmp/amiba-queue-files-build.log）。
+- 新增 --queue-files：真实上传 PNG、排队、读取实际存储记录中的 attachmentId，定位对应 Host 原始文件；经取消编辑、移除图片及切换会话后逐字节比较，删除最后一条队列记录后确认 ENOENT。首轮只上传图片而等待带文字的排队按钮超时，按现有交互补入文字后通过，没有为探针更改按钮规则。
+- 最终组合桌面回归 /tmp/amiba-queue-files-smoke2.log 退出 0，同时覆盖离屏草稿、引用队列与自动出队、刷新恢复、运行状态、命令及官方图片操作、动态 Cordis、轨迹、子会话及嵌套 Host 冷重启、插件安装/HMR/卸载。原编辑器、卡片尺寸及样式检查继续通过。
+- 本项验证队列与输入框的文件所有权，不代表完整官方图片生命周期：浏览器 File/草稿图片 ID 在队列恢复时的重建、发送中所有权和完整 Host inbox 对齐仍需核对。测试仅暂存并删除子会话队列图片，没有发送图片至子会话，不改变 rc.2 子会话图片输入限制。

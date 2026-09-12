@@ -832,6 +832,53 @@ try {
         await wait(() => evaluate("!document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
         await evaluate("window.__queueRefOff();void 0");
         console.log("Native queued mixed draft restored its real reference and literal token; edited Send now re-ran the codec and delivered the exact new model payload");
+        if (process.argv.includes("--queue-files")) {
+          const bytes=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJ1sAAAAASUVORK5CYII=","base64");
+          const imagePath=path.join(profile,"queue-owned.png");
+          await writeFile(imagePath,bytes);
+          await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_WAIT_FOR_STOP');window.__probeCtx.composerInputs.submitInput('compat-continuable-child');void 0");
+          await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+          await evaluate("Array.from(document.querySelectorAll('[data-composer-card]')).find(n=>n.getClientRects().length>0).parentElement.querySelector('input[type=file]').id='queue-file-input';void 0");
+          const doc=await call("DOM.getDocument");
+          const node=await call("DOM.querySelector",{nodeId:doc.root.nodeId,selector:'#queue-file-input'});
+          await call("DOM.setFileInputFiles",{nodeId:node.nodeId,files:[imagePath]});
+          await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','Queued file ownership check');void 0");
+          await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Queue: send after the current turn finishes\"]:not(:disabled)')"));
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-continuable-child')"),true);
+          await wait(()=>evaluate("(async()=>{const x=await window.amiba.storage.get('pendingQueue:compat-continuable-child');return !!x['pendingQueue:compat-continuable-child']?.[0]?.attachments?.[0]?.attachmentId})()"));
+          const attachmentId=await evaluate("(async()=>{const x=await window.amiba.storage.get('pendingQueue:compat-continuable-child');return x['pendingQueue:compat-continuable-child'][0].attachments[0].attachmentId})()");
+          const stored=(await readdir(profile,{recursive:true})).filter(file=>file.endsWith('/'+attachmentId+'.bin'));
+          assert.equal(stored.length,1);
+          const storedPath=path.join(profile,stored[0]);
+          await evaluate("new Promise(resolve=>setTimeout(resolve,250))");
+          assert.deepEqual(await readFile(storedPath),bytes);
+          await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]').click();void 0");
+          await wait(()=>evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+          const edit="document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]').click();void 0";
+          const cancel="document.querySelector('[data-composer-card] button[aria-label=\"Cancel edit\"]').click();void 0";
+          await evaluate(edit);
+          await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Cancel edit\"]')"));
+          await evaluate(cancel);
+          await evaluate("new Promise(resolve=>setTimeout(resolve,250))");
+          assert.deepEqual(await readFile(storedPath),bytes);
+          await evaluate(edit);
+          await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Remove queue-owned.png\"]')"));
+          await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Remove queue-owned.png\"]').click();void 0");
+          await evaluate("new Promise(resolve=>setTimeout(resolve,250))");
+          assert.deepEqual(await readFile(storedPath),bytes);
+          await evaluate(cancel);
+          await evaluate(edit);
+          await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+          await wait(()=>evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)"));
+          await evaluate("new Promise(resolve=>setTimeout(resolve,250))");
+          assert.deepEqual(await readFile(storedPath),bytes);
+          await evaluate("window.__probeCtx.sessions.open('compat-continuable-child');void 0");
+          await wait(()=>evaluate("!!document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]')"));
+          await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Delete]').click();void 0");
+          await wait(async()=>{try{await readFile(storedPath);return false;}catch(error){if(error.code==='ENOENT')return true;throw error;}});
+          console.log("Actual queued image bytes survived cancel edit, chip removal and session switching; deleting the last queue owner removed its stored file");
+        }
+
       }
 
       await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");

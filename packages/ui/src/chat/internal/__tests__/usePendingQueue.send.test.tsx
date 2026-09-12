@@ -8,6 +8,7 @@ import { pickSendText } from "../pickSendText"
 // --- Stub the platform + i18n the hook reaches for at import/runtime. The
 // queue hook only touches storage (persist effects) and useT (kept stable);
 // neither matters for the text-selection assertion. ---
+const attachmentFiles = { remove: vi.fn(async () => {}) };
 const storage = {
   get: vi.fn(async () => ({})),
   set: vi.fn(async () => {}),
@@ -15,7 +16,7 @@ const storage = {
   watch: vi.fn(() => () => {}),
 }
 vi.mock("@amiba/app-runtime/platform", () => ({
-  getPlatform: () => ({ storage }),
+  getPlatform: () => ({ storage, agentAttachments: attachmentFiles }),
 }))
 vi.mock("@amiba/i18n", () => ({
   useT: () => ({ t: (k: string) => k }),
@@ -305,4 +306,51 @@ it("keeps an unresolved queue draft when its codec produces no sendable content"
   expect(args.client.abort).not.toHaveBeenCalled();
   expect(result.current.queue).toHaveLength(1);
   expect(args.setAttachmentError).toHaveBeenCalledWith("Queued draft resolved to empty content");
+});
+
+
+describe("queue attachment ownership", () => {
+  const image = (attachmentId:string,uiId=attachmentId) => ({attachmentId,uiId,name:uiId+".png",kind:"image" as const,mime:"image/png",size:3});
+  beforeEach(()=>attachmentFiles.remove.mockClear());
+  it("cancel edit releases only newly added files, retaining the queued original", async()=>{
+    const original=image("shared"), extra=image("new");
+    const args=makeArgs({input:"",attachments:[{...original,uiId:"mirror"},extra]});
+    const {result}=renderHook(()=>usePendingQueue(args));
+    act(()=>{result.current.setQueue([{queueId:"a",text:"queued",attachments:[original]}]);result.current.setEditingQueueId("a");});
+    await act(async()=>{result.current.cancelEdit();});
+    expect(attachmentFiles.remove.mock.calls).toEqual([["new"]]);
+    expect(result.current.queue[0].attachments).toEqual([original]);
+    expect(args.setAttachments).toHaveBeenCalledWith([]);
+  });
+  it("removing one row retains files still owned by another row or the composer", async()=>{
+    const shared=image("shared"), composer=image("composer"), gone=image("gone");
+    const args=makeArgs({attachments:[composer]});
+    const {result}=renderHook(()=>usePendingQueue(args));
+    act(()=>result.current.setQueue([{queueId:"a",text:"a",attachments:[shared,composer,gone]},{queueId:"b",text:"b",attachments:[{...shared,uiId:"copy"}]}]));
+    await act(async()=>{result.current.remove("a");});
+    expect(attachmentFiles.remove.mock.calls).toEqual([["gone"]]);
+    await act(async()=>{result.current.remove("b");});
+    expect(attachmentFiles.remove.mock.calls).toEqual([["gone"],["shared"]]);
+  });
+  it("deleting the edited row releases shared row/composer copies only once", async()=>{
+    const original=image("shared");
+    const args=makeArgs({attachments:[{...original,uiId:"copy"}]});
+    const {result}=renderHook(()=>usePendingQueue(args));
+    act(()=>{result.current.setQueue([{queueId:"a",text:"a",attachments:[original]}]);result.current.setEditingQueueId("a");});
+    await act(async()=>{result.current.remove("a");});
+    expect(attachmentFiles.remove.mock.calls).toEqual([["shared"]]);
+    expect(args.setAttachments).toHaveBeenCalledWith([]);
+  });
+});
+
+
+it("committing edited attachments releases the discarded original without deleting the send payload",async()=>{
+  attachmentFiles.remove.mockClear();
+  const image=(id:string)=>({attachmentId:id,uiId:id,name:id+".png",mime:"image/png",size:3,kind:"image" as const});
+  const args=makeArgs({attachments:[image("kept"),image("new")]});
+  const {result}=renderHook(()=>usePendingQueue(args));
+  act(()=>{result.current.setQueue([{queueId:"edit",text:"old",attachments:[image("kept"),image("removed")]}]);result.current.setEditingQueueId("edit");});
+  await act(async()=>{await result.current.send("edited");});
+  expect(attachmentFiles.remove.mock.calls).toEqual([["removed"]]);
+  expect(args.runChatTurn).toHaveBeenCalledWith({text:"edited",attachments:[image("kept"),image("new")]});
 });

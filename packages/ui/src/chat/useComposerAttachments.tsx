@@ -60,6 +60,8 @@ export const ATTACHMENT_INPUT_ACCEPT =
 
 export interface UseComposerAttachmentsOptions {
   registerDraftImage?: ComposerTriggerRuntime["registerDraftImage"]
+  /** Queue mirrors can still own the same Host staging file after a chip is removed. */
+  isAttachmentRetained?: (attachmentId: string) => boolean
 
   /**
    * Resolve (or create) the session id the uploaded bytes should be
@@ -136,6 +138,8 @@ export interface UseComposerAttachmentsResult {
 export function useComposerAttachments(
   opts: UseComposerAttachmentsOptions,
 ): UseComposerAttachmentsResult {
+  const retentionRef = useRef(opts.isAttachmentRetained)
+  retentionRef.current = opts.isAttachmentRetained
   const [attachments, setAttachmentState] = useState<Attachment[]>([])
   const attachmentState = useRef(attachments)
   const imageSnapshot = useRef<readonly ComposerAttachment[]>(Object.freeze([]))
@@ -273,7 +277,7 @@ export function useComposerAttachments(
   const removeAttachment = useCallback((uiId: string) => {
     setAttachments((prev) => {
       const target = prev.find((a) => a.uiId === uiId)
-      if (target?.attachmentId) void deleteAttachmentFile(target)
+      if (target?.attachmentId && !retentionRef.current?.(target.attachmentId)) void deleteAttachmentFile(target)
       return prev.filter((a) => a.uiId !== uiId)
     })
   }, [])
@@ -306,7 +310,7 @@ export function useComposerAttachments(
   const clearAttachments = useCallback(() => {
     setAttachments((prev) => {
       for (const a of prev) {
-        if (a.attachmentId) void deleteAttachmentFile(a)
+        if (a.attachmentId && !retentionRef.current?.(a.attachmentId)) void deleteAttachmentFile(a)
       }
       return []
     })
