@@ -52,7 +52,7 @@ export interface ComposerTriggerSession {
   /** The availability tier handed to `track` (upstream's `guardOf(phase)`). */
   guard(): TriggerGuard;
   /** Mark a submit attempt in flight: `'frozen'` suppresses both triggers. */
-  setAttemptInFlight(inFlight: boolean): void;
+  setAttemptInFlight(inFlight: boolean, phase?: "adjudicating" | "submitting"): void;
 }
 
 export interface UseComposerTriggersOptions {
@@ -67,7 +67,7 @@ export function useComposerTriggers(
 ): ComposerTriggerSession {
   const { runtime, sessionId, disabled = false } = options;
   const draftSources = useSyncExternalStore(runtime?.subscribe ?? noSubscribe, runtime?.draftSources ?? emptySources, emptySources);
-  const claims = useMemo(() => new CommandClaimStore(), []);
+  const claims = useMemo(() => new CommandClaimStore(), [sessionId]);
   const revision = useMemo(() => new DraftRevision(), []);
   const attemptRef = useRef(false);
   const disabledRef = useRef(disabled);
@@ -128,8 +128,9 @@ export function useComposerTriggers(
         if (attemptRef.current || disabledRef.current) return { tier: "frozen" };
         return { tier: claims.get() !== null ? "claimed" : "plain" };
       },
-      setAttemptInFlight(inFlight: boolean) {
+      setAttemptInFlight(inFlight: boolean, phase: "adjudicating" | "submitting" = "adjudicating") {
         attemptRef.current = inFlight;
+        claims.setAttemptPhase(inFlight ? phase : null);
       },
     }),
     [claims, controller, resolver, revision, runtime, sessionId, draftSources],

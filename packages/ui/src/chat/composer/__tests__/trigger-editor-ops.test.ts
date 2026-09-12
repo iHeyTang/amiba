@@ -380,3 +380,38 @@ it("reports a public draft change even when the native placeholder string stays 
   expect(ops.setInputDraft!(`${PLACEHOLDER} `)).toBe(true);
   expect(ops.readInputDraft!()).toMatchObject({draft:`${PLACEHOLDER} `,occurrences:[]});
 });
+
+
+describe("public input phase projection", () => {
+  it("publishes claim and attempt transitions without changing the draft revision", () => {
+    const {ops,claims}=setup("/command args");
+    const before=ops.readInputDraft!();
+    const observed:string[]=[];
+    const off=ops.subscribeInputDraft!(()=>observed.push(ops.readInputDraft!().phase));
+    const command={token:"/command ",hint:"args",images:true,submit:async()=>({kind:"success" as const})};
+    claims.begin(command);
+    const claimed=ops.readInputDraft!();
+    expect(claimed).toMatchObject({phase:"claimed",claim:{token:"/command ",hint:"args",images:true}});
+    expect(claimed.claim).not.toHaveProperty("submit");
+    expect(ops.readInputDraft!()).toBe(claimed);
+    claims.setAttemptPhase("submitting");
+    claims.release(); // Edits can release the live claim; the transaction keeps its snapshot.
+    expect(ops.readInputDraft!()).toMatchObject({phase:"submitting",claim:{token:"/command "}});
+    expect(ops.setInputDraft!("replaced")).toBe(false);
+    claims.setAttemptPhase(null);
+    expect(ops.readInputDraft!()).toMatchObject({phase:"plain",draftRev:before.draftRev});
+    expect(ops.readInputDraft!().claim).toBeUndefined();
+    expect(observed).toEqual(["claimed","submitting","submitting","plain"]);
+    off();
+  });
+
+  it("reports adjudication independently of the current draft's command token", () => {
+    const {ops,claims}=setup("/pending");
+    claims.setAttemptPhase("adjudicating");
+    expect(ops.readInputDraft!()).toMatchObject({phase:"adjudicating"});
+    expect(ops.readInputDraft!().claim).toBeUndefined();
+    expect(ops.setInputDraft!("changed")).toBe(false);
+    claims.setAttemptPhase(null);
+    expect(ops.setInputDraft!("changed")).toBe(true);
+  });
+});

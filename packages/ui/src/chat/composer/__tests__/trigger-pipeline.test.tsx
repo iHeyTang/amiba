@@ -538,6 +538,7 @@ describe("claimed commands with staged images", () => {
       await waitFor(()=>expect(submitted).toHaveBeenCalledTimes(1));
       expect(submitted).toHaveBeenCalledWith("s1",claim,"describe",[{mediaType:"image/png",data:"AQID",name:"photo.png"}]);
       expect(attachmentsRef.current!.attachments).toHaveLength(1);
+      expect(controller.ops!.readInputDraft!()).toMatchObject({phase:"submitting",claim:{token:"/image ",images:true}});
       await act(async()=>settle({kind:outcomeKind,text:outcomeKind==="error"?"command rejected":undefined}));
     }
     await waitFor(()=>expect(valueRef.current).toBe(outcomeKind==="success"?"":"/image describe"));
@@ -607,6 +608,7 @@ describe("asynchronous input adjudication lifetime", () => {
     await waitFor(()=>expect(controller.tracked.length).toBeGreaterThan(0));
     act(()=>screen.getByRole("button",{name:/send/iu}).click());
     await waitFor(()=>expect(adjudicate).toHaveBeenCalledOnce());
+    expect(controller.ops!.readInputDraft!().phase).toBe("adjudicating");
     const signal=adjudicate.mock.calls[0][1];
     if(change==="unmount") unmount();
     else {
@@ -623,4 +625,35 @@ describe("asynchronous input adjudication lifetime", () => {
       await waitFor(()=>expect(adjudicate).toHaveBeenCalledTimes(2));
     }
   });
+});
+
+
+it("isolates a new session's submitting phase from an older command settlement", async () => {
+  const controller=controllerDouble(fixtureSource());
+  const completions:Array<(result:{kind:"success"})=>void>=[];
+  const submitClaim=vi.fn(()=>new Promise<{kind:"success"}>(resolve=>completions.push(resolve)));
+  const runtime={...runtimeFor(controller),submitClaim};
+  const editDraft={current:(_text:string)=>{}};
+  const valueRef={current:""};
+  const props={initial:"/image first",controller,runtime,onSubmit:()=>{},editDraft,valueRef};
+  const {rerender}=render(<ControlledComposer {...props} sessionId="s1"/>);
+  await waitFor(()=>expect(controller.tracked.length).toBeGreaterThan(0));
+  const claim:CommandClaim={token:"/image ",submit:async()=>({kind:"success"})};
+  const enter=()=>act(()=>{controller.ops!.beginCommand(claim,{start:0,end:7,draftRev:controller.tracked.at(-1)!.draftRev});});
+  const click=()=>act(()=>screen.getByRole("button",{name:/send/iu}).click());
+  enter();click();
+  await waitFor(()=>expect(submitClaim).toHaveBeenCalledTimes(1));
+  rerender(<ControlledComposer {...props} sessionId="s2"/>);
+  act(()=>editDraft.current("/image second"));
+  expect(controller.ops!.readInputDraft!().phase).toBe("plain");
+  enter();click();
+  await waitFor(()=>expect(submitClaim).toHaveBeenCalledTimes(2));
+  await act(async()=>completions[0]({kind:"success"}));
+  expect(controller.ops!.readInputDraft!().phase).toBe("submitting");
+  expect(valueRef.current).toBe("/image second");
+  click();
+  expect(submitClaim).toHaveBeenCalledTimes(2);
+  await act(async()=>completions[1]({kind:"success"}));
+  expect(controller.ops!.readInputDraft!().phase).toBe("plain");
+  expect(valueRef.current).toBe("");
 });

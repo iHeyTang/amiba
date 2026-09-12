@@ -33,6 +33,7 @@ import type { MentionData } from "../providers/types";
 import { CommandClaimStore } from "./claim";
 import type {
   CommandClaim,
+  ComposerInputDraft,
   ConsumeTokenGuard,
   PickOutcome,
   ReferenceInsert,
@@ -117,12 +118,26 @@ export function createTriggerEditorOps(
     span.end <= draftLength;
 
   const inputDraft = new InputDraftProjection();
+  let cachedDraft: ReturnType<InputDraftProjection["read"]> | undefined;
+  let cachedStatus: ReturnType<CommandClaimStore["getInputStatus"]> | undefined;
+  let cachedInput: ComposerInputDraft | undefined;
+  const readInput = (): ComposerInputDraft => {
+    const draft = inputDraft.read();
+    const status = claims.getInputStatus();
+    if (!cachedInput || draft !== cachedDraft || status !== cachedStatus) {
+      cachedDraft = draft;
+      cachedStatus = status;
+      cachedInput = Object.freeze({ ...draft, ...status });
+    }
+    return cachedInput;
+  };
   return {
     readInputDraft() {
-      return editor.getEditorState().read(() => inputDraft.read());
+      return editor.getEditorState().read(readInput);
     },
     setInputDraft(text, expectedRevision) {
-      if (!canWrite()) return false;
+      const phase = claims.getInputStatus().phase;
+      if (!canWrite() || phase === "adjudicating" || phase === "submitting") return false;
       return transact(editor, () => {
         const before = inputDraft.read();
         if (expectedRevision !== undefined && before.draftRev !== expectedRevision) return false;
@@ -131,12 +146,14 @@ export function createTriggerEditorOps(
       });
     },
     subscribeInputDraft(listener) {
-      return editor.registerUpdateListener(({ editorState }) => {
+      const offEditor = editor.registerUpdateListener(({ editorState }) => {
         // Advance public revisions even when no subscriber reads this update;
         // editing away and back must still invalidate an earlier span.
         editorState.read(() => inputDraft.read());
         listener();
       });
+      const offClaim = claims.subscribe(listener);
+      return () => { offEditor(); offClaim(); };
     },
     beginCommand(claim: CommandClaim, span: TokenSpan): boolean {
       const entered = transact(editor, () => {

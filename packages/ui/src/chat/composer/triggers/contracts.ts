@@ -108,7 +108,12 @@ export interface ComposerTriggerController {
  * `false`.
  */
 /** The text/reference portion of official InputState, read from the live editor. */
-export interface ComposerInputDraft {
+export interface ComposerInputStatus {
+  readonly phase: "plain" | "claimed" | "adjudicating" | "submitting";
+  readonly claim?: Readonly<Pick<CommandClaim, "token" | "hint" | "images">>;
+}
+
+export interface ComposerInputDraft extends ComposerInputStatus {
   readonly draft: string;
   readonly draftRev: number;
   readonly occurrences: readonly {

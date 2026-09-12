@@ -2,14 +2,16 @@ import { $getRoot, $isElementNode, type LexicalNode } from "lexical";
 import { $isMentionNode } from "../MentionNode";
 import type { ComposerInputDraft } from "./contracts";
 
+type DraftText = Pick<ComposerInputDraft, "draft" | "draftRev" | "occurrences">;
+
 /** Public input uses full @labels; trigger-menu spans retain their own space. */
 export class InputDraftProjection {
   private nextId = 0;
   private readonly ids = new Map<string, number>();
-  private snapshot: ComposerInputDraft | undefined;
+  private snapshot: DraftText | undefined;
   private fingerprint = "";
 
-  read(): ComposerInputDraft {
+  read(): DraftText {
     let draft = "";
     const occurrences: ComposerInputDraft["occurrences"][number][] = [];
     const visit = (node: LexicalNode): void => {

@@ -510,7 +510,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     //   4. ordinary send with `@[...]` expansion.
     // Abort / stop / queue branches do NOT route through here.
     const resolvingMentionRef = useRef<AbortController | null>(null);
-    const commandAttemptRef = useRef(false);
+    const commandAttemptRef = useRef<object | null>(null);
     const currentDraftRef = useRef({ value, sessionId: permissionSessionId });
     currentDraftRef.current = { value, sessionId: permissionSessionId };
     useEffect(() => () => {
@@ -520,6 +520,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       resolvingMentionRef.current = null;
       trigger.setAttemptInFlight(false);
     }, [value, permissionSessionId, disabled, attachments?.attachments]);
+    useEffect(() => {
+      commandAttemptRef.current = null;
+      trigger.setAttemptInFlight(false);
+      return () => { commandAttemptRef.current = null; };
+    }, [permissionSessionId]);
     const handleSend = useCallback(async () => {
       if (disabled || commandAttemptRef.current || resolvingMentionRef.current) return;
       const handled = routeSubmit(value, {
@@ -538,12 +543,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             }
             const captured = (attachments?.attachments ?? []).map((item) => ({ ...item }));
             const sessionId = permissionSessionId;
-            commandAttemptRef.current = true;
-            trigger.setAttemptInFlight(true);
+            const commandAttempt = {};
+            commandAttemptRef.current = commandAttempt;
+            trigger.setAttemptInFlight(true, "submitting");
             void commandImages(claim, captured).then((images) => submit(claim, args, images))
               .then(
                 (outcome) => {
-                  commandAttemptRef.current = false;
+                  if (commandAttemptRef.current !== commandAttempt) return;
+                  commandAttemptRef.current = null;
                   trigger.setAttemptInFlight(false);
                   if (currentDraftRef.current.sessionId !== sessionId) return;
                   if (outcome.kind === "success") {
@@ -558,7 +565,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   setCommandNotice(outcome.text ?? "command failed");
                 },
                 (error: unknown) => {
-                  commandAttemptRef.current = false;
+                  if (commandAttemptRef.current !== commandAttempt) return;
+                  commandAttemptRef.current = null;
                   trigger.setAttemptInFlight(false);
                   if (currentDraftRef.current.sessionId !== sessionId) return;
                   setCommandNotice(

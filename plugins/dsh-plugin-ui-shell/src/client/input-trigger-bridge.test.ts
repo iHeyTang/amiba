@@ -235,8 +235,8 @@ describe("service resolution", () => {
 
 it("exposes only the current bound editor's input projection", () => {
   const bridge=bridgeOver(scopeDouble());
-  const first={draft:"first",draftRev:1,occurrences:[]};
-  const second={draft:"second",draftRev:2,occurrences:[]};
+  const first={draft:"first",draftRev:1,occurrences:[],phase:"plain" as const};
+  const second={draft:"second",draftRev:2,occurrences:[],phase:"plain" as const};
   expect(bridge.inputDraftFor("s1")).toBeUndefined();
   const disposeFirst=bridge.bindEditor("s1",{...opsDouble(true),readInputDraft:()=>first});
   expect(bridge.inputDraftFor("s1")).toBe(first);
@@ -256,7 +256,7 @@ it("streams input snapshots through edit, replacement and detach without stale e
   expect(bridge.inputDraftSource("s1")).toBe(source);
   const seen:Array<string|undefined>=[];
   const off=source.subscribe(()=>seen.push(source.getSnapshot()?.draft));
-  let draft={draft:"one",draftRev:0,occurrences:[]};
+  let draft={draft:"one",draftRev:0,occurrences:[],phase:"plain" as const};
   let emit!:()=>void;
   const unsubscribe=vi.fn();
   const oldOps={...opsDouble(true),readInputDraft:()=>draft,subscribeInputDraft:(listener:()=>void)=>{emit=listener;return unsubscribe;}};
@@ -265,7 +265,7 @@ it("streams input snapshots through edit, replacement and detach without stale e
   draft={...draft,draft:"two",draftRev:1};
   emit();
   expect(seen).toEqual(["one","two"]);
-  const newOps={...opsDouble(true),readInputDraft:()=>({draft:"replacement",draftRev:0,occurrences:[]})};
+  const newOps={...opsDouble(true),readInputDraft:()=>({draft:"replacement",draftRev:0,occurrences:[],phase:"plain" as const})};
   const dispose=bridge.bindEditor("s1",newOps);
   emit(); // The old editor is still mounted briefly during replacement.
   expect(seen).toEqual(["one","two","replacement"]);
@@ -296,7 +296,7 @@ it("does not broadcast another session's input changes", () => {
 
 it("keeps a replacement binding even when it reuses the same editor operations", () => {
   const bridge=bridgeOver(scopeDouble());
-  const snapshot={draft:"same",draftRev:0,occurrences:[]};
+  const snapshot={draft:"same",draftRev:0,occurrences:[],phase:"plain" as const};
   const ops={...opsDouble(true),readInputDraft:()=>snapshot};
   const oldDispose=bridge.bindEditor("s1",ops);
   const newDispose=bridge.bindEditor("s1",ops);

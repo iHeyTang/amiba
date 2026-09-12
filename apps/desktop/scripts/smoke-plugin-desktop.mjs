@@ -128,7 +128,7 @@ try {
   await writeFile(path.join(project, "tsconfig.build.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", rootDir: "src", outDir: "lib", skipLibCheck: true }, include: ["src"] }));
   await writeFile(path.join(project, "vite.config.mjs"), `export default { build: { emptyOutDir:false, lib: {entry:'src/client.ts',formats:['cjs'],fileName:()=> 'client.js'}, rollupOptions: {output: {banner:'window.__ModuleLoader__.load({id:"dsh-plugin-probe",factory:(require)=>{const module={exports:{}};const exports=module.exports;',footer:'return module.exports;}});'}}}}`);
   const hostSource = version => `export function apply(ctx: any) { ctx.effect(() => { console.log('AMIBA_PROBE_HOST_${version}'); return () => console.log('AMIBA_PROBE_DISPOSE_${version}'); }); }`;
-  const clientSource = version => `${process.argv.includes("--compat") ? "export const inject = [\"slots\", \"settingsScope\", \"layout\", \"sessions\", \"sessionLogDownload\", \"inputTriggers\"];" : ""}export function apply(ctx: any) { (window as any).__probeCtx=ctx; ctx.effect(() => { const node=document.createElement('div');node.id='amiba-plugin-probe';node.textContent='client-${version}';document.body.append(node);return ()=>node.remove(); }); }`;
+  const clientSource = version => `${process.argv.includes("--compat") ? "export const inject = [\"slots\", \"settingsScope\", \"layout\", \"sessions\", \"sessionLogDownload\", \"inputTriggers\", \"composerInputs\"];" : ""}export function apply(ctx: any) { (window as any).__probeCtx=ctx; ctx.effect(() => { const node=document.createElement('div');node.id='amiba-plugin-probe';node.textContent='client-${version}';document.body.append(node);return ()=>node.remove(); }); }`;
   const nativeEvents = path.join(profile, "native-events.jsonl");
   const canonicalProfile = await realpath(profile);
   const nativeSource = version => `import {appendFileSync} from 'node:fs';${process.argv.includes("--compat") ? "import {session,dialog,shell,BrowserWindow} from 'electron';" : ""}export function create(){appendFileSync(${JSON.stringify(nativeEvents)},'native-start-${version}\\n');${process.argv.includes("--compat") ? `const originalOpenPath=shell.openPath;shell.openPath=async(target)=>{if(${JSON.stringify([profile, canonicalProfile])}.includes(target)){appendFileSync(${JSON.stringify(nativeEvents)},'turn-open-directory '+target+'\\n');return '';}return originalOpenPath(target);};const originalPicker=dialog.showOpenDialog;dialog.showOpenDialog=async(...args)=>{const options=args.at(-1);if(!options?.properties?.includes('openDirectory'))return originalPicker.apply(dialog,args);appendFileSync(${JSON.stringify(nativeEvents)},'picker-options '+JSON.stringify({defaultPath:options.defaultPath,properties:options.properties})+'\\n');return {canceled:false,filePaths:[${JSON.stringify(path.join(profile,'native-picked'))}]};};const save=(_event,item)=>{item.setSavePath(${JSON.stringify(path.join(profile,"downloads"))}+'/'+item.getFilename());item.on('done',(_event,state)=>appendFileSync(${JSON.stringify(nativeEvents)},'download-'+state+' '+item.getReceivedBytes()+'/'+item.getTotalBytes()+' '+item.getSavePath()+'\\n'));};session.defaultSession.on('will-download',save);` : ""}return {call(){return 'native-${version}'},rendererCall(_owner,method){${process.argv.includes("--compat") ? "if(method==='show-main'){const win=BrowserWindow.getAllWindows().find(w=>/out\\/renderer\\/index.html/.test(w.webContents.getURL()));if(!win)throw new Error('missing test window');win.showInactive();return 'shown';}" : ""}return 'native-${version}'},dispose(){${process.argv.includes("--compat") ? "session.defaultSession.removeListener('will-download',save);dialog.showOpenDialog=originalPicker;shell.openPath=originalOpenPath;" : ""}appendFileSync(${JSON.stringify(nativeEvents)},'native-stop-${version}\\n')}}}`;
@@ -369,6 +369,18 @@ try {
     await wait(() => evaluate("window.__nativeChatNode.isConnected && !window.__nativeChatNode.hidden && !document.body.textContent.includes('COMPAT_VIEW:') && !Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility view')"));
     await writeFile(path.join(tmpdir(), "amiba-conversation-native-view.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
     console.log("Conversation view passed: actual session props/injection, selection, preserved native chat and unload fallback.");
+    if (process.argv.includes("--input-state")) {
+      await evaluate("window.__inputSource=window.__probeCtx.composerInputs.inputDraftSource(window.__compatSessionId);window.__inputObserved=[];window.__inputOff=window.__inputSource.subscribe(()=>{const s=window.__inputSource.getSnapshot();window.__inputObserved.push(s?{draft:s.draft,phase:s.phase}:null)});window.__initialInput=window.__inputSource.getSnapshot();void 0");
+      assert.equal(await evaluate("window.__initialInput.phase"), "plain");
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'COMPAT_INPUT_读取😀',window.__initialInput.draftRev)"), true);
+      await wait(() => evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).some(n=>n.getClientRects().length>0&&n.textContent==='COMPAT_INPUT_读取😀')"));
+      assert.equal(await evaluate("window.__inputSource.getSnapshot().draft"), "COMPAT_INPUT_读取😀");
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'STALE_INPUT',window.__initialInput.draftRev)"), false);
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'')"), true);
+      await wait(() => evaluate("window.__inputSource.getSnapshot().draft===''") );
+      assert.ok(await evaluate("window.__inputObserved.some(s=>s?.draft==='COMPAT_INPUT_读取😀')"));
+      console.log("Real editor input snapshot, subscription, public write and stale revision rejection verified");
+    }
     if (process.argv.includes("--command-images")) {
       const imagePath = path.join(profile, "command-image.png");
       const imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJ1sAAAAASUVORK5CYII=";
@@ -397,6 +409,11 @@ try {
       assert.equal(await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).find(n=>n.getClientRects().length>0).textContent"), "");
       await evaluate("window.__imageSourceOff();void 0");
       console.log("Official image command received original staged bytes through native composer and consumed its draft attachments");
+      if(process.argv.includes("--input-state")) {
+        assert.deepEqual(await evaluate("Array.from(new Set(window.__inputObserved.filter(Boolean).map(s=>s.phase))).sort()"), ["adjudicating","claimed","plain","submitting"]);
+        await evaluate("window.__inputOff();void 0");
+        console.log("Real command input published all four official phases through the native input subscription");
+      }
     }
     if (process.argv.includes("--child-continuation")) {
       await mkdir(path.join(profile, "continuable"), { recursive: true });
