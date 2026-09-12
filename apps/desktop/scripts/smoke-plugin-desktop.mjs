@@ -856,13 +856,26 @@ try {
           await wait(()=>evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
           const edit="document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]').click();void 0";
           const cancel="document.querySelector('[data-composer-card] button[aria-label=\"Cancel edit\"]').click();void 0";
+          const checkRestoredImage=async()=>{
+            await wait(()=>evaluate("window.__probeCtx.composerInputs.inputImagesFor('compat-continuable-child').length===1"));
+            const value=await evaluate("(async()=>{const image=window.__probeCtx.composerInputs.inputImagesFor('compat-continuable-child')[0];return {id:image.id,name:image.file.name,mime:image.file.type,bytes:btoa(String.fromCharCode(...new Uint8Array(await image.file.arrayBuffer()))),registered:window.__probeCtx.get('composerImages').draftImages([image.id]).length}})()");
+            assert.equal(value.name,'queue-owned.png');
+            assert.equal(value.mime,'image/png');
+            assert.equal(value.bytes,bytes.toString('base64'));
+            assert.equal(value.registered,1);
+            assert.notEqual(value.id,attachmentId);
+            return value.id;
+          };
           await evaluate(edit);
           await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Cancel edit\"]')"));
+          const restoredImageId=await checkRestoredImage();
           await evaluate(cancel);
+          await wait(()=>evaluate(`window.__probeCtx.get('composerImages').draftImages([${JSON.stringify(restoredImageId)}]).length===0`));
           await evaluate("new Promise(resolve=>setTimeout(resolve,250))");
           assert.deepEqual(await readFile(storedPath),bytes);
           await evaluate(edit);
           await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Remove queue-owned.png\"]')"));
+          await checkRestoredImage();
           await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Remove queue-owned.png\"]').click();void 0");
           await evaluate("new Promise(resolve=>setTimeout(resolve,250))");
           assert.deepEqual(await readFile(storedPath),bytes);
@@ -870,12 +883,29 @@ try {
           await evaluate(edit);
           await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
           await wait(()=>evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)"));
+          assert.equal(await evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Cancel edit\"]')"),false);
           await evaluate("new Promise(resolve=>setTimeout(resolve,250))");
           assert.deepEqual(await readFile(storedPath),bytes);
           await evaluate("window.__probeCtx.sessions.open('compat-continuable-child');void 0");
           await wait(()=>evaluate("!!document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]')"));
+          if(process.argv.includes("--queue-image-reload")) {
+            const rootSessionId=await evaluate("window.__compatSessionId");
+            await evaluate("window.__queueImageReloadBefore=true;void 0");
+            await call("Page.reload",{});
+            await wait(async()=>{try{return await evaluate("!window.__queueImageReloadBefore && !!window.__probeCtx?.sessions");}catch{return false;}});
+            await evaluate(`window.__compatSessionId=${JSON.stringify(rootSessionId)};window.__probeCtx.layout.openChat();void 0`);
+            await wait(()=>evaluate("(async()=>{await window.__probeCtx.sessions.refreshSubagents('compat-continuable-parent');return window.__probeCtx.sessions.list.getSnapshot().subagentsByParent['compat-continuable-parent']?.entries.some(e=>e.kind==='child'&&e.id==='compat-continuable-child')})()"));
+            await evaluate("window.__probeCtx.sessions.open('compat-continuable-child');void 0");
+            await wait(()=>evaluate("!!document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]')"));
+          }
+          await wait(()=>evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')"));
+          await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','');void 0");
+          await evaluate(edit);
+          const finalImageId=await checkRestoredImage();
           await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Delete]').click();void 0");
           await wait(async()=>{try{await readFile(storedPath);return false;}catch(error){if(error.code==='ENOENT')return true;throw error;}});
+          await wait(()=>evaluate(`window.__probeCtx.get('composerImages').draftImages([${JSON.stringify(finalImageId)}]).length===0`));
+          console.log("Restored queued image registered a real browser File with exact original bytes and a distinct draft ID; renderer reload and final registry release passed");
           console.log("Actual queued image bytes survived cancel edit, chip removal and session switching; deleting the last queue owner removed its stored file");
         }
 

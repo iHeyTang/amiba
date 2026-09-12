@@ -1,3 +1,4 @@
+import { getPlatform } from "@amiba/app-runtime/platform"
 /**
  * Composer-attachment hook + `<AttachmentToolbar>` component.
  *
@@ -143,9 +144,13 @@ export function useComposerAttachments(
   const [attachments, setAttachmentState] = useState<Attachment[]>([])
   const attachmentState = useRef(attachments)
   const imageSnapshot = useRef<readonly ComposerAttachment[]>(Object.freeze([]))
+  const registrationRef = useRef(opts.registerDraftImage)
+  registrationRef.current = opts.registerDraftImage
+  const restores = useRef(new Map<string, { attachmentId: string; register: NonNullable<UseComposerAttachmentsOptions["registerDraftImage"]> }>())
   const mounted = useRef(true)
   const uploads = useRef(0)
   const imageListeners = useRef(new Set<() => void>())
+  const imageAttachmentIds = useRef(new Map<string, string>())
   const draftImages = useRef(new Map<string, NonNullable<ReturnType<NonNullable<ComposerTriggerRuntime["registerDraftImage"]>>>>())
   // Keep imperative extension reads synchronous while React renders the same
   // attachment list. Functional updates run once against the latest value.
@@ -153,6 +158,16 @@ export function useComposerAttachments(
     const next = typeof update === "function" ? update(attachmentState.current) : update
     if (!mounted.current) return
     attachmentState.current = next
+    for (const attachment of next) {
+      const registration = draftImages.current.get(attachment.uiId)
+      if (!registration || !attachment.attachmentId) continue
+      const previousId = imageAttachmentIds.current.get(attachment.uiId)
+      if (previousId && previousId !== attachment.attachmentId) {
+        draftImages.current.delete(attachment.uiId)
+        imageAttachmentIds.current.delete(attachment.uiId)
+        registration.release()
+      } else imageAttachmentIds.current.set(attachment.uiId, attachment.attachmentId)
+    }
     const images = next.flatMap(a => {
       const registration = draftImages.current.get(a.uiId)
       return registration ? [registration.image] : []
@@ -169,6 +184,7 @@ export function useComposerAttachments(
     for (const [uiId, registration] of draftImages.current) {
       if (!retained.has(uiId)) {
         draftImages.current.delete(uiId)
+        imageAttachmentIds.current.delete(uiId)
         registration.release()
       }
     }
@@ -180,14 +196,57 @@ export function useComposerAttachments(
       attachmentState.current = []
       imageSnapshot.current = Object.freeze([])
       imageListeners.current.clear()
+      restores.current.clear()
       for (const registration of draftImages.current.values()) registration.release()
       draftImages.current.clear()
+      imageAttachmentIds.current.clear()
     }
   }, [])
   const [attachmentBusy, setAttachmentBusy] = useState(false)
   const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Queue/restored attachment objects contain Host IDs, not browser File objects.
+  // Rehydrate only missing registrations; original upload registrations stay intact.
+  useEffect(() => {
+    const register = opts.registerDraftImage
+    for (const [uiId, attempt] of restores.current) {
+      if (attempt.register !== register || !attachments.some(a => a.uiId === uiId && a.attachmentId === attempt.attachmentId)) {
+        restores.current.delete(uiId)
+      }
+    }
+    if (!register) return
+    for (const attachment of attachments) {
+      if (attachment.kind !== "image" || attachment.uploading || !attachment.attachmentId ||
+        draftImages.current.has(attachment.uiId) || restores.current.has(attachment.uiId)) continue
+      const attempt = { attachmentId: attachment.attachmentId, register }
+      restores.current.set(attachment.uiId, attempt)
+      const current = () => mounted.current && registrationRef.current === register &&
+        restores.current.get(attachment.uiId) === attempt &&
+        attachmentState.current.some(a => a.uiId === attachment.uiId && a.attachmentId === attempt.attachmentId)
+      void (async () => {
+        try {
+          const adapter = getPlatform().agentAttachments
+          if (!adapter) return
+          const stored = await adapter.readForPrompt(attempt.attachmentId)
+          if (!current()) return
+          if (stored.attachmentId !== attempt.attachmentId || stored.kind !== "image") {
+            throw new Error("Stored draft image identity does not match its attachment")
+          }
+          const bytes = Uint8Array.from(atob(stored.dataBase64), c => c.charCodeAt(0))
+          const registration = register(new File([bytes], stored.name, { type: stored.mime }))
+          if (!registration) return
+          if (!current() || draftImages.current.has(attachment.uiId)) { registration.release(); return }
+          draftImages.current.set(attachment.uiId, registration)
+          imageAttachmentIds.current.set(attachment.uiId, attempt.attachmentId)
+          setAttachments(prev => [...prev])
+        } catch (error) {
+          if (current()) console.warn("[composer] restored draft image registration unavailable", error)
+        }
+      })()
+    }
+  }, [attachments, opts.registerDraftImage, setAttachments])
 
   const attachmentUploading = attachments.some((a) => !!a.uploading)
 

@@ -1285,3 +1285,14 @@ pipelines retain mounted component state.
 - 新增 --queue-files：真实上传 PNG、排队、读取实际存储记录中的 attachmentId，定位对应 Host 原始文件；经取消编辑、移除图片及切换会话后逐字节比较，删除最后一条队列记录后确认 ENOENT。首轮只上传图片而等待带文字的排队按钮超时，按现有交互补入文字后通过，没有为探针更改按钮规则。
 - 最终组合桌面回归 /tmp/amiba-queue-files-smoke2.log 退出 0，同时覆盖离屏草稿、引用队列与自动出队、刷新恢复、运行状态、命令及官方图片操作、动态 Cordis、轨迹、子会话及嵌套 Host 冷重启、插件安装/HMR/卸载。原编辑器、卡片尺寸及样式检查继续通过。
 - 本项验证队列与输入框的文件所有权，不代表完整官方图片生命周期：浏览器 File/草稿图片 ID 在队列恢复时的重建、发送中所有权和完整 Host inbox 对齐仍需核对。测试仅暂存并删除子会话队列图片，没有发送图片至子会话，不改变 rc.2 子会话图片输入限制。
+
+### 队列图片恢复后的浏览器注册（2026-09-13）
+
+- 队列序列化保存 Attachment 和 Host staging ID，原上传时的浏览器 File 注册在清空输入框后释放。此前编辑恢复只显示原生缩略图，官方 inputImagesFor 仍为空。本轮在原 useComposerAttachments 中为缺少注册的就绪图片读取同一 Host 文件，重建 File 并调用原 registerDraftImage。
+- 新草稿 ID 来自真实官方注册，不复用 Host staging ID；不重新上传文件。原生上传已有注册时不重复读取或注册。发布继续使用原同步图片快照和订阅，取消编辑、移除及卸载沿用原 release。
+- 恢复按 native uiId、Host ID、注册提供者及当前附件集合检查所有权，迟到读取不重新添加已移除的图片。同一 native 行指向新 Host 文件时先释放旧注册，避免展示旧文件。身份不匹配或注册不可用时保留原生附件，不发布虚假图片；失败记录不在每次渲染时无限重试。
+- 会话切换现在同时清空原 editingQueueId，避免把已离开的队列编辑状态带到另一个会话。该修正不改变输入框结构、原按钮样式或附件上传流程。
+- 图片恢复、附件所有权、队列及 Composer 触发管线共 65 项测试通过（/tmp/amiba-queue-image-restore-tests3.log），覆盖准确字节、新 ID、无二次上传、快照稳定、清理、迟到读取、提供者/Host ID 更换及无效身份。UI 类型检查通过（/tmp/amiba-queue-image-restore-types4.log）；完整 Desktop 构建通过（/tmp/amiba-queue-image-restore-build.log）。
+- --queue-files 增强验证真实 inputImagesFor 返回的 File、名称、MIME、完整字节、官方 registry 查找和 ID 与 Host ID 不同。新增 --queue-image-reload 完整刷新 renderer，从真实持久化队列重新编辑图片并执行同样检查，最后删除原行并确认浏览器注册和原文件均释放。另确认离开编辑中的会话后新会话不残留 Cancel edit。
+- 最终组合桌面回归 /tmp/amiba-queue-image-restore-smoke.log 退出 0，含原有动态插件、输入/图片/命令、离屏引用、队列解析及刷新、运行状态、轨迹、子会话及嵌套 Host 冷重启和插件开发生命周期。原编辑器、卡片尺寸及样式检查通过。
+- 本项重建 File 和新的浏览器 ID，不宣称持久化原 File 对象身份、原 lastModified 或跨 renderer 的浏览器 ID。发送中所有权、离屏图片操作和完整官方输入/Host inbox 状态仍需继续适配。子会话图片测试仍限于队列暂存、编辑和删除，不宣称 rc.2 支持子会话图片发送。

@@ -1519,6 +1519,7 @@ export default function ChatSurface({
         // Drop in-memory queue; the load-effect below will repopulate
         // from the new session's persisted queue.
         setPendingQueue([]);
+        setEditingQueueId(null);
         // Queue is scoped to a session; switching tabs drops it, so
         // any paused flag for the prior session must drop too.
         setQueuePaused(false);
