@@ -31,7 +31,7 @@ are required in addition to new-plugin tests.
 | Plugin settings tabs | implementation + focused tests + real Desktop file: integration passed; visual review pending | Real localized tabs/panels; existing inventory and filters preserved; unload falls back |
 | Plugin config cards/forms | keyed cards plus three built-in forms implemented; controller/UI tests, real Host save/reset and visual review passed | Host config read/write, actual schema, existing settings preserved |
 | Sidebar additive actions | implementation + focused tests + real Desktop wide/narrow/unload passed | Correct owner, no empty wrapper, collapsed/expanded behavior |
-| Workspace/directory selection | Home/project surfaces wired; 17 focused tests and Desktop Home smoke passed; project/native interaction open | Open/cancel/picked/error lifecycle, one workspace mutation authority |
+| Workspace/directory selection | Home/project surfaces wired; 17 focused tests and Desktop Home/project smoke passed; default native/browser interaction open | Open/cancel/picked/error lifecycle, one workspace mutation authority |
 | Session export | native plugin enabled + dialog adapted/tested; actual Desktop ZIP saved; ordinary Web download verification pending | Native command download on Web/Desktop without duplicate existing action |
 | Official session open from no-selection | implemented; 17 focused tests + real Desktop plugin open passed | Explicit opens follow the existing Amiba path; startup restore stays suppressed. Clear and direct-child navigation need separate audit |
 | Existing header/model/plan/command/reference extensions | open | Regression tests plus dependency/owner audit |
@@ -240,3 +240,19 @@ Final Home smoke also asserts no session IDs are added by directory selection an
 both default directory registrations remain after probe unload. The captured Home
 screenshot was visually reviewed: original layout/composer/selected-path control
 remain intact. Full smoke log: `/tmp/amiba-directory-desktop-smoke-final.log`.
+
+
+### Project directory integration verified
+
+The complete Desktop smoke now opens the existing workbench and its file tree,
+uses the actual New project / Add folder buttons with a registered directory-flow
+occupant, and reads the native project's persisted state. Verified creation,
+cancellation without mutation, folder addition retaining project identity, and
+session location binding to the newly selected folder. Fixture directories are
+canonicalized with realpath to match the existing macOS project service behavior.
+No production behavior or style changes were needed for this verification.
+
+The final full smoke passed (`/tmp/amiba-directory-project-verified.log`), including
+all previous Home/settings/view/export/HMR checks. The project-pane screenshot was
+visually inspected. Default OS picker interaction and browser-picker rendering
+remain separate open checks; fixture-occupant success does not prove those.

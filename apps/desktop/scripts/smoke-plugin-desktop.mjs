@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile, readFile, readdir, mkdir, symlink } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile, readdir, mkdir, symlink, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import http from "node:http";
@@ -300,6 +300,46 @@ try {
     await wait(() => evaluate("window.__nativeChatNode.isConnected && !window.__nativeChatNode.hidden && !document.body.textContent.includes('COMPAT_VIEW:') && !Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility view')"));
     await writeFile(path.join(tmpdir(), "amiba-conversation-native-view.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
     console.log("Conversation view passed: actual session props/injection, selection, preserved native chat and unload fallback.");
+    let projectFolder = path.join(profile, "directory-project");
+    let extraFolder = path.join(profile, "directory-extra");
+    await mkdir(projectFolder, { recursive: true });
+    await mkdir(extraFolder, { recursive: true });
+    projectFolder = await realpath(projectFolder);
+    extraFolder = await realpath(extraFolder);
+    await evaluate(`(() => {
+      window.__projectDirectoryOff = window.__probeCtx.slots.register({
+        name:'sidebar.workspaces.directoryFlow', id:'compat-project-directory', priority:-100,
+      }, owner => { window.__projectDirectoryOwner=owner; return owner.open ? 'COMPAT_PROJECT_DIRECTORY_OPEN' : null; });
+      const toggle=document.querySelector('button[aria-label="Open workbench"],button[aria-label="打开工作台"]');
+      if(toggle) toggle.click();
+    })()`);
+    await wait(() => evaluate("Boolean(document.querySelector('button[aria-label=\"Show file tree\"],button[aria-label=\"显示文件目录\"]'))"));
+    await evaluate("document.querySelector('button[aria-label=\"Show file tree\"],button[aria-label=\"显示文件目录\"]').click()");
+    await wait(() => evaluate("Boolean(document.querySelector('[data-workspace-project-strip] button[aria-haspopup=menu]'))"));
+    await evaluate("document.querySelector('[data-workspace-project-strip] button[aria-haspopup=menu]').click()");
+    await wait(() => evaluate("Array.from(document.querySelectorAll('[role=menuitem]')).some(n=>n.textContent==='New project from folder'||n.textContent==='从文件夹新建项目')"));
+    await evaluate("Array.from(document.querySelectorAll('[role=menuitem]')).find(n=>n.textContent==='New project from folder'||n.textContent==='从文件夹新建项目').click()");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_PROJECT_DIRECTORY_OPEN')"));
+    await evaluate(`window.__projectDirectoryOwner.onPicked(${JSON.stringify(projectFolder)})`);
+    await wait(() => evaluate(`(async()=>!document.body.textContent.includes('COMPAT_PROJECT_DIRECTORY_OPEN') && await window.amiba.workspaces.getCurrent(window.__compatSessionId)===${JSON.stringify(projectFolder)})()`));
+    const createdProject = await evaluate("window.amiba.workspaceDevelopment.ensureProject(window.__compatSessionId)");
+    assert.deepEqual(createdProject.folders, [projectFolder], "new project must keep the actual selected folder");
+    await wait(() => evaluate("Boolean(document.querySelector('[data-workspace-project-add]:not(:disabled)'))"));
+    await evaluate("document.querySelector('[data-workspace-project-add]').click()");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_PROJECT_DIRECTORY_OPEN')"));
+    await evaluate("window.__projectDirectoryOwner.onCancel()");
+    await wait(() => evaluate("!document.body.textContent.includes('COMPAT_PROJECT_DIRECTORY_OPEN')"));
+    assert.deepEqual((await evaluate("window.amiba.workspaceDevelopment.ensureProject(window.__compatSessionId)")).folders, [projectFolder], "cancel must not add a project folder");
+    await evaluate("document.querySelector('[data-workspace-project-add]').click()");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_PROJECT_DIRECTORY_OPEN')"));
+    await evaluate(`window.__projectDirectoryOwner.onPicked(${JSON.stringify(extraFolder)})`);
+    await wait(() => evaluate(`(async()=>!document.body.textContent.includes('COMPAT_PROJECT_DIRECTORY_OPEN') && await window.amiba.workspaces.getCurrent(window.__compatSessionId)===${JSON.stringify(extraFolder)})()`));
+    const extendedProject = await evaluate("window.amiba.workspaceDevelopment.ensureProject(window.__compatSessionId)");
+    assert.equal(extendedProject.id, createdProject.id, "add-folder must retain project identity");
+    assert.deepEqual(extendedProject.folders, [projectFolder, extraFolder]);
+    await writeFile(path.join(tmpdir(), "amiba-directory-project.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+    await evaluate("window.__projectDirectoryOff();void 0");
+    console.log("Project directory slot passed real project creation, cancellation, add-folder and session location binding.");
     console.log("Compatibility slots passed: real plugin tab selection, Host-keyed config card, removal and inventory fallback.");
   }
   await evaluate("window.__probePoll=setInterval(()=>window.amiba.agentDiagnostics.status().catch(()=>{}),50)");
