@@ -167,6 +167,7 @@ export interface ComposerTriggerRuntime {
     sessionId: string,
     claim: CommandClaim,
     args: string,
+    images?: Parameters<CommandClaim["submit"]>[2],
   ): Promise<SubmitOutcome>;
 }
 

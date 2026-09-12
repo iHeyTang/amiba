@@ -128,7 +128,7 @@ try {
   await writeFile(path.join(project, "tsconfig.build.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", rootDir: "src", outDir: "lib", skipLibCheck: true }, include: ["src"] }));
   await writeFile(path.join(project, "vite.config.mjs"), `export default { build: { emptyOutDir:false, lib: {entry:'src/client.ts',formats:['cjs'],fileName:()=> 'client.js'}, rollupOptions: {output: {banner:'window.__ModuleLoader__.load({id:"dsh-plugin-probe",factory:(require)=>{const module={exports:{}};const exports=module.exports;',footer:'return module.exports;}});'}}}}`);
   const hostSource = version => `export function apply(ctx: any) { ctx.effect(() => { console.log('AMIBA_PROBE_HOST_${version}'); return () => console.log('AMIBA_PROBE_DISPOSE_${version}'); }); }`;
-  const clientSource = version => `${process.argv.includes("--compat") ? "export const inject = [\"slots\", \"settingsScope\", \"layout\", \"sessions\", \"sessionLogDownload\"];" : ""}export function apply(ctx: any) { (window as any).__probeCtx=ctx; ctx.effect(() => { const node=document.createElement('div');node.id='amiba-plugin-probe';node.textContent='client-${version}';document.body.append(node);return ()=>node.remove(); }); }`;
+  const clientSource = version => `${process.argv.includes("--compat") ? "export const inject = [\"slots\", \"settingsScope\", \"layout\", \"sessions\", \"sessionLogDownload\", \"inputTriggers\"];" : ""}export function apply(ctx: any) { (window as any).__probeCtx=ctx; ctx.effect(() => { const node=document.createElement('div');node.id='amiba-plugin-probe';node.textContent='client-${version}';document.body.append(node);return ()=>node.remove(); }); }`;
   const nativeEvents = path.join(profile, "native-events.jsonl");
   const canonicalProfile = await realpath(profile);
   const nativeSource = version => `import {appendFileSync} from 'node:fs';${process.argv.includes("--compat") ? "import {session,dialog,shell,BrowserWindow} from 'electron';" : ""}export function create(){appendFileSync(${JSON.stringify(nativeEvents)},'native-start-${version}\\n');${process.argv.includes("--compat") ? `const originalOpenPath=shell.openPath;shell.openPath=async(target)=>{if(${JSON.stringify([profile, canonicalProfile])}.includes(target)){appendFileSync(${JSON.stringify(nativeEvents)},'turn-open-directory '+target+'\\n');return '';}return originalOpenPath(target);};const originalPicker=dialog.showOpenDialog;dialog.showOpenDialog=async(...args)=>{const options=args.at(-1);if(!options?.properties?.includes('openDirectory'))return originalPicker.apply(dialog,args);appendFileSync(${JSON.stringify(nativeEvents)},'picker-options '+JSON.stringify({defaultPath:options.defaultPath,properties:options.properties})+'\\n');return {canceled:false,filePaths:[${JSON.stringify(path.join(profile,'native-picked'))}]};};const save=(_event,item)=>{item.setSavePath(${JSON.stringify(path.join(profile,"downloads"))}+'/'+item.getFilename());item.on('done',(_event,state)=>appendFileSync(${JSON.stringify(nativeEvents)},'download-'+state+' '+item.getReceivedBytes()+'/'+item.getTotalBytes()+' '+item.getSavePath()+'\\n'));};session.defaultSession.on('will-download',save);` : ""}return {call(){return 'native-${version}'},rendererCall(_owner,method){${process.argv.includes("--compat") ? "if(method==='show-main'){const win=BrowserWindow.getAllWindows().find(w=>/out\\/renderer\\/index.html/.test(w.webContents.getURL()));if(!win)throw new Error('missing test window');win.showInactive();return 'shown';}" : ""}return 'native-${version}'},dispose(){${process.argv.includes("--compat") ? "session.defaultSession.removeListener('will-download',save);dialog.showOpenDialog=originalPicker;shell.openPath=originalOpenPath;" : ""}appendFileSync(${JSON.stringify(nativeEvents)},'native-stop-${version}\\n')}}}`;
@@ -369,6 +369,34 @@ try {
     await wait(() => evaluate("window.__nativeChatNode.isConnected && !window.__nativeChatNode.hidden && !document.body.textContent.includes('COMPAT_VIEW:') && !Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility view')"));
     await writeFile(path.join(tmpdir(), "amiba-conversation-native-view.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
     console.log("Conversation view passed: actual session props/injection, selection, preserved native chat and unload fallback.");
+    if (process.argv.includes("--command-images")) {
+      const imagePath = path.join(profile, "command-image.png");
+      const imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJ1sAAAAASUVORK5CYII=";
+      await writeFile(imagePath, Buffer.from(imageData,"base64"));
+      await evaluate(`window.__commandImages=[];window.__imageClaim={token:'/compat-image ',images:true,submit:async(args,ctx,images)=>{window.__commandImages.push({args,images});return {kind:'success',text:'COMPAT_IMAGE_COMMAND_OK'}}};window.__imageSourceOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-image-source',trigger:'/',order:-100,candidates:async()=>[],onPick:()=>({claim:window.__imageClaim}),matchEnter:async(_session,line)=>{window.__imageAdjudicated=(window.__imageAdjudicated||0)+1;return line.startsWith('/compat-image ')?{claim:window.__imageClaim}:undefined}});void 0`);
+      await evaluate("Array.from(document.querySelectorAll('[data-composer-card]')).find(n=>n.getClientRects().length>0).parentElement.querySelector('input[type=file]').id='compat-image-input';void 0");
+      const documentNode = await call("DOM.getDocument");
+      const fileNode = await call("DOM.querySelector", {nodeId:documentNode.root.nodeId,selector:'#compat-image-input'});
+      await call("DOM.setFileInputFiles", {nodeId:fileNode.nodeId,files:[imagePath]});
+      await wait(() => evaluate("document.body.textContent.includes('command-image.png')"));
+      await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0).focus();void 0");
+      await call("Input.insertText", {text:"/compat-image describe"});
+      await wait(() => evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).some(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')&&!n.disabled)"));
+      // First submission adjudicates the claim; the second executes it.
+      for (let pass=0;pass<2;pass++) {
+        await evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).find(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')).click();void 0");
+        if(pass===0) {
+          await wait(() => evaluate("window.__imageAdjudicated>0"));
+          await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+        }
+      }
+      await wait(() => evaluate("window.__commandImages.length===1"));
+      assert.deepEqual(await evaluate("window.__commandImages[0]"), {args:"describe",images:[{mediaType:"image/png",data:imageData,name:"command-image.png"}]});
+      await wait(() => evaluate("!document.body.textContent.includes('command-image.png')"));
+      assert.equal(await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).find(n=>n.getClientRects().length>0).textContent"), "");
+      await evaluate("window.__imageSourceOff();void 0");
+      console.log("Official image command received original staged bytes through native composer and consumed its draft attachments");
+    }
     if (process.argv.includes("--child-continuation")) {
       await mkdir(path.join(profile, "continuable"), { recursive: true });
       await writeFile(path.join(profile, "continuable-create"), "create");

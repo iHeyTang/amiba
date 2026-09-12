@@ -204,11 +204,19 @@ describe("service resolution", () => {
       commandUi: () => undefined,
     });
     await bridge.submitClaim!("s1", { token: "/goal ", submit }, "ship it");
-    // DSH 0.1.1 added composer images as a third `submit` argument. Amiba's
-    // composer does not forward attachments to slash commands, so the bridge
-    // passes an empty list rather than inventing one — pin that it is passed
-    // explicitly, not left undefined.
     expect(submit).toHaveBeenCalledWith("ship it", actx, []);
+  });
+
+  it("forwards actual command images and refuses claims without image support", async () => {
+    const scope = scopeDouble();
+    const bridge = bridgeOver(scope);
+    const submit = vi.fn(async () => ({ kind: "success" as const }));
+    const images = [{ mediaType: "image/png" as const, data: "AQID", name: "photo.png" }];
+    await bridge.submitClaim!("s1", { token: "/image ", images: true, submit }, "describe", images);
+    expect(submit).toHaveBeenCalledWith("describe", scope.ctx, images);
+    submit.mockClear();
+    await expect(bridge.submitClaim!("s1", { token: "/plain ", submit }, "describe", images)).rejects.toThrow("does not accept images");
+    expect(submit).not.toHaveBeenCalled();
   });
 
   it("rejects a claim submit for a session with no scope", async () => {

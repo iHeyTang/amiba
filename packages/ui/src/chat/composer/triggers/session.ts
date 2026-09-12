@@ -47,7 +47,7 @@ export interface ComposerTriggerSession {
    * Amiba's own sources never return one).
    */
   readonly submitClaim:
-    | ((claim: CommandClaim, args: string) => Promise<SubmitOutcome>)
+    | ((claim: CommandClaim, args: string, images?: Parameters<CommandClaim["submit"]>[2]) => Promise<SubmitOutcome>)
     | null;
   /** The availability tier handed to `track` (upstream's `guardOf(phase)`). */
   guard(): TriggerGuard;
@@ -120,9 +120,9 @@ export function useComposerTriggers(
       resolver,
       submitClaim:
         runtime?.submitClaim !== undefined && sessionId
-          ? (claim: CommandClaim, args: string): Promise<SubmitOutcome> =>
+          ? (claim: CommandClaim, args: string, images?: Parameters<CommandClaim["submit"]>[2]): Promise<SubmitOutcome> =>
               // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-              runtime.submitClaim!(sessionId, claim, args)
+              runtime.submitClaim!(sessionId, claim, args, images)
           : null,
       guard(): TriggerGuard {
         if (attemptRef.current || disabledRef.current) return { tier: "frozen" };

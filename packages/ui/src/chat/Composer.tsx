@@ -1,3 +1,4 @@
+import { commandImages } from "./composer/command-attachments";
 import { ComposerAccessory } from "../primitives/empty-state-visual";
 import { useT } from "@amiba/i18n";
 import { Paperclip } from "lucide-react";
@@ -509,7 +510,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     //   4. ordinary send with `@[...]` expansion.
     // Abort / stop / queue branches do NOT route through here.
     const resolvingMentionRef = useRef(false);
+    const commandAttemptRef = useRef(false);
+    const currentDraftRef = useRef({ value, sessionId: permissionSessionId });
+    currentDraftRef.current = { value, sessionId: permissionSessionId };
     const handleSend = useCallback(async () => {
+      if (disabled || commandAttemptRef.current) return;
       const handled = routeSubmit(value, {
         send: () => {},
         ctx: slashUiActions ?? {},
@@ -524,21 +529,31 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               );
               return;
             }
+            const captured = (attachments?.attachments ?? []).map((item) => ({ ...item }));
+            const sessionId = permissionSessionId;
+            commandAttemptRef.current = true;
             trigger.setAttemptInFlight(true);
-            void submit(claim, args)
+            void commandImages(claim, captured).then((images) => submit(claim, args, images))
               .then(
                 (outcome) => {
+                  commandAttemptRef.current = false;
                   trigger.setAttemptInFlight(false);
+                  if (currentDraftRef.current.sessionId !== sessionId) return;
                   if (outcome.kind === "success") {
-                    trigger.claims.release();
-                    onChange("");
+                    if (currentDraftRef.current.value === value) {
+                      trigger.claims.release();
+                      onChange("");
+                    }
+                    for (const item of captured) attachments?.removeAttachment(item.uiId);
                     if (outcome.text) setCommandNotice(outcome.text);
                     return;
                   }
                   setCommandNotice(outcome.text ?? "command failed");
                 },
                 (error: unknown) => {
+                  commandAttemptRef.current = false;
                   trigger.setAttemptInFlight(false);
+                  if (currentDraftRef.current.sessionId !== sessionId) return;
                   setCommandNotice(
                     error instanceof Error ? error.message : String(error),
                   );
@@ -596,7 +611,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       } finally {
         resolvingMentionRef.current = false;
       }
-    }, [value, slashUiActions, providerRegistry, onSubmit, onChange, trigger]);
+    }, [value, slashUiActions, providerRegistry, onSubmit, onChange, trigger, attachments, permissionSessionId, disabled]);
 
     useImperativeHandle(
       ref,

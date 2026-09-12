@@ -24,6 +24,12 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+const imageStore = vi.hoisted(() => ({
+  readForPrompt: vi.fn(async () => ({attachmentId:"stored",name:"photo.png",mime:"image/png",size:3,kind:"image",dataBase64:"AQID"})),
+  remove: vi.fn(async () => {}),
+}));
+vi.mock("@amiba/app-runtime/platform", () => ({getPlatform:()=>({agentAttachments:imageStore})}));
+
 vi.mock("@amiba/i18n", () => {
   const t = (key: string) => key;
   return { useT: () => ({ t }) };
@@ -200,13 +206,19 @@ function ControlledComposer(props: {
   mentionProviders?: React.ComponentProps<typeof Composer>["mentionProviders"];
   valueRef?: { current: string };
   filePicker?: () => Promise<void>;
+  editDraft?: { current: (text: string) => void };
+  initialAttachments?: import("@amiba/app-runtime/core").Attachment[];
+  attachmentsRef?: { current: import("../../useComposerAttachments").UseComposerAttachmentsResult | undefined };
 }) {
   const [value, setValue] = React.useState(props.initial ?? "");
   const attachments = useComposerAttachments({ getSessionId: () => props.sessionId ?? "draft" });
+  React.useEffect(() => { if (props.initialAttachments) attachments.setAttachments(props.initialAttachments); }, [props.initialAttachments]);
+  if (props.attachmentsRef) props.attachmentsRef.current = attachments;
+  if (props.editDraft) props.editDraft.current = setValue;
   if (props.valueRef) props.valueRef.current = value;
   return (
     <Composer
-      attachments={props.filePicker ? { ...attachments, openFilePicker: props.filePicker } : undefined}
+      attachments={props.filePicker ? { ...attachments, openFilePicker: props.filePicker } : props.initialAttachments ? attachments : undefined}
       inputOverlay={
         props.seat && props.controller ? props.seat(props.controller) : undefined
       }
@@ -457,5 +469,78 @@ describe("command mode", () => {
     // A claimed submit is NOT an ordinary message.
     expect(submitted).toEqual([]);
     await waitFor(() => expect(valueRef.current).toBe(""));
+  });
+});
+
+
+describe("claimed commands with staged images", () => {
+  it("consumes only captured images and preserves edits made during submission", async () => {
+    const controller=controllerDouble(fixtureSource());
+    let settle!:()=>void;
+    const submitClaim=vi.fn(()=>new Promise<{kind:"success"}>(resolve=>{settle=()=>resolve({kind:"success"});}));
+    const runtime:ComposerTriggerRuntime={...runtimeFor(controller),submitClaim};
+    const claim:CommandClaim={token:"/image ",images:true,submit:async()=>({kind:"success"})};
+    const valueRef={current:""};
+    const attachmentsRef: {current: import("../../useComposerAttachments").UseComposerAttachmentsResult|undefined}={current:undefined};
+    const editDraft={current: (_text:string)=>{}};
+    const original={uiId:"photo",attachmentId:"stored",name:"photo.png",mime:"image/png",size:3,kind:"image" as const};
+    render(<ControlledComposer initial="/image describe" sessionId="s1" runtime={runtime} controller={controller} onSubmit={()=>{}} valueRef={valueRef} attachmentsRef={attachmentsRef} initialAttachments={[original]} editDraft={editDraft}/>);
+    await waitFor(()=>expect(controller.tracked.length).toBeGreaterThan(0));
+    act(()=>{controller.ops!.beginCommand(claim,{start:0,end:7,draftRev:controller.tracked.at(-1)!.draftRev});});
+    act(()=>{screen.getByRole("button",{name:/send/iu}).click();});
+    await waitFor(()=>expect(submitClaim).toHaveBeenCalledOnce());
+    act(()=>editDraft.current("/image describe later"));
+    const edited=valueRef.current;
+    expect(edited).toContain("later");
+    act(()=>attachmentsRef.current!.setAttachments(prev=>[...prev,{...original,uiId:"new",attachmentId:"new-stored"}]));
+    await act(async()=>settle());
+    expect(valueRef.current).toBe(edited);
+    expect(attachmentsRef.current!.attachments.map(item=>item.uiId)).toEqual(["new"]);
+  });
+
+  it("does not clear another session's draft when an earlier command settles", async () => {
+    const controller=controllerDouble(fixtureSource());
+    let settle!:()=>void;
+    const submitClaim=vi.fn(()=>new Promise<{kind:"success"}>(resolve=>{settle=()=>resolve({kind:"success"});}));
+    const runtime:ComposerTriggerRuntime={...runtimeFor(controller),submitClaim};
+    const claim:CommandClaim={token:"/image ",images:true,submit:async()=>({kind:"success"})};
+    const valueRef={current:""};
+    const editDraft={current:(_text:string)=>{}};
+    const props={initial:"/image describe",runtime,controller,onSubmit:()=>{},valueRef,editDraft};
+    const {rerender}=render(<ControlledComposer {...props} sessionId="s1"/>);
+    await waitFor(()=>expect(controller.tracked.length).toBeGreaterThan(0));
+    act(()=>{controller.ops!.beginCommand(claim,{start:0,end:7,draftRev:controller.tracked.at(-1)!.draftRev});});
+    act(()=>{screen.getByRole("button",{name:/send/iu}).click();});
+    await waitFor(()=>expect(submitClaim).toHaveBeenCalledOnce());
+    rerender(<ControlledComposer {...props} sessionId="s2"/>);
+    act(()=>editDraft.current("Another session draft"));
+    await act(async()=>settle());
+    expect(valueRef.current).toBe("Another session draft");
+  });
+
+  it.each(["success", "error", "unsupported"] as const)("handles %s without losing attachments on failure", async (outcomeKind) => {
+    const controller = controllerDouble(fixtureSource());
+    let settle!: (result: {kind:"success"|"error";text?:string}) => void;
+    const submitted = vi.fn(() => new Promise<{kind:"success"|"error";text?:string}>(resolve => {settle=resolve;}));
+    const runtime: ComposerTriggerRuntime = {...runtimeFor(controller),submitClaim:submitted};
+    const claim: CommandClaim = {token:"/image ",images:outcomeKind!=="unsupported",submit:async()=>({kind:"success"})};
+    const valueRef={current:""};
+    const attachmentsRef: {current: import("../../useComposerAttachments").UseComposerAttachmentsResult|undefined}={current:undefined};
+    render(<ControlledComposer initial="/image describe" sessionId="s1" runtime={runtime} controller={controller} onSubmit={()=>{throw new Error("ordinary send must not run");}} valueRef={valueRef} attachmentsRef={attachmentsRef} initialAttachments={[{uiId:"photo",attachmentId:"stored",name:"photo.png",mime:"image/png",size:3,kind:"image"}]}/>);
+    await waitFor(()=>expect(controller.tracked.length).toBeGreaterThan(0));
+    act(()=>{expect(controller.ops!.beginCommand(claim,{start:0,end:7,draftRev:controller.tracked.at(-1)!.draftRev})).toBe(true);});
+    const send=await screen.findByRole("button",{name:/send/iu});
+    act(()=>{send.click();send.click();});
+    if(outcomeKind==="unsupported") {
+      await screen.findByText("This command does not accept images. Remove them before submitting.");
+      expect(submitted).not.toHaveBeenCalled();
+    } else {
+      await waitFor(()=>expect(submitted).toHaveBeenCalledTimes(1));
+      expect(submitted).toHaveBeenCalledWith("s1",claim,"describe",[{mediaType:"image/png",data:"AQID",name:"photo.png"}]);
+      expect(attachmentsRef.current!.attachments).toHaveLength(1);
+      await act(async()=>settle({kind:outcomeKind,text:outcomeKind==="error"?"command rejected":undefined}));
+    }
+    await waitFor(()=>expect(valueRef.current).toBe(outcomeKind==="success"?"":"/image describe"));
+    expect(attachmentsRef.current!.attachments).toHaveLength(outcomeKind==="success"?0:1);
   });
 });

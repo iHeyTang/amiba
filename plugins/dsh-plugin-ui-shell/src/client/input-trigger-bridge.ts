@@ -173,6 +173,7 @@ export function createInputTriggerBridge(
       sessionId: string,
       claim: CommandClaim,
       args: string,
+      images: Parameters<CommandClaim["submit"]>[2] = [],
     ): Promise<SubmitOutcome> {
       const actx = deps.scopeOf(sessionId);
       if (actx === undefined) {
@@ -180,12 +181,10 @@ export function createInputTriggerBridge(
           new Error(`command: session "${sessionId}" resolved no scope`),
         );
       }
-      // DSH 0.1.1 added a third `submit` argument: composer images to carry
-      // into the command. Amiba's composer does not forward its attachments
-      // to slash commands, so the honest value is none — passing a fabricated
-      // list would be worse than passing nothing. Threading real attachments
-      // through is a feature, gated upstream on `CommandClaim.images`.
-      return Promise.resolve().then(() => claim.submit(args, actx, []));
+      if (images.length && !claim.images) {
+        return Promise.reject(new Error("This command does not accept images."));
+      }
+      return Promise.resolve().then(() => claim.submit(args, actx, images));
     },
   };
 }
