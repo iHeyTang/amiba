@@ -4,7 +4,7 @@ import path from 'node:path';
 export function cordisBusinessFixture(profile, canonicalProfile) {
   const code = `
     styles.insert("[data-compat-dynamic] { border-radius: 4px; padding: 4px 8px; }");
-    function Card(props) { const [count,setCount]=React.useState(0); const [echo,setEcho]=React.useState(''); return React.createElement('button', {
+    function Card(props) { const [count,setCount]=React.useState(0); const [echo,setEcho]=React.useState(''); if(count>=3)throw new Error('COMPAT_RENDER_FAILURE'); return React.createElement('button', {
       'data-compat-dynamic':'', 'data-plugin':props.pluginId, 'data-package':props.packageId,
       'data-run':props.pluginRunId, 'data-host-echo':echo, onClick:async()=>{ try { const result=await host.call('increment',{text:'RPC_中文😀'}); setCount(result.count); setEcho(result.text); } catch(error) { setEcho('ERROR: '+error.message); } }
     }, 'COMPAT_DYNAMIC '+count); }

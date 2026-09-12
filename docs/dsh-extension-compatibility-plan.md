@@ -1100,3 +1100,11 @@ pipelines retain mounted component state.
 - 通过真实 define(existing Plugin) 创建第二个不可变 Package，使用 startUserRun(mode:update) 切换双端代码。新卡片显示 v2 界面，RPC 返回 Host-v2，只有一份业务组件；前一版本 run ID 返回 stale-run。历史工具记录保留。
 - 组合 Desktop 回归通过，日志 `/tmp/amiba-cordis-rpc-update-smoke.log`；包含命令历史重载、标准输入动作、图片和子会话续聊/停止/导航/重载。初次双端/重启验证日志 `/tmp/amiba-cordis-rpc-smoke.log` 也通过。本轮使用已构建产品，仅扩展探针与评估记录。
 - 仍未把这些证据当成模型发起审批全流程、故意抛错后的界面回退或 Host 冷重启持久化已通过的证明；这些边界分别继续核对。
+
+
+### 动态业务组件渲染失败隔离（2026-09-13）
+
+- 真实双端测试包在 Host 计数到 3 后，Client 组件于 React 渲染阶段主动抛出 COMPAT_RENDER_FAILURE。官方 renderFailures 报告 tool.view.cordis 和 abdicated:true，截图确认失败业务区域撤下、原工具行和输入器保留。
+- 同一原编辑器 DOM 可继续写入并展示新草稿；原工具组仍连接。停止该实例后，官方错误记录和插件 style[data-dyn] 都已清理。
+- 官方 Host 会将渲染错误反馈给会话；截图同时显示测试环境缺少模型密钥时的原生凭据错误。这不是插件渲染边界失效，也不把它当作模型恢复生成成功的证据。
+- 组合桌面验证完成到最终卸载成功标记，日志 /tmp/amiba-cordis-crash-smoke.log，截图 amiba-cordis-render-failure.png 已查看。覆盖命令重载、图片、输入、子会话续聊/停止/导航/重载及此前兼容项。只增加测试及记录，生产代码无需新增异常边界。

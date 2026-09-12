@@ -423,8 +423,20 @@ try {
       assert.deepEqual(updatedHost.value, {ok:true,value:{count:2,text:'updated',origin:'Host-v2'}});
       const obsolete = await evaluate(`window.__probeCtx.remote.dynamicCordisRunner.invoke(${JSON.stringify(definition.pluginId)},${JSON.stringify(restarted.pluginRunId)},'increment',{})`);
       assert.equal(obsolete.value.code, "stale-run");
+      await evaluate("window.__cordisOriginalEditor=document.querySelector('[data-composer-card] [contenteditable=true]');window.__cordisOriginalGroup=document.querySelector('[data-execution-summary]');document.querySelector('[data-compat-dynamic]').click();void 0");
+      await wait(() => evaluate("window.__probeCtx.get('dynamicCordisRunner').renderFailures.getSnapshot().get(window.__cordisDefinition.pluginId)?.message.includes('COMPAT_RENDER_FAILURE')"));
+      const renderFailure = await evaluate("window.__probeCtx.get('dynamicCordisRunner').renderFailures.getSnapshot().get(window.__cordisDefinition.pluginId)");
+      assert.equal(renderFailure.slot, "tool.view.cordis");
+      assert.ok(await evaluate("window.__cordisOriginalEditor.isConnected&&window.__cordisOriginalEditor===document.querySelector('[data-composer-card] [contenteditable=true]')&&window.__cordisOriginalGroup.isConnected"));
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'COMPAT_POST_CRASH_DRAFT')"), true);
+      await wait(() => evaluate("window.__cordisOriginalEditor.textContent==='COMPAT_POST_CRASH_DRAFT'"));
+      await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'');void 0");
+      await writeFile(path.join(tmpdir(), "amiba-cordis-render-failure.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+      console.log("Dynamic render failure was contained to its slot; native editor and tool group survived", {abdicated:renderFailure.abdicated});
       await evaluate("window.__probeCtx.remote.dynamicCordisRunner.stopFromPanel(window.__compatSessionId,window.__cordisDefinition.pluginId)");
       await wait(() => evaluate("!window.__probeCtx.get('dynamicCordisRunner').isLoaded(window.__cordisDefinition.pluginId)"));
+      assert.ok(await evaluate("!window.__probeCtx.get('dynamicCordisRunner').renderFailures.getSnapshot().has(window.__cordisDefinition.pluginId)"));
+      assert.ok(await evaluate("!Array.from(document.querySelectorAll('style[data-dyn]')).some(n=>n.dataset.dyn===window.__cordisDefinition.pluginId)"));
       console.log("Dynamic Cordis Client-to-Host RPC preserved Unicode, rejected stopped/stale runs and isolated Host state after restart and package update; native cards and cleanup remained intact");
     }
     if (process.argv.includes("--command-rows")) {
