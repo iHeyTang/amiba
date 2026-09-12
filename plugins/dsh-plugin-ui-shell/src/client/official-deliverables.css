@@ -1,0 +1,9 @@
+/* Pinned rc.2 produced-file row only. Keep the original component geometry
+ * and map its colors to the existing Amiba palette. */
+.P4kPIW_root {
+  --dsw-alias-label-primary: hsl(var(--foreground));
+  --dsw-alias-label-secondary: hsl(var(--foreground) / 0.85);
+  --dsw-alias-label-tertiary: hsl(var(--muted-foreground));
+  --dsw-alias-interactive-bg-hover: hsl(var(--muted));
+  --dsw-alias-border-l3: hsl(var(--border));
+}

@@ -97,3 +97,21 @@ it("publishes only real closed turn endpoints and drops anchors on session chang
   expect(result.current).toEqual([]);
   expect(listeners.size).toBe(0);
 });
+
+
+it("reports rejected open requests and ignores outcomes after the session changes", async () => {
+  let owner:any;
+  let reject!: (error:Error)=>void;
+  const source={getSnapshot:()=>fixture().snapshot,subscribe:()=>()=>{}};
+  const snapshot=fixture().snapshot;
+  source.getSnapshot=()=>snapshot;
+  const openFile=vi.fn(()=>new Promise<void>((_resolve,fail)=>{reject=fail;}));
+  const {container,rerender}=render(<TurnTail source={source} runtimeTurn={7} openFile={openFile} render={value=>{owner=value;return "tail";}}/>);
+  await act(async()=>{owner.openFile(".");});
+  await act(async()=>{reject(new Error("directory unavailable"));});
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe("directory unavailable");
+  await act(async()=>{owner.openFile(".");});
+  rerender(<TurnTail runtimeTurn={8} openFile={openFile} render={()=>"wrong"}/>);
+  await act(async()=>{reject(new Error("old request"));});
+  expect(container.innerHTML).toBe("");
+});

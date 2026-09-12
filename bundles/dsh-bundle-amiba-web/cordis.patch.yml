@@ -56,8 +56,8 @@
 - id: ui-workflow-run
   disabled: true
 
-- id: ui-deliverables
-  disabled: true
+# ui-deliverables stays enabled: UI Shell supplies the official turn data and
+# turn-tail chain while preserving the native conversation presentation.
 
 - id: ui-workspace
   disabled: true

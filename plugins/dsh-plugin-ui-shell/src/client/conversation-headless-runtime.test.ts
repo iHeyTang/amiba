@@ -173,3 +173,41 @@ it("does not publish a footer for an unfinished turn", () => {
   expect(snapshot.timeline.turns.get(1).data.get("turn-tail")).toBeUndefined();
   expect(snapshot.nodes.values().some((node: any) => node.kind === "turn-tail")).toBe(false);
 });
+
+
+it("feeds the official produced-files selector real turn data across rebuilds", () => {
+  const deliverablesSource=readFileSync("../../packages/app-runtime/resources/dsh-runtime/app/node_modules/@deepseek-ai/dsh-client-ui-deliverables/lib/client.js","utf8");
+  const selected=extractBundleClosure(deliverablesSource,["deliverablesDefinition","selectProducedFiles"]);
+  const {definition,select}=Function("runtime",selected.replace('require("@deepseek-ai/dsh-client-runtime/client")',"runtime")+";return {definition:deliverablesDefinition,select:selectProducedFiles};")(runtime);
+  const {events,fallbacks,views}=definitions();
+  let entries=[...events,definition];
+  const instance=new runtime.ConversationNodeAssembler({entries:()=>entries,fallbackEntry:()=>fallbacks[0]},{entries:()=>views});
+  const rows:any[]=[event("turn/start",1),event("step/start",2)];
+  let seq=3;
+  function call(id:string,path:string,card:string,isError=false){
+    const row:any=event("tool/call",seq++,{callId:id,name:"fixture",arguments:"{}"});
+    row.view={for:"call",view:{card,kind:"read",locations:[{path}]}};
+    rows.push(row,event("tool/result",seq++,{message:{source:{callId:id},content:[{type:"tool-result",toolCallId:id,content:[],isError}]}}));
+  }
+  call("write","made.txt","diff");
+  call("again","made.txt","diff");
+  call("read","read.txt","generic");
+  call("failed","failed.txt","diff",true);
+  const closingSeq=seq++;
+  rows.push(event("assistant/message",closingSeq,{message:{id:"final",content:[{type:"text",text:"Done"}]}}));
+  call("later","late.txt","diff");
+  rows.push(event("step/end",seq++),event("turn/end",seq++,{reason:{kind:"completed"}}));
+  instance.replaceWindow(rows,false);instance.flush();
+  const owner=()=>({turn:instance.snapshot("chat").timeline.turns.get(1),seq:closingSeq});
+  expect(owner().turn.data.get("deliverables").produced.map((p:any)=>p.path)).toEqual(["made.txt","made.txt","late.txt"]);
+  expect(select(owner())).toEqual(["made.txt"]);
+  entries=events;instance.rebuildRegistry();instance.flush();
+  expect(select(owner())).toBeNull();
+  entries=[...events,definition];instance.rebuildRegistry();instance.flush();
+  expect(select(owner())).toEqual(["made.txt"]);
+  instance.append(event("turn/start",seq++,{turn:2}));
+  instance.append(event("turn/end",seq++,{turn:2,reason:{kind:"blocked"}}));
+  instance.flush();
+  expect(select({turn:instance.snapshot("chat").timeline.turns.get(2),seq})).toBeNull();
+  expect(select(owner())).toEqual(["made.txt"]);
+});

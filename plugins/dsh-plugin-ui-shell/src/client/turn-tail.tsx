@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type {
   ConversationSnapshot,
   ObservableSnapshot,
@@ -30,8 +30,23 @@ export function TurnTail({
   render: (owner: TurnTailOwnerProps) => ReactNode;
 }) {
   const snapshot = useConversationSnapshot(source);
-  const owner = turnTailOwner(snapshot, runtimeTurn, openFile);
-  return owner ? render(owner) : null;
+  const [fileError, setFileError] = useState<string | null>(null);
+  const fileRequest = useRef(0);
+  useEffect(() => {
+    fileRequest.current += 1;
+    setFileError(null);
+    return () => { fileRequest.current += 1; };
+  }, [source, runtimeTurn]);
+  const requestOpenFile = useCallback((path: string) => {
+    const request = ++fileRequest.current;
+    Promise.resolve().then(() => openFile(path)).then(() => {
+      if (request === fileRequest.current) setFileError(null);
+    }, error => {
+      if (request === fileRequest.current) setFileError(error instanceof Error ? error.message : String(error));
+    });
+  }, [openFile]);
+  const owner = turnTailOwner(snapshot, runtimeTurn, requestOpenFile);
+  return owner ? <>{render(owner)}{fileError ? <p role="alert" className="text-xs text-destructive">{fileError}</p> : null}</> : null;
 }
 
 function useConversationSnapshot(source?: ObservableSnapshot<ConversationSnapshot>) {

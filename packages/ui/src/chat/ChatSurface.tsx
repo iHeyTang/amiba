@@ -2251,7 +2251,13 @@ export default function ChatSurface({
                           assistantActions={slots?.assistantActions}
                           turnTail={slots?.turnTail}
                           turnTailAnchors={slots?.turnTailAnchors}
-                          openTurnFile={path => openWorkspaceFile({ path })}
+                          openTurnFile={path => {
+                            if (path === ".") {
+                              if (!workspacePane.files || !sessions.activeId) throw new Error("Workspace folder access is unavailable.");
+                              return workspacePane.files.openExternal(sessions.activeId, path);
+                            }
+                            return openWorkspaceFile({ path });
+                          }}
                           sessionId={sessions.activeId ?? undefined}
                           messages={messages}
                           onReviewWorkspaceChanges={

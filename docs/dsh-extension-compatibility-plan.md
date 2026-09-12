@@ -37,7 +37,7 @@ are required in addition to new-plugin tests.
 | Existing header/model/plan/command/reference extensions | open | Regression tests plus dependency/owner audit |
 | Official component styles | open | Scoped compatibility assets; no changes to Amiba tokens or global defaults |
 | Message actions | open | Exact MessageId, no arbitrary turn-to-message mapping, existing bubbles preserved |
-| Turn tail/deliverables | open | Real turn/step/business data and unchanged default rendering |
+| Turn tail/deliverables | chain and produced-files row verified on Desktop; prose references and standalone Web open | Real turn/step/business data and unchanged default rendering |
 | Input zones | open | Correct reference offsets, draft images, revisions and submission phases |
 | Chat/command/workflow nodes and views | additive conversation views implemented; focused tests, real Desktop registration/session injection/unload and screenshot review passed; nodes/commands/workflows open | Official data and callbacks, independent lifecycle, existing presentation retained |
 | Tool subcalls/inspect | subcalls implemented; 26 runtime + 7 UI tests passed; inspect open | Real dispatch tree and trajectory target; no fabricated empty children |
@@ -426,3 +426,31 @@ visible messages. Session changes dispose the old source and discard its anchors
   separate per-session file-workspace binding. The file-opening smoke explicitly
   binds its temporary session before opening a file; this must not be counted as
   automatic workspace parity for official session creation/navigation.
+
+
+### Official produced-files row enabled
+
+The original ui-deliverables package is enabled again. Its actual event
+accumulator, selector, localization, responsive chip layout and optional
+chatFileMentions service run under their own plugin lifetime. The disabled
+whole conversation UI stays disabled. Only the pinned row's CSS-module root
+receives Amiba color aliases; no global theme or existing review card changes.
+
+A "." tail open request uses the existing session-validated external-path
+adapter, so the overflow row's Show in folder action opens the directory rather
+than trying to preview it as text. Tail open failures render an error, and old
+asynchronous outcomes cannot leak across turns or sessions.
+
+- Actual official assembler/selector tests passed: successful mutation paths,
+  duplicate paths, read-only/failed-call exclusions, closing-sequence cutoff,
+  turn isolation and definition removal/rebuild. Five tail adapter tests passed,
+  including rejected opens and stale outcomes. Shell typecheck passed.
+- Full Desktop build passed. Real installed-plugin smoke derived seven files
+  from Host tool-call views, opened actual file contents, and reached Electron's
+  validated directory opener. Only the OS folder-open boundary was stubbed.
+  Historical/live/empty tails, dynamic unregister, original settings, directory,
+  ZIP, view, HMR and detach checks passed in the same run. Screenshot reviewed.
+- Prose file references remain open: Amiba's current Markdown links handle
+  explicit paths, but not the official unique-basename resolver. It must apply
+  to the exact closing assistant content, including merged multi-step bubbles.
+  Standalone Web and remote-host behavior also remain unverified.
