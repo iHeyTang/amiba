@@ -377,6 +377,8 @@ try {
       await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:window.__compatSessionId,childSessionId:'compat-child',mode:'one-shot'});void 0");
       await wait(() => evaluate("document.body.textContent.includes('COMPAT_CHILD_REPLY') && !document.body.textContent.includes('COMPAT_TURN_REPLY')"));
       assert.equal(await evaluate("window.__probeCtx.sessions.subagentAddress('compat-child').parentSessionId"), await evaluate("window.__compatSessionId"));
+      assert.ok(await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).some(n=>n.getClientRects().length>0&&n.getAttribute('contenteditable')==='false')"), "one-shot child composer must be read-only");
+      await writeFile(path.join(tmpdir(), "amiba-child-readonly.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
       await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
       await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY') && !document.body.textContent.includes('COMPAT_CHILD_REPLY')"));
       await evaluate("window.__probeCtx.sessions.open('compat-child');void 0");
@@ -389,7 +391,23 @@ try {
       await wait(() => evaluate("document.body.textContent.includes('COMPAT_CHILD_REPLY') && window.__probeCtx.sessions.list.getSnapshot().current==='compat-child'"));
       await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
       await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY')"));
-      console.log("Real catalog child navigation, Home-origin open, transcript and parent return verified");
+      assert.ok(await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).some(n=>n.getClientRects().length>0&&n.getAttribute('contenteditable')==='true')"), "ordinary parent composer must become editable again");
+      console.log("Real catalog child navigation, Home-origin open, read-only composer, transcript and parent return verified");
+      if (process.argv.includes("--child-reload")) {
+        const parentId = await evaluate("window.__compatSessionId");
+        await evaluate("window.__probeCtx.sessions.open('compat-child');void 0");
+        await wait(() => evaluate("document.body.textContent.includes('COMPAT_CHILD_REPLY')"));
+        await evaluate("window.__beforeChildReload=true;void 0");
+        await call("Page.reload", {});
+        await wait(async () => { try { return await evaluate("Boolean(!window.__beforeChildReload && window.__probeCtx?.sessions && document.querySelector('[data-amiba-product-shell]'))"); } catch { return false; } });
+        await evaluate(`window.__compatSessionId=${JSON.stringify(parentId)};window.__probeCtx.layout.openChat();window.__probeCtx.sessions.open('compat-child');void 0`);
+        await wait(() => evaluate("document.body.textContent.includes('COMPAT_CHILD_REPLY')"));
+        assert.equal(await evaluate("window.__probeCtx.sessions.subagentAddress('compat-child')?.parentSessionId"), parentId);
+        assert.ok(await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).some(n=>n.getClientRects().length>0&&n.getAttribute('contenteditable')==='false')"));
+        await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+        await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY')"));
+        console.log("Child transcript, direct-parent address and read-only state survived full renderer reload");
+      }
     }
 
     const beforeClearIds = await evaluate("window.__probeCtx.sessions.list.getSnapshot().ids");

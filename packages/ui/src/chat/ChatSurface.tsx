@@ -467,6 +467,7 @@ export default function ChatSurface({
   const currentSessionMeta = sessions.sessions.find(
     (session) => session.id === sessions.activeId,
   );
+  const readOnly = currentSessionMeta?.subagentAddress?.mode === "one-shot";
   const effectiveAgent = normalizeAgentContext(
     currentSessionMeta?.agent ?? draftAgent,
   );
@@ -806,6 +807,7 @@ export default function ChatSurface({
   // down in this component body, so JS hoisting makes the forward
   // reference safe (the value resolves at call time, not capture time).
   const queueHook = usePendingQueue({
+    readOnly,
     sessions,
     client,
     input,
@@ -1558,6 +1560,11 @@ export default function ChatSurface({
     attachments: Attachment[];
   }): Promise<void> {
     const { text, attachments: attachmentsForTurn } = args;
+    if (readOnly) {
+      setInput(text);
+      setAttachments(attachmentsForTurn);
+      return;
+    }
 
     setError(null);
     try {
@@ -1982,6 +1989,7 @@ export default function ChatSurface({
   const composerNode = (
     <Composer
       ref={composerRef}
+      disabled={readOnly}
       value={input}
       onChange={setInput}
       onSubmit={(text) => {
@@ -1995,7 +2003,7 @@ export default function ChatSurface({
         // send has no user words to anchor the turn, and rather than the app
         // inventing a stand-in downstream, sending is simply not enabled
         // until something is typed.
-        input.trim().length > 0 && !attachmentUploading && !attachmentBusy
+        !readOnly && input.trim().length > 0 && !attachmentUploading && !attachmentBusy
       }
       contextRail={
         pendingSourceApp || pendingQueue.length > 0 ? (

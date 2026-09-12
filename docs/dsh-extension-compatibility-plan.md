@@ -873,3 +873,29 @@ pipelines retain mounted component state.
   real Home-origin child open and existing compatibility regression checks.
   Patch installation skipped lifecycle scripts and updated the lockfile patch hash.
   Read-only controls, cold child reload and actual continuation remain open.
+
+### One-shot child composer policy (2026-09-13)
+
+- ChatSurface derives read-only state only from a retained one-shot address and
+  passes it to the existing Composer disabled state. No CSS/layout replacement.
+  The queue's send, send-now, drain and stop entry points refuse read-only actions;
+  the turn runner also returns the supplied draft instead of dispatching it.
+- Queue tests verify that read-only attempts preserve draft and queued text, do
+  not call the runner or engine abort, and resume existing sending after returning
+  to an editable session. Shell typecheck passed.
+- Extended real-child smoke with visible editor contenteditable=false, screenshot,
+  parent return restoring contenteditable=true and optional --child-reload verifying
+  the child after a complete renderer restart. Initial build passed, but the first
+  Desktop smoke failed its read-only assertion: RichComposerEditor only used
+  disabled in Lexical's initialConfig, which does not react to later prop changes.
+- Added an in-context editable-state synchronizer without remounting Lexical;
+  disabled editors no longer forward paste or register submission chords. The
+  regression test verifies both transitions on the same editor/DOM with its draft
+  retained. All 19 editor/composer/queue tests and shell typecheck passed.
+- Production rebuild passed (`/tmp/amiba-child-editor-state-build.log`). Full
+  --compat --reopen-prose --child-navigation --child-reload passed
+  (`/tmp/amiba-child-editor-state-smoke.log`): one-shot editor is read-only,
+  parent editor becomes editable, and child transcript/address/read-only state
+  survive a complete renderer reload. The child screenshot was visually reviewed;
+  original layout and native disabled styling remain. This is renderer restart,
+  not cold Host/Agent recovery. Actual continuation remains open.

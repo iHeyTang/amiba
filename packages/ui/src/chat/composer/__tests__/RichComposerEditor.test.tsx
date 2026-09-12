@@ -32,6 +32,24 @@ function EditorRefCapture({ onReady }: { onReady: (e: LexicalEditor) => void }) 
 }
 
 describe("RichComposerEditor", () => {
+  it("updates read-only state without replacing the editor or losing its draft", async () => {
+    const capture = vi.fn();
+    const onChange = vi.fn();
+    const content = <EditorRefCapture onReady={capture} />;
+    const { rerender } = render(<RichComposerEditor value="Kept draft" onChange={onChange}>{content}</RichComposerEditor>);
+    await waitFor(() => expect(screen.getByRole("textbox")).toHaveTextContent("Kept draft"));
+    const node = screen.getByRole("textbox");
+    const editor = capture.mock.calls[0][0] as LexicalEditor;
+    rerender(<RichComposerEditor value="Kept draft" disabled onChange={onChange}>{content}</RichComposerEditor>);
+    expect(editor.isEditable()).toBe(false);
+    expect(node).toHaveAttribute("contenteditable", "false");
+    rerender(<RichComposerEditor value="Kept draft" onChange={onChange}>{content}</RichComposerEditor>);
+    expect(editor.isEditable()).toBe(true);
+    expect(screen.getByRole("textbox")).toBe(node);
+    expect(node).toHaveTextContent("Kept draft");
+    expect(capture).toHaveBeenCalledTimes(1);
+  });
+
   it("opens mentions at the caret without replacing selected text or duplicating an active @", async () => {
     Range.prototype.getBoundingClientRect ??= () => new DOMRect()
     const ref = createRef<RichComposerHandle>()

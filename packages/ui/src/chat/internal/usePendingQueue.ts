@@ -63,6 +63,8 @@ export interface RunChatTurnArgs {
  * function for the order-of-operations cascade.
  */
 export interface UsePendingQueueArgs {
+  /** Existing transcript can be viewed but cannot receive sends or stop actions. */
+  readOnly?: boolean;
   sessions: ReturnType<typeof useSessions>;
   client: ChatEngineClient;
 
@@ -142,6 +144,8 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     rejectPendingTurn,
     runChatTurn,
   } = args;
+  const readOnlyRef = useRef(args.readOnly ?? false);
+  readOnlyRef.current = args.readOnly ?? false;
   const { t: _t } = useT();
   void _t; // i18n hook kept stable for future copy needs
 
@@ -229,6 +233,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   // ---------------------------------------------------------------------
 
   const drainHead = useCallback((): void => {
+    if (readOnlyRef.current) return;
     setQueue((prev) => {
       if (prev.length === 0) return prev;
       const [head, ...tail] = prev;
@@ -244,6 +249,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
 
   const sendNow = useCallback(
     (queueId: string): void => {
+      if (readOnlyRef.current) return;
       const editingThisOne = editingQueueId === queueId;
       let item: PendingChatTurn | undefined;
       if (editingThisOne) {
@@ -313,6 +319,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   );
 
   const send = useCallback(async (textArg?: string): Promise<void> => {
+    if (readOnlyRef.current) return;
     // `textArg` carries the Composer's mention-expanded text (`@[...]`
     // tokens turned into agent-facing text). Prefer it for the payload
     // that's DISPATCHED to the engine / QUEUED so the backend never sees
@@ -395,6 +402,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   ]);
 
   const stop = useCallback((): void => {
+    if (readOnlyRef.current) return;
     // Preserve the pending queue. Hitting Stop while items are queued
     // is a "halt and let me think" gesture — wiping the queue forces
     // the user to retype everything they had lined up. We freeze

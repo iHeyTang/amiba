@@ -60,6 +60,26 @@ function makeArgs(
 describe("usePendingQueue.send — dispatches the mention-expanded text", () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it("preserves the draft and queue while read-only and resumes normal sending after switching back", async () => {
+    const args = makeArgs();
+    const { result, rerender } = renderHook(({ readOnly }) => usePendingQueue({ ...args, readOnly }), { initialProps: { readOnly: true } });
+    await act(async () => { result.current.setQueue([{ queueId: "queued", text: "Later", attachments: [] }]); });
+    await act(async () => {
+      await result.current.send("New text");
+      result.current.sendNow("queued");
+      result.current.drainHead();
+      result.current.stop();
+    });
+    expect(args.runChatTurn).not.toHaveBeenCalled();
+    expect(args.client.abort).not.toHaveBeenCalled();
+    expect(args.setInput).not.toHaveBeenCalled();
+    expect(args.setAttachments).not.toHaveBeenCalled();
+    expect(result.current.queue).toEqual([{ queueId: "queued", text: "Later", attachments: [] }]);
+    rerender({ readOnly: false });
+    await act(async () => { result.current.sendNow("queued"); });
+    expect(args.runChatTurn).toHaveBeenCalledWith({ text: "Later", attachments: [] });
+  });
+
   it("dispatches the passed (expanded) textArg, NOT the raw input", async () => {
     const runChatTurn = makeRunChatTurn()
     const { result } = renderHook(() =>

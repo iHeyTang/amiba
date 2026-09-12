@@ -1,10 +1,12 @@
 import { LexicalComposer } from "@lexical/react/LexicalComposer"
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
 import { ContentEditable } from "@lexical/react/LexicalContentEditable"
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary"
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin"
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin"
 import {
   forwardRef,
+  useEffect,
   type ClipboardEventHandler,
   type CSSProperties,
   type ReactNode,
@@ -21,6 +23,12 @@ import { useComposerTriggers, type ComposerTriggerSession } from "./triggers/ses
 import type { TriggerProvider } from "./providers/types"
 
 export type { RichComposerHandle } from "./plugins/ImperativeHandlePlugin"
+
+function EditableStatePlugin({ disabled }: { disabled?: boolean }) {
+  const [editor] = useLexicalComposerContext()
+  useEffect(() => { editor.setEditable(!disabled) }, [editor, disabled])
+  return null
+}
 
 export interface RichComposerEditorProps {
   value: string
@@ -93,7 +101,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
                 role="textbox"
                 aria-multiline="true"
                 spellCheck
-                onPaste={onPaste}
+                onPaste={disabled ? undefined : onPaste}
                 style={style}
                 className={cn(
                   "resize-none overflow-hidden border-0 bg-transparent text-sm outline-none",
@@ -121,12 +129,13 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
             ErrorBoundary={LexicalErrorBoundary}
           />
           <HistoryPlugin />
+          <EditableStatePlugin disabled={disabled} />
           <AutoGrowPlugin
             maxHeightPx={maxHeightPx ?? 200}
             layoutKey={className}
           />
           <MentionSerializePlugin value={value} onChange={onChange} />
-          {onSubmitChord && (
+          {onSubmitChord && !disabled && (
             <ImeEnterPlugin onSubmitChord={onSubmitChord} onKeyDownExtra={onKeyDownExtra} />
           )}
           <ImperativeHandlePlugin handleRef={ref} />
