@@ -6,8 +6,9 @@ Local commands:
 - pnpm release:cdn <target>
 
 Required configuration:
-- AMIBA_GITHUB_REPOSITORY: owner/repository
+- AMIBA_GITHUB_REPOSITORY: optional owner/repository override; defaults to Git origin
 - AMIBA_UPDATE_URLS: optional comma-separated HTTPS CDN directories
-- AMIBA_CDN_REMOTE: configured rclone destination for release:cdn
+- AMIBA_CDN_UPLOAD_URL: future HTTPS POST API for release:cdn
+- AMIBA_CDN_UPLOAD_TOKEN: optional Bearer token, publisher only
 
 A build on the wrong OS/Node architecture fails before preparing runtime assets.

@@ -1,6 +1,6 @@
 # Amiba 桌面分发
 
-当前发布代码位于 `feat/amiba-distribution` 独立工作区。发布仓库、CDN 和签名由发布者配置；没有内置第三方 GitHub 代理。
+当前发布代码位于 `feat/amiba-distribution` 独立工作区。发布仓库默认从 Git origin 读取（当前为 `iHeyTang/amiba`），CDN 和签名由发布者配置；没有内置第三方 GitHub 代理。
 
 ## 本地构建
 
@@ -12,7 +12,7 @@
 
 Apple Silicon 上的 Intel 构建可在独立 checkout 中，通过 Rosetta 运行 x64 Node 和 pnpm；不要复用 ARM 的 node_modules、运行时目录或输出目录。Windows 请使用本地 Windows x64 机器或 VM；当前没有验证 Mac 上 Wine 交叉编译原生依赖。
 
-如果只想在配置发布服务前验证本地安装包，可运行 `pnpm release:build <target> --local-only`。此模式禁用更新源与 macOS 签名，产物不可通过发布脚本上传。正式发布模式要求代码签名成功。
+如果只想在配置发布服务前验证本地安装包，可运行 `pnpm release:build <target> --local-only`。此模式禁用更新源与 macOS 签名，产物不可通过发布脚本上传。默认正式发布模式要求代码签名成功。Windows 可使用 `pnpm release:build win32-x64 --allow-unsigned` 放宽证书要求并保留更新功能；已有签名配置仍会生效。Windows 可能显示未知发布者或 SmartScreen 提示。macOS 现有 Squirrel.Mac 自动安装依赖签名，`--local-only` 未签名测试包不支持该安装链路。
 
 Rosetta 下使用 Intel Node 的示例（`/path/to/node-darwin-x64` 换为已校验的官方 x64 Node 解压目录，在独立 checkout 内运行）：
 
@@ -53,14 +53,19 @@ pnpm release:upload darwin-arm64
 
 上传创建或复用版本号对应的草稿 Release。不同机器可以依次上传三个目标，发布前确认全部到齐。已发布版本拒绝覆盖，必须增加 `apps/desktop/package.json` 中的版本。
 
-配置 rclone 的 OSS、COS 或 S3 兼容 remote，以及映射到其目录的 CDN：
+CDN 暂未选定，已预留 POST 上传适配器 `scripts/release/post-upload.mjs`，不依赖具体云存储 SDK。配置后执行：
 
 ```sh
-export AMIBA_CDN_REMOTE='cos:amiba/releases/stable'
+export AMIBA_CDN_UPLOAD_URL='https://your-api.example/releases/upload'
+# 可选：AMIBA_CDN_UPLOAD_TOKEN 提供 Bearer token，只在发布机器使用
 pnpm release:cdn darwin-arm64
 ```
 
-CDN 先上传安装包，再上传发现清单。不会删除历史包。版本化安装包可长期缓存；`latest-*.yml` 请设置短缓存或不缓存，上传后刷新 CDN 清单缓存。支持 HTTPS、GET、HEAD、Range 请求，并保留文件字节，禁止对安装包做转换。
+预留接口契约：`multipart/form-data` POST，包含 `file`、`name`、`version`、`target`、`sha512`、`kind`；`kind` 为 `artifact` 或 `metadata`。2xx 表示文件已保存并可访问；接口契约确定后只需修改适配器。安装包上传完成后才上传更新清单，任何失败都会停止，不自动重试可能已提交的 POST。
+
+上传接口与客户端下载地址分开：`AMIBA_CDN_UPLOAD_URL` 用于发布机器 POST 上传，`AMIBA_UPDATE_URLS` 用于客户端 GET 清单与安装包。上传凭据不会打进客户端。未配置 CDN 下载源时，客户端使用 GitHub。
+
+CDN 更新清单应采用短缓存或不缓存；版本化安装包可长期缓存。服务需支持 HTTPS、GET、HEAD、Range，并保留原始文件字节。
 
 全部平台上传并确认 CDN 可访问后，在 GitHub 发布草稿。发布后运行 `pnpm release:verify-online <target>`，它会逐个下载 CDN 与 GitHub 上的安装包、blockmap 和清单，并对照本地发布记录校验 SHA-512；该命令会产生完整安装包下载流量。首次分发前应在真实安装环境上完成一次版本 N → N+1 更新：检查每个架构命中正确 ZIP/EXE、网络中断重试、CDN 故障回退、校验失败拒绝安装、应用退出与重启后版本变化。
 
