@@ -1,3 +1,5 @@
+import type { AgentSubagentAddress } from "../platform/index.js"
+
 export { upsertCompactionTimeline, interruptOpenCompactions } from "./compaction.js"
 export interface DshRpcErrorShape {
   code: string
@@ -535,6 +537,24 @@ export class DshApiClient {
       "session.history",
       {
         sessionId,
+        ...(options.beforeSeq === undefined ? {} : { beforeSeq: options.beforeSeq }),
+        ...(options.maxMessages === undefined ? {} : { maxMessages: options.maxMessages }),
+      },
+      options.signal,
+    )
+  }
+
+  /** Read a catalog child without resuming either it or its direct parent. */
+  subagentHistory(
+    address: AgentSubagentAddress,
+    options: { beforeSeq?: number; maxMessages?: number; signal?: AbortSignal } = {},
+  ): Promise<DshHistoryPage> {
+    return this.call(
+      "subagent.history",
+      {
+        parentSessionId: address.parentSessionId,
+        childSessionId: address.childSessionId,
+        mode: address.mode,
         ...(options.beforeSeq === undefined ? {} : { beforeSeq: options.beforeSeq }),
         ...(options.maxMessages === undefined ? {} : { maxMessages: options.maxMessages }),
       },

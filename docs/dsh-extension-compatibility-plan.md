@@ -698,3 +698,19 @@ pipelines retain mounted component state.
   fixture now shows only its own main test window before capture; the final
   entire run completed without manual recovery. No production window policy
   or stylesheet changed. Web/remote and the remaining extension ledger stay open.
+
+### Catalog child history transport (2026-09-12)
+
+- Verified the installed rc.2 `SubagentsApi` contract and official runtime's
+  `Session.history`: catalog children use `subagent.history` with their durable
+  direct-parent address, not ordinary `session.history` or Agent activation.
+- Added the address to the platform history options, the exact addressed RPC
+  to DshApiClient, and address propagation across all `loadMessages` pages.
+  Ordinary callers retain their existing transport. A mismatched child ID fails
+  before RPC; catalog failures propagate without fallback or implicit resume.
+- All 25 tests across platform-adapters, DshApiClient and session storage passed;
+  both app-runtime and shell typechecks passed. Tests cover both child modes,
+  pagination, render views/projections, mismatched addresses and host errors.
+- This is transport groundwork, not complete child navigation: address discovery,
+  shell open/reopen metadata, selection intent, child prompt/interrupt semantics
+  and actual renderer verification remain open. No UI or stylesheet changed.

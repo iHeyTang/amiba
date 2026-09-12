@@ -1,4 +1,4 @@
-import { getPlatform, type AgentSessionHistoryEntry } from "@amiba/app-runtime/platform";
+import { getPlatform, type AgentSessionHistoryEntry, type AgentSubagentAddress } from "@amiba/app-runtime/platform";
 import { shortId } from "@amiba/app-runtime/utils";
 
 import {
@@ -249,12 +249,13 @@ export async function saveIndex(index: SessionMeta[]): Promise<void> {
   );
 }
 
-export async function loadMessages(id: string): Promise<SessionMessage[]> {
+export async function loadMessages(id: string, subagent?: AgentSubagentAddress): Promise<SessionMessage[]> {
   if (!id) return [];
   const events: AgentSessionHistoryEntry[] = [];
   let beforeSeq: number | undefined;
   for (;;) {
     const page = await sessionsAdapter().history(id, {
+      ...(subagent ? { subagent } : {}),
       ...(beforeSeq === undefined ? {} : { beforeSeq }),
       maxMessages: 200,
     });

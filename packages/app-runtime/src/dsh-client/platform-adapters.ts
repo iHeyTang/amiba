@@ -286,7 +286,12 @@ export function createDshPlatformAdapters(
       },
       create: (input) => client.createSession(input),
       async history(sessionId, options = {}) {
-        const result = await client.history(sessionId, options);
+        if (options.subagent && options.subagent.childSessionId !== sessionId) {
+          throw new Error("Subagent history address does not match the requested session");
+        }
+        const result = options.subagent
+          ? await client.subagentHistory(options.subagent, options)
+          : await client.history(sessionId, options);
         return {
           events: result.events,
           hasMore: result.hasMore,

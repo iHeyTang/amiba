@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   set: vi.fn(),
   removed: [] as string[],
   archiveSession: vi.fn(),
+  history: vi.fn(async () => ({ events: [] as Array<{ event: { type: string; seq: number; time: number; data: Record<string, unknown> } }>, hasMore: false })),
 }));
 
 vi.mock("@amiba/app-runtime/platform", () => ({
@@ -45,7 +46,7 @@ vi.mock("@amiba/app-runtime/platform", () => ({
       list: async () => mocks.summaries,
       search: async () => [],
       create: async () => ({ sessionId: "new" }),
-      history: async () => ({ events: [], hasMore: false }),
+      history: mocks.history,
       rename: async () => ({ title: "", seq: 0 }),
       fork: async () => ({ sessionId: "child" }),
     },
@@ -56,7 +57,21 @@ vi.mock("@amiba/app-runtime/platform", () => ({
   }),
 }));
 
-import { archiveSession, loadIndex, loadSessionMeta } from "./store";
+import { archiveSession, loadIndex, loadSessionMeta, loadMessages } from "./store";
+
+it("retains the same direct-parent address for every child history page", async () => {
+  const address = { parentSessionId: "parent", childSessionId: "child", mode: "one-shot" as const };
+  mocks.history.mockClear();
+  mocks.history.mockResolvedValueOnce({
+    events: [{ event: { type: "session/created", seq: 20, time: 1, data: {} } }],
+    hasMore: true,
+  }).mockResolvedValueOnce({ events: [], hasMore: false });
+  await loadMessages("child", address);
+  expect(mocks.history.mock.calls).toEqual([
+    ["child", { subagent: address, maxMessages: 200 }],
+    ["child", { subagent: address, beforeSeq: 20, maxMessages: 200 }],
+  ]);
+});
 
 const LOCAL_META_KEY = "sessions.local-meta";
 

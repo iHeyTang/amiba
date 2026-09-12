@@ -41,6 +41,46 @@ function rpcClient(
 }
 
 describe("createDshPlatformAdapters", () => {
+  it.each(["one-shot", "continuable"] as const)("reads %s catalog history through its direct parent without activating an Agent", async (mode) => {
+    const seen: Array<{ method: string; payload: unknown }> = [];
+    const events = [{ event: { type: "turn/end", seq: 12, time: 1, data: {} }, view: { kind: "complete" } }];
+    const client = rpcClient(() => ({ events, hasMore: true, projections: { asOfSeq: 12, values: { title: "Child" } } }), seen);
+    const adapters = createDshPlatformAdapters(client);
+    await expect(adapters.agentSessions.history("child", {
+      subagent: { parentSessionId: "parent", childSessionId: "child", mode },
+      beforeSeq: 20,
+      maxMessages: 200,
+    })).resolves.toEqual({ events, hasMore: true, projections: { title: "Child" } });
+    expect(seen).toEqual([{ method: "subagent.history", payload: {
+      parentSessionId: "parent", childSessionId: "child", mode, beforeSeq: 20, maxMessages: 200,
+    } }]);
+  });
+
+  it("rejects a mismatched child address before issuing any RPC", async () => {
+    const seen: Array<{ method: string; payload: unknown }> = [];
+    const adapters = createDshPlatformAdapters(rpcClient(() => ({}), seen));
+    await expect(adapters.agentSessions.history("other", {
+      subagent: { parentSessionId: "parent", childSessionId: "child", mode: "one-shot" },
+    })).rejects.toThrow("does not match");
+    expect(seen).toEqual([]);
+  });
+
+  it("keeps catalog errors instead of retrying through ordinary session history", async () => {
+    const seen: Array<{ method: string; payload: unknown }> = [];
+    const adapters = createDshPlatformAdapters(rpcClient(() => Object.assign(new Error("Child unavailable"), { code: "session-not-found" }), seen));
+    await expect(adapters.agentSessions.history("child", {
+      subagent: { parentSessionId: "parent", childSessionId: "child", mode: "continuable" },
+    })).rejects.toMatchObject({ code: "session-not-found" });
+    expect(seen.map(({ method }) => method)).toEqual(["subagent.history"]);
+  });
+
+  it("preserves ordinary session history transport when no catalog address is supplied", async () => {
+    const seen: Array<{ method: string; payload: unknown }> = [];
+    const adapters = createDshPlatformAdapters(rpcClient(() => ({ events: [], hasMore: false }), seen));
+    await adapters.agentSessions.history("root", { beforeSeq: 0, maxMessages: 10 });
+    expect(seen).toEqual([{ method: "session.history", payload: { sessionId: "root", beforeSeq: 0, maxMessages: 10 } }]);
+  });
+
   it("uses plugin-owned Typert Remotes for feature domains", async () => {
     const seen: Array<{ method: string; payload: unknown }> = [];
     const client = rpcClient(

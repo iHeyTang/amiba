@@ -109,6 +109,13 @@ export interface AgentSessionHistoryEntry {
   view?: unknown;
 }
 
+/** Durable catalog address; reading a child must not activate it as a root Agent. */
+export interface AgentSubagentAddress {
+  parentSessionId: string;
+  childSessionId: string;
+  mode: "one-shot" | "continuable";
+}
+
 /**
  * Runtime-neutral bridge to the canonical agent session log. The desktop
  * implementation delegates to DSH; web/remote surfaces can provide the same
@@ -125,7 +132,7 @@ export interface AgentSessionsAdapter {
   }): Promise<{ sessionId: string; agentPreset?: string }>;
   history(
     sessionId: string,
-    options?: { beforeSeq?: number; maxMessages?: number },
+    options?: { beforeSeq?: number; maxMessages?: number; subagent?: AgentSubagentAddress },
   ): Promise<{
     events: AgentSessionHistoryEntry[];
     hasMore: boolean;
