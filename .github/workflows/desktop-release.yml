@@ -108,6 +108,7 @@ jobs:
             apps/desktop/dist/${{ matrix.target }}/Amiba-*
             apps/desktop/dist/${{ matrix.target }}/latest-*.yml
             apps/desktop/dist/${{ matrix.target }}/release-manifest.json
+            apps/desktop/dist/${{ matrix.target }}/installer-*
 
   release:
     needs: [plan, build]

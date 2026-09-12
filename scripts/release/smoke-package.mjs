@@ -13,7 +13,7 @@ const output = path.join(root, 'apps/desktop/dist', target);
 validateMetadata(output, target, version);
 function run(command, args, env = process.env, timeout = 120000) {
   const result = spawnSync(command, args, { encoding: 'utf8', env, timeout, maxBuffer: 4 * 1024 * 1024 });
-  if (result.error || result.status !== 0) throw new Error(`${command} failed: ${result.error?.message || result.stderr || result.stdout}`);
+  if (result.error || result.status !== 0) throw new Error(`${command} failed: ${result.error?.message || result.status}\n${result.stderr}\n${result.stdout}`);
   console.log(result.stdout.trim());
   return result.stdout;
 }
@@ -53,12 +53,22 @@ assert.equal(run(node, ['-p', "process.platform + '-' + process.arch"]).trim(), 
 const probe = `
   const assert = require('node:assert/strict');
   assert.equal(process.platform + '-' + process.arch, ${JSON.stringify(target)});
+  const timer = setTimeout(() => { console.error('PTY timed out'); process.exit(1); }, 15000);
+  console.log('Loading packaged PTY');
   const pty = require(${JSON.stringify(path.join(resources, 'app.asar/node_modules/node-pty'))});
+  console.log('Spawning packaged PTY');
   const terminal = pty.spawn(process.platform === 'win32' ? 'cmd.exe' : '/bin/echo', process.platform === 'win32' ? ['/c', 'echo amiba-pty-ok'] : ['amiba-pty-ok'], {cols: 80, rows: 24});
   let output = '';
-  const timer = setTimeout(() => { console.error('PTY timed out', output); process.exit(1); }, 15000);
+  console.log('PTY spawned');
   terminal.onData(data => { output += data; });
-  terminal.onExit(({exitCode}) => { clearTimeout(timer); assert.equal(exitCode, 0); assert.match(output, /amiba-pty-ok/); console.log(process.arch + ' amiba-pty-ok'); });
+  terminal.onExit(({exitCode}) => { clearTimeout(timer); assert.equal(exitCode, 0); assert.match(output, /amiba-pty-ok/); console.log(process.arch + ' amiba-pty-ok'); process.exit(0); });
 `;
-run(electron, ['-e', probe], { ...process.env, ELECTRON_RUN_AS_NODE: '1' });
+const probeFile = path.join(output, 'installer-pty-probe.cjs');
+fs.writeFileSync(probeFile, probe);
+try {
+  run(electron, [probeFile], { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, 45000);
+} catch (error) {
+  fs.writeFileSync(path.join(output, 'installer-pty-error.txt'), error.stack);
+  throw error;
+}
 console.log(`Verified ${target}: installer integrity, packaged Node, Electron native PTY`);

@@ -51,9 +51,18 @@ macOS 自动更新必须签名；面向公开分发还需 Apple Developer ID 和
 - `target=win32-x64`、`mode=release`、`publish_draft=true`：生成 Windows 发布包并上传草稿 Release，允许没有代码签名证书。
 - `target=all`、`mode=release`、`publish_draft=true`：三个架构发布包全部通过后，依次上传同一个草稿 Release。必须先配置 Mac 签名与公证 secrets。
 
+也可在本机触发云端 Windows 构建：
+
+```sh
+gh workflow run desktop-release.yml --repo iHeyTang/amiba --ref feat/amiba-distribution \
+  -f target=win32-x64 -f mode=release -f publish_draft=true
+```
+
+合并后将 `--ref` 改为 `main`。首次运行不需要本机 Windows 虚拟机。
+
 推送 `v<桌面 package.json 版本>` 标签会触发所有架构的 release 构建并上传草稿；版本不匹配会失败。当前验证分支 `feat/amiba-distribution` 的普通 push 自动执行 test 构建。
 
-构建后校验更新清单的版本、目标架构和 SHA-512，运行内置 Node 与 Electron 原生 PTY。Mac 额外校验 DMG 和 ZIP；Windows 在临时 CI 机器里静默安装 EXE 后检查安装结果。测试通过才上传产物。上传 Release 时先验证所有目标文件，再顺序上传，草稿绑定实际构建提交。
+构建后校验更新清单的版本、目标架构和 SHA-512，运行内置 Node 与 Electron 原生 PTY。Mac 额外校验 DMG 和 ZIP；Windows 在临时 CI 机器里静默安装 EXE 后检查安装结果。安装包生成后即保存 Artifacts，运行检查失败时也保留文件便于排查；只有检查通过才允许上传 Release。上传 Release 时先验证所有目标文件，再顺序上传，草稿绑定实际构建提交。
 
 仓库 Variables 的 `AMIBA_UPDATE_URLS` 可指定 CDN 下载目录；GitHub 下载源作为兜底。发布用 Secrets：Mac 的 `CSC_LINK`、`CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`；Windows 可选 `WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD`。
 
