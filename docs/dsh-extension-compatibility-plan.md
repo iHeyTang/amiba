@@ -1046,3 +1046,13 @@ pipelines retain mounted component state.
 - 未挂载输入器的草稿写入明确报错；这仍是与官方常驻会话草稿的差异。当前未注册 `useInput`，不制造空状态来伪装完整输入服务。
 - 验证：Shell provider/bridge 28 项、UI editor/pipeline 64 项通过；Shell 与 UI 类型检查通过。完整 Desktop 构建通过。真实插件经标准属性拿到 inputActions，并完成写入、提交以及旧命令成功后保留新草稿；图片、子会话续聊/停止、导航及 renderer 重载回归通过，输入区域卸载后原编辑器身份和卡片尺寸保持。
 - 日志：`/tmp/amiba-input-actions-tests.log`、`/tmp/amiba-input-actions-ui-tests.log`、`/tmp/amiba-input-actions-desktop-build.log`、`/tmp/amiba-input-actions-desktop-smoke.log`。
+
+
+### 官方附件展示入口（2026-09-13）
+
+- 声明并实际渲染 `conversation.input.attachments`（single/session-maybe），传递真实浏览器附件 File、DraftAttachmentId 和 previewUrl。原附件条、文件选择、编辑器及样式保留。
+- owner 的图片添加和移除回调使用原附件 hook。每次操作检查当前会话身份、只读、命令/引用处理锁和上传状态，旧会话回调不能修改新会话。空插件入口不添加包装元素。
+- 未提供没有根据的数量/大小限制；官方可选 dropLimits 保持缺省。普通文件仍通过原附件入口操作。
+- UI 附件入口与注册链路 18 项测试、Shell/UI 类型检查及完整 Desktop 构建通过。真实插件以标准 single 槽优先级覆盖官方默认组件，添加/读取/移除原始图片通过；卸载后恢复默认组件。默认官方文档 drop 与原输入框 drop 同时存在时只暂存一张图，同步上传门禁阻止重复添加。子会话续聊/停止、导航及 renderer 重载回归通过。
+- 首次桌面测试发现已有官方附件组件占用 priority 0，按框架规则将测试插件改为 priority -100；未修改框架冲突规则。最终日志 `/tmp/amiba-attachment-seat-smoke3.log`，截图 `amiba-official-attachment-seat.png` 已查看，原附件条和输入器保留。插件新增的预览区域属于附加展示。
+- useInput 的完整提供仍需按会话拥有草稿生命周期，不能用组件未挂载时的空值假装常驻输入状态。

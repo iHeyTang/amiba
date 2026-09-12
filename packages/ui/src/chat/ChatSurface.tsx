@@ -308,6 +308,7 @@ export interface ChatSurfaceProps {
      * is byte-identical to before.
      */
     inputOverlay?: ReactNode;
+    inputAttachments?: import("./Composer").ComposerAttachmentsRenderer;
     inputDock?: ReactNode;
     composerDock?: ReactNode;
     inputLeft?: ReactNode;
@@ -2067,6 +2068,7 @@ export default function ChatSurface({
       approvalModePicker
       planSeat={slots?.planSeat}
       inputOverlay={slots?.inputOverlay}
+      inputAttachments={slots?.inputAttachments}
       inputDock={slots?.inputDock}
       composerDock={slots?.composerDock}
       inputLeft={slots?.inputLeft}

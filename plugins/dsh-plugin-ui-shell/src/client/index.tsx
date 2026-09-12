@@ -754,6 +754,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "conversation.input.overlay": { kind: "list", scope: "session" },
           "conversation.input.dock": { kind: "list", scope: "session" },
           "conversation.composer.dock": { kind: "list", scope: "session" },
+          "conversation.input.attachments": { kind: "single", scope: "session-maybe" },
           "conversation.input.left": { kind: "list", scope: "session" },
           "conversation.input.right": { kind: "list", scope: "session" },
           // Official vocabulary: the KEYED per-tool call row, from

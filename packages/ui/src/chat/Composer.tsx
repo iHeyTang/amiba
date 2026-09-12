@@ -54,6 +54,7 @@ import type {
   AmibaComposerModelPickerOwner,
   ConversationInputModelOwnerProps,
   ConversationInputPlanOwnerProps,
+  ComposerAttachmentsOwner,
 } from "@amiba/extension-sdk";
 
 /**
@@ -99,6 +100,8 @@ export type ComposerModelPickerRenderer = (
  * no reserved space. Surfaces without a DSH plugin runtime (Quick-Ask) pass
  * no renderer and the same nothing renders.
  */
+export type ComposerAttachmentsRenderer = (owner: ComposerAttachmentsOwner) => ReactNode;
+
 export type ComposerPlanSeatRenderer = (
   owner: ConversationInputPlanOwnerProps,
 ) => ReactNode;
@@ -274,6 +277,7 @@ export interface ComposerProps {
    * (Quick-Ask) pass nothing and behave exactly as before.
    */
   inputOverlay?: ReactNode;
+  inputAttachments?: ComposerAttachmentsRenderer;
   inputDock?: ReactNode;
   composerDock?: ReactNode;
   inputLeft?: ReactNode;
@@ -446,6 +450,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       approvalModePicker,
       planSeat,
       inputOverlay,
+      inputAttachments,
       inputDock,
       composerDock,
       inputLeft,
@@ -681,6 +686,29 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         removeImage: id => { if (writable()) current()?.attachments?.removeDraftImage?.(id); },
       });
     }, [permissionSessionId, triggerRuntime, !!attachments]);
+
+    const attachmentSeatSession = permissionSessionId;
+    const attachmentSeatWritable = () => {
+      const binding = imageBindingRef.current;
+      return binding.sessionId === attachmentSeatSession && !!binding.attachments &&
+        !binding.disabled && !commandAttemptRef.current && !resolvingMentionRef.current;
+    };
+    const attachmentSeatCanAdd = () => attachmentSeatWritable() &&
+      !imageBindingRef.current.attachments?.attachmentBusy &&
+      !imageBindingRef.current.attachments?.attachmentUploading &&
+      (imageBindingRef.current.attachments?.canAddDraftImages?.() ?? true);
+    const attachmentSeat = inputAttachments?.({
+      attachments: attachments?.getDraftImages?.() ?? attachments?.draftImages ?? [],
+      canAcceptDrop: attachmentSeatCanAdd(),
+      onAddImages: files => {
+        if (!attachmentSeatCanAdd()) return;
+        const images = files.filter(file => file.type.startsWith("image/"));
+        if (images.length) void imageBindingRef.current.attachments?.addFiles(images);
+      },
+      onRemoveImage: id => {
+        if (attachmentSeatWritable()) imageBindingRef.current.attachments?.removeDraftImage?.(id);
+      },
+    });
 
     // Default canSubmit if not provided.
     const effectiveCanSubmit =
@@ -982,6 +1010,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           <ComposerAccessory />
           {topAffordance}
           {renderedChipRow}
+          {attachmentSeat}
           <div className="flex items-start">
             <div className="min-w-0 flex-1">
               <RichComposerEditor

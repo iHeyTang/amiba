@@ -217,6 +217,7 @@ export interface FullScreenChatViewProps {
      * seat, forwarded through ChatSurface to the internal Composer's card.
      */
     inputOverlay?: ReactNode;
+    inputAttachments?: import("./Composer").ComposerAttachmentsRenderer;
     inputDock?: ReactNode;
     composerDock?: ReactNode;
     inputLeft?: ReactNode;

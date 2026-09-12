@@ -125,3 +125,47 @@ describe("additive official input regions", () => {
     expect(view.container.innerHTML).toBe(baseline);
   });
 });
+
+
+describe("official attachment presentation seat", () => {
+  it("adds its presentation alongside native chips and forwards real browser descriptors", () => {
+    const addFiles = vi.fn(async () => {}), removeDraftImage = vi.fn();
+    const file = new File(["image"], "photo.png", { type: "image/png" });
+    const image = { kind: "image", id: "browser-id", file, previewUrl: "blob:preview" };
+    let owner: import("@amiba/extension-sdk").ComposerAttachmentsOwner;
+    const attachments = {
+      attachments: [], draftImages: [image], canAddDraftImages: () => true,
+      addFiles, removeDraftImage, fileInputProps: { type: "file" },
+    } as never;
+    const props = { value: "", onChange: () => {}, onSubmit: () => {}, attachments,
+      permissionSessionId: "a", chipRow: <span data-native-chip="" />,
+      inputAttachments: (next: typeof owner) => { owner = next; return <span data-plugin-attachments="" />; },
+    };
+    const { container, rerender } = render(<Composer {...props} />);
+    expect(owner!.attachments[0]).toBe(image);
+    expect(card(container).querySelector("[data-native-chip]")).not.toBeNull();
+    expect(card(container).querySelector("[data-plugin-attachments]")).not.toBeNull();
+    owner!.onAddImages([file]);
+    expect(addFiles).toHaveBeenCalledWith([file]);
+    owner!.onRemoveImage(image.id as never);
+    expect(removeDraftImage).toHaveBeenCalledWith(image.id);
+    const old = owner!;
+    rerender(<Composer {...props} permissionSessionId="b" />);
+    old.onAddImages([file]); old.onRemoveImage(image.id as never);
+    expect(addFiles).toHaveBeenCalledTimes(1);
+    expect(removeDraftImage).toHaveBeenCalledTimes(1);
+    rerender(<Composer {...props} permissionSessionId="b" disabled />);
+    expect(owner!.canAcceptDrop).toBe(false);
+    owner!.onAddImages([file]); owner!.onRemoveImage(image.id as never);
+    expect(addFiles).toHaveBeenCalledTimes(1);
+    expect(removeDraftImage).toHaveBeenCalledTimes(1);
+  });
+
+  it("costs no markup when the registered renderer is empty", () => {
+    const props = { value: "", onChange: () => {}, onSubmit: () => {} };
+    const { container, rerender } = render(<Composer {...props} />);
+    const before = container.innerHTML;
+    rerender(<Composer {...props} inputAttachments={() => null} />);
+    expect(container.innerHTML).toBe(before);
+  });
+});

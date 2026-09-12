@@ -791,3 +791,5 @@ export type ConversationInputState = OwnerOf<"conversation.input.left">["input"]
 export type ConversationInputZoneOwner = OwnerOf<"conversation.input.left">;
 
 export type ConversationInputActions = PropsRuntime<"conversation.input.left">["inputActions"];
+
+export type ComposerAttachmentsOwner = OwnerOf<"conversation.input.attachments">;

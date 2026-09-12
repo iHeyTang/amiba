@@ -376,6 +376,8 @@ try {
       await wait(() => evaluate("document.querySelectorAll('[data-compat-input-region]').length===4"));
       assert.ok(await evaluate("(()=>{const card=window.__regionCard;const region=name=>document.querySelector('[data-compat-input-region=\"'+name+'\"]');const branch=(el,parent)=>{while(el&&el.parentElement!==parent)el=el.parentElement;return el};const above=region('conversation.input.dock'),below=region('conversation.composer.dock'),left=region('conversation.input.left'),right=region('conversation.input.right');const send=Array.from(card.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.startsWith('Send'));return branch(above,card.parentElement)&&branch(below,card.parentElement)&&!card.contains(above)&&!card.contains(below)&&(above.compareDocumentPosition(card)&Node.DOCUMENT_POSITION_FOLLOWING)&&(card.compareDocumentPosition(below)&Node.DOCUMENT_POSITION_FOLLOWING)&&card.contains(left)&&card.contains(right)&&branch(right,send.parentElement)?.nextElementSibling===send&&window.__regionEditor===card.querySelector('[contenteditable]')})()"));
       assert.ok(await evaluate("window.__regionNames.every(name=>window.__regionOwners[name].sessionId===window.__compatSessionId&&window.__regionOwners[name].queueMatches)"));
+      await evaluate("window.__attachmentSeatOff=window.__probeCtx.slots.register({name:'conversation.input.attachments',id:'compat-attachment-seat',priority:-100},props=>{window.__attachmentSeatOwner=props;return window.__probeCreateElement('span',{'data-compat-attachment-seat':''},'Attachment extension')});void 0");
+      await wait(() => evaluate("!!document.querySelector('[data-composer-card] [data-compat-attachment-seat]')&&!!window.__attachmentSeatOwner"));
       await writeFile(path.join(tmpdir(), "amiba-input-regions.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
       await evaluate("window.__wholeInputSource=window.__probeCtx.composerInputs.inputStateSource(window.__compatSessionId);window.__wholeInputObserved=[];window.__wholeInputOff=window.__wholeInputSource.subscribe(()=>{const s=window.__wholeInputSource.getSnapshot();window.__wholeInputObserved.push(s?{draft:s.draft,phase:s.phase,imageIds:s.imageIds,queue:s.queue}:null)});void 0");
       assert.ok(await evaluate("(()=>{const state=window.__wholeInputSource.getSnapshot();return state!==undefined&&state.draft===window.__initialInput.draft&&state.imageIds.length===0&&state.queue===window.__probeCtx.sessions.binding(window.__compatSessionId).session.getSnapshot().queue&&state===window.__wholeInputSource.getSnapshot()})()"));
@@ -472,6 +474,15 @@ try {
       await evaluate("window.__draftImageRegistry.createDraftImages=window.__createDraftImages;void 0");
       console.log("Native image upload registered the original browser File and released its compatible draft registry entry after successful submission");
       await evaluate("window.__imageSourceOff();void 0");
+      if (process.argv.includes("--input-state")) {
+        await wait(() => evaluate("window.__attachmentSeatOwner.canAcceptDrop"));
+        await evaluate("window.__attachmentSeatOwner.onAddImages([window.__extensionImage.file]);void 0");
+        await wait(() => evaluate("window.__attachmentSeatOwner.attachments.length===1&&window.__attachmentSeatOwner.canAcceptDrop"));
+        assert.ok(await evaluate("window.__attachmentSeatOwner.attachments[0].file===window.__extensionImage.file&&window.__attachmentSeatOwner.attachments[0].previewUrl.startsWith('blob:')"));
+        await evaluate("window.__attachmentSeatOwner.onRemoveImage(window.__attachmentSeatOwner.attachments[0].id);void 0");
+        await wait(() => evaluate("window.__attachmentSeatOwner.attachments.length===0"));
+        console.log("Official attachment seat received original browser images and added/removed files through the native upload path");
+      }
       console.log("Official image command received original staged bytes through native composer and consumed its draft attachments");
       if(process.argv.includes("--input-state")) {
         assert.deepEqual(await evaluate("Array.from(new Set(window.__inputObserved.filter(Boolean).map(s=>s.phase))).sort()"), ["adjudicating","claimed","plain","submitting"]);
@@ -485,10 +496,20 @@ try {
       }
     }
     if (process.argv.includes("--input-state")) {
-      await evaluate("window.__regionOffs.forEach(off=>off());void 0");
+      await evaluate("window.__regionOffs.forEach(off=>off());window.__attachmentSeatOff();void 0");
       await wait(() => evaluate("document.querySelectorAll('[data-compat-input-region]').length===0"));
       assert.ok(await evaluate("(()=>{const card=window.__regionCard;const rect=card.getBoundingClientRect();return card.isConnected&&card.querySelector('[contenteditable]')===window.__regionEditor&&card.className===window.__regionBaseline.className&&Math.abs(rect.height-window.__regionBaseline.height)<1&&Math.abs(rect.width-window.__regionBaseline.width)<1})()"));
       console.log("All four official input regions rendered live native owners in their specified positions; unload preserved the original editor, card styles and dimensions");
+      if (process.argv.includes("--command-images")) {
+        await evaluate("(()=>{const transfer=new DataTransfer();transfer.items.add(window.__extensionImage.file);window.__regionCard.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer}))})();void 0");
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId)?.length===1&&window.__probeCtx.composerInputs.addInputImages(window.__compatSessionId,[])"));
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId).length"), 1);
+        await writeFile(path.join(tmpdir(), "amiba-official-attachment-seat.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+        await evaluate("window.__officialInputActions.removeImage(window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId)[0].id);void 0");
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId).length===0"));
+        console.log("Default official attachment component and native drop handler staged one image without duplicate upload");
+      }
+
     }
     if (process.argv.includes("--child-continuation")) {
       await mkdir(path.join(profile, "continuable"), { recursive: true });
