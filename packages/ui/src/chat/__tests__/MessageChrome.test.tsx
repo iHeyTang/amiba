@@ -1547,3 +1547,34 @@ it("keeps final file mentions scoped through condensed tool/assistant rendering"
   expect(screen.getByRole("button",{name:"Final file"})).toBeInTheDocument();
   expect(resolve).not.toHaveBeenCalledWith(3,"file.txt");
 });
+
+
+it("retains closing-message file links inside folded narration without altering its layout", () => {
+  const message:UiMessage={uiId:"folded-closing",role:"assistant",content:"First `file.txt`Last `file.txt`",assistantTimeline:[
+    {kind:"text",id:"first",text:"First `file.txt`",runtimeSeq:12},
+    {kind:"reasoning",id:"thinking",text:"thinking"},
+    {kind:"text",id:"last",text:"Last `file.txt`",runtimeSeq:12},
+  ]};
+  const {container,rerender}=render(<Bubble m={message}/>);
+  expandProcess();
+  const baseline=container.innerHTML;
+  rerender(<WorkspaceTextMentionsContext.Provider value={()=>undefined}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider>);
+  expandProcess();
+  expect(container.innerHTML).toBe(baseline);
+  const resolve=(seq:number,value:string)=>seq===12 && value==="file.txt"?{open:()=>{},label:"Open final file",title:"file.txt"}:undefined;
+  rerender(<WorkspaceTextMentionsContext.Provider value={resolve}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider>);
+  expect(screen.getAllByRole("button",{name:"Open final file"})).toHaveLength(2);
+});
+
+
+it("keeps prose file links after inline thinking cleanup and leaves extracted thinking inert", () => {
+  const text="Before `one.txt`<think>private `secret.txt`</think>\n\n\nAfter `two.txt`";
+  const message:UiMessage={uiId:"thought-tags",role:"assistant",content:text,assistantTimeline:[{kind:"text",id:"final",text,runtimeSeq:40}]};
+  const resolver=(seq:number,value:string)=>seq===40?{open:()=>{},label:"Open "+value,title:value}:undefined;
+  const {container}=render(<WorkspaceTextMentionsContext.Provider value={resolver}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider>);
+  expect(screen.getByRole("button",{name:"Open one.txt"})).toBeInTheDocument();
+  expect(screen.getByRole("button",{name:"Open two.txt"})).toBeInTheDocument();
+  expandProcess();
+  for(const button of Array.from(container.querySelectorAll('button[aria-expanded="false"]')))fireEvent.click(button);
+  expect(screen.queryByRole("button",{name:"Open secret.txt"})).toBeNull();
+});

@@ -1,4 +1,4 @@
-import { joinTextSources, sliceTextSources, timelineTextSource, type TextSourceRange } from "../text-source-ranges";
+import { joinTextSources, sliceTextSources, timelineTextSource, thinkingBodySource, type TextSourceRange } from "../text-source-ranges";
 import { WorkspaceMarkdown } from "../workspace-file-links";
 import { CompactionRow } from "./CompactionRow";
 import type { CompactionProgress } from "@amiba/app-runtime/protocol";
@@ -446,7 +446,7 @@ export function Bubble({
         )}
         {hasBody && (
           <WorkspaceMarkdown
-            sources={sliceTextSources(joinTextSources((m.assistantTimeline??[]).filter(item=>item.kind==="text").map(timelineTextSource),""),trace.bodyText)}
+            sources={sliceTextSources(thinkingBodySource(joinTextSources((m.assistantTimeline??[]).filter(item=>item.kind==="text").map(timelineTextSource),"")),trace.bodyText)}
             components={chatMarkdownComponents}
             mode={m.streaming ? "streaming" : "static"}
             parseIncompleteMarkdown
@@ -753,6 +753,7 @@ type TurnTraceDetail =
       kind: "narration";
       id: string;
       text: string;
+      sources?: TextSourceRange[];
     }
   | {
       kind: "tool";
@@ -962,7 +963,8 @@ function ExecutionDisclosure({
             }
             if (detail.kind === "narration") {
               return (
-                <Streamdown
+                <WorkspaceMarkdown
+                  sources={detail.sources}
                   components={chatMarkdownComponents}
                   key={detail.id}
                   mode="static"
@@ -970,7 +972,7 @@ function ExecutionDisclosure({
                   className="chat-md chat-md--reasoning break-words px-1.5 text-xs text-muted-foreground/85"
                 >
                   {detail.text}
-                </Streamdown>
+                </WorkspaceMarkdown>
               );
             }
             if (detail.kind === "tool") {
@@ -1229,7 +1231,7 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
     const body = splitThinkingFromBody(text).body;
     if (!body.trim()) return;
     flushExecution();
-    flow.push({ kind: "text", id, text: body, sources: sliceTextSources({text,sources},body) });
+    flow.push({ kind: "text", id, text: body, sources: sliceTextSources(thinkingBodySource({text,sources}),body) });
   };
   const appendTool = (id: string, toolCallId: string) => {
     if (seenTools.has(toolCallId)) return;
@@ -1321,7 +1323,7 @@ function InterleavedAssistantFlow({
     (segment) =>
       segment.kind === "execution"
         ? segment.details
-        : segment.kind === "text" ? [{ kind: "narration" as const, id: segment.id, text: segment.text }] : [],
+        : segment.kind === "text" ? [{ kind: "narration" as const, id: segment.id, text: segment.text, sources: segment.sources }] : [],
   );
   processDetails.push(
     ...(executionNotices.get(message.uiId) ?? []).map((notice) => ({

@@ -526,3 +526,21 @@ and file-link styles.
   interrupted synthetic final nodes with no assistant/message event; a dedicated
   historical/reopen Desktop check; custom source-transforming Markdown providers;
   and standalone Web/remote-host behavior. Overall compatibility stays open.
+
+### Folded narration and thinking markup source mapping
+
+Finalized prose retains its exact source ranges when displayed inside the native
+execution disclosure. Thinking extraction now reports retained raw slices to
+the source mapper; the existing extracted body, whitespace rules, disclosure
+classes and visible text are unchanged. Adjacent ranges merge only when they
+share a source sequence. Extracted reasoning receives no prose attribution.
+
+- 51 UI tests passed, including unchanged DOM with an empty provider, folded
+  narration links, thinking removal, repeated blocks and separate source events.
+  The existing thinking helper regression and Shell typecheck passed.
+- Full production Desktop build and installed-plugin smoke passed. The smoke
+  opens a real produced file from the final prose, expands the native process
+  disclosure and verifies both source-mapped links. The screenshot was reviewed
+  with the disclosure expanded and actual file contents open in the workbench.
+- Synthetic interrupted finals, historical/reopen Desktop coverage, custom
+  Markdown transforms and standalone Web/remote behavior remain open.
