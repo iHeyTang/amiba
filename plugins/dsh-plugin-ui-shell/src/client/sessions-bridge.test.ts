@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 
 import {
   createSessionsBridge,
@@ -84,6 +86,29 @@ const flushMicrotasks = () =>
   new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("sessions selection bridge", () => {
+  it("forwards the actual pinned openSubagent method from Home and restores intent on failure", () => {
+    const source = readFileSync(createRequire(import.meta.url).resolve("@deepseek-ai/dsh-client-runtime/client"), "utf8");
+    const body = source.match(/\n\t{3}openSubagent\(address\) \{([\s\S]*?)\n\t{3}\}/)?.[1];
+    expect(body).toBeDefined();
+    const openSubagent = new Function("address", body!);
+    const official = officialSessionsDouble({ ids: ["parent"] });
+    official.retainAddress("child");
+    const onExternalOpen = vi.fn();
+    const bridge = createSessionsBridge(official.face, onExternalOpen);
+    const manager = { selectSubagent: (address: { childSessionId: string }) => official.face.open(address.childSessionId) };
+    Object.assign(official.face, { manager });
+    const address = official.face.subagentAddress!("child")!;
+    openSubagent.call(official.face, address);
+    expect(onExternalOpen).toHaveBeenCalledWith("child", address);
+    expect(official.current).toBe("child");
+    const before = official.face.lastOpenRequest;
+    manager.selectSubagent = () => { throw new Error("not a healthy catalog child"); };
+    expect(() => openSubagent.call(official.face, address)).toThrow("not a healthy");
+    expect(official.face.lastOpenRequest).toBe(before);
+    expect(onExternalOpen).toHaveBeenCalledTimes(1);
+    bridge.dispose();
+  });
+
   it("forwards the retained direct-parent address when a plugin opens a child", () => {
     const official = officialSessionsDouble({ ids: ["parent"], current: "parent" });
     official.retainAddress("child");

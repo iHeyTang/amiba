@@ -383,7 +383,13 @@ try {
       await wait(() => evaluate("document.body.textContent.includes('COMPAT_CHILD_REPLY')"));
       await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
       await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY')"));
-      console.log("Real catalog child navigation, transcript and parent return verified");
+      await evaluate("window.__probeCtx.sessions.clear();void 0");
+      await wait(() => evaluate("window.__probeCtx.sessions.list.getSnapshot().current===undefined && !document.body.textContent.includes('COMPAT_TURN_REPLY')"));
+      await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:window.__compatSessionId,childSessionId:'compat-child',mode:'one-shot'});void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_CHILD_REPLY') && window.__probeCtx.sessions.list.getSnapshot().current==='compat-child'"));
+      await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY')"));
+      console.log("Real catalog child navigation, Home-origin open, transcript and parent return verified");
     }
 
     const beforeClearIds = await evaluate("window.__probeCtx.sessions.list.getSnapshot().ids");

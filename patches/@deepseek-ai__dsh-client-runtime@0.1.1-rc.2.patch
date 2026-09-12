@@ -1,8 +1,8 @@
 diff --git a/lib/client.js b/lib/client.js
-index ba3cb21f72709cc91a733d4080266e452d6435d5..c1ada61653d65e68d14bf32ee33b26fbeb082dd9 100644
+index ba3cb21f72709cc91a733d4080266e452d6435d5..a6dd8b94978e5ea4f859375cd377f47dc8180968 100644
 --- a/lib/client.js
 +++ b/lib/client.js
-@@ -8964,8 +8964,17 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
+@@ -8964,15 +8964,31 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
  			* Select a listed or retained catalog-addressed session as current.
  			* @param id - listed or addressed session id.
  			*/
@@ -22,7 +22,22 @@ index ba3cb21f72709cc91a733d4080266e452d6435d5..c1ada61653d65e68d14bf32ee33b26fb
  			}
  			/**
  			* Open a healthy catalog child through its direct-parent address.
-@@ -9009,6 +9018,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
+ 			* @param address - catalog-derived parent and child ids.
+ 			*/
+ 			openSubagent(address) {
+-				this.manager.selectSubagent(address);
++				const previous = this.lastOpenRequest;
++				this.lastOpenRequest = { sessionId: address.childSessionId, source: "explicit" };
++				try {
++					this.manager.selectSubagent(address);
++				} catch (error) {
++					this.lastOpenRequest = previous;
++					throw error;
++				}
+ 			}
+ 			/**
+ 			* Resolve an already discovered direct-parent address without opening it.
+@@ -9009,6 +9025,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
  			* per the masked-gap contract until the next open() moves the stage.
  			*/
  			clear() {
@@ -30,7 +45,7 @@ index ba3cb21f72709cc91a733d4080266e452d6435d5..c1ada61653d65e68d14bf32ee33b26fb
  				this.manager.clearSelection();
  			}
  			/**
-@@ -9897,7 +9907,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
+@@ -9897,7 +9914,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
  					state = "connecting";
  					this.connectWorkspace(target).then((sessionId) => {
  						if (disposed) return;

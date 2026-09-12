@@ -855,3 +855,21 @@ pipelines retain mounted component state.
 - This fixture verifies persisted event reading, not actual model execution.
   Home-origin openSubagent intent, read-only controls, cold child reload and real
   continuation remain open.
+
+### Home-origin explicit subagent navigation (2026-09-12)
+
+- Extended the pinned runtime's existing navigation-intent patch to public
+  openSubagent. It marks the child before synchronous selection notification,
+  and restores the previous marker if catalog validation throws. Startup/restore
+  selection remains unmarked and therefore retains Amiba's Home behavior.
+- All 23 bridge tests and shell typecheck passed. The added test executes the
+  actual installed patched method against the bridge, covering Home forwarding
+  with its retained parent address and rollback on selection failure.
+- Updated --child-navigation Desktop smoke with clear-to-Home then public
+  openSubagent and parent return. Production build passed
+  (`/tmp/amiba-child-home-build.log`), including managed patch-cache invalidation
+  and locked dependency installation. Full --compat --reopen-prose
+  --child-navigation passed (`/tmp/amiba-child-home-smoke.log`), including the
+  real Home-origin child open and existing compatibility regression checks.
+  Patch installation skipped lifecycle scripts and updated the lockfile patch hash.
+  Read-only controls, cold child reload and actual continuation remain open.
