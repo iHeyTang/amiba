@@ -917,18 +917,9 @@ try {
     await call("Input.insertText", { text: "COMPAT_COLD_FOLLOWUP" });
     await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
     await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
-    await wait(() => evaluate(`document.body.textContent.includes('parent session "compat-continuable-parent" is not live')`));
-    console.log("Cold child prompt correctly reported the official live-parent requirement");
-    await writeFile(path.join(profile, "cold-resume-parent"), "resume-existing-parent");
-    await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_COLD_PARENT_RESUMED'})")).entries.length > 0);
-    await evaluate("window.__probeCtx.sessions.refreshSubagents('compat-continuable-parent')");
-    await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0).focus();void 0");
-    await call("Input.insertText", { text: "COMPAT_COLD_FOLLOWUP" });
-    await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
-    await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
     await wait(() => evaluate("document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_COLD_FOLLOWUP')"));
     await wait(() => evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
-    console.log("Cold Host process replacement restored continuable child history and executed a native follow-up after the real persisted parent was resumed");
+    console.log("Cold Host process replacement restored continuable child history and native submit automatically recovered its persisted parent through the configured official resolver");
   }
   await evaluate("window.__probePoll=setInterval(()=>window.amiba.agentDiagnostics.status().catch(()=>{}),50)");
   cli.kill("SIGINT");

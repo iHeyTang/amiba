@@ -1165,3 +1165,13 @@ pipelines retain mounted component state.
 - 首次完整续聊失败的确切原因来自实际 npm rc.2 dsh-host-apiproxy/lib/index.js 的 subagent.prompt：ctx.agents.get(parentSessionId) 缺失时返回 subagent-parent-unavailable。它要求直接父 Agent 已驻留，不会在此入口自动恢复父会话。错误已通过原输入器展示，不能改成成功或绕过父子归属检查。
 - 测试接着通过 ctx.agents.resume({resumeSessionId:原父ID,agentOptions:原测试模型配置}) 恢复同一个已持久化父会话，未新建父/子会话、未注入回复。再次通过原输入框发送后，官方 subagents.coldResume 从原子会话描述恢复运行实例，测试模型生成 COMPAT_CONTINUABLE_REPLY COMPAT_COLD_FOLLOWUP。该结果证明条件满足后可冷恢复续聊；产品的自动父恢复入口、配置恢复及并发恢复管理仍需适配，不将测试端恢复父会话当成生产能力已补齐。
 - 初次日志 /tmp/amiba-child-cold-restart-smoke.log 暴露目录地址未发现；第二次 /tmp/amiba-child-cold-restart-smoke2.log 记录父 Agent 不驻留的真实错误。最终 /tmp/amiba-child-cold-restart-smoke3.log 退出 0，包含上述父恢复后的真实续聊及原有完整兼容回归、插件卸载/原配置保留。本轮只增加验证脚本及文档，复用上一轮已验证的生产构建。
+
+
+### 原发送流程中的直接父会话恢复（2026-09-13）
+
+- prepareSubmit 在既有会话归属/轮换准备完成后，检查目标会话的持久化头与自身日志后缀。普通会话和未持久化的新会话走原路径；仅 version:2、mode:continuable 的子会话尝试恢复日志头指定的直接父会话，跳过 fork seed 中祖先的描述符。
+- 已驻留父会话直接复用，包括仍由上层子代理拥有的父会话。冷父会话交给当前 Host 已配置的 typert.lookups.get('agent').resolve，复用官方 ApiProxy 的预设日志恢复、并发复用、缺失身份拒绝及子会话归属限制。不新建解析器、不调用 session.create、不猜测 cwd、模型或父会话 ID。
+- 原发送准备接口仍返回原目标 ID；准备失败沿用原输入器的消息/附件恢复路径。父会话本身也是冷子会话时，官方 generic lookup 的 agent-busy 归属限制仍保留，不能把它伪装成普通根 Agent；该层级的 owner 恢复另需适配。
+- Host 版 dsh-api-remotes 的直接类型导入会把 Host sessions 声明并入本包 Client 的 Context 类型，导致 SessionStore 与 Client session API 冲突；已移除该导入，改为读取实际服务的窄接口。没有修改官方类型声明或 Client 会话能力来消除报错。
+- 9 项准备逻辑测试通过（/tmp/amiba-parent-recovery-tests2.log），覆盖真实身份传递、已驻留父复用、一次性/未知版本/祖先描述符跳过、普通新会话、存储错误、缺失 lookup、自指父身份及归属拒绝。Shell 类型检查通过（/tmp/amiba-parent-recovery-types2.log）。冷重启探针移除测试端 agents.resume，改为要求原生发送流程独立恢复父会话并续聊。
+- 完整 Desktop 构建通过（/tmp/amiba-parent-recovery-build.log）；最终组合桌面回归 /tmp/amiba-parent-recovery-smoke.log 退出 0。真实 Host PID 更换并刷新 renderer 后，测试未调用 agents.resume，也未创建父/子会话；原输入框发送触发生产 prepareSubmit 自动恢复普通根父会话，子会话返回真实新回复。一次性子会话恢复、原有命令/图片/输入/轨迹/Cordis/文件/配置/插件生命周期均通过，UI 结构和样式未改。

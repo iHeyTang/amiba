@@ -33,15 +33,8 @@ export function continuableChildFixture(root, profile) {
     const registration=ctx.llm.registerAdapter(['compat-local'],new FixtureAdapter());
     ctx.effect(()=>()=>registration());
     let started=false;
-    let parentResumed=false;
     ctx.effect(()=>{
       const watcher=watch(${JSON.stringify(profile)},()=>{
-        if(!parentResumed && existsSync(${JSON.stringify(path.join(profile, 'cold-resume-parent'))})) {
-          parentResumed=true;
-          void ctx.agents.resume({resumeSessionId:'compat-continuable-parent',agentOptions:{provider:'compat-local',model:'fixture'}})
-            .then((parent:any)=>{ctx.effect(()=>()=>parent.dispose());console.log('AMIBA_PROBE_COLD_PARENT_RESUMED');})
-            .catch((error:any)=>console.error('AMIBA_PROBE_COLD_PARENT_ERROR',error));
-        }
         if(started || existsSync(${JSON.stringify(path.join(profile, 'cold-restart'))}) || !existsSync(${JSON.stringify(path.join(profile, 'continuable-create'))}))return;
         started=true;
         void (async()=>{
