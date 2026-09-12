@@ -562,3 +562,65 @@ describe("enter adjudication attachment envelope", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });
+
+
+describe("asynchronous input adjudication lifetime", () => {
+  it("ignores a late claim without unlocking a newer pending submission", async () => {
+    const controller=controllerDouble(fixtureSource());
+    let oldSettle!:(result:PickOutcome)=>void;
+    let newSettle!:(result:PickOutcome)=>void;
+    const adjudicate=vi.spyOn(controller,"adjudicate")
+      .mockImplementationOnce(()=>new Promise(resolve=>{oldSettle=resolve;}))
+      .mockImplementationOnce(()=>new Promise(resolve=>{newSettle=resolve;}))
+      .mockResolvedValue("handled");
+    const submitClaim=vi.fn(async()=>({kind:"success" as const}));
+    const runtime={...runtimeFor(controller),submitClaim};
+    const editDraft={current:(_text:string)=>{}};
+    render(<ControlledComposer initial="/old" sessionId="s1" runtime={runtime} controller={controller} onSubmit={()=>{}} editDraft={editDraft}/>);
+    await waitFor(()=>expect(controller.tracked.length).toBeGreaterThan(0));
+    const click=()=>act(()=>screen.getByRole("button",{name:/send/iu}).click());
+    click();
+    await waitFor(()=>expect(adjudicate).toHaveBeenCalledTimes(1));
+    act(()=>editDraft.current("/new words"));
+    click();
+    await waitFor(()=>expect(adjudicate).toHaveBeenCalledTimes(2));
+    await act(async()=>oldSettle({claim:{token:"/new ",submit:async()=>({kind:"success"})}}));
+    click();
+    expect(adjudicate).toHaveBeenCalledTimes(2);
+    expect(submitClaim).not.toHaveBeenCalled();
+    await act(async()=>newSettle("handled"));
+    click();
+    await waitFor(()=>expect(adjudicate).toHaveBeenCalledTimes(3));
+  });
+
+  it.each(["draft", "session", "unmount"] as const)("abandons old adjudication after %s changes", async (change) => {
+    const controller=controllerDouble(fixtureSource());
+    let settle!:(outcome:PickOutcome)=>void;
+    const adjudicate=vi.spyOn(controller,"adjudicate").mockImplementationOnce(()=>new Promise(resolve=>{settle=resolve;})).mockResolvedValue("handled");
+    const onSubmit=vi.fn();
+    const submitClaim=vi.fn(async()=>({kind:"success" as const}));
+    const runtime={...runtimeFor(controller),submitClaim};
+    const valueRef={current:""};
+    const editDraft={current:(_text:string)=>{}};
+    const props={initial:"/old",runtime,controller,onSubmit,valueRef,editDraft};
+    const {rerender,unmount}=render(<ControlledComposer {...props} sessionId="s1"/>);
+    await waitFor(()=>expect(controller.tracked.length).toBeGreaterThan(0));
+    act(()=>screen.getByRole("button",{name:/send/iu}).click());
+    await waitFor(()=>expect(adjudicate).toHaveBeenCalledOnce());
+    const signal=adjudicate.mock.calls[0][1];
+    if(change==="unmount") unmount();
+    else {
+      if(change==="session") rerender(<ControlledComposer {...props} sessionId="s2"/>);
+      act(()=>editDraft.current("/new"));
+    }
+    expect(signal.aborted).toBe(true);
+    await act(async()=>settle(undefined));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(submitClaim).not.toHaveBeenCalled();
+    if(change!=="unmount") {
+      expect(valueRef.current).toBe("/new");
+      act(()=>screen.getByRole("button",{name:/send/iu}).click());
+      await waitFor(()=>expect(adjudicate).toHaveBeenCalledTimes(2));
+    }
+  });
+});

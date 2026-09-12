@@ -66,14 +66,15 @@ export async function expandMentionsAsync(
   value: string,
   providers: TriggerProvider[],
   resolver?: ReferenceResolver,
+  signal: AbortSignal = new AbortController().signal,
 ): Promise<string> {
+  signal.throwIfAborted()
   const byType = new Map<MentionType, TriggerProvider>()
   for (const provider of providers) {
     if (provider.ownsType && !byType.has(provider.ownsType)) {
       byType.set(provider.ownsType, provider)
     }
   }
-  const attempt = new AbortController()
   const chunks = await Promise.all(parseTokens(value).map(async (part) => {
     if (part.kind === "text") return part.text
     const reference = referenceOf(part.mention)
@@ -83,7 +84,7 @@ export async function expandMentionsAsync(
       return resolver.serializeReference(
         reference.source,
         reference.ref,
-        attempt.signal,
+        signal,
       )
     }
     const provider = byType.get(part.mention.type)
@@ -96,5 +97,6 @@ export async function expandMentionsAsync(
     }
     return provider?.serialize ? provider.serialize(part.mention) : part.raw
   }))
+  signal.throwIfAborted()
   return chunks.join("")
 }

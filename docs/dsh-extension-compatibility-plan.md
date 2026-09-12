@@ -928,3 +928,10 @@ pipelines retain mounted component state.
 - 先复现 0 张及 2 张图片的两项失败，再补充真实图片数量；普通文件不计入该数量。公共结构类型直接引用官方 source 回调参数，避免再次把必需字段漏掉。24 项相关测试与 UI 类型检查通过。
 - 完整输入服务的后续约束：官方 `SessionProvideChannel` 拒绝同名 hook/prop 的重复提供者；现有 `input` / `inputActions` 来自 ui-conversation 的 InputHub。完整桥接必须接到该唯一提供者及真实编辑器状态，不能叠加第二套同名提供者或只提供空快照。
 - 完整 Desktop 构建通过；`/tmp/amiba-input-envelope-smoke.log` 的 `--compat --command-images` 退出 0，真实官方 source 在 `matchEnter` 阶段收到 `{images:1}`，随后命令仍收到原图字节。既有完整兼容 smoke 同轮通过，未修改布局或 CSS。
+
+### 输入扩展异步提交的取消与过期结果（2026-09-13）
+
+- 先复现修改草稿、切换会话和卸载输入器后的三个失败用例：旧 adjudication 的 AbortSignal 未取消，返回 undefined 后仍可能走普通发送，晚返回的 claim 也可能进入新的草稿。
+- 原输入器现在为判定与引用展开持有同一个提交 AbortController。草稿、会话、禁用状态或附件改变以及卸载时，取消旧提交并释放该提交的锁；旧结果、异常和 finally 均不会覆盖或解锁后续新提交。已经进入命令执行的提交仍按原成功/失败结算规则处理。
+- `expandMentionsAsync` 接受可选外部 signal 并传给官方 reference codec；开始前与展开后检查取消，拒绝忽略取消的插件晚返回结果。未传 signal 的既有调用仍可用；普通资源解析行为保留。
+- 32 项输入管线、原图序列化和引用展开测试，以及 UI 类型检查通过。包括旧 claim 在新提交等待期间返回仍不接管新草稿、旧 finally 不解锁新提交、已取消的请求不调用 codec。此次是状态和接口回归验证，未重复完整桌面构建/烟测；未修改 CSS 或布局。

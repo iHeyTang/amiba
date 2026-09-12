@@ -509,12 +509,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     //   3. official Enter adjudication for a `/`-leading draft,
     //   4. ordinary send with `@[...]` expansion.
     // Abort / stop / queue branches do NOT route through here.
-    const resolvingMentionRef = useRef(false);
+    const resolvingMentionRef = useRef<AbortController | null>(null);
     const commandAttemptRef = useRef(false);
     const currentDraftRef = useRef({ value, sessionId: permissionSessionId });
     currentDraftRef.current = { value, sessionId: permissionSessionId };
+    useEffect(() => () => {
+      const attempt = resolvingMentionRef.current;
+      if (!attempt) return;
+      attempt.abort();
+      resolvingMentionRef.current = null;
+      trigger.setAttemptInFlight(false);
+    }, [value, permissionSessionId, disabled, attachments?.attachments]);
     const handleSend = useCallback(async () => {
-      if (disabled || commandAttemptRef.current) return;
+      if (disabled || commandAttemptRef.current || resolvingMentionRef.current) return;
       const handled = routeSubmit(value, {
         send: () => {},
         ctx: slashUiActions ?? {},
@@ -563,8 +570,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         },
       });
       if (handled) return; // command claim or UI action took it, don't send
-      if (resolvingMentionRef.current) return;
-      resolvingMentionRef.current = true;
+      const attempt = new AbortController();
+      resolvingMentionRef.current = attempt;
+      trigger.setAttemptInFlight(true);
       try {
         // Enter adjudication: give every registered source its `matchEnter`
         // turn before the draft becomes an ordinary message. Only the
@@ -573,21 +581,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         const controller = trigger.controller;
         const trimmed = value.trim();
         if (controller !== undefined && trimmed.startsWith("/")) {
-          const attempt = new AbortController();
-          trigger.setAttemptInFlight(true);
           let outcome;
           try {
             outcome = await controller.adjudicate(trimmed, attempt.signal, {
               images: attachments?.attachments.filter((item) => item.kind === "image").length ?? 0,
             });
           } catch (error) {
+            if (attempt.signal.aborted) return;
             setCommandNotice(
               error instanceof Error ? error.message : String(error),
             );
             return;
-          } finally {
-            trigger.setAttemptInFlight(false);
           }
+          if (attempt.signal.aborted) return;
           if (outcome !== undefined) {
             if (outcome !== "handled" && "claim" in outcome) {
               trigger.claims.begin(outcome.claim);
@@ -601,17 +607,24 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             value,
             providerRegistry.all,
             trigger.resolver,
+            attempt.signal,
           );
         } catch (error) {
+          if (attempt.signal.aborted) return;
           setCommandNotice(
             error instanceof Error ? error.message : String(error),
           );
           return;
         }
+        if (attempt.signal.aborted) return;
         setCommandNotice(null);
         onSubmit(finalText);
       } finally {
-        resolvingMentionRef.current = false;
+        // A canceled provider may settle after a new submission has begun.
+        if (resolvingMentionRef.current === attempt) {
+          resolvingMentionRef.current = null;
+          trigger.setAttemptInFlight(false);
+        }
       }
     }, [value, slashUiActions, providerRegistry, onSubmit, onChange, trigger, attachments, permissionSessionId, disabled]);
 
