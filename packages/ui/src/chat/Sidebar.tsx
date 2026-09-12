@@ -92,6 +92,7 @@ export interface SidebarProps {
    * the icon and label of the profile menu settings item (`wide: true`).
    */
   settingsTrigger?: (owner: { wide: boolean }) => ReactNode;
+  sidebarFooterActions?: (owner: { wide: boolean }) => ReactNode;
   /** Sidebar column state, controlling visibility of the profile nickname. */
   wide?: boolean;
   /** Whether the settings dialog this row opens is currently open. */
@@ -136,6 +137,7 @@ export function Sidebar({
   onHistoryLayoutChange,
   onOpenSettings,
   settingsTrigger,
+  sidebarFooterActions,
   wide = true,
   settingsOpen = false,
   className,
@@ -408,6 +410,7 @@ export function Sidebar({
           settingsTrigger={settingsTrigger}
           onOpenSettings={onOpenSettings}
         />
+        {sidebarFooterActions?.({ wide })}
       </div>
     </nav>
   );

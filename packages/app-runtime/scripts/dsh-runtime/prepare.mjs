@@ -116,6 +116,9 @@ const pluginBuildOrder = (() => {
     const pluginDependencies = Object.keys({
       ...(manifest.dependencies ?? {}),
       ...(manifest.peerDependencies ?? {}),
+      // Type-only service augmentations are often development dependencies
+      // (notably the optional Electron browser's runtime gateway).
+      ...(manifest.devDependencies ?? {}),
     })
       .filter((dependency) => manifestByName.has(dependency))
       .sort();

@@ -1686,6 +1686,7 @@ export function UserStickyBubble({
  * stays visible — Cursor-style.
  */
 export function MessageTurns({
+  assistantActions,
   messages,
   sessionId,
   onOpenAgentDestination,
@@ -1694,6 +1695,7 @@ export function MessageTurns({
   onRestoreBeforeTurn,
   restorableTurnOrdinals,
 }: {
+  assistantActions?: (messageId: string) => ReactNode;
   messages: UiMessage[];
   sessionId?: string;
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
@@ -1801,6 +1803,8 @@ export function MessageTurns({
                   suppressRunBoundary={item.suppressRunBoundary}
                   onOpenAgentDestination={onOpenAgentDestination}
                 />
+                {item.message.role === "assistant" && !item.message.streaming && item.message.assistantMessageId
+                  ? assistantActions?.(item.message.assistantMessageId) : null}
                 {item.message.role === "assistant" && <MessageDecoration sessionId={sessionId} messageId={item.message.uiId} streaming={!!item.message.streaming} />}
                 </Fragment>
               );

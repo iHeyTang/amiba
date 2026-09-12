@@ -202,6 +202,8 @@ export interface ToolResultWireRecord {
 export interface ToolWireRecord {
   call?: ToolCallWireRecord;
   result?: ToolResultWireRecord;
+  /** DSH Code Dispatch call blocks; adapter types are reasserted by the UI. */
+  subCalls?: readonly unknown[];
 }
 
 /** Runtime-neutral presentation state for one tool invocation. */
@@ -354,6 +356,8 @@ export interface ChatRuntimeState {
   assistantUiId: string | null;
   streaming: boolean;
   assistantText: string;
+  /** Durable identity of the completed turn’s closing assistant, when available. */
+  assistantMessageId?: string;
   reasoning: string;
   /** Wall-clock bounds of the reasoning stream; null until the first delta. */
   reasoningStartedAt: number | null;
@@ -432,6 +436,7 @@ export type EngineToClientMessage =
 
 export type StreamEvent =
   | { kind: "begin"; assistantUiId: string }
+  | { kind: "assistantMessage"; messageId: string }
   | { kind: "chunk"; text: string }
   | { kind: "reasoning"; text: string }
   | { kind: "toolCalls"; calls: ToolCall[] }

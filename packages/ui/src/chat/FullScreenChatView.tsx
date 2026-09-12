@@ -225,6 +225,7 @@ export interface FullScreenChatViewProps {
      * conversation. Omit it (Quick-Ask, any host outside a DSH plugin
      * runtime) and every row renders Amiba's own tool chip.
      */
+    assistantActions?: (messageId: string) => ReactNode;
     toolView?: ToolCallSeatRenderer;
     /**
      * renderSlot-backed dispatch of Amiba's keyed
@@ -242,6 +243,7 @@ export interface FullScreenChatViewProps {
      * so the host supplies a renderer rather than a node.
      */
     settingsTrigger?: (owner: { wide: boolean }) => ReactNode;
+    sidebarFooterActions?: (owner: { wide: boolean }) => ReactNode;
   };
   /**
    * Whether the settings dialog the sidebar row opens is currently open —
@@ -905,6 +907,7 @@ function FullScreenChatViewInner({
             onHistoryLayoutChange={onHistoryLayoutChange}
             onOpenSettings={(tab) => openSettings(tab)}
             settingsTrigger={slots?.settingsTrigger}
+            sidebarFooterActions={slots?.sidebarFooterActions}
             settingsOpen={settingsOpen}
             wide={!sidebarCollapsed}
             className="min-w-0 flex-1"

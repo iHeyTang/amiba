@@ -65,6 +65,8 @@ export interface UiMessage extends ChatMessage {
    * tool calls as they streamed in. Each item carries a stable `id` so
    * React keys are stable across rehydration.
    */
+  /** Canonical DSH closing message, never the synthetic bubble id. */
+  assistantMessageId?: string
   assistantTimeline?: AssistantTimelineItem[]
   /**
    * Approvals that fired during this assistant turn — including resolved

@@ -184,6 +184,30 @@ describe("tool.call.toolview seat", () => {
     });
   });
 
+  it("passes nested Code Mode blocks to an occupied toolview without adding host rows", () => {
+    const messages = structuredClone(MESSAGES) as UiMessage[];
+    const child = {
+      kind: "tool-result" as const, callId: "nested-call", seq: 8, time: 1_200,
+      call: { name: "nested_read", argsRaw: '{"path":"README.md"}' },
+      callTime: 1_100, content: [{ type: "text" as const, text: "nested failure" }],
+      isError: true, callView: null, resultView: null, subCalls: [],
+    };
+    messages[1]!.toolProgress![1]!.wire!.subCalls = [child];
+    const owners: ToolCallOwnerProps[] = [];
+    const { container } = render(
+      <ToolCallSeatProvider render={({ owner, fallback }) => {
+        owners.push(owner);
+        return owner.toolName === "bash" ? <p>{owner.block.subCalls.map((call) => call.callId).join(",")}</p> : fallback;
+      }}>
+        <MessageTurns messages={messages} />
+      </ToolCallSeatProvider>,
+    );
+    expandProcess();
+    expect(container).toHaveTextContent("nested-call");
+    expect(owners.find((owner) => owner.toolName === "bash")!.block.subCalls).toEqual([child]);
+    expect(owners.some((owner) => owner.callId === "nested-call")).toBe(false);
+  });
+
   it("keeps the host row for a legacy row with no retained wire material", () => {
     const dispatch = vi.fn(
       ({ fallback }: ToolCallSeatRequest) => fallback,

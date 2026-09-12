@@ -22,6 +22,7 @@ import { MarkdownProvider, type MarkdownExtension, type MarkdownCapabilities } f
 import { useSyncExternalStore } from "react";
 import { createMarkdownSource } from "./markdown-source.js";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import { mountSessionExportChrome } from "./session-export.js";
 import {
   DshApiClient,
   createWebPlatformAdapter,
@@ -608,6 +609,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           messageSources,
         }),
         children: {
+          "sidebar.footer.action": { kind: "list", scope: "root" },
           "amiba.message.decoration": { kind: "list", scope: "root" },
           "amiba.composer.accessory": { kind: "list", scope: "root" },
           "amiba.emptyState.visual": { kind: "list", scope: "root" },
@@ -713,6 +715,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // projection. Declaring it on this root instead is legal and the
           // same pattern the adopted conversation.* seats use; only the
           // declaration site differs, never the key/kind/scope/owner.
+          "conversation.chat.assistant-actions": { kind: "list", scope: "session" },
           "tool.call.toolview": { kind: "keyed", scope: "session" },
           // Amiba's keyed question seat: one entry per question id (a
           // plugin-owned question kind claims exactly its own id), `fallback`
@@ -813,6 +816,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // only the DSH-Menu-based pixels are replaced with @amiba/ui's Select.
     // Register lazily because `locale` may arrive after this shell, and keep
     // the same official id so entriesOfSlot elects exactly one language row.
+    const sessionExportFiber = mountSessionExportChrome(ctx);
     const languageRowFiber = ctx.inject(["locale"], (scope) => {
       scope.effect(
         () =>
@@ -854,6 +858,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       for (const dispose of disposeOfficialToolviews) dispose();
       disposeAskToolview();
       void languageRowFiber.dispose();
+      void sessionExportFiber.dispose();
       disposeCommandPopup();
       disposeSurfaceSettings();
       disposeSlashMenu();

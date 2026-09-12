@@ -177,8 +177,12 @@ function phaseLabel(
 
 export function DshPluginInventoryView({
   adapter,
+  active = true,
+  panel,
 }: {
   adapter: DshPluginInventoryAdapter;
+  active?: boolean;
+  panel?: { id: string; labelledBy: string };
 }) {
   const { language } = usePluginT();
   const labels = copy(language);
@@ -287,20 +291,33 @@ export function DshPluginInventoryView({
   ];
 
   return (
-    <ScrollArea className="min-h-0 flex-1">
+    <ScrollArea
+      className={cn("min-h-0 flex-1", !active && "hidden")}
+      hidden={!active || undefined}
+      {...(panel
+        ? {
+            id: panel.id,
+            role: "tabpanel",
+            "aria-labelledby": panel.labelledBy,
+            tabIndex: 0,
+          }
+        : {})}
+    >
       <PageContent size="lg">
-        <SettingsPageActions>
-          <SettingsPageActionButton
-            aria-label={labels.refresh}
-            disabled={loading}
-            icon
-            onClick={() => void refresh()}
-            title={labels.refresh}
-            variant="ghost"
-          >
-            <RefreshCw className={cn(loading && "animate-spin")} />
-          </SettingsPageActionButton>
-        </SettingsPageActions>
+        {active && (
+          <SettingsPageActions>
+            <SettingsPageActionButton
+              aria-label={labels.refresh}
+              disabled={loading}
+              icon
+              onClick={() => void refresh()}
+              title={labels.refresh}
+              variant="ghost"
+            >
+              <RefreshCw className={cn(loading && "animate-spin")} />
+            </SettingsPageActionButton>
+          </SettingsPageActions>
+        )}
         <SettingsPageDescription className="mb-5 max-w-2xl">
           {labels.description}
         </SettingsPageDescription>
