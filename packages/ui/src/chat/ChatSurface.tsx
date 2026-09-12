@@ -821,6 +821,8 @@ export default function ChatSurface({
     input,
     draftSource: composerDraftSource,
     submitComposer: () => composerRef.current?.submit?.() ?? false,
+    resolveQueuedDraft: (draft, signal) => composerRef.current?.resolveQueuedDraft?.(draft, signal)
+      ?? Promise.reject(new Error("Input editor is not mounted")),
     setInput,
     attachments,
     setAttachments,
@@ -849,6 +851,8 @@ export default function ChatSurface({
     cancelEdit: cancelQueueEdit,
     remove: removePendingQueueItem,
   } = queueHook;
+  const queueDrainRef = useRef({ sessionId: sessions.activeId, drain: queueHook.drainHead });
+  queueDrainRef.current = { sessionId: sessions.activeId, drain: queueHook.drainHead };
 
   // Pick up a prompt handed off from the new-tab Home launcher or from
   // an external surface (Quick-Ask Spotlight selection, Region Snip
@@ -1806,18 +1810,8 @@ export default function ChatSurface({
       } else if (!queuePausedRef.current) {
         // If the user hit Stop, the queue was deliberately frozen — don't
         // re-fire it until they explicitly resume. Otherwise drain the head.
-        setPendingQueue((prev) => {
-          if (prev.length === 0) return prev;
-          const [head, ...tail] = prev;
-          queueMicrotask(
-            () =>
-              void runChatTurn({
-                text: head.text,
-                attachments: head.attachments,
-              }),
-          );
-          return tail;
-        });
+        const current = queueDrainRef.current;
+        if (current.sessionId === sessionId) current.drain();
       }
     }
   }

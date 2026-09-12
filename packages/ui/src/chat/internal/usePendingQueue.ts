@@ -17,6 +17,8 @@ import { pickSendText } from "./pickSendText";
 /** One user turn waiting while the model is still streaming the previous reply. */
 export interface PendingChatTurn {
   queueId: string;
+  /** A draft stashed by Edit has not yet passed through reference codecs. */
+  needsResolution?: boolean;
   text: string;
   attachments: Attachment[];
   /** Original editor nodes, separate from the resolved model payload. */
@@ -83,6 +85,7 @@ export interface UsePendingQueueArgs {
   draftSource?: ComposerDraftSource;
   /** Route an edited queue row through the same codec/command pipeline as Send. */
   submitComposer?: () => boolean;
+  resolveQueuedDraft?: (draft: ComposerDraftDocument, signal: AbortSignal) => Promise<string>;
   setInput: (v: string) => void;
   attachments: Attachment[];
   setAttachments: React.Dispatch<React.SetStateAction<Attachment[]>>;
@@ -145,6 +148,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     input,
     draftSource,
     submitComposer,
+    resolveQueuedDraft,
     setInput,
     attachments,
     setAttachments,
@@ -244,25 +248,65 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   // Actions.
   // ---------------------------------------------------------------------
 
+  const queueRef = useRef(queue);
+  queueRef.current = queue;
+  const activeSessionRef = useRef(sessions.activeId);
+  activeSessionRef.current = sessions.activeId;
+  const resolutionRef = useRef<AbortController | null>(null);
+  const cancelResolution = useCallback(() => {
+    resolutionRef.current?.abort();
+    resolutionRef.current = null;
+  }, []);
+  useEffect(() => cancelResolution, [sessions.activeId, args.readOnly, cancelResolution]);
+
+  // Resolve only unsent drafts stashed by Edit. Already-submitted queue items
+  // retain their original resolved model payload, including across reloads.
+  const prepareItem = useCallback((item: PendingChatTurn, ready: (item: PendingChatTurn) => void) => {
+    if (resolutionRef.current) return;
+    if (!item.needsResolution) { ready(item); return; }
+    const attempt = new AbortController();
+    const sessionId = sessions.activeId;
+    resolutionRef.current = attempt;
+    const current = () => resolutionRef.current === attempt && !attempt.signal.aborted &&
+      !readOnlyRef.current && activeSessionRef.current === sessionId &&
+      queueRef.current.includes(item);
+    void (async () => {
+      try {
+        if (!item.draft || !resolveQueuedDraft) throw new Error("Queued draft resolver is unavailable");
+        const text = await resolveQueuedDraft(item.draft, attempt.signal);
+        if (!current()) return;
+        if (!text.trim() && item.attachments.every(a => !a.attachmentId || a.uploading)) {
+          throw new Error("Queued draft resolved to empty content");
+        }
+        setAttachmentError(null);
+        ready({ ...item, text: text.trim(), needsResolution: false });
+      } catch (error) {
+        if (!current()) return;
+        setPausedState(true);
+        setAttachmentError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (resolutionRef.current === attempt) resolutionRef.current = null;
+      }
+    })();
+  }, [sessions.activeId, resolveQueuedDraft, setAttachmentError]);
+
   const drainHead = useCallback((): void => {
     if (readOnlyRef.current) return;
-    setQueue((prev) => {
-      if (prev.length === 0) return prev;
-      const [head, ...tail] = prev;
-      queueMicrotask(() =>
-        void runChatTurn({
-          text: head.text,
-          attachments: head.attachments,
-          ...(head.draft ? { draft: head.draft } : {}),
-        }),
-      );
-      return tail;
+    const head = queueRef.current[0];
+    if (!head) return;
+    prepareItem(head, (item) => {
+      queueRef.current = queueRef.current.filter(row => row.queueId !== item.queueId);
+      setQueue((prev) => prev.filter(row => row.queueId !== item.queueId));
+      queueMicrotask(() => void runChatTurn({
+        text: item.text, attachments: item.attachments,
+        ...(item.draft ? { draft: item.draft } : {}),
+      }));
     });
-  }, [runChatTurn]);
+  }, [prepareItem, runChatTurn]);
 
   const sendNow = useCallback(
     (queueId: string, textArg?: string): void => {
-      if (readOnlyRef.current) return;
+      if (readOnlyRef.current || resolutionRef.current) return;
       const editingThisOne = editingQueueId === queueId;
       if (editingThisOne && textArg === undefined && submitComposer) {
         submitComposer();
@@ -286,48 +330,51 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       }
       if (!item) return;
 
-      // The item is about to fire — remove it from the visible queue
-      // now so the chip doesn't linger during the handoff.
-      setQueue((prev) => prev.filter((q) => q.queueId !== queueId));
-      setPausedState(false);
+      prepareItem(item, (item) => {
+        // The item is about to fire — remove it from the visible queue
+        // now so the chip doesn't linger during the handoff.
+        setQueue((prev) => prev.filter((q) => q.queueId !== queueId));
+        setPausedState(false);
 
-      const sid = sessions.activeId;
-      if (busy && sid) {
-        // Drive the preemption locally. Order matters:
-        //   1. Set the gates BEFORE rejecting / aborting so neither the
-        //      finally that fires next microtask nor the engine's echo
-        //      double-handles us.
-        //   2. Seal the bubble locally so the user sees `[stopped]`
-        //      immediately, not after an engine round-trip.
-        //   3. Reject the old pendingTurn so the old runChatTurn unwinds
-        //      promptly into its finally (which we just gated).
-        //   4. Fire abort to DSH — best-effort cleanup; the echoed
-        //      `aborted` event hits `ignoreAbortForSessionRef` and
-        //      no-ops.
-        suppressFinallyDrainRef.current = true;
-        ignoreAbortForSessionRef.current = sid;
-        markCurrentAssistantStopped();
-        rejectPendingTurn(sid, new DOMException("aborted", "AbortError"));
-      }
-      // After renderer reload the Host may still be running a turn for which
-      // this window has no local busy state. Send now explicitly preempts it;
-      // let the authoritative session treat an already-idle interrupt as a no-op.
-      if (sid) {
-        try {
-          client.abort(sid);
-        } catch (e) {
-          console.warn("[sidepanel] abort-for-send-now failed:", e);
+        const sid = sessions.activeId;
+        if (busy && sid) {
+          // Drive the preemption locally. Order matters:
+          //   1. Set the gates BEFORE rejecting / aborting so neither the
+          //      finally that fires next microtask nor the engine's echo
+          //      double-handles us.
+          //   2. Seal the bubble locally so the user sees `[stopped]`
+          //      immediately, not after an engine round-trip.
+          //   3. Reject the old pendingTurn so the old runChatTurn unwinds
+          //      promptly into its finally (which we just gated).
+          //   4. Fire abort to DSH — best-effort cleanup; the echoed
+          //      `aborted` event hits `ignoreAbortForSessionRef` and
+          //      no-ops.
+          suppressFinallyDrainRef.current = true;
+          ignoreAbortForSessionRef.current = sid;
+          markCurrentAssistantStopped();
+          rejectPendingTurn(sid, new DOMException("aborted", "AbortError"));
         }
-      }
+        // After renderer reload the Host may still be running a turn for which
+        // this window has no local busy state. Send now explicitly preempts it;
+        // let the authoritative session treat an already-idle interrupt as a no-op.
+        if (sid) {
+          try {
+            client.abort(sid);
+          } catch (e) {
+            console.warn("[sidepanel] abort-for-send-now failed:", e);
+          }
+        }
 
-      void runChatTurn({
-        text: item.text,
-        attachments: item.attachments,
-        ...(item.draft ? { draft: item.draft } : {}),
+        void runChatTurn({
+          text: item.text,
+          attachments: item.attachments,
+          ...(item.draft ? { draft: item.draft } : {}),
+        });
       });
     },
     [
       editingQueueId,
+      prepareItem,
       queue,
       input,
       draftSource,
@@ -345,7 +392,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   );
 
   const send = useCallback(async (textArg?: string): Promise<void> => {
-    if (readOnlyRef.current) return;
+    if (readOnlyRef.current || resolutionRef.current) return;
     // `textArg` carries the Composer's mention-expanded text (`@[...]`
     // tokens turned into agent-facing text). Prefer it for the payload
     // that's DISPATCHED to the engine / QUEUED so the backend never sees
@@ -433,6 +480,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
 
   const stop = useCallback((): void => {
     if (readOnlyRef.current) return;
+    cancelResolution();
     // Preserve the pending queue. Hitting Stop while items are queued
     // is a "halt and let me think" gesture — wiping the queue forces
     // the user to retype everything they had lined up. We freeze
@@ -448,10 +496,11 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
         console.warn("[sidepanel] abort failed:", e);
       }
     }
-  }, [sessions.activeId, client]);
+  }, [sessions.activeId, client, cancelResolution]);
 
   const remove = useCallback(
     (queueId: string): void => {
+      cancelResolution();
       setQueue((prev) => {
         const hit = prev.find((q) => q.queueId === queueId);
         if (hit) {
@@ -469,7 +518,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
         setAttachments([]);
       }
     },
-    [editingQueueId, attachments, setInput, setAttachments],
+    [editingQueueId, attachments, setInput, setAttachments, cancelResolution],
   );
 
   /**
@@ -484,6 +533,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     (queueId: string): void => {
       const item = queue.find((q) => q.queueId === queueId);
       if (!item) return;
+      cancelResolution();
       const draftText = input;
       const draft = draftSource?.getDocument();
       const draftAttachments = attachments.filter(
@@ -499,7 +549,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
           {
             queueId: shortId("q"),
             text: draftText,
-            ...(draft ? { draft } : {}),
+            ...(draft ? { draft, needsResolution: true } : {}),
             attachments: draftAttachments.map((a) => ({ ...a })),
           },
         ];
@@ -514,6 +564,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       queue,
       input,
       draftSource,
+      cancelResolution,
       attachments,
       setInput,
       setAttachments,

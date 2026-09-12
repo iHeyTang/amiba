@@ -222,3 +222,87 @@ it("Send now interrupts the authoritative session even when a reload has no loca
   expect(args.runChatTurn).toHaveBeenCalledWith({text:"restored payload",attachments:[]});
   expect(result.current.queue).toHaveLength(0);
 });
+
+describe("stashed drafts resolve before leaving the queue", () => {
+  function setup(resolveQueuedDraft: NonNullable<UsePendingQueueArgs["resolveQueuedDraft"]>) {
+    const draftSource = createComposerDraftSource();
+    const reference = legacyDraftDocument("@[dsh.reference:files|id|Label|clip]");
+    draftSource.setParts([{kind:"text", text:"literal @[dsh.reference:files|fake|Fake|clip] "}, ...reference.parts]);
+    const document = draftSource.getDocument();
+    const args = makeArgs({input:document.text, draftSource, setInput:draftSource.set, resolveQueuedDraft});
+    const hook = renderHook((props:UsePendingQueueArgs) => usePendingQueue(props), {initialProps:args});
+    act(() => hook.result.current.setQueue([{queueId:"original",text:"already resolved",attachments:[]}]));
+    act(() => hook.result.current.edit("original"));
+    const stashed = hook.result.current.queue[1];
+    act(() => { hook.result.current.setEditingQueueId(null); hook.result.current.setQueue([JSON.parse(JSON.stringify(stashed))]); });
+    return {...hook,args,document,stashed};
+  }
+  it.each(["sendNow", "drainHead"] as const)("%s resolves persisted original nodes once and leaves the current editor alone", async action => {
+    let finish!: (text:string)=>void;
+    const resolve = vi.fn((_draft, _signal) => new Promise<string>(r=>{finish=r;}));
+    const {result,args,document,stashed}=setup(resolve);
+    vi.mocked(args.setAttachments).mockClear();
+    await act(async()=>{
+      if(action==="sendNow") result.current.sendNow(stashed.queueId); else result.current.drainHead();
+      if(action==="sendNow") result.current.sendNow(stashed.queueId); else result.current.drainHead();
+    });
+    expect(stashed.needsResolution).toBe(true);
+    expect(resolve).toHaveBeenCalledOnce();
+    expect(resolve.mock.calls[0][0]).toEqual(document);
+    expect(args.runChatTurn).not.toHaveBeenCalled();
+    expect(args.client.abort).not.toHaveBeenCalled();
+    expect(result.current.queue).toHaveLength(1);
+    await act(async()=>{finish("literal token and resolved reference");});
+    expect(args.runChatTurn).toHaveBeenCalledWith({text:"literal token and resolved reference",draft:document,attachments:[]});
+    expect(args.setAttachments).not.toHaveBeenCalled();
+    expect(result.current.queue).toHaveLength(0);
+  });
+  it("retains a failed draft, pauses draining, and permits a later retry", async()=>{
+    const resolve=vi.fn().mockRejectedValueOnce(new Error("Reference source unavailable")).mockResolvedValueOnce("recovered");
+    const {result,args,stashed}=setup(resolve);
+    await act(async()=>{result.current.sendNow(stashed.queueId);});
+    expect(args.setAttachmentError).toHaveBeenCalledWith("Reference source unavailable");
+    expect(args.runChatTurn).not.toHaveBeenCalled();
+    expect(args.client.abort).not.toHaveBeenCalled();
+    expect(result.current.queue).toHaveLength(1);
+    expect(result.current.paused).toBe(true);
+    await act(async()=>{result.current.sendNow(stashed.queueId);});
+    expect(args.runChatTurn).toHaveBeenCalledOnce();
+    expect(result.current.queue).toHaveLength(0);
+  });
+  it.each(["stop", "remove", "switch", "unmount"] as const)("%s prevents a late codec from dispatching", async action=>{
+    let finish!: (text:string)=>void;
+    const resolve=vi.fn((_draft,_signal)=>new Promise<string>(r=>{finish=r;}));
+    const {result,args,stashed,rerender,unmount}=setup(resolve);
+    act(()=>result.current.sendNow(stashed.queueId));
+    act(()=>{
+      if(action==="stop") result.current.stop();
+      if(action==="remove") result.current.remove(stashed.queueId);
+      if(action==="switch") rerender({...args,sessions:{...args.sessions,activeId:"s2"}});
+      if(action==="unmount") unmount();
+    });
+    expect(resolve.mock.calls[0][1].aborted).toBe(true);
+    await act(async()=>{finish("late");});
+    expect(args.runChatTurn).not.toHaveBeenCalled();
+  });
+});
+
+it("successive drains before a render consume distinct queued turns", async()=>{
+  const args=makeArgs();
+  const {result}=renderHook(()=>usePendingQueue(args));
+  act(()=>result.current.setQueue([{queueId:"a",text:"first",attachments:[]},{queueId:"b",text:"second",attachments:[]}]));
+  await act(async()=>{result.current.drainHead();result.current.drainHead();});
+  expect(vi.mocked(args.runChatTurn).mock.calls.map(([item])=>item.text)).toEqual(["first","second"]);
+});
+
+it("keeps an unresolved queue draft when its codec produces no sendable content", async()=>{
+  const draft=legacyDraftDocument("@[dsh.reference:files|id|Label|clip]");
+  const args=makeArgs({resolveQueuedDraft:async()=>"   "});
+  const {result}=renderHook(()=>usePendingQueue(args));
+  act(()=>result.current.setQueue([{queueId:"empty",text:draft.text,draft,needsResolution:true,attachments:[]}]));
+  await act(async()=>{result.current.sendNow("empty");});
+  expect(args.runChatTurn).not.toHaveBeenCalled();
+  expect(args.client.abort).not.toHaveBeenCalled();
+  expect(result.current.queue).toHaveLength(1);
+  expect(args.setAttachmentError).toHaveBeenCalledWith("Queued draft resolved to empty content");
+});

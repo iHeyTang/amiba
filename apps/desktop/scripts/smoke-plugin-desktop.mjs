@@ -797,6 +797,18 @@ try {
           }
 
         }
+        let stashedExpected;
+        if (process.argv.includes("--queue-stash")) {
+          await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','@queue');void 0");
+          await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor('compat-continuable-child').onSpace()"),true);
+          await wait(()=>evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.occurrences.length===1"));
+          await evaluate(`window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child',window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft+${JSON.stringify(suffix)});void 0`);
+          await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_LITERAL_STASH '+window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft);void 0");
+          const stash=await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')");
+          const occurrence=stash.occurrences[0];
+          stashedExpected=(stash.draft.slice(0,occurrence.offset)+'<queue:id>'+stash.draft.slice(occurrence.offset+occurrence.length)).trim();
+        }
         await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]').click();void 0");
         await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.draft===${JSON.stringify(queuedDraft.draft)}`));
         assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').occurrences.length"),1);
@@ -812,7 +824,11 @@ try {
         const reference=queuedDraft.occurrences[0];
         const expected=(queuedDraft.draft.slice(0,reference.offset)+'<queue:id>'+queuedDraft.draft.slice(reference.offset+reference.length)+' edited').trim();
         await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(expected))));
-        assert.equal(await evaluate("window.__queueCodecCalls"),process.argv.includes("--queue-reload") ? 1 : 2);
+        if (stashedExpected) {
+          await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(stashedExpected))));
+          console.log("An unsent draft stashed by queue Edit was resolved on automatic drain; the real model received its reference codec output and literal token unchanged");
+        }
+        assert.equal(await evaluate("window.__queueCodecCalls"),(process.argv.includes("--queue-reload") ? 1 : 2)+(stashedExpected ? 1 : 0));
         await wait(() => evaluate("!document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
         await evaluate("window.__queueRefOff();void 0");
         console.log("Native queued mixed draft restored its real reference and literal token; edited Send now re-ran the codec and delivered the exact new model payload");

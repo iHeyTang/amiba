@@ -151,6 +151,7 @@ export type ComposerPlanSeatRenderer = (
 export interface ComposerHandle {
   /** Submit through the existing guards, command routing and reference codecs. */
   submit?(): boolean;
+  resolveQueuedDraft?(draft: ComposerDraftDocument, signal: AbortSignal): Promise<string>;
   focus(): void;
   select(): void;
   /** Imperative access to the underlying textarea, for callers that need
@@ -679,10 +680,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       }
     }, [value, draftSource, slashUiActions, providerRegistry, onSubmit, onChange, trigger, attachments, permissionSessionId, disabled]);
 
+    const queuedResolverRef = useRef({ disabled, providerRegistry, trigger });
+    queuedResolverRef.current = { disabled, providerRegistry, trigger };
     useImperativeHandle(
       ref,
       (): ComposerHandle => ({
         submit: () => submitBindingRef.current.submit(),
+        resolveQueuedDraft: (draft, signal) => {
+          const current = queuedResolverRef.current;
+          if (current.disabled) return Promise.reject(new Error("Input editor cannot send queued drafts"));
+          return expandMentionPartsAsync(draft.parts, current.providerRegistry.all, current.trigger.resolver, signal);
+        },
         focus: () => innerRef.current?.focus(),
         select: () => innerRef.current?.select(),
         getTextarea: () => innerRef.current?.getTextarea() ?? null,

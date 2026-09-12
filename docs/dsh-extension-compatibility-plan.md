@@ -1265,3 +1265,13 @@ pipelines retain mounted component state.
 - 输入状态来源、触发桥与动作提供者共 37 项测试通过（/tmp/amiba-offscreen-input-tests3.log）；Shell 和 UI 类型检查通过（/tmp/amiba-offscreen-input-types2.log、/tmp/amiba-offscreen-input-ui-types.log）。完整 Desktop 构建通过（/tmp/amiba-offscreen-input-build.log）。
 - 最终组合桌面回归 /tmp/amiba-offscreen-input-smoke.log 退出 0。探针保存官方 sessions.provide 的真实 inputActions，切换到另一会话后调用原会话 setDraft；当前输入框保持为空，切回及整页刷新后，原真实引用及新增普通文字完整保留。实际一次性子会话离屏后的标准写入也明确拒绝。原队列、刷新恢复、运行状态、命令与图片、动态 Cordis、轨迹、子会话及嵌套 Host 冷重启、插件生命周期一并通过。
 - 范围限定：此次验证已有绑定、先前打开过的会话的离屏写入，不声明首次异步恢复前的同步写入已覆盖全部恢复情况。完整 useInput、离屏公开快照、严格修订号与 occurrence 身份、离屏图片和提交、完整官方队列仍待适配；不会生成虚假的离屏修订号或绕过原提交准入。
+
+### 编辑时暂存的草稿在真实自动出队前解析（2026-09-13）
+
+- 发现两个实际缺口：Edit 将输入框原草稿放入队尾时尚未执行引用 codec；ChatSurface 的 runChatTurn.finally 仍保留独立旧出队逻辑，绕过 usePendingQueue.drainHead 且未传递原始 draft。此前队列模块测试不能证明真实自动出队已接通，本轮补上该调用链。
+- 新暂存的结构化草稿使用可持久化 needsResolution 标记。直接 Send now 和自动出队先调用原 Composer 的 expandMentionPartsAsync、providerRegistry 和真实 trigger resolver；普通文字不重新解析为引用。此前已提交并解析的队列项继续使用原模型文本，不重复执行 codec。
+- 异步解析完成前不移除条目、不抢先中断旧生成、不更改当前输入框。失败或解析为空且没有附件时保留条目、暂停队列并使用原错误区域提示。停止、删除、编辑、切换会话、只读变化和卸载取消待完成解析；迟到结果检查原条目身份及会话所有权。
+- 真实 finally 现调用当前会话的队列 drain，携带原始文档，避免旧会话结束触发新会话出队。同步消费 queue ref 避免渲染前连续 drain 重复发送同一条。新增回归先失败（/tmp/amiba-stashed-queue-drain-before.log：1 失败、19 通过），最终队列及 Composer 触发管线共 52 项通过（/tmp/amiba-stashed-queue-tests5.log）。UI 类型检查通过（/tmp/amiba-stashed-queue-types4.log）。
+- 最终完整 Desktop 构建通过（/tmp/amiba-stashed-queue-build3.log）。新增 --queue-stash 使用真实引用源和普通 token 文字，点击原 Edit 暂存未提交草稿，再发送编辑项并等待原自动出队。实际模型日志逐字匹配 codec 输出和普通文字，调用次数准确。首轮探针同时添加前后缀，按原最小差异规则解散了引用；改为两次独立编辑后通过，未改变产品编辑规则。
+- 最终组合回归 /tmp/amiba-stashed-queue-smoke2.log 退出 0，覆盖离屏草稿、排队及刷新恢复、运行状态、命令/图片、动态 Cordis、轨迹、子会话及嵌套 Host 冷重启、插件安装/HMR/卸载。原编辑器与卡片尺寸、样式检查继续通过，无 JSX 或 CSS 变更。
+- JSON 测试覆盖新暂存标记持久化，桌面验证覆盖真实暂存后的自动出队；不将旧版本无标记记录猜测为待解析草稿。队列图片所有权及清理、完整 Host inbox 对齐、完整离屏输入和官方 useInput 仍需适配，不代表全部队列兼容。
