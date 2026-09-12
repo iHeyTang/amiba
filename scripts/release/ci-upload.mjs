@@ -14,6 +14,6 @@ for (const { target } of include) {
 // Validate the full set before creating or modifying a release. A single job
 // uploads serially so multiple architecture jobs cannot race to create the tag.
 for (const { target } of include) {
-  const result = spawnSync(process.execPath, ['scripts/release/upload.mjs', target], { stdio: 'inherit' });
+  const result = spawnSync(process.execPath, ['scripts/release/upload.mjs', target, '--verify-download'], { stdio: 'inherit' });
   if (result.error || result.status !== 0) throw new Error(`Release upload failed for ${target}`);
 }

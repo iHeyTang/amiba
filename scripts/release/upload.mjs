@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { verifiedArtifacts, metadataName } from './artifacts.mjs';
@@ -27,4 +28,13 @@ const existing = releases.find(r => r.tagName === tag);
 if (existing && !existing.isDraft) throw new Error(`${tag} is already published. Increment the version.`);
 if (!existing) run(['release', 'create', tag, '--repo', repo, '--draft', '--target', releaseCommit, '--title', tag, '--notes', `Amiba ${pkg.version}`]);
 run(['release', 'upload', tag, '--repo', repo, ...names.map(name => path.join(dir, name)), path.join(dir, metadata), '--clobber']);
+if (process.argv.includes('--verify-download')) {
+  const verificationDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amiba-release-verify-'));
+  try {
+    run(['release', 'download', tag, '--repo', repo, '--dir', verificationDir, ...[...names, metadata].flatMap(name => ['--pattern', name])]);
+    fs.copyFileSync(path.join(dir, 'release-manifest.json'), path.join(verificationDir, 'release-manifest.json'));
+    verifiedArtifacts(verificationDir, target, pkg.version);
+    console.log(`Verified GitHub download: ${target} installers, blockmaps and update metadata match the build manifest`);
+  } finally { fs.rmSync(verificationDir, {recursive: true, force: true}); }
+}
 console.log(`Uploaded ${target} to draft ${repo} ${tag}. Publish only after all three targets and CDN sync are verified.`);
