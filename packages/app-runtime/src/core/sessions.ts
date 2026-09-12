@@ -6,8 +6,11 @@
  */
 
 import type { AgentExecutionContext } from "./agent-context";
+import type { AgentSubagentAddress } from "../platform/index";
 
 export interface SessionMeta {
+  /** Catalog navigation fact; Host still validates every addressed operation. */
+  subagentAddress?: AgentSubagentAddress
   id: string
   /** User-visible title; empty means "auto-generate from first user msg". */
   title: string
@@ -64,6 +67,7 @@ export type SessionMessage = ChatMessage
  * workspace registry, so the sidecar must not carry a second, divergent copy.
  */
 export interface SessionLocalMeta {
+  subagentAddress?: AgentSubagentAddress
   unread?: boolean
   /** Latest activity acknowledged by this viewer, retained across restarts. */
   readAt?: number

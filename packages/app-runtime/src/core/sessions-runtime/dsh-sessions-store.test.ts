@@ -70,6 +70,69 @@ vi.mock("@amiba/app-runtime/platform", () => ({
 import { SessionsStore } from "./sessions-store";
 
 describe("SessionsStore with DSH sessions", () => {
+  it("reloads an already selected session when its catalog transport is discovered", async () => {
+    mocks.extra = [{ sessionId: "catalog-child", updatedAt: 10, running: false, blank: false, title: "Child" }];
+    const store = new SessionsStore();
+    await store.initialize();
+    await store.openTab("catalog-child");
+    mocks.history.mockClear();
+    const address = { parentSessionId: "dsh-1", childSessionId: "catalog-child", mode: "one-shot" as const };
+    await store.openTab("catalog-child", address);
+    expect(mocks.history.mock.calls).toEqual([["catalog-child", { subagent: address, maxMessages: 200 }]]);
+    address.parentSessionId = "changed-by-caller";
+    expect(store.getSnapshot().sessions.find((row) => row.id === "catalog-child")?.subagentAddress?.parentSessionId).toBe("dsh-1");
+    store.teardown();
+  });
+
+  it("opens an unlisted catalog child and preserves its address across tabs, export and a new store", async () => {
+    const address = { parentSessionId: "dsh-1", childSessionId: "catalog-child", mode: "continuable" as const };
+    const store = new SessionsStore();
+    await store.initialize();
+    await store.openTab("catalog-child", address);
+    expect(store.getSnapshot().activeId).toBe("catalog-child");
+    expect(store.getSnapshot().sessions.find((row) => row.id === "catalog-child")).toMatchObject({
+      origin: "subagent", parentSessionId: "dsh-1", subagentAddress: address,
+    });
+    await store.openTab("dsh-1");
+    await store.refresh();
+    await store.switchToTab("catalog-child");
+    await store.exportSession("catalog-child");
+    await store.resolveUserMessageId("catalog-child", 0);
+    store.teardown();
+    const reopened = new SessionsStore();
+    await reopened.initialize();
+    expect(reopened.getSnapshot().activeId).toBe("");
+    await reopened.openTab("catalog-child");
+    expect(reopened.getSnapshot().activeId).toBe("catalog-child");
+    const childReads = mocks.history.mock.calls.filter(([id]) => id === "catalog-child");
+    expect(childReads).toHaveLength(5);
+    for (const [, options] of childReads) expect(options.subagent).toEqual(address);
+    reopened.teardown();
+  });
+
+  it("does not open a child when the supplied address names a different session", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    await expect(store.openTab("catalog-child", {
+      parentSessionId: "dsh-1", childSessionId: "other", mode: "one-shot",
+    })).rejects.toThrow("Invalid subagent");
+    expect(store.getSnapshot().openTabIds).toEqual([]);
+    expect(mocks.history).not.toHaveBeenCalled();
+    store.teardown();
+  });
+
+  it("preserves selection when addressed history fails without requesting ordinary child history", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    await store.openTab("dsh-1");
+    mocks.history.mockClear();
+    mocks.history.mockRejectedValueOnce(new Error("catalog unavailable"));
+    const address = { parentSessionId: "dsh-1", childSessionId: "catalog-child", mode: "one-shot" as const };
+    await expect(store.openTab("catalog-child", address)).rejects.toThrow("catalog unavailable");
+    expect(store.getSnapshot().activeId).toBe("dsh-1");
+    expect(mocks.history.mock.calls).toEqual([["catalog-child", { subagent: address, maxMessages: 200 }]]);
+    store.teardown();
+  });
 
   it("retains a completion that beats the host session index", async () => {
     const store = new SessionsStore();

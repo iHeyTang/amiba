@@ -380,7 +380,7 @@ export class SessionsStore {
    * load its messages. ``activeId`` is per-window in-memory state, so
    * no persistence is involved — the commit is purely local.
    */
-  private async activateOpen(id: string, token = ++this.switchToken): Promise<void> {
+  private async activateOpen(id: string, token = ++this.switchToken, reload = false): Promise<void> {
     if (token !== this.switchToken) return;
     if (!id) {
       // Returning to Home is a UI state transition, so publish it before
@@ -393,13 +393,13 @@ export class SessionsStore {
       await flush;
       return;
     }
-    if (id === this.state.activeId) {
+    if (id === this.state.activeId && !reload) {
       await this.markRead(id);
       return;
     }
     await this.flushActiveBeforeSwitch();
     if (token !== this.switchToken) return;
-    const next = await loadMessages(id);
+    const next = await loadMessages(id, this.state.sessions.find((session) => session.id === id)?.subagentAddress);
     if (token !== this.switchToken) return;
     this.commit({ activeId: id, activeMessages: next });
     await this.markRead(id);
@@ -436,24 +436,28 @@ export class SessionsStore {
     await this.activateOpen("");
   };
 
-  openTab = async (id: string): Promise<void> => {
+  openTab = async (id: string, subagent?: SessionMeta["subagentAddress"]): Promise<void> => {
     if (!id) return;
     const token = ++this.switchToken;
-    if (!this.state.sessions.some((session) => session.id === id)) {
+    const previousAddress = this.state.sessions.find((session) => session.id === id)?.subagentAddress;
+    if (subagent || !this.state.sessions.some((session) => session.id === id)) {
       // Open-by-id may target a session the history index dropped (a host-
       // or plugin-created session with no user turn yet). Surface its real
       // identity — the agent preset it already runs, its title — before it
       // becomes active, or the composer would treat it as a fresh draft.
-      const meta = await loadSessionMeta(id);
+      const meta = await loadSessionMeta(id, subagent);
       if (token !== this.switchToken) return;
-      if (meta) this.commit({ sessions: [meta, ...this.state.sessions] });
+      if (meta) this.commit({ sessions: this.state.sessions.some((session) => session.id === id)
+        ? this.state.sessions.map((session) => session.id === id ? { ...session, subagentAddress: meta.subagentAddress, parentSessionId: meta.parentSessionId } : session)
+        : [meta, ...this.state.sessions] });
     }
     if (!this.state.openTabIds.includes(id)) {
       // Append at the end so existing tabs keep their relative order.
       const nextTabs = [...this.state.openTabIds, id];
       this.commit({ openTabIds: nextTabs });
     }
-    await this.activateOpen(id, token);
+    const address = this.state.sessions.find((session) => session.id === id)?.subagentAddress;
+    await this.activateOpen(id, token, JSON.stringify(previousAddress) !== JSON.stringify(address));
   };
 
   closeTab = async (id: string): Promise<void> => {
@@ -629,7 +633,7 @@ export class SessionsStore {
     return {
       export_version: 2,
       runtime: "dsh",
-      session: { ...session, messages: await loadMessages(id) },
+      session: { ...session, messages: await loadMessages(id, session?.subagentAddress) },
     };
   };
 
@@ -640,7 +644,7 @@ export class SessionsStore {
     id: string,
     userOrdinal: number,
   ): Promise<number | null> => {
-    const messages = await loadMessages(id);
+    const messages = await loadMessages(id, this.state.sessions.find((session) => session.id === id)?.subagentAddress);
     const message = messages.filter((item) => item.role === "user")[userOrdinal] as
       | (SessionMessage & { runtimeSeq?: number })
       | undefined;

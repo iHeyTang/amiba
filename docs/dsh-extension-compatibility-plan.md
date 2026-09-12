@@ -730,3 +730,21 @@ pipelines retain mounted component state.
   state behavior, not full child UI support. Public `openSubagent` intent from
   Home, native child metadata/address persistence, history wiring and child
   interaction semantics still need integration and renderer verification.
+
+### Native child metadata and history lifecycle (2026-09-12)
+
+- Added a validated, copied catalog address to native session metadata and its
+  local sidecar. It is a navigation hint; addressed RPCs remain Host-validated.
+  Invalid addresses fail before navigation, and conflicting Host parent IDs are
+  rejected. Root-list absence no longer prevents creating child tab metadata.
+- `openTab(id, address)` loads addressed history; switching back, exporting and
+  resolving historical message IDs retain the same transport. New store instances
+  still start at Home and can recover an explicitly reopened child's saved address.
+  Discovering an address for the already selected ID forces a transcript reload.
+- All 34 session-store/storage/platform tests passed, including unlisted children,
+  refresh, tab switching, export, store recreation, malformed addresses, Host read
+  errors and copying caller-owned address objects. App-runtime and shell typechecks
+  passed. No UI source or stylesheet changed.
+- Official navigation events do not yet supply this optional address. End-to-end
+  event integration, child prompt/interrupt semantics and Desktop renderer/build
+  verification remain open; these unit tests do not establish full child support.

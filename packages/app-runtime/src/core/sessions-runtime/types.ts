@@ -69,7 +69,7 @@ export interface SessionsController {
    * Open the session as a tab (appending if not already open) and
    * activate it. Used when picking a session from History.
    */
-  openTab: (id: string) => Promise<void>;
+  openTab: (id: string, subagent?: SessionMeta["subagentAddress"]) => Promise<void>;
 
   /**
    * Close the tab without touching the underlying session. If `id` was
