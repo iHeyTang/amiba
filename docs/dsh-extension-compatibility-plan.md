@@ -305,3 +305,20 @@ when checking filesystem identity. The Open button must be awaited until enabled
 after the post-create directory scan. No production behavior changes were needed
 for those two test corrections. This run used the browser picker in Electron's
 web renderer; a standalone Web deployment remains separately unverified.
+
+### Turn-tail prerequisite: headless official conversation definitions
+
+The installed rc.2 `conversation.chat.turnTail` is a session-scoped chain with a
+real engine TurnLocation, closing assistant seq (or turn/end seq), and openFile.
+Its Turn/Step data stores cannot be replaced with Amiba bubble ordinals. The
+currently excluded ui-conversation package also owns the business definitions and
+chat target builder that publish assistant-step and turn-tail data.
+
+A source-level runtime test executes the actual package's contiguous headless
+registration region, without React, DOM, slots or input services. Both tests pass:
+registration includes assistant-step / turn-tail plus the chat target, and the
+actual empty chat builder preserves the supplied engine timeline by reference.
+This proves a headless extraction is feasible at registration time. It does not
+prove complete event projection: external helpers used during event processing
+must still be included, tested, packaged and wired before adding the render seat.
+No turn-tail compatibility is claimed from this prerequisite test alone.
