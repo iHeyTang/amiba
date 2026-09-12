@@ -9,8 +9,9 @@ export function ciPlan({ ref = '', inputs = {}, version }) {
   const tagged = ref.startsWith('refs/tags/');
   if (tagged && ref !== `refs/tags/v${version}`) throw new Error('Release tag must match apps/desktop/package.json version');
   const mode = tagged ? 'release' : inputs.mode || 'test';
-  if (!['test', 'release'].includes(mode)) throw new Error('Invalid build mode');
+  if (!['test', 'release', 'verify'].includes(mode)) throw new Error('Invalid build mode');
   const target = inputs.target || 'all';
+  if (mode === 'verify' && (target !== 'win32-x64' || !/^[0-9]+$/.test(inputs.run_id || ''))) throw new Error('Verify mode requires a Windows target and artifact run ID');
   const include = runnerTargets.filter(row => target === 'all' || row.target === target);
   if (!include.length) throw new Error('Invalid build target');
   const publish = tagged || inputs.publish_draft === true || inputs.publish_draft === 'true';

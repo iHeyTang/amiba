@@ -11,8 +11,12 @@ on:
       mode:
         description: Test packages or release packages (macOS release requires signing secrets)
         type: choice
-        options: [test, release]
+        options: [test, release, verify]
         default: test
+      run_id:
+        description: Existing artifact run ID for Windows verify mode
+        type: string
+        required: false
       publish_draft:
         description: Upload release packages to a GitHub Release draft
         type: boolean
@@ -23,6 +27,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: desktop-release-${{ github.ref }}-${{ inputs.target || 'all' }}
@@ -94,6 +99,12 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: pnpm release:build ${{ matrix.target }}
+      - name: Download installer for verification without rebuilding
+        if: needs.plan.outputs.mode == 'verify'
+        env:
+          ARTIFACT_RUN_ID: ${{ inputs.run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download $env:ARTIFACT_RUN_ID --repo $env:GITHUB_REPOSITORY --name amiba-win32-x64 --dir apps/desktop/dist/win32-x64
       - name: Smoke test packaged runtime and installer
         run: node scripts/release/smoke-package.mjs ${{ matrix.target }}
       - name: Save installers and update metadata

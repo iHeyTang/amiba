@@ -16,3 +16,11 @@ test('CI validates release tags and prevents publishing disabled test updates', 
   assert.equal(plan.publish, true);
   assert.equal(ciPlan({ version: '0.1.0', ref: 'refs/tags/v0.1.0' }).mode, 'release');
 });
+
+test('installer verification reuses only a Windows artifact and cannot publish it', () => {
+  const inputs = { mode: 'verify', target: 'win32-x64', run_id: '12345' };
+  assert.equal(ciPlan({version:'0.1.0', inputs}).mode, 'verify');
+  assert.throws(() => ciPlan({version:'0.1.0', inputs:{...inputs, target:'all'}}));
+  assert.throws(() => ciPlan({version:'0.1.0', inputs:{...inputs, run_id:'bad'}}));
+  assert.throws(() => ciPlan({version:'0.1.0', inputs:{...inputs, publish_draft:true}}));
+});
