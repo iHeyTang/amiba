@@ -319,3 +319,16 @@ it("does not remove newer listeners when an old subscription is disposed twice",
   off();
   detach();
 });
+
+
+it("routes public draft writes to the current session editor and reports absence", () => {
+  const bridge=bridgeOver(scopeDouble());
+  expect(bridge.setInputDraft("s1","new")).toBe(false);
+  const setInputDraft=vi.fn(()=>true);
+  const dispose=bridge.bindEditor("s1",{...opsDouble(true),setInputDraft});
+  expect(bridge.setInputDraft("s2","wrong")).toBe(false);
+  expect(bridge.setInputDraft("s1","new",12)).toBe(true);
+  expect(setInputDraft).toHaveBeenCalledWith("new",12);
+  dispose();
+  expect(bridge.setInputDraft("s1","detached")).toBe(false);
+});

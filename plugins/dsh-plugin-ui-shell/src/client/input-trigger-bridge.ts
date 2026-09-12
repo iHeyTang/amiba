@@ -83,6 +83,7 @@ export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
   /** Live editor projection; absent until that session has an attached editor. */
   inputDraftFor(sessionId: string): ReturnType<NonNullable<TriggerEditorOps["readInputDraft"]>> | undefined;
   inputDraftSource(sessionId: string): InputDraftSource;
+  setInputDraft(sessionId: string, text: string, expectedRevision?: number): boolean;
   /** Publish Amiba's own sources; returns the aggregate disposer. */
   registerSources(sources: readonly InputTriggerSource[], drafts?: boolean): () => void;
   /** Resolve the official controller for a session (seat + composer share it). */
@@ -125,6 +126,7 @@ export function createInputTriggerBridge(
   const notify = () => { for (const listener of listeners) listener(); };
   return {
     inputDraftSource,
+    setInputDraft: (sessionId, text, expectedRevision) => editors.get(sessionId)?.ops.setInputDraft?.(text, expectedRevision) ?? false,
     inputDraftFor: (sessionId) => editors.get(sessionId)?.ops.readInputDraft?.(),
     draftSources: () => draftSources,
     registerSources(sources, drafts = false) {

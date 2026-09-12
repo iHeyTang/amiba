@@ -48,7 +48,7 @@ export function OfficialTriggerPlugin({
     if (runtime === undefined || !sessionId) return;
     return runtime.bindEditor(
       sessionId,
-      createTriggerEditorOps(editor, claims, revision),
+      createTriggerEditorOps(editor, claims, revision, () => editor.isEditable() && trigger.guard().tier !== "frozen"),
     );
   }, [claims, editor, revision, runtime, sessionId]);
 

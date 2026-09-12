@@ -307,3 +307,76 @@ it("advances the public revision when edits return to the same draft between rea
   expect(next).not.toBe(first);
   off();
 });
+
+
+describe("public draft writes", () => {
+  it("preserves untouched reference nodes while replacing surrounding text", () => {
+    const {ops}=setup("");
+    ops.insertReference({source:"fixture",ref:"one",label:"文档",clipboardText:"@one"},span(0,0));
+    ops.insertReference({source:"fixture",ref:"two",label:"文档",clipboardText:"@two"},span(2,2));
+    const before=ops.readInputDraft!();
+    expect(ops.setInputDraft!("😀 @文档 @文档 ",before.draftRev)).toBe(true);
+    const after=ops.readInputDraft!();
+    expect(after.draft).toBe("😀 @文档 @文档 ");
+    expect(after.occurrences.map(item=>item.occurrenceId)).toEqual(before.occurrences.map(item=>item.occurrenceId));
+    expect(after.occurrences.map(item=>item.offset)).toEqual([3,7]);
+    expect(ops.setInputDraft!("stale",before.draftRev)).toBe(false);
+    expect(ops.readInputDraft!()).toBe(after);
+  });
+
+  it("dissolves only a reference edited through its label", () => {
+    const {ops}=setup("");
+    ops.insertReference({source:"fixture",ref:"one",label:"Alpha",clipboardText:"@one"},span(0,0));
+    ops.insertReference({source:"fixture",ref:"two",label:"Beta",clipboardText:"@two"},span(2,2));
+    const before=ops.readInputDraft!();
+    expect(ops.setInputDraft!("@Al!pha @Beta ")).toBe(true);
+    const after=ops.readInputDraft!();
+    expect(after.draft).toBe("@Al!pha @Beta ");
+    expect(after.occurrences).toHaveLength(1);
+    expect(after.occurrences[0].occurrenceId).toBe(before.occurrences[1].occurrenceId);
+  });
+
+  it.each(["", "first\nsecond", "全新文字 😀"])("writes a plain draft %j", next => {
+    const {ops}=setup("original");
+    expect(ops.setInputDraft!(next)).toBe(true);
+    expect(ops.readInputDraft!().draft).toBe(next);
+    expect(ops.setInputDraft!(next)).toBe(false);
+  });
+
+  it("replaces part of a paragraph separator and preserves text", () => {
+    const {editor,ops}=setup("first");
+    editor.update(()=>$getRoot().append($createParagraphNode().append($createTextNode("second"))),{discrete:true});
+    expect(ops.setInputDraft!("first\nsecond")).toBe(true);
+    expect(ops.readInputDraft!().draft).toBe("first\nsecond");
+  });
+
+  it("refuses writes when the editor is read-only or admission is frozen", () => {
+    const {editor,ops,claims,revision}=setup("keep");
+    editor.setEditable(false);
+    expect(ops.setInputDraft!("changed")).toBe(false);
+    editor.setEditable(true);
+    const frozen=createTriggerEditorOps(editor,claims,revision,()=>false);
+    expect(frozen.setInputDraft!("changed")).toBe(false);
+    expect(ops.readInputDraft!().draft).toBe("keep");
+  });
+});
+
+
+it.each([["", "", "ready"], ["first", "", "first"], ["", "last", "last"]])("writes across empty paragraph boundaries %j / %j", (first, last, next) => {
+  const {editor,ops}=setup(first);
+  editor.update(()=>{
+    const paragraph=$createParagraphNode();
+    if(last) paragraph.append($createTextNode(last));
+    $getRoot().append(paragraph);
+  },{discrete:true});
+  expect(ops.setInputDraft!(next)).toBe(true);
+  expect(ops.readInputDraft!().draft).toBe(next);
+});
+
+
+it("reports a public draft change even when the native placeholder string stays identical", () => {
+  const {ops}=setup("");
+  ops.insertReference({source:"fixture",ref:"one",label:"Alpha",clipboardText:"@one"},span(0,0));
+  expect(ops.setInputDraft!(`${PLACEHOLDER} `)).toBe(true);
+  expect(ops.readInputDraft!()).toMatchObject({draft:`${PLACEHOLDER} `,occurrences:[]});
+});

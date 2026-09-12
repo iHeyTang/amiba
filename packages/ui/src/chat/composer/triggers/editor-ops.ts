@@ -1,3 +1,4 @@
+import { $setInputDraft } from "./input-draft-edit";
 import { InputDraftProjection } from "./input-draft";
 /**
  * The four scoped `slash/input-*` verbs, implemented against Amiba's Lexical
@@ -106,6 +107,7 @@ export function createTriggerEditorOps(
   editor: LexicalEditor,
   claims: CommandClaimStore,
   revision: DraftRevision,
+  canWrite: () => boolean = () => editor.isEditable(),
 ): TriggerEditorOps {
   /** Span CAS: revision equality plus bounds sanity (upstream `casOk`). */
   const casOk = (span: TokenSpan, draftLength: number): boolean =>
@@ -118,6 +120,15 @@ export function createTriggerEditorOps(
   return {
     readInputDraft() {
       return editor.getEditorState().read(() => inputDraft.read());
+    },
+    setInputDraft(text, expectedRevision) {
+      if (!canWrite()) return false;
+      return transact(editor, () => {
+        const before = inputDraft.read();
+        if (expectedRevision !== undefined && before.draftRev !== expectedRevision) return false;
+        $setInputDraft(text);
+        return before.draft !== text && inputDraft.read().draft === text;
+      });
     },
     subscribeInputDraft(listener) {
       return editor.registerUpdateListener(({ editorState }) => {

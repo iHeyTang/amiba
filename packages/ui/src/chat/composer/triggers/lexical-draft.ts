@@ -30,6 +30,7 @@
 import {
   $createRangeSelection,
   $getRoot,
+  $getNodeByKey,
   $getSelection,
   $isDecoratorNode,
   $isElementNode,
@@ -150,6 +151,15 @@ function pointAt(
     }
   }
   if (boundary !== null) return boundary;
+  // Empty paragraphs have no leaves but still own valid boundary points.
+  // Use the recorded element spans so whole-draft writes can remove leading
+  // or trailing blank paragraphs without inventing an offset inside a gap.
+  for (const [key, span] of scan.spans) {
+    const node = $getNodeByKey(key);
+    if (!$isElementNode(node)) continue;
+    if (offset === span.start) return { node, offset: 0, type: "element" };
+    if (offset === span.end) return { node, offset: node.getChildrenSize(), type: "element" };
+  }
   // Empty document (no leaves at all): point at the root's first child slot.
   if (scan.leaves.length === 0 && offset === 0) {
     const root = $getRoot();
