@@ -116,3 +116,22 @@ describe("actual native directory picker component", () => {
     expect(owner.onError).toHaveBeenCalledWith("unavailable");
   });
 });
+
+it("uses an embedding shell's native chooser when supplied", async () => {
+  const owner = callbacks();
+  const pick = vi.fn(),
+    native = vi.fn().mockResolvedValue("/local");
+  render(
+    <Flow
+      open
+      busy={false}
+      pick={pick}
+      amibaNativePicker={native}
+      {...owner}
+    />,
+  );
+  await act(async () => {});
+  expect(native).toHaveBeenCalledTimes(1);
+  expect(pick).not.toHaveBeenCalled();
+  expect(owner.onPicked).toHaveBeenCalledWith("/local");
+});

@@ -1,3 +1,4 @@
+import { useDirectoryChooser } from "../directory-chooser";
 import { InteractionRegion } from "../primitives/interaction-region";
 import { EmptyStateVisual } from "../primitives/empty-state-visual";
 /**
@@ -149,7 +150,8 @@ function Home({
   >(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const inputRef = useRef<ComposerHandle | null>(null);
-  const canChooseWorkspace = Boolean(getPlatform().workspaces?.chooseDirectory);
+  const chooseDirectory = useDirectoryChooser("home");
+  const canChooseWorkspace = Boolean(chooseDirectory);
 
   // On mount: focus the composer textarea.
   useEffect(() => {
@@ -226,13 +228,13 @@ function Home({
   }
 
   async function chooseWorkspace() {
-    const choose = getPlatform().workspaces?.chooseDirectory;
+    const choose = chooseDirectory;
     if (!choose) return;
     try {
-      const selected = await choose(workspacePath ?? undefined);
-      if (!selected) return;
-      setWorkspacePath(selected);
-      setWorkspaceError(null);
+      await choose(workspacePath ?? undefined, async (selected) => {
+        setWorkspacePath(selected);
+        setWorkspaceError(null);
+      });
     } catch (e) {
       setWorkspaceError(
         t("workspace.pickerFailed", {

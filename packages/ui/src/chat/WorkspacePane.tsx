@@ -1,3 +1,4 @@
+import { useDirectoryChooser } from "../directory-chooser";
 import { EmptyStateVisual } from "../primitives/empty-state-visual";
 import {
   WorkbenchResourceView,
@@ -2615,7 +2616,7 @@ function WorkspaceProjectStrip({
   }, [development, sessionId, workspaces]);
 
   const mutate = useCallback(
-    async (operation: () => Promise<unknown>) => {
+    async (operation: () => Promise<unknown>, propagate = false) => {
       setBusy(true);
       setError(null);
       try {
@@ -2623,6 +2624,7 @@ function WorkspaceProjectStrip({
         await refresh();
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause));
+        if (propagate) throw cause;
       } finally {
         setBusy(false);
       }
@@ -2630,30 +2632,35 @@ function WorkspaceProjectStrip({
     [refresh],
   );
 
+  const chooseDirectory = useDirectoryChooser("workspace");
   const chooseNewProject = useCallback(async () => {
-    if (!workspaces?.chooseDirectory || !development) return;
-    const path = await workspaces.chooseDirectory(project?.folders[0]);
-    if (!path) return;
-    await mutate(async () => {
-      const created = await development.createProject("", [path]);
-      await development.bindProjectLocation(
-        sessionId,
-        created.id,
-        created.folders[0]!,
-      );
-      setProjectMenuOpen(false);
-    });
-  }, [development, mutate, project?.folders, sessionId, workspaces]);
+    if (!chooseDirectory || !development) return;
+    try {
+      await chooseDirectory(project?.folders[0], async (path) => {
+        await mutate(async () => {
+          const created = await development.createProject("", [path]);
+          await development.bindProjectLocation(sessionId, created.id, created.folders[0]!);
+          setProjectMenuOpen(false);
+        }, true);
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }, [chooseDirectory, development, mutate, project?.folders, sessionId]);
 
   const addFolder = useCallback(async () => {
-    if (!workspaces?.chooseDirectory || !development || !project) return;
-    const path = await workspaces.chooseDirectory(project.folders[0]);
-    if (!path) return;
-    await mutate(async () => {
-      const updated = await development.addProjectFolder(project.id, path);
-      await development.bindProjectLocation(sessionId, updated.id, path);
-    });
-  }, [development, mutate, project, sessionId, workspaces]);
+    if (!chooseDirectory || !development || !project) return;
+    try {
+      await chooseDirectory(project.folders[0], async (path) => {
+        await mutate(async () => {
+          const updated = await development.addProjectFolder(project.id, path);
+          await development.bindProjectLocation(sessionId, updated.id, path);
+        }, true);
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }, [chooseDirectory, development, mutate, project, sessionId]);
 
   useEffect(() => {
     void refresh();
@@ -2775,7 +2782,7 @@ function WorkspaceProjectStrip({
                 })}
               </div>
             ) : null}
-            {workspaces?.chooseDirectory ? (
+            {chooseDirectory ? (
               <button
                 type="button"
                 role="menuitem"
@@ -2789,7 +2796,7 @@ function WorkspaceProjectStrip({
             ) : null}
           </PopoverContent>
         </Popover>
-        {workspaces?.chooseDirectory ? (
+        {chooseDirectory ? (
           <button
             type="button"
             data-workspace-project-add

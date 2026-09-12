@@ -36,3 +36,5 @@ export {
   PaneHeaderBar,
   type PaneHeaderBarProps,
 } from "./navigation/PaneHeaderBar";
+
+export * from "./directory-chooser";

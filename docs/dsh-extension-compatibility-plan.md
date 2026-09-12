@@ -31,7 +31,7 @@ are required in addition to new-plugin tests.
 | Plugin settings tabs | implementation + focused tests + real Desktop file: integration passed; visual review pending | Real localized tabs/panels; existing inventory and filters preserved; unload falls back |
 | Plugin config cards/forms | keyed cards plus three built-in forms implemented; controller/UI tests, real Host save/reset and visual review passed | Host config read/write, actual schema, existing settings preserved |
 | Sidebar additive actions | implementation + focused tests + real Desktop wide/narrow/unload passed | Correct owner, no empty wrapper, collapsed/expanded behavior |
-| Workspace/directory selection | lifecycle controller implemented; 5 tests passed; surface integration open | Open/cancel/picked/error lifecycle, one workspace mutation authority |
+| Workspace/directory selection | Home/project surfaces wired; 17 focused tests and Desktop Home smoke passed; project/native interaction open | Open/cancel/picked/error lifecycle, one workspace mutation authority |
 | Session export | native plugin enabled + dialog adapted/tested; actual Desktop ZIP saved; ordinary Web download verification pending | Native command download on Web/Desktop without duplicate existing action |
 | Official session open from no-selection | implemented; 17 focused tests + real Desktop plugin open passed | Explicit opens follow the existing Amiba path; startup restore stays suppressed. Clear and direct-child navigation need separate audit |
 | Existing header/model/plan/command/reference extensions | open | Regression tests plus dependency/owner audit |
@@ -212,3 +212,31 @@ The same six cases against the unpatched managed runtime reproduced five failure
 all six pass with the patch, alongside the five directory-flow controller tests.
 Surface integration, starting-directory preservation and real Desktop interaction
 remain open; this patch alone does not establish directory-flow compatibility.
+
+
+### Directory flow surface wiring
+
+Both official single/root directory slots are declared together. A context bridge
+connects Home and the workspace project's existing choose/add-folder actions;
+no additional idle DOM, replacement controls or styles are introduced. The caller's
+actual path adoption runs while the owner is busy: Home stores its intended path,
+and project actions use the existing development service. This deliberately does
+not create an extra Host workspace or session when merely choosing a Home path.
+The controller still accepts Host workspace adoption when used by such a caller.
+
+The patched native occupant accepts an optional Amiba native picker callback to
+retain the original platform chooser and starting path. Other occupants receive
+the unchanged required official owner contract. Each opened request has a separate
+React key, including when close/reopen notifications are batched together.
+
+Validation: 6 controller, 7 actual native component, and 4 chooser-context tests
+passed; shell typecheck and complete Desktop production build passed. The real
+Desktop smoke passed Home registration, cancel/reopen, stale callbacks and path
+adoption, as well as existing settings/view/export/HMR checks. Native picker
+interaction, project-surface integration and browser picker styling still require
+runtime verification before marking this entry done.
+
+Final Home smoke also asserts no session IDs are added by directory selection and
+both default directory registrations remain after probe unload. The captured Home
+screenshot was visually reviewed: original layout/composer/selected-path control
+remain intact. Full smoke log: `/tmp/amiba-directory-desktop-smoke-final.log`.

@@ -1,18 +1,22 @@
 diff --git a/lib/client.js b/lib/client.js
 --- a/lib/client.js
 +++ b/lib/client.js
-@@ -21,9 +21,7 @@
+@@ -20,10 +20,10 @@
+ 		* @returns nothing — the native chooser renders on the host display.
  		*/
  		function NativeDirectoryFlow(props) {
- 			const { open, pick } = props;
+-			const { open, pick } = props;
 -			const armed = (0, react.useRef)(false);
 -			const outcome = (0, react.useRef)(props);
 -			outcome.current = props;
++			const { open } = props;
++			// An embedding shell may preserve its native chooser and starting path.
++			const pick = props.amibaNativePicker ?? props.pick;
 +			const request = (0, react.useRef)(null);
  			const alive = (0, react.useRef)(true);
  			(0, react.useEffect)(() => {
  				alive.current = true;
-@@ -33,18 +31,21 @@
+@@ -33,18 +33,21 @@
  			}, []);
  			(0, react.useEffect)(() => {
  				if (!open) {

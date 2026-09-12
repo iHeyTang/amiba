@@ -1,3 +1,5 @@
+import { DirectoryChooserContext, type DirectoryChooser } from "@amiba/ui";
+import type { DirectoryFlow } from "./directory-flow.js";
 import type { ConversationViewEntry } from "./conversation-view-source.js";
 import { SurfaceProvider } from "./surface-provider.js";
 import type { SurfaceSelections } from "./surface-selections.js";
@@ -133,6 +135,8 @@ const EMPTY_MESSAGE_SOURCES: readonly MessageSourceRow[] = [];
 export type AmibaShellSlot =
   | Exclude<AmibaRootSlot, "amiba.agentPreset.section">
   | "settings.section"
+  | "conversation.hero.workspace.directoryFlow"
+  | "sidebar.workspaces.directoryFlow"
   | "sidebar.footer.action"
   | "settings.trigger"
   | "settings.header"
@@ -338,6 +342,7 @@ function createChatClient(dshClient: DshApiClient): DshChatEngineClient {
 }
 
 interface ProductShellProps {
+  directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
   conversationViews: ContributionsSource<ConversationViewEntry>;
   surfaces: SurfaceSelections;
   dshClient: DshApiClient;
@@ -388,6 +393,7 @@ export function AmibaProductShell(props: ProductShellProps): ReactElement {
 }
 
 function ProductShellInner({
+  directoryFlows,
   conversationViews,
   dshClient,
   openSettingsSection,
@@ -472,6 +478,14 @@ function ProductShellInner({
   const { open: settingsOpen, close: closeSettings } = settings;
   const client = useMemo(() => createChatClient(dshClient), [dshClient]);
   const capabilities = useMemo(productCapabilities, []);
+  const homeDirectory = useSyncExternalStore(directoryFlows.home.subscribe, directoryFlows.home.getSnapshot, directoryFlows.home.getSnapshot);
+  const workspaceDirectory = useSyncExternalStore(directoryFlows.workspace.subscribe, directoryFlows.workspace.getSnapshot, directoryFlows.workspace.getSnapshot);
+  const directoryChoosers = useMemo(() => {
+    const bind = (flow: DirectoryFlow, available: boolean): DirectoryChooser | undefined => available
+      ? (defaultPath, adopt) => flow.choose(defaultPath, platform.workspaces?.chooseDirectory, adopt)
+      : undefined;
+    return { home: bind(directoryFlows.home, homeDirectory.available), workspace: bind(directoryFlows.workspace, workspaceDirectory.available) };
+  }, [directoryFlows, homeDirectory.available, workspaceDirectory.available, platform]);
   const viewEntries = useSyncExternalStore(conversationViews.subscribe, conversationViews.getSnapshot, conversationViews.getSnapshot);
   const sessions = useSessions();
   // Host-side session changes (a plugin creating a task session, a blank
@@ -697,12 +711,15 @@ function ProductShellInner({
 
   return (
     <PresentationRoot>
+      <DirectoryChooserContext.Provider value={directoryChoosers}>
       <div hidden aria-hidden="true">{renderSlot("amiba.session.observer", { readStates: sessions.sessions.filter(s => s.readAt !== undefined).map(s => ({sessionId: s.id, readAt: s.readAt!})) })}</div>
       <SurfaceProvider surfaces={surfaces} renderSlot={renderSlot}>
         <div
           data-amiba-product-shell
           className="relative h-screen w-full overflow-hidden bg-background text-foreground"
         >
+          {homeDirectory.owner.open && <DirectoryFlowSeat key={`home:${homeDirectory.requestId}`} content={renderSlot("conversation.hero.workspace.directoryFlow", homeDirectory.owner)} />}
+          {workspaceDirectory.owner.open && <DirectoryFlowSeat key={`workspace:${workspaceDirectory.requestId}`} content={renderSlot("sidebar.workspaces.directoryFlow", workspaceDirectory.owner)} />}
           {standaloneTitleBar && (
             <div
               data-testid="native-window-titlebar"
@@ -943,6 +960,9 @@ function ProductShellInner({
           </span>
         </div>
       </SurfaceProvider>
+      </DirectoryChooserContext.Provider>
     </PresentationRoot>
   );
 }
+
+function DirectoryFlowSeat({ content }: { content: ReactNode }) { return <>{content}</>; }

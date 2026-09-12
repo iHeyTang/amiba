@@ -26,7 +26,7 @@ it("preserves the native chooser and initial path when unoccupied", async () => 
   const flow = createDirectoryFlow(f.slots, "flow", adopt);
   expect(await flow.choose("/initial", native)).toBe("/chosen");
   expect(native).toHaveBeenCalledWith("/initial");
-  expect(adopt).not.toHaveBeenCalled();
+  expect(adopt).toHaveBeenCalledWith("/chosen");
   expect(flow.getSnapshot().owner.open).toBe(false);
   flow.dispose();
 });
@@ -100,4 +100,22 @@ it("does not apply late adoption after cancellation or disposal", async () => {
   await Promise.resolve();
   expect(flow.getSnapshot().available).toBe(false);
   expect(await flow.choose()).toBeNull();
+});
+
+it("preserves the initial path and delegates adoption to the existing caller", async () => {
+  const f = fixture();
+  f.replace([{}]);
+  const hostAdopt = vi.fn(),
+    projectAdopt = vi.fn();
+  const native = vi.fn().mockResolvedValue("/chosen");
+  const flow = createDirectoryFlow(f.slots, "flow", hostAdopt);
+  const selected = flow.choose("/initial", native, projectAdopt);
+  const owner = flow.getSnapshot().owner;
+  const path = await owner.amibaNativePicker!();
+  expect(native).toHaveBeenCalledWith("/initial");
+  owner.onPicked(path!);
+  expect(await selected).toBe("/chosen");
+  expect(projectAdopt).toHaveBeenCalledWith("/chosen");
+  expect(hostAdopt).not.toHaveBeenCalled();
+  flow.dispose();
 });

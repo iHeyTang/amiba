@@ -159,6 +159,29 @@ try {
     assert.equal((await evaluate("window.amiba.agentDiagnostics.status()")).pid, runtimeBefore.pid);
   }
   if (process.argv.includes("--compat")) {
+    const directorySessionsBefore = await evaluate("window.__probeCtx.sessions.list.getSnapshot().ids");
+    await evaluate(`(() => {
+      window.__directoryOff = window.__probeCtx.slots.register({
+        name:'conversation.hero.workspace.directoryFlow', id:'compat-directory', priority:-100,
+      }, owner => { window.__directoryOwner=owner; return owner.open ? 'COMPAT_DIRECTORY_OPEN' : null; });
+    })()`);
+    const directoryButton = "document.querySelector('[role=group][aria-label=\"Execution context\"] button, [role=group][aria-label=\"执行上下文\"] button')";
+    await wait(() => evaluate(`Boolean(${directoryButton})`));
+    await evaluate(`${directoryButton}.click()`);
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_DIRECTORY_OPEN')"));
+    await evaluate("window.__oldDirectoryOwner=window.__directoryOwner;window.__directoryOwner.onCancel();void 0");
+    await wait(() => evaluate("!document.body.textContent.includes('COMPAT_DIRECTORY_OPEN')"));
+    await evaluate(`${directoryButton}.click()`);
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_DIRECTORY_OPEN')"));
+    await evaluate("window.__oldDirectoryOwner.onPicked('/stale-directory')");
+    assert.ok(await evaluate("document.body.textContent.includes('COMPAT_DIRECTORY_OPEN')"), "old callback must not finish the new flow");
+    await evaluate(`window.__directoryOwner.onPicked(${JSON.stringify(profile)})`);
+    await wait(() => evaluate(`!document.body.textContent.includes('COMPAT_DIRECTORY_OPEN') && ${directoryButton}?.title===${JSON.stringify(profile)}`));
+    assert.deepEqual(await evaluate("window.__probeCtx.sessions.list.getSnapshot().ids"), directorySessionsBefore, "choosing a Home path must not create a session");
+    await writeFile(path.join(tmpdir(), "amiba-directory-home.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+    await evaluate("window.__directoryOff();void 0");
+    assert.ok(await evaluate("window.__probeCtx.slots.entriesOfSlot('conversation.hero.workspace.directoryFlow').length > 0 && window.__probeCtx.slots.entriesOfSlot('sidebar.workspaces.directoryFlow').length > 0"), "default picker registrations must remain in both directory slots");
+    console.log("Home directory slot passed real registration, cancellation, reopen, stale callback rejection and existing path adoption.");
     // Real SlotCore + module-loader + renderer integration on the file: surface.
     const namespace = await evaluate(`(async () => {
       const ctx = window.__probeCtx;

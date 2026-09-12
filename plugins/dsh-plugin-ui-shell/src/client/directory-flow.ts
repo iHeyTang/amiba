@@ -2,13 +2,19 @@ import type { DirectoryFlowOwnerProps } from "@amiba/extension-sdk";
 
 export interface DirectoryFlowSnapshot {
   available: boolean;
-  owner: DirectoryFlowOwnerProps;
+  requestId: number;
+  owner: DirectoryFlowOwnerProps & {
+    amibaNativePicker?: () => Promise<string | null>;
+  };
 }
 interface Slots {
   entriesOfSlot(name: string): readonly unknown[];
   subscribe(name: string, listener: () => void): () => void;
 }
 interface Request {
+  id: number;
+  adopt: (path: string) => Promise<unknown>;
+  nativePicker?: () => Promise<string | null>;
   entry: unknown;
   busy: boolean;
   resolve(path: string | null): void;
@@ -20,14 +26,17 @@ export function createDirectoryFlow(
   adopt: (path: string) => Promise<unknown>,
 ) {
   let current: Request | undefined;
+  let nextId = 0;
   let disposed = false;
   const listeners = new Set<() => void>();
   let snapshot = read();
   function read(): DirectoryFlowSnapshot {
     const request = current;
     return {
+      requestId: request?.id ?? 0,
       available: !disposed && slots.entriesOfSlot(name).length > 0,
       owner: {
+        amibaNativePicker: request?.nativePicker,
         open: request !== undefined,
         busy: request?.busy ?? false,
         onCancel: () => finish(request, null),
@@ -40,7 +49,7 @@ export function createDirectoryFlow(
             // Cancellation/unload before the microtask must not start adoption.
             if (request !== current) return;
             try {
-              await adopt(path);
+              await request.adopt(path);
               finish(request, path);
             } catch (error) {
               finish(
@@ -78,14 +87,28 @@ export function createDirectoryFlow(
     choose(
       defaultPath?: string,
       fallback?: (defaultPath?: string) => Promise<string | null>,
+      adoptSelection = adopt,
     ): Promise<string | null> {
       if (disposed) return Promise.resolve(null);
       finish(current, null);
       const entry = slots.entriesOfSlot(name)[0];
       // No occupant: preserve the platform chooser, including its starting path.
-      if (!entry) return fallback?.(defaultPath) ?? Promise.resolve(null);
+      if (!entry)
+        return (async () => {
+          const path = (await fallback?.(defaultPath)) ?? null;
+          if (path) await adoptSelection(path);
+          return path;
+        })();
       return new Promise((resolve, reject) => {
-        current = { entry, busy: false, resolve, reject };
+        current = {
+          id: ++nextId,
+          entry,
+          busy: false,
+          resolve,
+          reject,
+          adopt: adoptSelection,
+          nativePicker: fallback ? () => fallback(defaultPath) : undefined,
+        };
         publish();
       });
     },

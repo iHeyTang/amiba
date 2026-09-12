@@ -1,3 +1,4 @@
+import { createDirectoryFlow, type DirectoryFlow } from "./directory-flow.js";
 import { createConversationViewSource, type ConversationViewEntry } from "./conversation-view-source.js";
 import { CONVERSATION_ENTRY_REMOTE } from "../conversation-remote.js";
 import { createConversationPreparer } from "./conversation-submit.js";
@@ -261,6 +262,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     markdownSource: ContributionsSource<MarkdownExtension>;
     surfaces: SurfaceSelections;
     workbenchSource: ContributionsSource<WorkbenchViewExtension>;
+    directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
     conversationViews: ContributionsSource<ConversationViewEntry>;
     reportMarkdown: (sessionId:string, capabilities:MarkdownCapabilities[]) => Promise<void>;
     prepareConversation: (sessionId: string) => Promise<string>;
@@ -291,6 +293,7 @@ function AmibaRoot({
   messageSources,
   markdownSource,
   workbenchSource,
+  directoryFlows,
   conversationViews,
   surfaces,
   reportMarkdown,
@@ -319,6 +322,7 @@ function AmibaRoot({
       sessionListGroups={sessionListGroups}
       sessionItemMenuItems={sessionItemMenuItems}
       surfaces={surfaces}
+      directoryFlows={directoryFlows}
       conversationViews={conversationViews}
       messageSources={messageSources}
       useOfficialSessions={useSessions}
@@ -586,6 +590,15 @@ export async function apply(ctx: ClientContext): Promise<void> {
     const markdownSource = createMarkdownSource(ctx.slots);
     const workbenchSource = createWorkbenchSource(ctx.slots);
     const conversationViews = createConversationViewSource(ctx.slots);
+    const adoptDirectory = async (path: string) => {
+      const workspaces = ctx.get("workspaces");
+      if (!workspaces) throw new Error("Workspace service is unavailable");
+      return workspaces.create({ path });
+    };
+    const directoryFlows = {
+      home: createDirectoryFlow(ctx.slots, "conversation.hero.workspace.directoryFlow", adoptDirectory),
+      workspace: createDirectoryFlow(ctx.slots, "sidebar.workspaces.directoryFlow", adoptDirectory),
+    };
     const surfaces = createSurfaceSelections(ctx.slots, getPlatform().storage);
     const disposeRoot = ctx.slots.register(
       {
@@ -599,6 +612,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           dshClient,
           markdownSource,
           workbenchSource,
+          directoryFlows,
           conversationViews,
           surfaces,
           reportMarkdown,
@@ -615,6 +629,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
           messageSources,
         }),
         children: {
+          "conversation.hero.workspace.directoryFlow": { kind: "single", scope: "root" },
+          "sidebar.workspaces.directoryFlow": { kind: "single", scope: "root" },
           "sidebar.footer.action": { kind: "list", scope: "root" },
           "amiba.message.decoration": { kind: "list", scope: "root" },
           "amiba.composer.accessory": { kind: "list", scope: "root" },
@@ -875,6 +891,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
       void sourcesFiber.dispose();
       void disposeComposerInputs();
       for (const dispose of disposeWorkbench) dispose();
+      directoryFlows.home.dispose();
+      directoryFlows.workspace.dispose();
       disposeRoot();
       sessionsBridge.dispose();
       void disposeLayout();
