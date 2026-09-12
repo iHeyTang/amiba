@@ -31,7 +31,7 @@ are required in addition to new-plugin tests.
 | Plugin settings tabs | implementation + focused tests + real Desktop file: integration passed; visual review pending | Real localized tabs/panels; existing inventory and filters preserved; unload falls back |
 | Plugin config cards/forms | keyed cards plus three built-in forms implemented; controller/UI tests, real Host save/reset and visual review passed | Host config read/write, actual schema, existing settings preserved |
 | Sidebar additive actions | implementation + focused tests + real Desktop wide/narrow/unload passed | Correct owner, no empty wrapper, collapsed/expanded behavior |
-| Workspace/directory selection | open | Open/cancel/picked/error lifecycle, one workspace mutation authority |
+| Workspace/directory selection | lifecycle controller implemented; 5 tests passed; surface integration open | Open/cancel/picked/error lifecycle, one workspace mutation authority |
 | Session export | native plugin enabled + dialog adapted/tested; actual Desktop ZIP saved; ordinary Web download verification pending | Native command download on Web/Desktop without duplicate existing action |
 | Official session open from no-selection | implemented; 17 focused tests + real Desktop plugin open passed | Explicit opens follow the existing Amiba path; startup restore stays suppressed. Clear and direct-child navigation need separate audit |
 | Existing header/model/plan/command/reference extensions | open | Regression tests plus dependency/owner audit |
@@ -174,3 +174,28 @@ standalone implementations now check the write result and retain failed drafts.
 - The same real run passed plugin-tab shadow/unload fallback, footer width,
   explicit session open, conversation view injection/unload, actual native ZIP
   download, plugin HMR/detach and preservation of the installed user profile.
+
+### Directory flow lifecycle groundwork
+
+`directory-flow.ts` supplies real open/busy/outcome state over an occupied slot,
+awaits Host adoption before returning the path, cancels on occupant replacement or
+unload, and ignores stale callbacks and late adoption results. With no occupant,
+it calls the existing platform chooser with the exact original starting path.
+Five lifecycle tests and shell typecheck passed. It is not yet wired to a product
+surface, so directory-flow compatibility is not claimed complete.
+
+Integration evidence and remaining requirements:
+
+- The installed native picker nests injection of BOTH directory-flow keys before
+  registering either one. Declaring only the Home key does not activate it.
+- Its `pick()` calls `ctx.workspaces.pickDirectory()` without a starting path;
+  Amiba Home and workspace-project pickers currently pass a starting directory.
+  Preserve that capability when adapting the default native occupant.
+- The native driver reads `outcome.current` when an asynchronous picker returns.
+  Reopening before an older picker settles can route that old result into the new
+  request. Surface integration must isolate request instances or fix that driver,
+  in addition to the controller's own stale-callback guards.
+- Home currently selects an intended path; workspace-project actions feed the
+  existing development-project authority. Keep those caller actions, use real
+  Host workspace adoption for the contributed flow, and do not fabricate owner
+  callbacks or silently replace a project/session mutation path.

@@ -18,6 +18,7 @@ packages:
 # `catalog:` resolves at install time and is replaced by the concrete version
 # when a package is published, so consumers of @amiba/* see real versions.
 catalog:
+  "@deepseek-ai/dsh-client-ui-workspace": "0.1.1-rc.2"
   "@deepseek-ai/dsh-client-connection": "0.1.1-rc.2"
   "@deepseek-ai/cordis": ^4.0.1
   "@deepseek-ai/dsh-agent": 0.1.1-rc.2

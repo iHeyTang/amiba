@@ -787,3 +787,5 @@ export type AssistantActionOwnerProps = OwnerOf<"conversation.chat.assistant-act
 
 /** Additive conversation view; inspect handoff fields are optional. */
 export type { ConvViewOwnerProps } from "@deepseek-ai/dsh-client-ui-conversation/client";
+
+export type { DirectoryFlowOwnerProps } from "@deepseek-ai/dsh-client-ui-workspace/client";
