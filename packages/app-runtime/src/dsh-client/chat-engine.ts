@@ -397,6 +397,7 @@ export class DshChatEngineClient implements ChatEngineClient {
       }
       case "turn":
         state.turnId = event.turnId;
+        state.runtimeTurn = event.runtimeTurn;
         delete state.assistantMessageId;
         break;
       case "approvalRequest":

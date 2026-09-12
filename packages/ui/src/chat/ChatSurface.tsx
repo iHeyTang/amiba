@@ -1054,6 +1054,7 @@ export default function ChatSurface({
       const merged: Partial<UiMessage> = {
         content: state.assistantText,
         assistantMessageId: state.assistantMessageId,
+        runtimeTurn: state.runtimeTurn,
         streaming: state.streaming,
         // Carry the chip URL the engine captured at end-of-turn through to
         // any panel that opens AFTER the stream finished. While the panel
@@ -1387,9 +1388,13 @@ export default function ChatSurface({
           );
         }
         break;
-      case "turn":
+      case "turn": {
         setActiveTurnId(event.turnId || null);
+        const assistantUiId = stream.getCurrentAssistantUiId();
+        if (assistantUiId) sessions.setActiveMessages(prev => (prev as UiMessage[]).map(message =>
+          message.uiId === assistantUiId ? { ...message, runtimeTurn: event.runtimeTurn } : message));
         break;
+      }
       case "approvalRequest":
         onApprovalRequestEvent(event.request);
         break;

@@ -209,7 +209,7 @@ export class DshAmibaEventBridge {
     if (source.type === "turn/start") {
       this.dispatches.set(sessionId, new CodeDispatchTree())
       const turn = typeof data.turn === "number" ? data.turn : source.seq
-      return [{ sessionId, event: { kind: "turn", turnId: `${sessionId}:${turn}` } }]
+      return [{ sessionId, event: { kind: "turn", turnId: `${sessionId}:${turn}`, ...(Number.isSafeInteger(data.turn) && (data.turn as number) >= 0 ? { runtimeTurn: data.turn as number } : {}) } }]
     }
     if (source.type === "assistant/chunk") {
       const chunk = record(data.chunk)

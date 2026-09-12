@@ -36,6 +36,7 @@ type RuntimeSessionMessage = SessionMessage & {
   assistantTimeline?: AssistantTimelineItem[];
   runtimeSeq?: number;
   assistantMessageId?: string;
+  runtimeTurn?: number;
 };
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -91,6 +92,7 @@ function messageFromEvent(event: AgentSessionEvent): Record<string, unknown> | n
 
 interface AssistantTurn {
   turn: number;
+  runtimeTurn?: number;
   firstSeq: number;
   text: string;
   draftText: string;
@@ -109,6 +111,7 @@ function beginTurn(event: AgentSessionEvent): AssistantTurn {
   return {
     turn:
       typeof event.data.turn === "number" ? event.data.turn : event.seq,
+    ...(Number.isSafeInteger(event.data.turn) && (event.data.turn as number) >= 0 ? { runtimeTurn: event.data.turn as number } : {}),
     firstSeq: event.seq,
     text: "",
     draftText: "",
@@ -150,6 +153,7 @@ function finishTurn(
     content,
     uiId: `dsh:turn:${turn.firstSeq}`,
     runtimeSeq: turn.firstSeq,
+    ...(turn.runtimeTurn === undefined ? {} : { runtimeTurn: turn.runtimeTurn }),
     ...(turn.closing.getMessageId() ? { assistantMessageId: turn.closing.getMessageId()! } : {}),
     ...(turn.reasoning ? { reasoning: turn.reasoning } : {}),
     ...(turn.reasoning && reasoningMs !== undefined ? { reasoningMs } : {}),

@@ -67,6 +67,8 @@ export interface UiMessage extends ChatMessage {
    */
   /** Canonical DSH closing message, never the synthetic bubble id. */
   assistantMessageId?: string
+  /** Exact DSH engine turn, shared by live and historical projections. */
+  runtimeTurn?: number
   assistantTimeline?: AssistantTimelineItem[]
   /**
    * Approvals that fired during this assistant turn — including resolved

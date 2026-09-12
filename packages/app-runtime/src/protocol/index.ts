@@ -358,6 +358,8 @@ export interface ChatRuntimeState {
   assistantText: string;
   /** Durable identity of the completed turn’s closing assistant, when available. */
   assistantMessageId?: string;
+  /** Exact DSH engine turn number, never a display ordinal. */
+  runtimeTurn?: number;
   reasoning: string;
   /** Wall-clock bounds of the reasoning stream; null until the first delta. */
   reasoningStartedAt: number | null;
@@ -443,7 +445,7 @@ export type StreamEvent =
   | { kind: "toolProgress"; event: ToolProgress }
   | { kind: "compaction"; event: CompactionUpdate }
   | { kind: "session"; sessionId: string }
-  | { kind: "turn"; turnId: string }
+  | { kind: "turn"; turnId: string; runtimeTurn?: number }
   | { kind: "approvalRequest"; request: ApprovalRequest }
   | { kind: "approvalResolved"; approvalId: string }
   | { kind: "questionRequest"; request: UserQuestionRequest }

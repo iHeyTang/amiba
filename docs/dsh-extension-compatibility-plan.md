@@ -360,3 +360,17 @@ be treated as engine turn numbers. Carry the exact event turn number through
 live/history message projection before mapping footer render sites, including
 completed tool-only replies. The headless module alone is not a completed footer
 adapter.
+
+### Exact engine-turn currency carried through Amiba messages
+
+Added optional runtimeTurn metadata from the actual nonnegative safe-integer DSH
+turn number to bridge events, engine snapshots, historical assistant messages and
+live/snapshot UI projection. The existing turnId and message/bubble identities are
+unchanged. Missing or invalid turn numbers do not borrow the event sequence or
+user-message ordinal. No new display or styling is introduced.
+
+Seven mapping tests plus sixteen closing-assistant tests pass. Engine tests also
+verify that a passive run's stream event and recovered snapshot preserve the
+same exact number; the full engine test file passes. Shell typecheck passed.
+The footer renderer still needs to use this metadata to read the corresponding
+engine TurnLocation, handle missing history and avoid duplicate placement.

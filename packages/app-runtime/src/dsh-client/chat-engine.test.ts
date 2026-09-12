@@ -285,6 +285,8 @@ describe("DshChatEngineClient host-started turns", () => {
     expect(last?.kind).toBe("live");
     const live = last as Extract<SnapshotFrame, { kind: "live" }>;
     expect(live.state.assistantText).toBe("on it");
+    expect(live.state.runtimeTurn).toBe(1);
+    expect(events.find(event => event.kind === "turn")).toMatchObject({ runtimeTurn: 1 });
     expect(live.state.assistantUiId).toBe(
       (events.find((event) => event.kind === "begin") as
         | Extract<StreamEvent, { kind: "begin" }>
