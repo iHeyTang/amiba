@@ -25,6 +25,8 @@ export function continuableChildFixture(root, profile) {
         const text = options.sessionId==='compat-continuable-child'
           ? 'COMPAT_CONTINUABLE_REPLY '+input : options.sessionId==='compat-nested-child' ? 'COMPAT_NESTED_REPLY '+input : 'COMPAT_PARENT_SETTLED';
         console.log('AMIBA_PROBE_MODEL '+options.sessionId+' '+input);
+        const literal=options.messages.filter((m:any)=>m.role==='user').flatMap((m:any)=>m.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text)).find((text:string)=>text.startsWith('COMPAT_LITERAL_'));
+        if(literal) console.log('AMIBA_PROBE_LITERAL_INPUT '+options.sessionId+' '+JSON.stringify(literal));
         yield {type:'block-start',index:0,blockType:'text'};
         yield {type:'text-delta',index:0,text};
         if((input.includes('COMPAT_WAIT_FOR_STOP') || input.includes('COMPAT_NESTED_PARENT_WAKE')) && options.sessionId==='compat-continuable-child') {

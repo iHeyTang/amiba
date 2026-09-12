@@ -1,3 +1,4 @@
+import { parseTokens } from "./composer/serialize";
 import { commandImages } from "./composer/command-attachments";
 import { ComposerAccessory } from "../primitives/empty-state-visual";
 import { useT } from "@amiba/i18n";
@@ -42,7 +43,7 @@ import {
 
 import { COMPOSER_TEXTAREA_MAX_PX } from "./internal/types";
 import { buildProviderRegistry } from "./composer/providers/registry";
-import { expandMentionsAsync } from "./composer/expandMentions";
+import { expandMentionPartsAsync } from "./composer/expandMentions";
 import { routeSubmit } from "./composer/command-routing";
 import { useComposerTriggers } from "./composer/triggers/session";
 import type { ComposerTriggerRuntime } from "./composer/triggers/contracts";
@@ -599,6 +600,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         },
       });
       if (handled) return; // command claim or UI action took it, don't send
+      const editorParts = innerRef.current?.getParts?.();
+      const parts = editorParts && editorParts.map(part => part.kind === "text" ? part.text : part.raw).join("") === draft
+        ? editorParts : parseTokens(draft);
       const attempt = Object.assign(new AbortController(), { draft, sessionId: permissionSessionId, attachments: attachments?.attachments });
       resolvingMentionRef.current = attempt;
       trigger.setAttemptInFlight(true);
@@ -632,8 +636,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         }
         let finalText: string;
         try {
-          finalText = await expandMentionsAsync(
-            draft,
+          finalText = await expandMentionPartsAsync(
+            parts,
             providerRegistry.all,
             trigger.resolver,
             attempt.signal,

@@ -740,3 +740,21 @@ it("blocks image additions during native adjudication", async () => {
   await act(async () => settle(undefined));
   expect(images.canAdd()).toBe(true);
 });
+
+it("submits token-shaped literal text without invoking an official reference codec", async () => {
+  const controller = controllerDouble(fixtureSource());
+  const serialize = vi.spyOn(controller, "serializeReference");
+  let submit!: () => boolean;
+  const runtime: ComposerTriggerRuntime = { ...runtimeFor(controller), bindSubmit: (_id, callback) => { submit = callback; return () => {}; } };
+  const onSubmit = vi.fn();
+  render(<ControlledComposer initial="" sessionId="literal" controller={controller} runtime={runtime} onSubmit={onSubmit}
+    submitOptions={{ canSubmitDraft: draft => !!draft.trim() }} />);
+  await waitFor(() => expect(controller.ops).not.toBeNull());
+  const text = "Example: @[dsh.reference:fixture|alpha|alpha|@alpha]";
+  act(() => {
+    expect(controller.ops!.editInputDraft!(text)).toBe(true);
+    expect(submit()).toBe(true);
+  });
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(text));
+  expect(serialize).not.toHaveBeenCalled();
+});

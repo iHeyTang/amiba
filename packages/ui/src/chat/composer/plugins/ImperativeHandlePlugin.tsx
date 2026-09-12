@@ -1,3 +1,5 @@
+import { $readComposerParts } from "../composer-parts"
+import type { ParsedPart } from "../serialize"
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
 import { $createRangeSelection, $getRoot, $getSelection, $isRangeSelection, $setSelection } from "lexical"
 import { useImperativeHandle, type Ref } from "react"
@@ -11,6 +13,7 @@ export interface RichComposerHandle {
   focus(): void
   select(): void
   getValue(): string
+  getParts?(): readonly ParsedPart[]
   getTextarea(): HTMLTextAreaElement | null
 }
 
@@ -19,6 +22,7 @@ export function ImperativeHandlePlugin({ handleRef }: { handleRef: Ref<RichCompo
   useImperativeHandle(
     handleRef,
     (): RichComposerHandle => ({
+      getParts: () => editor.getEditorState().read($readComposerParts),
       getValue: () => editor.getEditorState().read(() => $getRoot().getTextContent()),
       focus: () => editor.focus(),
       openMention: () => {

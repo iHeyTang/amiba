@@ -1184,3 +1184,13 @@ pipelines retain mounted component state.
 - 测试通过原输入框向父会话发送明确的新请求，测试模型模拟一个仍在运行的父任务。此时父会话确实驻留；返回孙会话，直接发送保留的草稿即可得到真实 COMPAT_NESTED_REPLY COMPAT_NESTED_FOLLOWUP。最后通过原停止按钮中止父任务，完成插件卸载检查。没有测试端直接恢复父/孙 Agent。
 - 首轮 /tmp/amiba-nested-cold-smoke.log 暴露测试误以为已完成的子会话仍驻留：ctx.agents.get 返回 undefined。实际 continuation 的 settlement watcher 会在 Agent 空闲且无存活子实例时释放它。测试已改为在 Agent stream 执行期间创建孙会话、在父请求仍运行时重试孙会话，不再把历史可读或刚完成请求等同于驻留。
 - 最终 /tmp/amiba-nested-cold-smoke2.log 退出 0，包含原有完整兼容回归及两次真实 Host 冷重启。只扩展测试与边界说明，复用已验证的生产构建；不宣称当前已具备无消息自动恢复冷嵌套父会话的能力。
+
+
+### 发送时保留普通文本与真实引用的节点区别（2026-09-13）
+
+- 原发送链把 Lexical 树先压成 token 字符串，再 parseTokens。因此用户实际输入的 `@[dsh.reference:...]` 示例文本也可能触发不存在的插件引用解析；这会阻断发送或替换原本的普通文本，不符合官方输入中的 occurrence 身份语义。
+- 新增 $readComposerParts，从真实节点树读取 text/mention 分段，保留段落分隔和真实引用 payload。payload 是独立副本，调用者修改快照不会修改编辑器。RichComposerHandle 增加可选 getParts，保留原 getValue 和旧调用方式。
+- Composer 在提交开始时捕获与本次 draft 一致的分段快照，普通发送仅对其中真实 mention 调用原解析器；旧嵌入器没有该接口或提交的不是当前编辑器值时，仍沿用原 token 解析路径。命令仲裁、提交条件、原字符串协议和所有样式未改。
+- 真实 Lexical 节点及完整 Composer 测试区分同样 token 文本的字面内容与真实引用，验证只有真实引用被解析、普通文本按原样提交。44 项编辑器、触发管线及解析测试通过（/tmp/amiba-structured-submit-tests.log），UI 类型检查通过（/tmp/amiba-structured-submit-types.log）。
+- 该分段快照目前接到发送路径，尚未替代 version:1 的字符串草稿保存；跨重载保留字面 token 文本与引用的区别，以及离屏编辑共享同一分段状态仍需继续实现，不能据此宣称完整驻留输入完成。
+- 完整 Desktop 构建通过（/tmp/amiba-structured-submit-build.log）。首轮桌面日志 /tmp/amiba-structured-submit-smoke.log 中，输入 token 文本打开了原 @ 候选菜单，Enter 被菜单处理，尚未触发发送；探针改用官方 composerInputs.submitInput 进入原普通发送路径，未改变键盘行为。最终 /tmp/amiba-structured-submit-smoke2.log 退出 0，真实模型适配器收到完全一致的 COMPAT_LITERAL_ 文本；同时通过所有既有兼容项、普通和嵌套子会话的真实 Host 冷重启验证。
