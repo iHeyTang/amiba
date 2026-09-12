@@ -44,3 +44,19 @@ it("retains each finalized text's exact sequence inside a merged history bubble"
     {kind:"text",id:"dsh:text:119",text:"last `report.txt`",runtimeSeq:119},
   ]);
 });
+
+it("restores draft provenance without changing the historical body or timeline", () => {
+  const source=[event("turn/start",1,7),
+    event("assistant/chunk",2,7,{chunk:{type:"text-delta",index:0,text:"old "}}),
+    event("llm/retry",3,7),
+    event("assistant/chunk",4,7,{chunk:{type:"text-delta",index:0,text:"new `file.txt`"}}),
+    event("assistant/chunk",5,7,{chunk:{type:"reasoning-delta",index:1,text:"thought"}}),
+    event("turn/end",6,7,{reason:{kind:"blocked"}})];
+  const row=projectRuntimeSessionHistory(source.map(event=>({event})))[0]!;
+  expect(row.content).toBe("old new `file.txt`");
+  expect(row.assistantTimeline?.map(item=>item.kind)).toEqual(["reasoning"]);
+  expect(row.assistantDraftSource).toEqual({kind:"text",id:"dsh:turn:1:text-tail",text:row.content,sourceRanges:[{start:4,end:18,runtimeStep:1}]});
+  const finalized=projectRuntimeSessionHistory([...source.slice(0,-1),event("assistant/message",6,7,{message:{id:"final",content:[{type:"text",text:"final"}]}}),source.at(-1)!].map(event=>({event})))[0]!;
+  expect(finalized.content).toBe("final");
+  expect(finalized.assistantDraftSource).toBeUndefined();
+});

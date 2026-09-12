@@ -1,4 +1,4 @@
-import { joinTextSources, sliceTextSources, timelineTextSource, thinkingBodySource, type TextSourceRange } from "../text-source-ranges";
+import { messageTextTimeline, joinTextSources, sliceTextSources, timelineTextSource, thinkingBodySource, type TextSourceRange } from "../text-source-ranges";
 import { WorkspaceMarkdown } from "../workspace-file-links";
 import { CompactionRow } from "./CompactionRow";
 import type { CompactionProgress } from "@amiba/app-runtime/protocol";
@@ -446,7 +446,7 @@ export function Bubble({
         )}
         {hasBody && (
           <WorkspaceMarkdown
-            sources={sliceTextSources(thinkingBodySource(joinTextSources((m.assistantTimeline??[]).filter(item=>item.kind==="text").map(timelineTextSource),"")),trace.bodyText)}
+            sources={sliceTextSources(thinkingBodySource(joinTextSources(messageTextTimeline(m).filter(item=>item.kind==="text").map(timelineTextSource),"")),trace.bodyText)}
             components={chatMarkdownComponents}
             mode={m.streaming ? "streaming" : "static"}
             parseIncompleteMarkdown
@@ -1275,7 +1275,8 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
     rawBody.startsWith(timelineText) &&
     rawBody.length > timelineText.length
   ) {
-    appendText(`${message.uiId}:text-tail`, rawBody.slice(timelineText.length));
+    const tail = rawBody.slice(timelineText.length);
+    appendText(`${message.uiId}:text-tail`, tail, message.assistantDraftSource ? sliceTextSources(timelineTextSource(message.assistantDraftSource), tail) : []);
   }
 
   for (const event of message.toolProgress ?? []) {
@@ -1857,7 +1858,7 @@ export function MessageTurns({
                   suppressTrace={item.suppressTrace}
                   suppressRunBoundary={item.suppressRunBoundary}
                   onOpenAgentDestination={onOpenAgentDestination}
-                />, openTurnFile, item.message.assistantTimeline)
+                />, openTurnFile, messageTextTimeline(item.message))
                   : <Bubble
                   m={item.message}
                   suppressTrace={item.suppressTrace}

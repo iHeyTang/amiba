@@ -1,3 +1,4 @@
+import { appendAssistantText, applyAssistantTextSource } from "../dsh-client/assistant-text-source";
 import { ClosingAssistant } from "../dsh-client/closing-assistant";
 import { compactionUpdate, upsertCompactionTimeline, interruptOpenCompactions } from "../dsh-client/compaction";
 import type { AssistantTimelineItem } from "../protocol";
@@ -34,6 +35,8 @@ type RuntimeSessionMessage = SessionMessage & {
   processMs?: number;
   toolProgress?: ToolProgress[];
   assistantTimeline?: AssistantTimelineItem[];
+  /** Source metadata for the existing draft-only body; not a new display row. */
+  assistantDraftSource?: Extract<AssistantTimelineItem, {kind:"text"}>;
   runtimeSeq?: number;
   assistantMessageId?: string;
   runtimeTurn?: number;
@@ -96,6 +99,7 @@ interface AssistantTurn {
   firstSeq: number;
   text: string;
   draftText: string;
+  draftTimeline: AssistantTimelineItem[];
   reasoning: string;
   reasoningStartAt: number | null;
   reasoningEndAt: number | null;
@@ -115,6 +119,7 @@ function beginTurn(event: AgentSessionEvent): AssistantTurn {
     firstSeq: event.seq,
     text: "",
     draftText: "",
+    draftTimeline: [],
     reasoning: "",
     reasoningStartAt: null,
     reasoningEndAt: null,
@@ -138,6 +143,7 @@ function finishTurn(
 ): void {
   if (!turn) return;
   const content = turn.text || turn.draftText;
+  const draftSource = !turn.text && turn.draftTimeline[0]?.kind === "text" ? turn.draftTimeline[0] : undefined;
   const tools = [...turn.tools.values()].map(tool => turn.dispatches.project(tool));
   if (!content && !turn.reasoning && tools.length === 0 && !turn.timeline?.length) return;
   const reasoningMs =
@@ -160,6 +166,7 @@ function finishTurn(
     ...(processMs !== undefined ? { processMs } : {}),
     ...(tools.length ? { toolProgress: tools } : {}),
     ...(turn.timeline?.length ? { assistantTimeline: turn.timeline } : {}),
+    ...(draftSource?.sourceRanges?.length ? {assistantDraftSource: draftSource} : {}),
   });
 }
 
@@ -334,6 +341,10 @@ export function projectRuntimeSessionHistory(
     }
     if (!turn) turn = beginTurn(event);
     turn.closing.apply(event);
+    const runtimeStep = Number.isSafeInteger(event.data.step) && (event.data.step as number) >= 0 ? event.data.step as number : undefined;
+    if (event.type === "llm/retry" && runtimeStep !== undefined) {
+      applyAssistantTextSource(turn.draftTimeline, {kind:"assistantTextSource",phase:"reset",runtimeStep});
+    }
     if (event.type === "assistant/chunk") {
       const chunk = record(event.data.chunk);
       if (typeof chunk?.text !== "string") continue;
@@ -345,7 +356,10 @@ export function projectRuntimeSessionHistory(
         if (turn.reasoningStartAt === null) turn.reasoningStartAt = event.time;
         turn.reasoningEndAt = event.time;
         markProcessActivity(turn, event.time);
-      } else if (chunk.type === "text-delta") turn.draftText += chunk.text;
+      } else if (chunk.type === "text-delta") {
+        turn.draftText += chunk.text;
+        appendAssistantText(turn.draftTimeline, chunk.text, () => `dsh:turn:${turn!.firstSeq}:text-tail`, runtimeStep);
+      }
       continue;
     }
     if (event.type === "assistant/message") {
@@ -361,6 +375,7 @@ export function projectRuntimeSessionHistory(
         });
       }
       turn.draftText = "";
+      turn.draftTimeline = [];
       continue;
     }
     if (event.type === "tool/code-dispatch-start" || event.type === "tool/code-dispatch") {

@@ -1591,3 +1591,16 @@ it("passes pending step identity through native prose but never enables streamin
   expect(screen.getByRole("button",{name:"Interrupted file"})).toBeInTheDocument();
   expect(resolve).toHaveBeenCalledWith(undefined,"file.txt",2);
 });
+
+it("maps historical draft-only prose without inserting a display row or changing tool layout", () => {
+  const text="Draft `file.txt`";
+  const message:UiMessage={uiId:"history-draft",role:"assistant",content:text,toolProgress:[{tool:"bash",toolCallId:"c",status:"completed"}],assistantTimeline:[{kind:"tool",id:"c",toolCallId:"c"}]};
+  const {container,rerender}=render(<Bubble m={message}/>);
+  const baseline=container.innerHTML;
+  const sourced:UiMessage={...message,assistantDraftSource:{kind:"text",id:"source",text,sourceRanges:[{start:0,end:text.length,runtimeStep:2}]}};
+  rerender(<Bubble m={sourced}/>);
+  expect(container.innerHTML).toBe(baseline);
+  const resolve=(seq:number|undefined,value:string,step?:number)=>step===2?{open:vi.fn(),title:value,label:"Historical file"}:undefined;
+  rerender(<WorkspaceTextMentionsContext.Provider value={resolve}><Bubble m={sourced}/></WorkspaceTextMentionsContext.Provider>);
+  expect(screen.getByRole("button",{name:"Historical file"})).toBeInTheDocument();
+});

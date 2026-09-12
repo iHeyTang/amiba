@@ -69,6 +69,7 @@ export interface UiMessage extends ChatMessage {
   assistantMessageId?: string
   /** Exact DSH engine turn, shared by live and historical projections. */
   runtimeTurn?: number
+  assistantDraftSource?: Extract<AssistantTimelineItem, {kind:"text"}>
   assistantTimeline?: AssistantTimelineItem[]
   /**
    * Approvals that fired during this assistant turn — including resolved

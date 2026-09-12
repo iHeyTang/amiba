@@ -397,6 +397,18 @@ try {
     const openedDirectory = (await readFile(nativeEvents,"utf8")).split("\n").find(line=>line.startsWith("turn-open-directory ")).slice("turn-open-directory ".length);
     assert.equal(await realpath(openedDirectory), await realpath(profile), "folder action must use the existing validated session-workspace opener");
     console.log("Official produced-files row passed actual tool-view derivation, file contents and validated directory IPC (OS folder opener stubbed).");
+    if (process.argv.includes("--reopen-prose")) {
+      const reopenedId = await evaluate("window.__compatSessionId");
+      await evaluate("window.__beforeProseReload=true;void 0");
+      await call("Page.reload", {});
+      await wait(async () => { try { return await evaluate("Boolean(!window.__beforeProseReload && window.__probeCtx?.sessions && document.querySelector('[data-amiba-product-shell]'))"); } catch { return false; } });
+      await evaluate(`window.__compatSessionId=${JSON.stringify(reopenedId)};window.__probeCtx.layout.openChat();window.__probeCtx.sessions.open(window.__compatSessionId);void 0`);
+      await wait(() => evaluate("Array.from(document.querySelectorAll('.chat-md-file-link')).some(n=>n.textContent==='compat-produced.txt')"));
+      await evaluate("Array.from(document.querySelectorAll('.chat-md-file-link')).find(n=>n.textContent==='compat-produced.txt').click()");
+      await wait(() => evaluate("document.querySelector('[data-workspace-file-preview]')?.textContent.includes('COMPAT_PRODUCED_FILE_CONTENT')"));
+      await writeFile(path.join(tmpdir(), "amiba-history-prose.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data,"base64"));
+      console.log("Prose file links passed a full renderer reload and durable history reopen with actual file contents.");
+    }
     let projectFolder = path.join(profile, "directory-project");
     let extraFolder = path.join(profile, "directory-extra");
     await mkdir(projectFolder, { recursive: true });

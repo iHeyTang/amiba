@@ -582,3 +582,29 @@ from a step number alone. Existing text and layout remain unchanged.
 - Historical draft-only replies still lack source metadata in the history
   projector. Reopen coverage and that metadata bridge remain required, along
   with custom Markdown transforms, standalone Web and the broader open ledger.
+
+### Historical draft provenance and renderer reload verified
+
+The history projector tracks draft-only text ranges with the shared append/reset
+helper and returns them as assistantDraftSource metadata. It leaves the existing
+body selection (final text or draft), assistantTimeline rows, tool order and
+reasoning untouched. A finalized message clears draft metadata; retries revoke
+old step attribution without rewriting the existing displayed draft text.
+The native Markdown mapping and turn provider consume this metadata without
+inserting a timeline row, which would otherwise change tool-only layout.
+
+- 24 history/runtime tests and 53 UI tests passed; Shell typecheck passed.
+  The UI regression compares complete DOM before and after draft metadata on
+  a tool-only historical reply, then verifies the new link.
+- Final production Desktop build passed after removing redundant reset code.
+  Two installed-plugin smoke runs passed: --compat --reopen-prose, and the same
+  with --interrupted-prose. Both reload the entire renderer and require a
+  pre-reload window marker to disappear before reopening the durable session.
+  They click a restored prose link and verify actual file contents. The
+  historical interrupted-reply screenshot was reviewed; native review and
+  execution surfaces remain present. Settings, ZIP, directories, produced-file
+  rows, HMR and unload checks pass in both runs.
+- Existing history rules may omit a later unfinished draft when earlier final
+  text already exists; this change does not rewrite that display policy.
+  Custom Markdown transformations, Web/remote behavior and the remaining
+  extension ledger are still open.

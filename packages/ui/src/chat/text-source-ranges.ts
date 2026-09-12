@@ -56,3 +56,8 @@ export function thinkingBodySource(source:SourcedText):SourcedText {
   const result=sliceAt(joined,start,Math.max(start,end));
   return result.text===body?result:{text:body,sources:[]};
 }
+
+/** Include historical draft provenance only for mapping, never as a display row. */
+export function messageTextTimeline(message:{assistantTimeline?:readonly AssistantTimelineItem[];assistantDraftSource?:Extract<AssistantTimelineItem,{kind:"text"}>}):readonly AssistantTimelineItem[] {
+  return message.assistantDraftSource ? [...(message.assistantTimeline??[]),message.assistantDraftSource] : message.assistantTimeline??[];
+}
