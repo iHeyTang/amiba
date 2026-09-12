@@ -667,3 +667,34 @@ recovery: official clear/reopen, history reload, ZIP, files, directories, settin
 HMR and detach. Artificially delayed metadata/history cancellation is covered
 by the state-store regressions; the Desktop run verifies normal plugin routing.
 No UI layout or style code changed for this fix.
+
+### Markdown transform identity, updates and source ownership
+
+The real Streamdown 2.5 pipeline cached processors by function names, causing
+distinct extensions with same-named attachers to reuse earlier transforms.
+Amiba now adds inert identity metadata to each remark/rehype pipeline, using
+weak identities shared across module instances and the extension revision.
+The original plugin functions, options, order and Unified deduplication remain
+in place. Remark and rehype marker attachers have separate identities to avoid
+merging their options. A pipeline identity key also refreshes Streamdown's
+rendered output when implementations change without a version bump; unchanged
+pipelines retain mounted component state.
+
+- 70 Markdown/message tests passed, followed by all 8 source-position tests
+  after adding an ordinary-rerender mount-stability regression (71 distinct
+  checks in total). Shell typecheck and final production Desktop build passed.
+- Actual MarkdownProvider/Streamdown tests cover inserted paragraphs, rewritten
+  anchored code, reordered paragraphs, padded multi-backtick spans, and newly
+  generated code without source positions. Original positions retain message
+  ownership even if the displayed value changes. No new text-equality restriction
+  was added. Generated nodes without provenance cannot be assigned to a merged
+  reply's original message; explicit native path links remain available.
+- Real installed-plugin smoke registers, replaces and removes two same-name,
+  same-version transforms through amiba.markdown.extension. It verifies replacement
+  output, retained produced-file links and complete unload. Full --compat
+  --reopen-prose passed, including settings, clear/reopen, files, directories,
+  ZIP, history, HMR and detach. The post-unload history screenshot was reviewed.
+- Hidden test windows previously stalled compositor capture. The native smoke
+  fixture now shows only its own main test window before capture; the final
+  entire run completed without manual recovery. No production window policy
+  or stylesheet changed. Web/remote and the remaining extension ledger stay open.

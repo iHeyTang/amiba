@@ -15,6 +15,27 @@ import {
   type StreamdownProps,
 } from "streamdown";
 
+// Streamdown 2.5 caches processors by plugin function names. Names are not
+// identities (especially after minification or HMR); add an inert cache key
+// without wrapping/replacing plugin functions or changing Unified's dedup rules.
+const identityKey = Symbol.for("@amiba/markdown/pipeline-identities");
+const identityGlobal = globalThis as typeof globalThis & {
+  [identityKey]?: {next:number;entries:WeakMap<object,number>};
+};
+const pipelineIdentities = identityGlobal[identityKey] ??= {next:0,entries:new WeakMap()};
+function identifyPipeline(plugins:NonNullable<StreamdownProps["remarkPlugins"]>, revision:string, implicit:unknown[] = []):NonNullable<StreamdownProps["remarkPlugins"]> {
+  // Separate attacher identities prevent Unified merging remark/rehype key options.
+  function amibaMarkdownPipelineIdentity() {}
+  const identity = (value:unknown) => {
+    if ((typeof value !== "object" || value === null) && typeof value !== "function") return value;
+    const object = value as object;
+    let id = pipelineIdentities.entries.get(object);
+    if (id === undefined) {id = ++pipelineIdentities.next;pipelineIdentities.entries.set(object,id);}
+    return id;
+  };
+  return [[amibaMarkdownPipelineIdentity,{items:plugins.map(identity),revision,implicit:implicit.map(identity)}],...plugins];
+}
+
 export const MARKDOWN_SLOT = "amiba.markdown.extension";
 /** Rendering configuration is typed directly from Streamdown, without custom props. */
 export type MarkdownExtension = Pick<
@@ -228,31 +249,30 @@ export function ChatMarkdown(input: StreamdownProps) {
   ]);
   const remark = resolved.sorted.flatMap((e) => e.remarkPlugins ?? []);
   const rehype = resolved.sorted.flatMap((e) => e.rehypePlugins ?? []);
+  const revision = JSON.stringify(resolved.sorted.map(e=>[e.id,e.version]));
+  const remarkPipeline = identifyPipeline([
+    ...(props.remarkPlugins ?? Object.values(defaultRemarkPlugins)), ...remark,
+  ], revision, [options.plugins.math, options.plugins.cjk]);
+  const rehypePipeline = identifyPipeline([
+    ...rehype, ...(props.rehypePlugins ?? Object.values(defaultRehypePlugins)),
+  ], revision, [options.plugins.math, options.plugins.cjk]);
+  // Streamdown also memoizes rendered output; refresh it when a processor changes.
+  const pipelineKey = JSON.stringify([remarkPipeline[0],rehypePipeline[0]]);
+
   return (
     <RenderBoundary
-      key={resolved.sorted.map((e) => `${e.id}@${e.version}`).join("|")}
+      key={pipelineKey}
       resetKey={props.children}
-      fallback={<Streamdown {...props} />}
+      fallback={<Streamdown {...props}
+        remarkPlugins={identifyPipeline(props.remarkPlugins ?? Object.values(defaultRemarkPlugins), "fallback", [props.plugins?.math,props.plugins?.cjk])}
+        rehypePlugins={identifyPipeline(props.rehypePlugins ?? Object.values(defaultRehypePlugins), "fallback", [props.plugins?.math,props.plugins?.cjk])}
+      />}
     >
       <Streamdown
         {...props}
         {...options}
-        {...(remark.length
-          ? {
-              remarkPlugins: [
-                ...(props.remarkPlugins ?? Object.values(defaultRemarkPlugins)),
-                ...remark,
-              ],
-            }
-          : {})}
-        {...(rehype.length
-          ? {
-              rehypePlugins: [
-                ...rehype,
-                ...(props.rehypePlugins ?? Object.values(defaultRehypePlugins)),
-              ],
-            }
-          : {})}
+        remarkPlugins={remarkPipeline}
+        rehypePlugins={rehypePipeline}
       />
     </RenderBoundary>
   );

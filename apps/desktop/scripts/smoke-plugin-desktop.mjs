@@ -66,7 +66,10 @@ async function wait(check) {
   logs += "\nNative events: " + await readFile(path.join(profile,"native-events.jsonl"),"utf8").catch(String);
   throw new Error("App UI timeout: " + logs.slice(-18000) + "\nCLI: " + cliLogs);
 }
-function call(method, params = {}) {
+async function call(method, params = {}) {
+  if (method === "Page.captureScreenshot" && process.argv.includes("--compat")) {
+    await evaluate("(async()=>window.amiba.nativeExtensions.call(await window.amiba.nativeExtensions.connect('dsh-plugin-probe'),'show-main'))()");
+  }
   const id = ++next;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
@@ -127,7 +130,7 @@ try {
   const clientSource = version => `${process.argv.includes("--compat") ? "export const inject = [\"slots\", \"settingsScope\", \"layout\", \"sessions\", \"sessionLogDownload\"];" : ""}export function apply(ctx: any) { (window as any).__probeCtx=ctx; ctx.effect(() => { const node=document.createElement('div');node.id='amiba-plugin-probe';node.textContent='client-${version}';document.body.append(node);return ()=>node.remove(); }); }`;
   const nativeEvents = path.join(profile, "native-events.jsonl");
   const canonicalProfile = await realpath(profile);
-  const nativeSource = version => `import {appendFileSync} from 'node:fs';${process.argv.includes("--compat") ? "import {session,dialog,shell} from 'electron';" : ""}export function create(){appendFileSync(${JSON.stringify(nativeEvents)},'native-start-${version}\\n');${process.argv.includes("--compat") ? `const originalOpenPath=shell.openPath;shell.openPath=async(target)=>{if(${JSON.stringify([profile, canonicalProfile])}.includes(target)){appendFileSync(${JSON.stringify(nativeEvents)},'turn-open-directory '+target+'\\n');return '';}return originalOpenPath(target);};const originalPicker=dialog.showOpenDialog;dialog.showOpenDialog=async(...args)=>{const options=args.at(-1);if(!options?.properties?.includes('openDirectory'))return originalPicker.apply(dialog,args);appendFileSync(${JSON.stringify(nativeEvents)},'picker-options '+JSON.stringify({defaultPath:options.defaultPath,properties:options.properties})+'\\n');return {canceled:false,filePaths:[${JSON.stringify(path.join(profile,'native-picked'))}]};};const save=(_event,item)=>{item.setSavePath(${JSON.stringify(path.join(profile,"downloads"))}+'/'+item.getFilename());item.on('done',(_event,state)=>appendFileSync(${JSON.stringify(nativeEvents)},'download-'+state+' '+item.getReceivedBytes()+'/'+item.getTotalBytes()+' '+item.getSavePath()+'\\n'));};session.defaultSession.on('will-download',save);` : ""}return {call(){return 'native-${version}'},rendererCall(){return 'native-${version}'},dispose(){${process.argv.includes("--compat") ? "session.defaultSession.removeListener('will-download',save);dialog.showOpenDialog=originalPicker;shell.openPath=originalOpenPath;" : ""}appendFileSync(${JSON.stringify(nativeEvents)},'native-stop-${version}\\n')}}}`;
+  const nativeSource = version => `import {appendFileSync} from 'node:fs';${process.argv.includes("--compat") ? "import {session,dialog,shell,BrowserWindow} from 'electron';" : ""}export function create(){appendFileSync(${JSON.stringify(nativeEvents)},'native-start-${version}\\n');${process.argv.includes("--compat") ? `const originalOpenPath=shell.openPath;shell.openPath=async(target)=>{if(${JSON.stringify([profile, canonicalProfile])}.includes(target)){appendFileSync(${JSON.stringify(nativeEvents)},'turn-open-directory '+target+'\\n');return '';}return originalOpenPath(target);};const originalPicker=dialog.showOpenDialog;dialog.showOpenDialog=async(...args)=>{const options=args.at(-1);if(!options?.properties?.includes('openDirectory'))return originalPicker.apply(dialog,args);appendFileSync(${JSON.stringify(nativeEvents)},'picker-options '+JSON.stringify({defaultPath:options.defaultPath,properties:options.properties})+'\\n');return {canceled:false,filePaths:[${JSON.stringify(path.join(profile,'native-picked'))}]};};const save=(_event,item)=>{item.setSavePath(${JSON.stringify(path.join(profile,"downloads"))}+'/'+item.getFilename());item.on('done',(_event,state)=>appendFileSync(${JSON.stringify(nativeEvents)},'download-'+state+' '+item.getReceivedBytes()+'/'+item.getTotalBytes()+' '+item.getSavePath()+'\\n'));};session.defaultSession.on('will-download',save);` : ""}return {call(){return 'native-${version}'},rendererCall(_owner,method){${process.argv.includes("--compat") ? "if(method==='show-main'){const win=BrowserWindow.getAllWindows().find(w=>/out\\/renderer\\/index.html/.test(w.webContents.getURL()));if(!win)throw new Error('missing test window');win.showInactive();return 'shown';}" : ""}return 'native-${version}'},dispose(){${process.argv.includes("--compat") ? "session.defaultSession.removeListener('will-download',save);dialog.showOpenDialog=originalPicker;shell.openPath=originalOpenPath;" : ""}appendFileSync(${JSON.stringify(nativeEvents)},'native-stop-${version}\\n')}}}`;
 
   if (native) {
     await writeFile(path.join(project, "src/native.ts"), nativeSource(1));
@@ -396,6 +399,15 @@ try {
       console.log("Interrupted prose passed actual synthetic final, folded narration and real file opening without an assistant/message event.");
     }
     console.log("Official prose links passed live source mapping, folded final-message narration, thinking cleanup and file opening.");
+    await evaluate(`window.__markdownRegister = label => window.__probeCtx.slots.register({name:'amiba.markdown.extension',id:'compat-markdown',inject:()=>({extension:{id:'compat-markdown',version:'1',remarkPlugins:[function compatTransform(){return tree=>{tree.children.unshift({type:'paragraph',children:[{type:'text',value:label}]});};}]}})},()=>null);window.__markdownOff=window.__markdownRegister('COMPAT_MARKDOWN_FIRST');void 0`);
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_MARKDOWN_FIRST')"));
+    await evaluate("window.__markdownOff();window.__markdownOff=window.__markdownRegister('COMPAT_MARKDOWN_SECOND');void 0");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_MARKDOWN_SECOND') && !document.body.textContent.includes('COMPAT_MARKDOWN_FIRST')"));
+    assert.ok(await evaluate("Array.from(document.querySelectorAll('.chat-md-file-link')).some(n=>n.textContent==='compat-produced.txt')"), "surrounding Markdown transforms retain existing prose file ownership");
+    await evaluate("window.__markdownOff();void 0");
+    await wait(() => evaluate("!document.body.textContent.includes('COMPAT_MARKDOWN_SECOND')"));
+    console.log("Markdown extension replacement passed same-name/same-version transforms, preserved file links and unload cleanup.");
+
     await evaluate("Array.from(document.querySelectorAll('[data-produced-files-row] button')).find(n=>n.textContent==='compat-produced.txt').click()");
     await wait(() => evaluate("document.querySelector('[data-workspace-file-preview]')?.textContent.includes('COMPAT_PRODUCED_FILE_CONTENT')"));
     await writeFile(path.join(tmpdir(), "amiba-official-deliverables.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data,"base64"));
