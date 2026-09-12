@@ -1,6 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { createComposerDraftSource } from "../../composer-draft-store";
+import { legacyDraftDocument } from "../../composer-draft-document";
 import { pickSendText } from "../pickSendText"
 
 // --- Stub the platform + i18n the hook reaches for at import/runtime. The
@@ -146,3 +148,65 @@ describe("pickSendText", () => {
     expect(pickSendText("", "raw")).toBe("")
   })
 })
+
+
+describe("queued draft identity", () => {
+  const token = "@[dsh.reference:files|id|Label|clip]";
+  const mixedDraft = () => {
+    const source = createComposerDraftSource();
+    source.setParts([{kind:"text",text:token+" "}, ...legacyDraftDocument(token).parts]);
+    return source;
+  };
+  it("retains literal/reference nodes separately from the resolved payload through queue persistence and edit", async () => {
+    const draftSource = mixedDraft();
+    const document = draftSource.getDocument();
+    const args = makeArgs({busy:true, input:document.text, draftSource, setInput:draftSource.set});
+    const {result, rerender} = renderHook((props:UsePendingQueueArgs) => usePendingQueue(props), {initialProps:args});
+    await act(async () => { await result.current.send("resolved model text"); });
+    const queued = result.current.queue[0];
+    expect(queued.text).toBe("resolved model text");
+    expect(queued.draft).toEqual(document);
+    expect(draftSource.getSnapshot()).toBe("");
+    await waitFor(() => expect(storage.set).toHaveBeenCalledWith({"pendingQueue:s1":[queued]}));
+    // Simulate the JSON persistence boundary before restoring the row.
+    act(() => result.current.setQueue(JSON.parse(JSON.stringify([queued]))));
+    rerender({...args,input:""});
+    act(() => result.current.edit(queued.queueId));
+    expect(draftSource.getDocument()).toEqual(document);
+    expect(result.current.queue).toHaveLength(1);
+    expect(result.current.paused).toBe(true);
+  });
+  it("passes the resolved edited payload and its original nodes to the runner", async () => {
+    const draftSource = mixedDraft();
+    const document = draftSource.getDocument();
+    const args=makeArgs({input:document.text,draftSource,setInput:draftSource.set});
+    const {result}=renderHook(()=>usePendingQueue(args));
+    act(()=>result.current.setEditingQueueId("edit"));
+    await act(async()=>{await result.current.send("new resolved payload");});
+    expect(args.runChatTurn).toHaveBeenCalledWith({text:"new resolved payload",attachments:[],draft:document});
+    expect(draftSource.getSnapshot()).toBe("");
+  });
+  it("routes the editing row's Send now through Composer without clearing or preempting early", async () => {
+    const submitComposer=vi.fn(()=>false);
+    const args=makeArgs({busy:true,submitComposer});
+    const {result}=renderHook(()=>usePendingQueue(args));
+    act(()=>{result.current.setEditingQueueId("edit");result.current.setQueue([{queueId:"edit",text:"old",attachments:[]}]);});
+    act(()=>result.current.sendNow("edit"));
+    expect(submitComposer).toHaveBeenCalledOnce();
+    expect(args.runChatTurn).not.toHaveBeenCalled();
+    expect(args.client.abort).not.toHaveBeenCalled();
+    expect(args.setInput).not.toHaveBeenCalled();
+    expect(result.current.queue).toHaveLength(1);
+    expect(result.current.editingQueueId).toBe("edit");
+  });
+  it("carries the original draft on both direct send and automatic queue drain for failure recovery", async () => {
+    const draftSource=mixedDraft(),document=draftSource.getDocument();
+    const args=makeArgs({draftSource,input:document.text,setInput:draftSource.set});
+    const {result}=renderHook(()=>usePendingQueue(args));
+    await act(async()=>{await result.current.send("resolved");});
+    expect(args.runChatTurn).toHaveBeenLastCalledWith({text:"resolved",attachments:[],draft:document});
+    act(()=>result.current.setQueue([{queueId:"later",text:"queued resolved",attachments:[],draft:document}]));
+    await act(async()=>{result.current.drainHead();});
+    expect(args.runChatTurn).toHaveBeenLastCalledWith({text:"queued resolved",attachments:[],draft:document});
+  });
+});

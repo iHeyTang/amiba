@@ -819,6 +819,8 @@ export default function ChatSurface({
     sessions,
     client,
     input,
+    draftSource: composerDraftSource,
+    submitComposer: () => composerRef.current?.submit?.() ?? false,
     setInput,
     attachments,
     setAttachments,
@@ -1559,17 +1561,18 @@ export default function ChatSurface({
     prepare: prepareConversationSubmit,
     refresh: sessions.refresh,
     open: sessions.openTab,
-    run: (args: { text: string; attachments: Attachment[] }) => runChatTurn(args),
+    run: (args: RunChatTurnArgs) => runChatTurn(args),
   });
 
 
-  async function runChatTurn(args: {
-    text: string;
-    attachments: Attachment[];
-  }): Promise<void> {
+  async function runChatTurn(args: RunChatTurnArgs): Promise<void> {
     const { text, attachments: attachmentsForTurn } = args;
+    const restoreDraft = () => {
+      if (args.draft) composerDraftSource.setParts(args.draft.parts);
+      else setInput(text);
+    };
     if (readOnly) {
-      setInput(text);
+      restoreDraft();
       setAttachments(attachmentsForTurn);
       return;
     }
@@ -1578,7 +1581,7 @@ export default function ChatSurface({
     try {
       if (await handoffConversationSubmit(args)) return;
     } catch (error) {
-      setInput(text);
+      restoreDraft();
       setAttachments(attachmentsForTurn);
       setError({ message: error instanceof Error ? error.message : String(error), source: "run" });
       return;
@@ -1612,7 +1615,7 @@ export default function ChatSurface({
           // The send path has already consumed the composer values. Restore
           // them so the user can choose another directory and retry without
           // losing the prompt or its attachments.
-          setSessionInput(sessionId, text);
+          setSessionInput(sessionId, text, args.draft);
           setAttachments(attachmentsForTurn);
           return;
         }
@@ -1637,7 +1640,7 @@ export default function ChatSurface({
       } catch (e) {
         const message = String((e as Error)?.message || e);
         setWorkspaceError(message);
-        setSessionInput(sessionId, text);
+        setSessionInput(sessionId, text, args.draft);
         setAttachments(attachmentsForTurn);
         return;
       }

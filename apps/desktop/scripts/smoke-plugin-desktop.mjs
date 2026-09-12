@@ -743,6 +743,36 @@ try {
       await wait(() => evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
       assert.equal(await evaluate("window.__probeCtx.sessions.subagentAddress('compat-continuable-child')?.parentSessionId"), "compat-continuable-parent");
       console.log("Real continuable child interrupt reached the running model and cleared native busy state");
+      if (process.argv.includes("--queue-draft")) {
+        await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_WAIT_FOR_STOP');window.__probeCtx.composerInputs.submitInput('compat-continuable-child');void 0");
+        await wait(() => evaluate("Boolean(document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]'))"));
+        await evaluate("window.__queueCodecCalls=0;window.__queueRefOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-queue-ref',trigger:'@',candidates:async()=>[],onPick:()=>({}),matchSpace:(_s,token)=>token==='@queue'?{insert:{source:'compat-queue-ref',ref:'id',label:'Queue引用😀',clipboardText:'queue clip'}}:undefined,codec:{serialize:async ref=>{window.__queueCodecCalls++;return '<queue:'+ref+'>'}}});window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','@queue');void 0");
+        await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor('compat-continuable-child').onSpace()"),true);
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.occurrences.length===1"));
+        const suffix=' literal @[dsh.reference:missing-example|id|literal|clip]';
+        await evaluate(`window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child',window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft+${JSON.stringify(suffix)});void 0`);
+        await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_LITERAL_QUEUE '+window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft);void 0");
+        const queuedDraft=await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')");
+        assert.equal(queuedDraft.occurrences.length,1);
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-continuable-child')"),true);
+        await wait(() => evaluate("Boolean(document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]'))"));
+        assert.equal(await evaluate("window.__queueCodecCalls"),1);
+        await wait(() => evaluate("(async()=>{const values=await window.amiba.storage.get('pendingQueue:compat-continuable-child');const item=values['pendingQueue:compat-continuable-child']?.[0];return item?.draft?.parts.filter(p=>p.kind==='mention').length===1 && item.draft.parts.some(p=>p.kind==='text'&&p.text.includes('literal @[dsh.reference:missing-example')) && item.text.includes('<queue:id>')})()"));
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]').click();void 0");
+        await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.draft===${JSON.stringify(queuedDraft.draft)}`));
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').occurrences.length"),1);
+        await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child',window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft+' edited');void 0");
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=\"Send now\"]').click();void 0");
+        const reference=queuedDraft.occurrences[0];
+        const expected=(queuedDraft.draft.slice(0,reference.offset)+'<queue:id>'+queuedDraft.draft.slice(reference.offset+reference.length)+' edited').trim();
+        await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(expected))));
+        assert.equal(await evaluate("window.__queueCodecCalls"),2);
+        await wait(() => evaluate("!document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        await evaluate("window.__queueRefOff();void 0");
+        console.log("Native queued mixed draft restored its real reference and literal token; edited Send now re-ran the codec and delivered the exact new model payload");
+      }
+
       await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
       await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY')"));
     }
@@ -964,8 +994,26 @@ try {
     await wait(async () => { try { return await evaluate("!window.__beforeNestedRestart && !!window.__probeCtx?.sessions"); } catch { return false; } });
     await evaluate("window.__probeCtx.layout.openChat();void 0");
     await openNested();
-    await sendText("COMPAT_NESTED_FOLLOWUP");
-    await wait(() => evaluate(`document.body.textContent.includes("Couldn't open the conversation") && window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child')?.draft==='COMPAT_NESTED_FOLLOWUP'`));
+    let nestedDraft = 'COMPAT_NESTED_FOLLOWUP';
+    let nestedResolved = nestedDraft;
+    if (process.argv.includes("--queue-draft")) {
+      await evaluate("window.__recoverCalls=0;window.__recoverRefOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-recover-ref',trigger:'@',candidates:async()=>[],onPick:()=>({}),matchSpace:(_s,token)=>token==='@recover'?{insert:{source:'compat-recover-ref',ref:'id',label:'恢复引用😀',clipboardText:'recover clip'}}:undefined,codec:{serialize:async ref=>{window.__recoverCalls++;return '<recover:'+ref+'>'}}});window.__probeCtx.composerInputs.editInputDraft('compat-nested-child','@recover');void 0");
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor('compat-nested-child').onSpace()"),true);
+      await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child')?.occurrences.length===1"));
+      await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-nested-child',window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child').draft+' literal @[dsh.reference:missing|id|literal|clip]');void 0");
+      await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-nested-child','COMPAT_NESTED_FOLLOWUP '+window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child').draft);void 0");
+      const recoveryDraft=await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child')");
+      nestedDraft=recoveryDraft.draft;
+      const reference=recoveryDraft.occurrences[0];
+      nestedResolved=(nestedDraft.slice(0,reference.offset)+'<recover:id>'+nestedDraft.slice(reference.offset+reference.length)).trim();
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-nested-child')"),true);
+    } else await sendText(nestedDraft);
+    await wait(() => evaluate(`document.body.textContent.includes("Couldn't open the conversation") && window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child')?.draft===${JSON.stringify(nestedDraft)}`));
+    if (process.argv.includes("--queue-draft")) {
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child').occurrences.length"),1);
+      assert.equal(await evaluate("window.__recoverCalls"),1);
+    }
     assert.ok(!await evaluate("document.body.textContent.includes('COMPAT_NESTED_REPLY COMPAT_NESTED_FOLLOWUP')"));
     console.log("Cold nested parent ownership refusal preserved the original grandchild draft without sending a synthetic wake-up message");
     await wait(() => evaluate("(async()=>{await window.__probeCtx.sessions.refreshSubagents('compat-continuable-parent');return window.__probeCtx.sessions.list.getSnapshot().subagentsByParent['compat-continuable-parent']?.entries.some(e=>e.kind==='child'&&e.id==='compat-continuable-child')})()"));
@@ -974,9 +1022,15 @@ try {
     await sendText("COMPAT_NESTED_PARENT_WAKE");
     await wait(() => evaluate("document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_NESTED_PARENT_WAKE')"));
     await openNested();
-    assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child').draft"), "COMPAT_NESTED_FOLLOWUP");
-    await sendText("");
+    assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child').draft"), nestedDraft);
+    assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-nested-child')"),true);
     await wait(() => evaluate("document.body.textContent.includes('COMPAT_NESTED_REPLY COMPAT_NESTED_FOLLOWUP')"));
+    if (process.argv.includes("--queue-draft")) {
+      await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_MODEL'})")).entries.some(entry => entry.message==='AMIBA_PROBE_MODEL compat-nested-child '+nestedResolved));
+      assert.equal(await evaluate("window.__recoverCalls"),2);
+      await evaluate("window.__recoverRefOff();void 0");
+      console.log("Failed native preparation restored real reference nodes and literal text; retry resolved the restored reference through its codec again");
+    }
     console.log("An actually running parent continuation enabled the persisted nested child to submit its retained draft through the original composer");
     await evaluate("window.__probeCtx.sessions.open('compat-continuable-child');void 0");
     await wait(() => evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));

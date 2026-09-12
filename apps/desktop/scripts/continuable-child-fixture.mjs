@@ -12,7 +12,7 @@ export function continuableChildFixture(root, profile) {
       async *stream(options:any) {
         const input = options.messages.filter((m:any)=>m.role==='user')
           .flatMap((m:any)=>m.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text))
-          .reverse().find((text:string)=>/^COMPAT_(INITIAL_CHILD|NATIVE_FOLLOWUP|COLD_FOLLOWUP|NESTED_CREATE|NESTED_INITIAL|NESTED_FOLLOWUP|NESTED_PARENT_WAKE|WAIT_FOR_STOP)$/.test(text)) || '';
+          .reverse().find((text:string)=>/^COMPAT_(INITIAL_CHILD|NATIVE_FOLLOWUP|COLD_FOLLOWUP|NESTED_CREATE|NESTED_INITIAL|NESTED_FOLLOWUP|NESTED_PARENT_WAKE|WAIT_FOR_STOP)$/.test(text) || text.startsWith('COMPAT_LITERAL_') || text.startsWith('COMPAT_NESTED_FOLLOWUP ')) || '';
         if(input==='COMPAT_NESTED_CREATE' && options.sessionId==='compat-continuable-child' && !nestedCreated) {
           nestedCreated=true;
           const parent=ctx.agents.get('compat-continuable-child');
@@ -25,7 +25,7 @@ export function continuableChildFixture(root, profile) {
         const text = options.sessionId==='compat-continuable-child'
           ? 'COMPAT_CONTINUABLE_REPLY '+input : options.sessionId==='compat-nested-child' ? 'COMPAT_NESTED_REPLY '+input : 'COMPAT_PARENT_SETTLED';
         console.log('AMIBA_PROBE_MODEL '+options.sessionId+' '+input);
-        const literal=options.messages.filter((m:any)=>m.role==='user').flatMap((m:any)=>m.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text)).find((text:string)=>text.startsWith('COMPAT_LITERAL_'));
+        const literal=options.messages.filter((m:any)=>m.role==='user').flatMap((m:any)=>m.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text)).reverse().find((text:string)=>text.startsWith('COMPAT_LITERAL_'));
         if(literal) console.log('AMIBA_PROBE_LITERAL_INPUT '+options.sessionId+' '+JSON.stringify(literal));
         yield {type:'block-start',index:0,blockType:'text'};
         yield {type:'text-delta',index:0,text};

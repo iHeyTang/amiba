@@ -9,6 +9,9 @@ import {
   type ChatEngineClient,
 } from "@amiba/app-runtime/core";
 
+import type { ComposerDraftDocument } from "../composer-draft-document";
+import type { ComposerDraftSource } from "../composer-draft-store";
+
 import { pickSendText } from "./pickSendText";
 
 /** One user turn waiting while the model is still streaming the previous reply. */
@@ -16,6 +19,8 @@ export interface PendingChatTurn {
   queueId: string;
   text: string;
   attachments: Attachment[];
+  /** Original editor nodes, separate from the resolved model payload. */
+  draft?: ComposerDraftDocument;
 }
 
 /** Per-session storage key for the pending-turn queue — survives reloads
@@ -41,6 +46,8 @@ export function previewPendingTurn(t: PendingChatTurn): string {
 export interface RunChatTurnArgs {
   text: string;
   attachments: Attachment[];
+  /** Original editor nodes, separate from the resolved model payload. */
+  draft?: ComposerDraftDocument;
 }
 
 /**
@@ -73,6 +80,9 @@ export interface UsePendingQueueArgs {
   // composer drafts into queue items, commit edits, and clear the
   // composer after a fire.
   input: string;
+  draftSource?: ComposerDraftSource;
+  /** Route an edited queue row through the same codec/command pipeline as Send. */
+  submitComposer?: () => boolean;
   setInput: (v: string) => void;
   attachments: Attachment[];
   setAttachments: React.Dispatch<React.SetStateAction<Attachment[]>>;
@@ -133,6 +143,8 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     sessions,
     client,
     input,
+    draftSource,
+    submitComposer,
     setInput,
     attachments,
     setAttachments,
@@ -241,6 +253,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
         void runChatTurn({
           text: head.text,
           attachments: head.attachments,
+          ...(head.draft ? { draft: head.draft } : {}),
         }),
       );
       return tail;
@@ -248,14 +261,19 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   }, [runChatTurn]);
 
   const sendNow = useCallback(
-    (queueId: string): void => {
+    (queueId: string, textArg?: string): void => {
       if (readOnlyRef.current) return;
       const editingThisOne = editingQueueId === queueId;
+      if (editingThisOne && textArg === undefined && submitComposer) {
+        submitComposer();
+        return;
+      }
       let item: PendingChatTurn | undefined;
       if (editingThisOne) {
         item = {
           queueId,
-          text: input,
+          text: pickSendText(textArg, input),
+          ...(draftSource ? { draft: draftSource.getDocument() } : {}),
           attachments: attachments
             .filter((a) => a.attachmentId && !a.uploading)
             .map((a) => ({ ...a })),
@@ -300,12 +318,15 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       void runChatTurn({
         text: item.text,
         attachments: item.attachments,
+        ...(item.draft ? { draft: item.draft } : {}),
       });
     },
     [
       editingQueueId,
       queue,
       input,
+      draftSource,
+      submitComposer,
       attachments,
       sessions,
       client,
@@ -340,10 +361,11 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     // "save my changes and fire this one now" — equivalent to the per-row
     // send-now button on the same item.
     if (editingQueueId != null) {
-      sendNow(editingQueueId);
+      sendNow(editingQueueId, textArg);
       return;
     }
 
+    const draft = draftSource?.getDocument();
     const attachmentsForSend = attachments.filter(
       (a) => a.attachmentId && !a.uploading,
     );
@@ -354,6 +376,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
         {
           queueId: shortId("q"),
           text,
+          ...(draft ? { draft } : {}),
           attachments: attachmentsForSend.map((a) => ({ ...a })),
         },
       ]);
@@ -384,10 +407,12 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
 
     await runChatTurn({
       text,
+      ...(draft ? { draft } : {}),
       attachments: attachmentsForSend,
     });
   }, [
     input,
+    draftSource,
     attachments,
     attachmentUploading,
     sessions.ready,
@@ -455,6 +480,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       const item = queue.find((q) => q.queueId === queueId);
       if (!item) return;
       const draftText = input;
+      const draft = draftSource?.getDocument();
       const draftAttachments = attachments.filter(
         (a) => a.attachmentId && !a.uploading,
       );
@@ -468,18 +494,21 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
           {
             queueId: shortId("q"),
             text: draftText,
+            ...(draft ? { draft } : {}),
             attachments: draftAttachments.map((a) => ({ ...a })),
           },
         ];
       });
       setEditingQueueId(queueId);
-      setInput(item.text);
+      if (item.draft && draftSource) draftSource.setParts(item.draft.parts);
+      else setInput(item.text);
       setAttachments(item.attachments.map((a) => ({ ...a })));
       setPausedState(true);
     },
     [
       queue,
       input,
+      draftSource,
       attachments,
       setInput,
       setAttachments,

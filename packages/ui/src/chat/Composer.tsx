@@ -149,6 +149,8 @@ export type ComposerPlanSeatRenderer = (
  * surfaces with a queue (ChatSurface) push to their FIFO.
  */
 export interface ComposerHandle {
+  /** Submit through the existing guards, command routing and reference codecs. */
+  submit?(): boolean;
   focus(): void;
   select(): void;
   /** Imperative access to the underlying textarea, for callers that need
@@ -680,6 +682,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     useImperativeHandle(
       ref,
       (): ComposerHandle => ({
+        submit: () => submitBindingRef.current.submit(),
         focus: () => innerRef.current?.focus(),
         select: () => innerRef.current?.select(),
         getTextarea: () => innerRef.current?.getTextarea() ?? null,
