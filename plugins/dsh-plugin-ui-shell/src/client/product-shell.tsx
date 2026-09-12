@@ -1,4 +1,4 @@
-import { TurnTail, useTurnTailAnchors } from "./turn-tail.js";
+import { TurnTail, TurnText, useTurnTailAnchors } from "./turn-tail.js";
 import { DirectoryChooserContext, type DirectoryChooser } from "@amiba/ui";
 import type { DirectoryFlow } from "./directory-flow.js";
 import type { ConversationViewEntry } from "./conversation-view-source.js";
@@ -346,6 +346,7 @@ function createChatClient(dshClient: DshApiClient): DshChatEngineClient {
 interface ProductShellProps {
   renderSlotChain: PropsRenderSlots<AmibaShellSlot>["renderSlotChain"];
   conversationSource: (sessionId: string) => import("@deepseek-ai/dsh-client-runtime/client").SessionFace | undefined;
+    fileMentions: import("@deepseek-ai/dsh-client-ui-conversation/client").ChatFileMentions["forClosing"];
   directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
   conversationViews: ContributionsSource<ConversationViewEntry>;
   surfaces: SurfaceSelections;
@@ -399,6 +400,7 @@ export function AmibaProductShell(props: ProductShellProps): ReactElement {
 function ProductShellInner({
   renderSlotChain,
   conversationSource,
+  fileMentions,
   directoryFlows,
   conversationViews,
   dshClient,
@@ -806,6 +808,7 @@ function ProductShellInner({
                 // bridge) and renders nothing while none is current, which is also
                 // why the home/draft composer keeps Amiba's own trigger menu.
                 inputOverlay: renderSlot("conversation.input.overlay", {}),
+                messageText: (runtimeTurn, children, openFile) => <TurnText source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} fileMentions={fileMentions}>{children}</TurnText>,
                 turnTailAnchors,
                 turnTail: (runtimeTurn, openFile) => <TurnTail source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} render={owner => renderSlotChain("conversation.chat.turnTail", owner)} />,
                 assistantActions: (messageId) => renderSlot("conversation.chat.assistant-actions", { messageId: messageId as import("@amiba/extension-sdk").AssistantActionOwnerProps["messageId"] }),

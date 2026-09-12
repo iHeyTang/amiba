@@ -1,3 +1,5 @@
+import { joinTextSources, sliceTextSources, timelineTextSource, type TextSourceRange } from "../text-source-ranges";
+import { WorkspaceMarkdown } from "../workspace-file-links";
 import { CompactionRow } from "./CompactionRow";
 import type { CompactionProgress } from "@amiba/app-runtime/protocol";
 import { Fragment } from "react";
@@ -443,7 +445,8 @@ export function Bubble({
           </div>
         )}
         {hasBody && (
-          <Streamdown
+          <WorkspaceMarkdown
+            sources={sliceTextSources(joinTextSources((m.assistantTimeline??[]).filter(item=>item.kind==="text").map(timelineTextSource),""),trace.bodyText)}
             components={chatMarkdownComponents}
             mode={m.streaming ? "streaming" : "static"}
             parseIncompleteMarkdown
@@ -452,7 +455,7 @@ export function Bubble({
             className="chat-md break-words"
           >
             {trace.bodyText}
-          </Streamdown>
+          </WorkspaceMarkdown>
         )}
         {showRunning && <TurnRunningIndicator />}
         {!m.streaming && m.agentFinalUrl && onOpenAgentDestination && (
@@ -1186,7 +1189,7 @@ function buildTurnReplyItems(replies: UiMessage[]): TurnReplyItem[] {
 
 type AssistantFlowItem =
   | { kind: "compaction"; id: string; compaction: CompactionProgress }
-  | { kind: "text"; id: string; text: string }
+  | { kind: "text"; id: string; text: string; sources: TextSourceRange[] }
   | {
       kind: "execution";
       id: string;
@@ -1222,11 +1225,11 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
     pendingDetails = [];
     pendingTools = [];
   };
-  const appendText = (id: string, text: string) => {
+  const appendText = (id: string, text: string, sources: TextSourceRange[] = []) => {
     const body = splitThinkingFromBody(text).body;
     if (!body.trim()) return;
     flushExecution();
-    flow.push({ kind: "text", id, text: body });
+    flow.push({ kind: "text", id, text: body, sources: sliceTextSources({text,sources},body) });
   };
   const appendTool = (id: string, toolCallId: string) => {
     if (seenTools.has(toolCallId)) return;
@@ -1246,7 +1249,7 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
 
   for (const item of timeline) {
     if (item.kind === "text") {
-      appendText(item.id, item.text);
+      appendText(item.id, item.text, timelineTextSource(item).sources);
     } else if (item.kind === "reasoning") {
       pendingDetails.push({kind:"reasoning",id:item.id,text:item.text,reasoningMs:item.startedAt !== undefined && item.endedAt !== undefined ? Math.max(0,item.endedAt-item.startedAt) : undefined});
     } else if (item.kind === "tool") {
@@ -1330,10 +1333,8 @@ function InterleavedAssistantFlow({
   const processTools: ToolProgress[] = processSegments.flatMap((segment) =>
     segment.kind === "execution" ? segment.tools : [],
   );
-  const resultText = resultSegments
-    .map((segment) => (segment.kind === "text" ? segment.text : ""))
-    .join("\n\n")
-    .trim();
+  const resultSource = joinTextSources(resultSegments.map(segment=>segment.kind === "text" ? segment : {text:"",sources:[]}), "\n\n");
+  const resultText = resultSource.text.trim();
   const resultStreaming = !!message.streaming;
   const processStreaming = resultStreaming && resultText.length === 0;
   const hasCompactions = flow.some(segment => segment.kind === "compaction");
@@ -1443,7 +1444,8 @@ function InterleavedAssistantFlow({
                   key={segment.id}
                   data-live-tail={index === flow.length - 1 ? "" : undefined}
                 >
-                  <Streamdown
+                  <WorkspaceMarkdown
+                    sources={segment.sources}
                     components={chatMarkdownComponents}
                     mode={resultStreaming ? "streaming" : "static"}
                     parseIncompleteMarkdown
@@ -1454,7 +1456,7 @@ function InterleavedAssistantFlow({
                     className="chat-md break-words"
                   >
                     {segment.text}
-                  </Streamdown>
+                  </WorkspaceMarkdown>
                 </div>
               ) : (
                 <ExecutionDisclosure
@@ -1482,7 +1484,8 @@ function InterleavedAssistantFlow({
             )}
             {resultText.length > 0 && (
               <div data-turn-result>
-                <Streamdown
+                <WorkspaceMarkdown
+                  sources={sliceTextSources(resultSource,resultText)}
                   components={chatMarkdownComponents}
                   mode={resultStreaming ? "streaming" : "static"}
                   parseIncompleteMarkdown
@@ -1491,7 +1494,7 @@ function InterleavedAssistantFlow({
                   className="chat-md break-words"
                 >
                   {resultText}
-                </Streamdown>
+                </WorkspaceMarkdown>
               </div>
             )}
           </>
@@ -1686,6 +1689,7 @@ export function UserStickyBubble({
  * stays visible — Cursor-style.
  */
 export function MessageTurns({
+  messageText,
   turnTail,
   turnTailAnchors,
   openTurnFile,
@@ -1698,6 +1702,7 @@ export function MessageTurns({
   onRestoreBeforeTurn,
   restorableTurnOrdinals,
 }: {
+  messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void)=>ReactNode;
   assistantActions?: (messageId: string) => ReactNode;
   turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
   turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
@@ -1844,12 +1849,19 @@ export function MessageTurns({
               }
 
               return (
-                <Fragment key={item.id}><Bubble
+                <Fragment key={item.id}>{item.message.role === "assistant" && messageText && openTurnFile
+                  ? messageText(item.message.runtimeTurn, <Bubble
                   m={item.message}
                   suppressTrace={item.suppressTrace}
                   suppressRunBoundary={item.suppressRunBoundary}
                   onOpenAgentDestination={onOpenAgentDestination}
-                />
+                />, openTurnFile)
+                  : <Bubble
+                  m={item.message}
+                  suppressTrace={item.suppressTrace}
+                  suppressRunBoundary={item.suppressRunBoundary}
+                  onOpenAgentDestination={onOpenAgentDestination}
+                />}
                 {renderTailsAfter(itemIndex)}
                 {item.message.role === "assistant" && !item.message.streaming && item.message.assistantMessageId
                   ? assistantActions?.(item.message.assistantMessageId) : null}

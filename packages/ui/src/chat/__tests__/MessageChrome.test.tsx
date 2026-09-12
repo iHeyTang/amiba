@@ -9,7 +9,7 @@ vi.mock("@amiba/i18n", () => ({
 import { Bubble, MessageTurns } from "../bubble/Bubble";
 import type { UiMessage } from "../internal/types";
 import { WorkspaceControl } from "../WorkspaceControl";
-import { WorkspaceFileOpenerContext } from "../workspace-file-links";
+import { WorkspaceTextMentionsContext, WorkspaceFileOpenerContext } from "../workspace-file-links";
 
 /** Expand the aggregated process disclosure a completed bubble folds
  *  its tool evidence behind. */
@@ -1515,4 +1515,35 @@ it("inserts unrepresented closed-turn tails by engine sequence without stored me
   rerender(<MessageTurns messages={[]} turnTailAnchors={anchors} openTurnFile={()=>{}} turnTail={turn=><button>Tail {turn}</button>}/>);
   expect(container.children).toHaveLength(2);
   expect(container.firstElementChild?.tagName).toBe("BUTTON");
+});
+
+
+it("resolves only finalized prose ranges while retaining existing explicit path links", () => {
+  const open=vi.fn(),resolve=vi.fn((seq:number,value:string)=>seq===20 && value==="same.txt"?{open:()=>open("out/same.txt"),label:"Open produced file",title:"out/same.txt"}:undefined);
+  const message:UiMessage={uiId:"merged",role:"assistant",content:"Earlier `same.txt`\n\nFinal `same.txt` and `src/existing.ts`",assistantTimeline:[
+    {kind:"text",id:"earlier",text:"Earlier `same.txt`\n\n",runtimeSeq:10},
+    {kind:"text",id:"final",text:"Final `same.txt` and `src/existing.ts`",runtimeSeq:20},
+  ]};
+  const {container,rerender}=render(<WorkspaceFileOpenerContext.Provider value={open}><Bubble m={message}/></WorkspaceFileOpenerContext.Provider>);
+  const baseline=container.innerHTML;
+  rerender(<WorkspaceFileOpenerContext.Provider value={open}><WorkspaceTextMentionsContext.Provider value={()=>undefined}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider></WorkspaceFileOpenerContext.Provider>);
+  expect(container.innerHTML).toBe(baseline);
+  rerender(<WorkspaceFileOpenerContext.Provider value={open}><WorkspaceTextMentionsContext.Provider value={resolve}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider></WorkspaceFileOpenerContext.Provider>);
+  expect(screen.getAllByRole("button",{name:"Open produced file"})).toHaveLength(1);
+  expect(container.querySelectorAll('code')[0].closest('button')).toBeNull();
+  fireEvent.click(screen.getByRole("button",{name:"Open produced file"}));
+  expect(open).toHaveBeenCalledWith("out/same.txt");
+  expect(container.querySelector('[data-workspace-file="src/existing.ts"]')).not.toBeNull();
+});
+
+it("keeps final file mentions scoped through condensed tool/assistant rendering", () => {
+  const resolve=vi.fn((seq:number,value:string)=>seq===12 && value==="file.txt"?{open:()=>{},label:"Final file",title:"file.txt"}:undefined);
+  const message:UiMessage={uiId:"with-tool",role:"assistant",content:"Before `file.txt`Final `file.txt`",toolProgress:[{tool:"bash",toolCallId:"c",status:"completed"}],assistantTimeline:[
+    {kind:"text",id:"before",text:"Before `file.txt`",runtimeSeq:3},
+    {kind:"tool",id:"tool",toolCallId:"c"},
+    {kind:"text",id:"after",text:"Final `file.txt`",runtimeSeq:12},
+  ]};
+  render(<WorkspaceTextMentionsContext.Provider value={resolve}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider>);
+  expect(screen.getByRole("button",{name:"Final file"})).toBeInTheDocument();
+  expect(resolve).not.toHaveBeenCalledWith(3,"file.txt");
 });

@@ -180,3 +180,5 @@ export type {
   ComposerTriggerRuntime,
   TriggerEditorOps,
 } from "./composer/triggers/contracts";
+
+export { WorkspaceTextMentionsContext } from "./workspace-file-links";

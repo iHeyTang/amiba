@@ -230,6 +230,7 @@ export interface FullScreenChatViewProps {
      */
     assistantActions?: (messageId: string) => ReactNode;
     turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
+    messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void)=>ReactNode;
     turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
     toolView?: ToolCallSeatRenderer;
     /**

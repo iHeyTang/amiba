@@ -324,6 +324,7 @@ export interface ChatSurfaceProps {
      */
     assistantActions?: (messageId: string) => ReactNode;
     turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
+    messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void)=>ReactNode;
     turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
     toolView?: ToolCallSeatRenderer;
     /**
@@ -2252,6 +2253,7 @@ export default function ChatSurface({
                       >
                         <MessageTurns
                           assistantActions={slots?.assistantActions}
+                          messageText={slots?.messageText}
                           turnTail={slots?.turnTail}
                           turnTailAnchors={slots?.turnTailAnchors}
                           openTurnFile={path => {

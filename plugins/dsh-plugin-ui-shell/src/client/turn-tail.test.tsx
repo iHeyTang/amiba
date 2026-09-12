@@ -1,8 +1,9 @@
+import { WorkspaceTextMentionsContext } from "@amiba/ui";
 // @vitest-environment jsdom
 import React from "react";
 import { act, cleanup, render, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { TurnTail, turnTailOwner, useTurnTailAnchors } from "./turn-tail";
+import { TurnTail, TurnText, turnTailOwner, useTurnTailAnchors } from "./turn-tail";
 afterEach(cleanup);
 function fixture(closing: number | null = 12) {
   const data = {
@@ -114,4 +115,20 @@ it("reports rejected open requests and ignores outcomes after the session change
   rerender(<TurnTail runtimeTurn={8} openFile={openFile} render={()=>"wrong"}/>);
   await act(async()=>{reject(new Error("old request"));});
   expect(container.innerHTML).toBe("");
+});
+
+
+it("resolves prose only for the closing sequence and drops the resolver without a source", () => {
+  const f=fixture(),open=vi.fn();
+  let resolve:React.ContextType<typeof WorkspaceTextMentionsContext>;
+  function Consumer(){resolve=React.useContext(WorkspaceTextMentionsContext);return "native prose";}
+  const provider=vi.fn((owner:any)=>({resolve:(value:string)=>({label:"Open "+value,title:value,open:()=>owner.openFile(value)})}));
+  const source={getSnapshot:()=>f.snapshot,subscribe:()=>()=>{}};
+  const {rerender}=render(<TurnText source={source} runtimeTurn={7} openFile={open} fileMentions={provider}><Consumer/></TurnText>);
+  expect(resolve?.(11,"same.txt")).toBeUndefined();
+  resolve?.(12,"same.txt")?.open();
+  expect(open).toHaveBeenCalledWith("same.txt");
+  expect(provider.mock.calls[0][0].turn).toBe(f.turn);
+  rerender(<TurnText runtimeTurn={7} openFile={open} fileMentions={provider}><Consumer/></TurnText>);
+  expect(resolve?.(12,"same.txt")).toBeUndefined();
 });

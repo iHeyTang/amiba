@@ -1,3 +1,5 @@
+import { WorkspaceTextMentionsContext } from "@amiba/ui";
+import type { ChatFileMentions } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type {
   ConversationSnapshot,
@@ -69,4 +71,19 @@ export function useTurnTailAnchors(source?: ObservableSnapshot<ConversationSnaps
     return turn?.status === "closed" && turn.end && turn.data.get("turn-tail")
       ? [{ runtimeTurn, endSeq: turn.end.seq }] : [];
   }) ?? [], [snapshot]);
+}
+
+
+/** The native Markdown renderer supplies the exact source sequence of each code span. */
+export function TurnText({source,runtimeTurn,openFile,fileMentions,children}:{
+  source?:ObservableSnapshot<ConversationSnapshot>;
+  runtimeTurn?:number;
+  openFile:(path:string)=>void;
+  fileMentions:ChatFileMentions["forClosing"];
+  children:ReactNode;
+}) {
+  const snapshot=useConversationSnapshot(source);
+  const owner=runtimeTurn===undefined?null:turnTailOwner(snapshot,runtimeTurn,openFile);
+  const mentions=owner?fileMentions(owner):undefined;
+  return <WorkspaceTextMentionsContext.Provider value={(seq,value)=>owner?.seq===seq?mentions?.resolve(value):undefined}>{children}</WorkspaceTextMentionsContext.Provider>;
 }

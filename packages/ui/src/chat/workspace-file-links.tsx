@@ -1,3 +1,5 @@
+import { ChatMarkdown } from "@amiba/markdown";
+import type { TextSourceRange } from "./text-source-ranges";
 import { useT } from "@amiba/i18n";
 import {
   createContext,
@@ -33,6 +35,13 @@ export const WorkspaceFileOpenerContext = createContext<
 
 export function useWorkspaceFileOpener(): WorkspaceFileOpener | undefined {
   return useContext(WorkspaceFileOpenerContext);
+}
+
+export interface WorkspaceTextMention { open(): void; label: string; title: string; }
+export const WorkspaceTextMentionsContext = createContext<((seq:number,value:string)=>WorkspaceTextMention|undefined)|undefined>(undefined);
+const MarkdownTextSources = createContext<readonly TextSourceRange[]>([]);
+export function WorkspaceMarkdown({sources=[],...props}: ComponentProps<typeof ChatMarkdown> & {sources?:readonly TextSourceRange[]}) {
+  return <MarkdownTextSources.Provider value={props.mode === "static" ? sources : []}><ChatMarkdown {...props}/></MarkdownTextSources.Provider>;
 }
 
 const TRAILING_LINE = /:(\d+)(?::\d+)?$/;
@@ -148,14 +157,22 @@ export function WorkspaceInlineCode({
   ...props
 }: InlineCodeProps) {
   const open = useWorkspaceFileOpener();
+  const mentions = useContext(WorkspaceTextMentionsContext);
+  const sources = useContext(MarkdownTextSources);
   const { t } = useT();
-  const text = open ? textOf(children) : null;
+  const text = open || mentions ? textOf(children) : null;
+  const position = (_node as {position?:{start?:{offset?:number};end?:{offset?:number}}}|undefined)?.position;
+  const start=position?.start?.offset,end=position?.end?.offset;
+  const source = typeof start === "number" && typeof end === "number"
+    ? sources.find(range=>range.start<=start && end<=range.end) : undefined;
+  const mention = source && text ? mentions?.(source.runtimeSeq,text) : undefined;
   const link = text ? parseWorkspaceFileLink(text) : null;
   const code = (
     <code data-streamdown="inline-code" className={className} {...props}>
       {children}
     </code>
   );
+  if (mention) return <button type="button" className="chat-md-file-link" data-workspace-file={mention.title} title={mention.title} aria-label={mention.label} onClick={()=>mention.open()}>{code}</button>;
   if (!open || !link) return code;
   return (
     <button

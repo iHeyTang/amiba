@@ -266,6 +266,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
     conversationViews: ContributionsSource<ConversationViewEntry>;
     conversationSource: (sessionId: string) => import("@deepseek-ai/dsh-client-runtime/client").SessionFace | undefined;
+    fileMentions: import("@deepseek-ai/dsh-client-ui-conversation/client").ChatFileMentions["forClosing"];
     reportMarkdown: (sessionId:string, capabilities:MarkdownCapabilities[]) => Promise<void>;
     prepareConversation: (sessionId: string) => Promise<string>;
   };
@@ -298,6 +299,7 @@ function AmibaRoot({
   directoryFlows,
   conversationViews,
   conversationSource,
+  fileMentions,
   surfaces,
   reportMarkdown,
   prepareConversation,
@@ -320,6 +322,7 @@ function AmibaRoot({
       renderSlot={renderSlot}
       renderSlotChain={renderSlotChain}
       conversationSource={conversationSource}
+      fileMentions={fileMentions}
       sessionsBridge={sessionsBridge}
       settingsSections={settingsSections}
       settingsOnboardingSteps={settingsOnboardingSteps}
@@ -623,6 +626,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           workbenchSource,
           directoryFlows,
           conversationViews,
+          fileMentions: (owner: import("@deepseek-ai/dsh-client-ui-conversation/client").TurnTailOwnerProps) => ctx.get("chatFileMentions")?.forClosing(owner),
           conversationSource: (sessionId: string) => ctx.get("sessions")?.binding(sessionId as import("@deepseek-ai/dsh-client-runtime/client").SessionId)?.session,
           surfaces,
           reportMarkdown,

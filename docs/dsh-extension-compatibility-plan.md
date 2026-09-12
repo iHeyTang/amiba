@@ -496,3 +496,33 @@ offsets across multiple paragraphs, including repeated filenames. The next step
 can therefore gate the official resolver by exact finalized-source ranges in
 static native views, while preserving existing explicit-path links. Custom
 source-transforming Markdown extensions must not be assumed to preserve offsets.
+
+
+### Official closing-prose resolver connected
+
+UI Shell now supplies the original chatFileMentions.forClosing provider with the
+actual session TurnLocation, closing sequence and existing file opener. Native
+Markdown supplies a source sequence only when the inline-code node lies wholly
+inside a finalized text range. Existing explicit-path links remain the fallback;
+unknown/earlier text and all streaming Markdown receive no new basename links.
+The provider uses React context only and adds no DOM or style wrapper.
+
+Source ranges are translated through the native result join and outer trimming.
+Plain merged replies and condensed tool/reply results retain their native text
+and layout. Ambiguous or noncontiguous text transforms decline attribution
+rather than assigning a nearby source. The renderer uses the existing inline-code
+and file-link styles.
+
+- 53 message/file-link tests, 2 source-range translation tests and 6 adapter tests
+  passed. These cover repeated filenames, unchanged empty-provider DOM, original
+  explicit links, condensed tool replies, exact owner forwarding and missing
+  session sources. Shell typecheck passed.
+- Full Desktop build passed. Real installed-plugin smoke clicked a unique bare
+  filename in a live finalized reply and opened actual file contents. Produced
+  file chips, validated directory IPC, settings, workspace, ZIP, conversation
+  views, HMR and detach passed in the same run. Screenshot reviewed.
+- Remaining prose cases: finalized text represented inside folded process
+  narration; noncontiguous body transforms (such as inline thinking markup);
+  interrupted synthetic final nodes with no assistant/message event; a dedicated
+  historical/reopen Desktop check; custom source-transforming Markdown providers;
+  and standalone Web/remote-host behavior. Overall compatibility stays open.
