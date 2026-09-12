@@ -13,18 +13,23 @@ export function ConversationViewRegion({
   renderView,
   chatLabel,
   children,
+  selection: controlledSelection,
+  onSelect,
 }: {
   sessionId?: string | null;
   entries: readonly ConversationViewEntry[];
   renderView?: (id: string) => ReactNode;
   chatLabel: string;
   children: ReactNode;
+  selection?: { sessionId: string; id: string } | null;
+  onSelect?: (id: string | null) => void;
 }) {
   const prefix = useId();
-  const [selection, setSelection] = useState<{
+  const [localSelection, setSelection] = useState<{
     sessionId: string;
     id: string;
   } | null>(null);
+  const selection = controlledSelection === undefined ? localSelection : controlledSelection;
   const views = sessionId && renderView ? entries : [];
   const current =
     selection !== null &&
@@ -33,12 +38,17 @@ export function ConversationViewRegion({
       ? selection.id
       : null;
   useEffect(() => {
-    if (selection && current === null) setSelection(null);
-  }, [selection, current]);
+    if (selection && current === null) {
+      if (onSelect) onSelect(null);
+      else setSelection(null);
+    }
+  }, [selection, current, onSelect]);
   const rows = [{ id: null, label: chatLabel }, ...views];
   const index = rows.findIndex((row) => row.id === current);
-  const select = (id: string | null) =>
-    setSelection(id !== null && sessionId ? { sessionId, id } : null);
+  const select = (id: string | null) => {
+    if (onSelect) onSelect(id);
+    else setSelection(id !== null && sessionId ? { sessionId, id } : null);
+  };
   return (
     <>
       {views.length > 0 && (
@@ -102,6 +112,7 @@ export function ConversationViewRegion({
       {views.map((view, position) => (
         <div
           key={`view:${view.id}`}
+          data-conversation-view={view.id}
           role="tabpanel"
           id={`${prefix}-panel-${position + 1}`}
           aria-labelledby={`${prefix}-tab-${position + 1}`}

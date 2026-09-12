@@ -1,3 +1,4 @@
+import { useTrajectoryInspection } from "./trajectory-inspection.js";
 import { CordisBusiness, type CordisPackages } from "./cordis-business.js";
 import { useCommandRows } from "./command-rows.js";
 import { InputRegion } from "./input-region.js";
@@ -515,6 +516,7 @@ function ProductShellInner({
     return { home: bind(directoryFlows.home, homeDirectory.available), workspace: bind(directoryFlows.workspace, workspaceDirectory.available) };
   }, [directoryFlows, homeDirectory.available, workspaceDirectory.available, platform]);
   const viewEntries = useSyncExternalStore(conversationViews.subscribe, conversationViews.getSnapshot, conversationViews.getSnapshot);
+  const trajectory = useTrajectoryInspection(sessions.activeId, viewEntries);
   const commandRows = useCommandRows(sessions.activeId ? conversationSource(sessions.activeId) : undefined,
     owner => renderSlot("conversation.chat.commandview", owner, { entryKey: owner.node.name ?? "", fallback: null }), commandRowKeys);
   const turnTailAnchors = useTurnTailAnchors(sessions.activeId ? conversationSource(sessions.activeId) : undefined);
@@ -633,20 +635,23 @@ function ProductShellInner({
   // Unknown tools retain the generic row; plugin registrations still win.
   const renderToolViewSeat = useCallback(
     (request: ToolCallSeatRequest) => {
-      const fallback = renderSlot("tool.call.toolview", request.owner, {
+      const owner = trajectory.inspectCall
+        ? { ...request.owner, inspect: () => trajectory.inspectCall?.(request.owner.callId) }
+        : request.owner;
+      const fallback = renderSlot("tool.call.toolview", owner, {
         entryKey: request.owner.toolName,
-        fallback: renderOfficialToolFallback(request.owner, request.fallback),
+        fallback: renderOfficialToolFallback(owner, request.fallback),
       });
       const row = renderSlot(
         "amiba.tool.execution",
-        { ...request.owner, fallback },
+        { ...owner, fallback },
         { fallback },
       );
       return request.owner.toolName === "cordis_run" ? <>{row}<CordisBusiness owner={request.owner}
         source={conversationSource(sessions.activeId)} packages={cordisPackages}
         render={owner => renderSlot("tool.view.cordis", owner, { entryKey: `${owner.pluginId}.${owner.packageId}` })} /></> : row;
     },
-    [renderSlot, conversationSource, sessions.activeId, cordisPackages],
+    [renderSlot, conversationSource, sessions.activeId, cordisPackages, trajectory.inspectCall],
   );
 
   // Amiba's KEYED per-question seat. Dispatched once per pending request with
@@ -812,7 +817,9 @@ function ProductShellInner({
               messageSourceLabel={messageSourceLabel}
               slots={{
                 conversationViews: viewEntries,
-                conversationView: (id) => renderSlot("conversation.view", {}, { only: id }),
+                conversationView: (id) => renderSlot("conversation.view", trajectory.owner, { only: id }),
+                conversationViewSelection: trajectory.selection,
+                onConversationViewSelect: trajectory.select,
                 emptyState: (
                   <HomeView
                     triggerRuntime={triggerRuntime}

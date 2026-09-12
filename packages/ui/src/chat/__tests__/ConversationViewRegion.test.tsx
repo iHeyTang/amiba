@@ -96,3 +96,18 @@ it("supports keyboard selection and withdraws a removed view or changed session"
   );
   expect(screen.queryByRole("tablist")).toBeNull();
 });
+
+it("accepts external trajectory selection without remounting the native editor", async () => {
+  const onSelect = vi.fn();
+  const props = { sessionId: "session", entries: [{ id: "trajectory", label: "Trajectory" }], chatLabel: "Chat", renderView: () => <p>Exact call record</p>, onSelect };
+  const { rerender } = render(<ConversationViewRegion {...props} selection={null}><textarea aria-label="Resident draft" defaultValue="keep me" /></ConversationViewRegion>);
+  const editor = screen.getByRole("textbox");
+  rerender(<ConversationViewRegion {...props} selection={{ sessionId: "session", id: "trajectory" }}><textarea aria-label="Resident draft" defaultValue="keep me" /></ConversationViewRegion>);
+  expect(screen.getByText("Exact call record")).toBeVisible();
+  expect(editor).not.toBeVisible();
+  await userEvent.click(screen.getByRole("tab", { name: "Chat" }));
+  expect(onSelect).toHaveBeenCalledWith(null);
+  rerender(<ConversationViewRegion {...props} selection={null}><textarea aria-label="Resident draft" defaultValue="keep me" /></ConversationViewRegion>);
+  expect(screen.getByRole("textbox")).toBe(editor);
+  expect(editor).toHaveValue("keep me");
+});

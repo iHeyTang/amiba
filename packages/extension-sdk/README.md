@@ -206,9 +206,11 @@ How Amiba supplies that owner share: `callId` from the canonical call id,
 (and reused as the dispatch `entryKey`), `block` rebuilt from the verbatim
 `tool/call` / `tool/result` material both Amiba tool producers retain, `cwd`
 from the conversation's workspace binding, `openFile` from the workspace
-pane's file-open path. `inspect` is deliberately OMITTED (it is optional): it
-means "inspect this call in the trajectory view", and Amiba disables the
-official `ui-trajectory` plugin and ships no equivalent. `block.subCalls` retains the nested
+pane's file-open path. The shell supplies optional `inspect` when a
+`trajectory` view is registered: it opens that view with the real call ID.
+The view receives `inspect` and `onInspectDone` for the one-shot handoff.
+Session switches and view removal invalidate old callbacks; no trajectory
+plugin is automatically enabled or substituted for the native Chat. `block.subCalls` retains the nested
 Code Mode dispatch tree, including running children and completed/error results,
 in both live sessions and restored history. Calls without dispatch events keep
 an empty array. The existing Amiba tool rows remain unchanged; registered

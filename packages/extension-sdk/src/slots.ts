@@ -414,14 +414,11 @@ export type {
  *                  (`platform.workspaces.getCurrent(sessionId)`).
  *   - `openFile` — the workspace pane's `openFile(path)`, the host file-open
  *                  path already behind Amiba's own tool rows.
- *   - `inspect`  — deliberately OMITTED (the member is optional). It means
- *                  "inspect this call in the TRAJECTORY view"; Amiba disables
- *                  the official `ui-trajectory` plugin and ships no
- *                  equivalent, so any callback here would lead nowhere.
- *                  Amiba's own row affordances are NOT it: the workspace pane
- *                  opens the tool's RESOURCE (a file / terminal / browser),
- *                  and the inline detail fold belongs to the very row an
- *                  occupant replaces.
+ *   - `inspect`  — supplied by the shell only while a `trajectory` view is
+ *                  registered. Opens that view with the actual call ID and
+ *                  a one-shot acknowledgement. Session switches and view
+ *                  removal invalidate old callbacks. Native resource-open
+ *                  and inline detail controls retain their existing meaning.
  *
  * `block.subCalls` carries Code Mode dispatch children from live events and
  * restored history. Calls without dispatch events have an empty array.

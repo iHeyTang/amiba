@@ -127,9 +127,8 @@ export function ToolChip({ event, mode = "row" }: { event: ToolProgress; mode?: 
     [workspacePane],
   );
   const block = useMemo(() => toolCallBlockFromProgress(event), [event]);
-  // `inspect` is deliberately absent from the owner share: it means "inspect
-  // this call in the trajectory view", and Amiba runs no trajectory surface.
-  // The member is optional, so omitting it is the honest supply.
+  // The shell adds `inspect` only when a contributed trajectory view can
+  // receive the call. This runtime-neutral row cannot promise that surface.
   const owner = useMemo(
     () =>
       block

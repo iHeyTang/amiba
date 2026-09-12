@@ -127,7 +127,7 @@ try {
   await symlink(path.join(root, "apps/desktop/node_modules"), path.join(project, "node_modules"), "dir");
   await writeFile(path.join(project, "package.json"), JSON.stringify({ name: "dsh-plugin-probe", version: "0.0.0", type: "module", main: "lib/index.js", exports: { ".": "./lib/index.js", "./client": "./lib/client.js", "./package.json": "./package.json" }, scripts: { build: "tsc -p tsconfig.build.json && vite build" + (native ? " && vite build --config vite.native.config.mjs" : "") }, dsh: { ...(native ? { native: "./lib/native.cjs" } : {}), client: { inject: ["@deepseek-ai/dsh-client-runtime"], platform: "web" } } }));
   await writeFile(path.join(project, "tsconfig.build.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", rootDir: "src", outDir: "lib", skipLibCheck: true }, include: ["src"] }));
-  await writeFile(path.join(project, "vite.config.mjs"), `export default { build: { emptyOutDir:false, lib: {entry:'src/client.ts',formats:['cjs'],fileName:()=> 'client.js'}, rollupOptions: {external:["react"],output: {banner:'window.__ModuleLoader__.load({id:"dsh-plugin-probe",factory:(require)=>{const module={exports:{}};const exports=module.exports;',footer:'return module.exports;}});'}}}}`);
+  await writeFile(path.join(project, "vite.config.mjs"), `export default { build: { emptyOutDir:false, lib: {entry:'src/client.ts',formats:['cjs'],fileName:()=> 'client.js'}, rollupOptions: {external:["react"],output: {banner:'window.__ModuleLoader__.load({id:"dsh-plugin-probe",factory:(require)=>{const module={exports:{}};const exports=module.exports;window.__probeRequire=require;',footer:'return module.exports;}});'}}}}`);
   const hostSource = version => `export function apply(ctx: any) { ctx.effect(() => { console.log('AMIBA_PROBE_HOST_${version}'); return () => console.log('AMIBA_PROBE_DISPOSE_${version}'); }); }`;
   const clientSource = version => `import {createElement} from "react";${process.argv.includes("--compat") ? "export const inject = [\"slots\", \"settingsScope\", \"layout\", \"sessions\", \"sessionLogDownload\", \"inputTriggers\", \"composerInputs\", \"composerImages\", \"remote\", \"remote.dynamicCordisRunner\"];" : ""}export function apply(ctx: any) { (window as any).__probeCreateElement=createElement; (window as any).__probeCtx=ctx; ctx.effect(() => { const node=document.createElement('div');node.id='amiba-plugin-probe';node.textContent='client-${version}';document.body.append(node);return ()=>node.remove(); }); }`;
   const nativeEvents = path.join(profile, "native-events.jsonl");
@@ -438,6 +438,32 @@ try {
       assert.ok(await evaluate("!window.__probeCtx.get('dynamicCordisRunner').renderFailures.getSnapshot().has(window.__cordisDefinition.pluginId)"));
       assert.ok(await evaluate("!Array.from(document.querySelectorAll('style[data-dyn]')).some(n=>n.dataset.dyn===window.__cordisDefinition.pluginId)"));
       console.log("Dynamic Cordis Client-to-Host RPC preserved Unicode, rejected stopped/stale runs and isolated Host state after restart and package update; native cards and cleanup remained intact");
+    }
+    if (process.argv.includes("--trajectory")) {
+      assert.ok(process.argv.includes("--cordis-business"), "trajectory smoke needs real tool-result fixtures");
+      const officialBundle = await readFile(path.join(root,"packages/app-runtime/resources/dsh-runtime/app/node_modules/@deepseek-ai/dsh-client-ui-trajectory/lib/client.js"),"utf8");
+      await evaluate(officialBundle);
+      await evaluate("window.__trajectoryFiber=window.__probeCtx.plugin(window.__probeRequire('@deepseek-ai/dsh-client-ui-trajectory'));void 0");
+      await wait(() => evaluate("window.__probeCtx.slots.entriesOfSlot('conversation.view').some(e=>e.options.id==='trajectory')"));
+      await evaluate(`window.__inspectRowOff=window.__probeCtx.slots.register({name:'tool.call.toolview',key:'cordis_run',priority:-100},owner=>{window.__inspectOwner=owner;return window.__probeCreateElement('button',{'data-compat-inspect':owner.callId,onClick:owner.inspect},'Inspect '+owner.callId)});void 0`);
+      await wait(() => evaluate("typeof window.__inspectOwner?.inspect==='function'"));
+      await evaluate("window.__trajectoryEditor=document.querySelector('[data-composer-card] [contenteditable=true]');window.__trajectoryCard=document.querySelector('[data-composer-card]');window.__trajectoryBefore={height:window.__trajectoryCard.getBoundingClientRect().height,font:getComputedStyle(window.__trajectoryEditor).font,alias:getComputedStyle(window.__trajectoryEditor).getPropertyValue('--dsw-font-xs-13')};window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'COMPAT_TRAJECTORY_DRAFT');document.querySelector('[data-compat-inspect=compat-cordis-next-call]').click();void 0");
+      await wait(() => evaluate("Boolean(document.querySelector('tr[data-record-index][aria-selected=true]'))"));
+      const state = await evaluate("({selected:Array.from(document.querySelectorAll('tr[aria-selected=true]')).map(n=>n.textContent),viewFont:getComputedStyle(document.querySelector('[data-conversation-view=trajectory]')).fontSize,nativeConnected:window.__trajectoryEditor.isConnected})");
+      console.log("Trajectory inspection rendered", state);
+      assert.ok(state.nativeConnected);
+      assert.equal(state.selected.length, 1);
+      const inspectedDefinition = JSON.parse(await readFile(path.join(profile,"cordis-next-definition.json"),"utf8"));
+      assert.ok(state.selected[0].includes(JSON.stringify(inspectedDefinition.packageId)));
+      assert.ok(state.selected[0].includes("COMPAT_DYNAMIC_OUTPUT"));
+      assert.equal(state.viewFont,"13px");
+      await writeFile(path.join(tmpdir(),"amiba-trajectory-inspection.png"),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+      await evaluate("window.__trajectoryFiber.dispose();void 0");
+      await wait(() => evaluate("!window.__probeCtx.slots.entriesOfSlot('conversation.view').some(e=>e.options.id==='trajectory') && typeof window.__inspectOwner?.inspect==='undefined'"));
+      assert.ok(await evaluate("window.__trajectoryEditor===document.querySelector('[data-composer-card] [contenteditable=true]') && window.__trajectoryEditor.textContent==='COMPAT_TRAJECTORY_DRAFT'"));
+      assert.deepEqual(await evaluate("({height:window.__trajectoryCard.getBoundingClientRect().height,font:getComputedStyle(window.__trajectoryEditor).font,alias:getComputedStyle(window.__trajectoryEditor).getPropertyValue('--dsw-font-xs-13')})"),await evaluate("window.__trajectoryBefore"));
+      await evaluate("window.__inspectRowOff();window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'');void 0");
+      console.log("Official trajectory selected the exact tool package and result; unload restored the same native editor, draft and card styles");
     }
     if (process.argv.includes("--command-rows")) {
       await evaluate("window.__commandRowOff=window.__probeCtx.slots.register({name:'conversation.chat.commandview',key:'compat-row',id:'compat-command-row'},props=>{window.__commandRowOwner=props;return window.__probeCreateElement('div',{'data-compat-command-row':''},props.node.outcome?.text??'COMPAT_COMMAND_EXECUTING')});void 0");

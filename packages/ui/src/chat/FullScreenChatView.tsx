@@ -198,6 +198,8 @@ export interface FullScreenChatViewProps {
     headerActions?: ReactNode;
     conversationViews?: readonly ConversationViewEntry[];
     conversationView?: (id: string) => ReactNode;
+    conversationViewSelection?: { sessionId: string; id: string } | null;
+    onConversationViewSelect?: (id: string | null) => void;
     /** Additive controls in the active chat header action cluster. */
     headerAfter?: ReactNode;
     /** Frame-wide overlay for chat modules; entries opt into pointer events. */
@@ -981,7 +983,7 @@ function FullScreenChatViewInner({
                 )}
                 seamless
               />
-              <ConversationViewRegion sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
+              <ConversationViewRegion selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
                 <ChatSurface
                   messagesMaxWidth={messagesWidth}
                   client={client}
