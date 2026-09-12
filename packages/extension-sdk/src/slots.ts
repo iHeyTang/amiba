@@ -44,7 +44,7 @@
  * official ones.
  */
 
-import type { OwnerOf, SlotMap } from "@deepseek-ai/dsh-client-ui-slots";
+import type { OwnerOf, PropsRuntime, SlotMap } from "@deepseek-ai/dsh-client-ui-slots";
 export type { SidebarFooterActionOwnerProps } from "@deepseek-ai/dsh-client-ui-sidebar/client";
 export type { SettingsPluginItemOwnerProps } from "@deepseek-ai/dsh-client-ui-settings-plugins/client";
 
@@ -789,3 +789,5 @@ export type { DirectoryFlowOwnerProps } from "@deepseek-ai/dsh-client-ui-workspa
 export type ConversationInputState = OwnerOf<"conversation.input.left">["input"];
 
 export type ConversationInputZoneOwner = OwnerOf<"conversation.input.left">;
+
+export type ConversationInputActions = PropsRuntime<"conversation.input.left">["inputActions"];

@@ -16,19 +16,19 @@
 | 6 | `conversation.chat.turnTail` | 桌面接入已验证，Web 待验证 | 使用真实回合与结束序号；支持有回复、仅工具和空回合的位置。官方产出文件行、文件打开及目录 IPC 已验证；常规结束回复、折叠过程正文和思考标记清理后的文件名链接已通过桌面验证；实时中断回复，以及正常/中断回复整页重载后的文件链接均已通过桌面验证；保留原始节点位置的 Markdown 变换已验证；独立 Web 仍在核对。 |
 | 7 | `conversation.composer` | 不能同时原样接管 | 完整接管该区域可能替换现有界面或创建第二套控制器。需拆出附加能力；不能宣称完整兼容。 |
 | 8 | `conversation.composer.bar` | 不能同时原样接管 | 完整接管该区域可能替换现有界面或创建第二套控制器。需拆出附加能力；不能宣称完整兼容。 |
-| 9 | `conversation.composer.dock` | 入口已接入，桌面验证通过 | 按官方位置传递真实 session/input，草稿及图片变化实时更新；卸载保留原编辑器及卡片尺寸。依赖 useInput/inputActions 或私有服务的具体组件仍需继续适配。 |
+| 9 | `conversation.composer.dock` | 入口已接入，桌面验证通过 | 按官方位置传递真实 session/input，草稿及图片变化实时更新；卸载保留原编辑器及卡片尺寸。inputActions 已接入标准会话属性，草稿写入、提交及旧命令完成后保留新草稿已通过真实桌面验证；useInput、未挂载输入器的草稿及私有服务仍需继续适配。 |
 | 10 | `conversation.details.tool` | 可行方向，待验证 | 旧版工具详情入口需真实调用定位及详情生命周期；新版已移除此键。 |
 | 11 | `conversation.hero.agentPreset` | 只能按组件分别适配 | 这是已有界面的替换入口。可复用服务或增加可选展示，但默认能力和样式必须保留。 |
 | 12 | `conversation.hero.brand.mark` | 新版契约，待验证 | 属于新版品牌替换入口；只能在用户主动选择替换时采用，默认品牌不变。 |
 | 13 | `conversation.hero.workspace` | 只能按组件分别适配 | 这是已有界面的替换入口。可复用服务或增加可选展示，但默认能力和样式必须保留。 |
 | 14 | `conversation.hero.workspace.directoryFlow` | 已接入，首页插件实测通过 | 打开、选择、取消、重开及旧回调隔离已实测；保留首页路径写入。默认原生组件至系统对话框接口的链路已验证（系统返回值用测试替身）；浏览器选择器读取、创建、选择及局部样式已在桌面 Web 渲染器实测；独立 Web 部署另核对。 |
 | 15 | `conversation.input.attachments` | rc.2 已有契约，可以适配，尚未完成 | 实际 npm rc.2 已注册此插槽。官方描述包含浏览器 File、草稿 ID 和 previewUrl；原上传、移除与命令成功消费的浏览器注册已完成桌面验证；官方草稿反向添加及移除已通过原输入器桌面验证；图片列表的同步读取、订阅与 pruneImages 已通过桌面验证；完整官方输入提供者与队列恢复仍待接通，不能混用 Host staging ID。 |
-| 16 | `conversation.input.dock` | 入口已接入，桌面验证通过 | 按官方位置传递真实 session/input，草稿及图片变化实时更新；卸载保留原编辑器及卡片尺寸。依赖 useInput/inputActions 或私有服务的具体组件仍需继续适配。 |
-| 17 | `conversation.input.left` | 入口已接入，桌面验证通过 | 按官方位置传递真实 session/input，草稿及图片变化实时更新；卸载保留原编辑器及卡片尺寸。依赖 useInput/inputActions 或私有服务的具体组件仍需继续适配。 |
+| 16 | `conversation.input.dock` | 入口已接入，桌面验证通过 | 按官方位置传递真实 session/input，草稿及图片变化实时更新；卸载保留原编辑器及卡片尺寸。inputActions 已接入标准会话属性，草稿写入、提交及旧命令完成后保留新草稿已通过真实桌面验证；useInput、未挂载输入器的草稿及私有服务仍需继续适配。 |
+| 17 | `conversation.input.left` | 入口已接入，桌面验证通过 | 按官方位置传递真实 session/input，草稿及图片变化实时更新；卸载保留原编辑器及卡片尺寸。inputActions 已接入标准会话属性，草稿写入、提交及旧命令完成后保留新草稿已通过真实桌面验证；useInput、未挂载输入器的草稿及私有服务仍需继续适配。 |
 | 18 | `conversation.input.model` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 19 | `conversation.input.overlay` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 20 | `conversation.input.plan` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
-| 21 | `conversation.input.right` | 入口已接入，桌面验证通过 | 按官方位置传递真实 session/input，草稿及图片变化实时更新；卸载保留原编辑器及卡片尺寸。依赖 useInput/inputActions 或私有服务的具体组件仍需继续适配。 |
+| 21 | `conversation.input.right` | 入口已接入，桌面验证通过 | 按官方位置传递真实 session/input，草稿及图片变化实时更新；卸载保留原编辑器及卡片尺寸。inputActions 已接入标准会话属性，草稿写入、提交及旧命令完成后保留新草稿已通过真实桌面验证；useInput、未挂载输入器的草稿及私有服务仍需继续适配。 |
 | 22 | `conversation.message.images` | 新版契约，待验证 | 需要新版消息图片数据和资源读取接口，不是增加图片容器即可。 |
 | 23 | `conversation.session` | 不能同时原样接管 | 完整接管该区域可能替换现有界面或创建第二套控制器。需拆出附加能力；不能宣称完整兼容。 |
 | 24 | `conversation.session.header` | 只能按组件分别适配 | 这是已有界面的替换入口。可复用服务或增加可选展示，但默认能力和样式必须保留。 |
@@ -80,7 +80,7 @@
 | 官方 sessions.open | 已适配并实测 | 插件可从首页主动打开会话；启动恢复不会因此替换首页。clear 已接入现有取消选择并通过桌面验证；读取历史/元数据期间的取消竞态已修复并通过状态测试；真实目录子会话的打开、返回父会话、首页主动打开、只读输入及渲染器重载已通过桌面验证；可续聊子会话通过原输入框文本发送和停止已完成真实桌面验证；冷 Host 恢复另核对。 |
 | 同版本 Host 插件、工具、生命周期 | 原生机制可用 | 每个插件声明的服务和外部依赖仍必须满足。 |
 | 官方组件样式 | 可适配，待完成 | 需提供局部样式资源，不能全局覆盖 Amiba 主题。 |
-| 官方完整 useInput/inputActions | 尚不能宣称全部支持 | 尚缺草稿附件及提交状态的完整桥接；命令图片提交已补充原图读取、声明检查、失败保留与成功消费。完整输入服务仍需继续适配。 |
+| 官方完整 useInput/inputActions | 尚不能宣称全部支持 | inputActions 已通过 sessions.provide 连接原输入器的草稿、图片和提交操作；尚未挂载的输入器会明确拒绝草稿写入。useInput、离屏草稿及队列恢复语义仍需继续适配，不能宣称完整支持。 |
 | 一次性子会话的继续发送和停止 | 当前官方契约不支持 | 实际 rc.2 Session.prompt 将 one-shot 判为只读；Session.cancel 同样拒绝。只能读取其记录，不能伪装成普通会话来继续或取消。 |
 | 可继续子会话的图片输入 | 当前官方客户端不支持 | 实际 rc.2 Session.prompt 明确拒绝包含 image 的子会话续聊；文本续聊和停止可通过 subagent.prompt / subagent.interrupt 适配。此结论限定当前版本。 |
 | 会话 ZIP 导出 | Desktop 已实测，Web 待实测 | Desktop file: 不能靠普通相对链接下载，已增加限定到运行时导出端点的原生交接。 |

@@ -145,6 +145,14 @@ export function createTriggerEditorOps(
         return before.draft !== text && inputDraft.read().draft === text;
       });
     },
+    editInputDraft(text) {
+      if (!editor.isEditable()) return false;
+      return transact(editor, () => {
+        const before = inputDraft.read();
+        $setInputDraft(text);
+        return before.draft !== text && inputDraft.read().draft === text;
+      });
+    },
     subscribeInputDraft(listener) {
       const offEditor = editor.registerUpdateListener(({ editorState }) => {
         // Advance public revisions even when no subscriber reads this update;

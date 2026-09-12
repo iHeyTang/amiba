@@ -131,6 +131,8 @@ export interface ComposerInputDraft extends ComposerInputStatus {
 
 export interface TriggerEditorOps {
   readInputDraft?(): ComposerInputDraft;
+  /** User draft edits remain available during asynchronous admission/submission. */
+  editInputDraft?(text: string): boolean;
   setInputDraft?(text: string, expectedRevision?: number): boolean;
   subscribeInputDraft?(listener: () => void): () => void;
   beginCommand(claim: CommandClaim, span: TokenSpan): boolean;

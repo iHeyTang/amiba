@@ -415,3 +415,16 @@ describe("public input phase projection", () => {
     expect(ops.setInputDraft!("changed")).toBe(true);
   });
 });
+
+
+it.each(["adjudicating", "submitting"] as const)("allows user draft edits during %s while preserving strict writes", phase => {
+  const { editor, claims, revision } = setup("old");
+  const ops = createTriggerEditorOps(editor, claims, revision, () => false);
+  claims.setAttemptPhase(phase);
+  expect(ops.setInputDraft!("strict")).toBe(false);
+  expect(ops.editInputDraft!("新草稿😀")).toBe(true);
+  expect(ops.readInputDraft!()).toMatchObject({ draft: "新草稿😀", phase });
+  editor.setEditable(false);
+  expect(ops.editInputDraft!("readonly")).toBe(false);
+  expect(ops.readInputDraft!().draft).toBe("新草稿😀");
+});

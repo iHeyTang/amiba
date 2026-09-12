@@ -1036,3 +1036,13 @@ pipelines retain mounted component state.
 - 这些区域由 owner 接收真实 session/input，无需伪造 useInput。依赖尚未提供的 useInput/inputActions、完整 conversation 服务或其他私有依赖的扩展仍需后续适配；本步骤不宣称全部组件可直接使用。
 - `/tmp/amiba-input-regions-desktop-build.log` 完整构建退出 0；`/tmp/amiba-input-regions-desktop-smoke4.log` 的 `--compat --input-state --command-images --child-continuation --child-navigation --child-reload` 退出 0。四个真实插件入口传入正确 sessionId、真实 Host queue 和原草稿，文字/图片变化更新 owner；位置符合上下 dock 和工具行左右区。卸载保留同一个原编辑器节点，卡片类名及宽高恢复至挂载前。截图 amiba-input-regions.png 已查看，现有操作保持可见。
 - 首次桌面夹具将 React 打入插件包导致 process 未定义；改为 external 复用运行时 React。随后位置断言错误地要求插件元素直接邻接原控件，实际运行时会包装插件元素；截图和 DOM 确认位置正确后，按区域分支与原卡片/发送按钮的相对顺序核对，未更改产品代码绕过该断言。前三次失败不计为通过证据。
+
+
+### 官方标准 inputActions 提供者（2026-09-13）
+
+- 通过真实 `sessions.provide` 注册 `inputActions`，按会话缓存动作对象。操作每次查找该会话当前绑定的原输入器；卸载旧编辑器不会移除替代编辑器，也不会改到其他会话。
+- `setDraft` 使用 Lexical 的同一差分写入路径。官方 rc.2 的 `draft-changed` 不拒绝 adjudicating/submitting，因此单独增加用户编辑操作；原菜单/CAS 写入的锁定规则保持不变。真实只读输入器仍拒绝写入。
+- 图片添加、移除、清理及提交调用现有桥接；`submit()` 保留官方 void 契约，不能把内部准入布尔值解释为 Host 已接收。
+- 未挂载输入器的草稿写入明确报错；这仍是与官方常驻会话草稿的差异。当前未注册 `useInput`，不制造空状态来伪装完整输入服务。
+- 验证：Shell provider/bridge 28 项、UI editor/pipeline 64 项通过；Shell 与 UI 类型检查通过。完整 Desktop 构建通过。真实插件经标准属性拿到 inputActions，并完成写入、提交以及旧命令成功后保留新草稿；图片、子会话续聊/停止、导航及 renderer 重载回归通过，输入区域卸载后原编辑器身份和卡片尺寸保持。
+- 日志：`/tmp/amiba-input-actions-tests.log`、`/tmp/amiba-input-actions-ui-tests.log`、`/tmp/amiba-input-actions-desktop-build.log`、`/tmp/amiba-input-actions-desktop-smoke.log`。

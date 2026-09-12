@@ -1,3 +1,4 @@
+import { createInputActionsProvider } from "./input-actions-provider.js";
 import { createDraftImageRegistry } from "./draft-image-registry.js";
 import { registerConversationNodes } from "@deepseek-ai/dsh-client-ui-conversation/headless";
 import { createDirectoryFlow, type DirectoryFlow } from "./directory-flow.js";
@@ -570,6 +571,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
         >,
     });
     const disposeComposerInputs = ctx.reflect.provide("composerInputs", triggerRuntime);
+    ctx.effect(() => ctx.sessions.provide(createInputActionsProvider(triggerRuntime)), "native input actions");
     // Amiba's own `/` and `@` sources, published through the official
     // registry rather than a private one — so a plugin's `registerSource`
     // and Amiba's own land in the same menu, ranked by the same `order`.
