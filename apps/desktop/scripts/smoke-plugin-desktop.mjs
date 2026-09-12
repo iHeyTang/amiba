@@ -173,7 +173,7 @@ try {
       const ctx = window.__probeCtx;
       window.__compatDisposers = [
         ctx.slots.register({name:'settings.plugins.tab',id:'compat-probe',label:'Compatibility probe'}, () => 'COMPAT_TAB_CONTENT'),
-        ctx.slots.register({name:'settings.plugin.item',id:'compat-card',key:${JSON.stringify(namespace)}}, () => 'COMPAT_CONFIG_CARD'),
+        ctx.slots.register({name:'settings.plugin.item',id:'compat-card',priority:-1,key:${JSON.stringify(namespace)}}, () => 'COMPAT_CONFIG_CARD'),
         ctx.slots.register({name:'sidebar.footer.action',id:'compat-footer'}, ({wide}) => wide ? 'COMPAT_FOOTER_WIDE' : 'COMPAT_FOOTER_NARROW'),
       ];
       ctx.layout.openSettings('plugins');
@@ -189,8 +189,54 @@ try {
     await evaluate("window.__probeCtx.layout.toggleSidebar()");
     await wait(() => evaluate(`document.body.textContent.includes(${JSON.stringify(wasWide ? 'COMPAT_FOOTER_NARROW' : 'COMPAT_FOOTER_WIDE')})`));
     await evaluate("window.__probeCtx.layout.toggleSidebar();window.__probeCtx.layout.openSettings('plugins')");
+    await wait(() => evaluate("Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility probe')"));
+    await evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(n=>n.textContent==='Compatibility probe').click()");
     await evaluate("window.__compatDisposers.forEach(dispose=>dispose());delete window.__compatDisposers");
-    await wait(() => evaluate("!document.body.textContent.includes('COMPAT_TAB_CONTENT') && !document.querySelector('[role=tablist]')"));
+    await wait(() => evaluate("!document.body.textContent.includes('COMPAT_TAB_CONTENT') && /inventory|清单/i.test(document.querySelector('[role=tab][aria-selected=true]')?.textContent ?? '')"));
+    await evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(n=>/Configuration|配置/.test(n.textContent)).click()");
+    await wait(() => evaluate("Array.from(document.querySelectorAll('form')).some(n=>/Agent execution|Agent 执行/.test(n.getAttribute('aria-label')??''))"));
+    await evaluate("window.__agentSettings=window.__probeCtx.settingsScope.bind({namespace:'agent-loop'});void 0");
+    await wait(() => evaluate("window.__agentSettings.getSnapshot().status==='ready'"));
+    const beforeLimit=await evaluate("window.__agentSettings.getSnapshot().value.maxParallelToolCalls");
+    const nextLimit=beforeLimit===2?3:2;
+    await evaluate(`(() => {
+      const form=Array.from(document.querySelectorAll('form')).find(n=>/Agent execution|Agent 执行/.test(n.getAttribute('aria-label')??''));
+      window.__agentForm=form;
+      const input=form.querySelector('input');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(String(nextLimit))});
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+    })()`);
+    await wait(() => evaluate("!window.__agentForm.querySelector('button[type=submit]').disabled"));
+    assert.equal(await evaluate("window.__agentSettings.getSnapshot().value.maxParallelToolCalls"),beforeLimit,"editing must not write Host settings");
+    await evaluate("window.__agentForm.querySelector('button[type=submit]').click()");
+    await wait(() => evaluate(`window.__agentSettings.getSnapshot().value.maxParallelToolCalls===${nextLimit} && window.__agentForm.querySelector('button[type=submit]').disabled`));
+    await evaluate("window.__agentForm.querySelector('input').parentElement.querySelector('button').click()");
+    await wait(() => evaluate("!window.__agentForm.querySelector('button[type=submit]').disabled"));
+    await evaluate("window.__agentForm.querySelector('button[type=submit]').click()");
+    await wait(() => evaluate("!Object.hasOwn(window.__agentSettings.getSnapshot().user??{},'maxParallelToolCalls') && window.__agentForm.querySelector('button[type=submit]').disabled"));
+    await writeFile(path.join(tmpdir(), "amiba-plugin-config-cards.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+    for (const spec of [
+      {namespace:"shell",label:"Shell execution|Shell 执行",field:"timeoutMs",text:"61000",value:61000},
+      {namespace:"web-search-deepseek",label:"DeepSeek web search|DeepSeek 网页搜索",field:"baseURL",text:"https://example.test",value:"https://example.test"},
+    ]) {
+      await evaluate(`window.__cardScope=window.__probeCtx.settingsScope.bind({namespace:${JSON.stringify(spec.namespace)}});window.__cardForm=Array.from(document.querySelectorAll('form')).find(n=>new RegExp(${JSON.stringify(spec.label)}).test(n.getAttribute('aria-label')??''));void 0`);
+      await wait(() => evaluate("window.__cardScope.getSnapshot().status==='ready' && Boolean(window.__cardForm)"));
+      const before=await evaluate(`window.__cardScope.getSnapshot().value[${JSON.stringify(spec.field)}]`);
+      await evaluate(`(() => {const input=window.__cardForm.querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(spec.text)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+      await wait(() => evaluate("!window.__cardForm.querySelector('button[type=submit]').disabled"));
+      assert.equal(await evaluate(`window.__cardScope.getSnapshot().value[${JSON.stringify(spec.field)}]`),before);
+      await evaluate("window.__cardForm.querySelector('button[type=submit]').click()");
+      await wait(() => evaluate(`window.__cardScope.getSnapshot().value[${JSON.stringify(spec.field)}]===${JSON.stringify(spec.value)} && window.__cardForm.querySelector('button[type=submit]').disabled`));
+      await evaluate("window.__cardForm.querySelector('input').parentElement.querySelector('button').click()");
+      await wait(() => evaluate("!window.__cardForm.querySelector('button[type=submit]').disabled"));
+      await evaluate("window.__cardForm.querySelector('button[type=submit]').click()");
+      await wait(() => evaluate(`!Object.hasOwn(window.__cardScope.getSnapshot().user??{},${JSON.stringify(spec.field)}) && window.__cardForm.querySelector('button[type=submit]').disabled`));
+    }
+    assert.ok(await evaluate("window.__cardForm.querySelector('input[type=password]')?.value===''") , "search key must never be prefilled");
+    await evaluate("window.__cardForm.scrollIntoView({block:'end'})");
+    await writeFile(path.join(tmpdir(), "amiba-plugin-search-config.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+    console.log("All three official config forms passed actual Host save/reset; the search key remains blank.");
+
     const downloads = path.join(profile, "downloads");
     await mkdir(downloads, { recursive: true });
     // The native fixture saves via Electron DownloadItem, avoiding a save dialog.

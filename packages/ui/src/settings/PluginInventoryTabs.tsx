@@ -97,7 +97,7 @@ export function PluginInventoryTabs({
           aria-labelledby={tabId(position + 1)}
           tabIndex={0}
           hidden={current !== tab.id}
-          className={cn("min-h-0 flex-1", current !== tab.id && "hidden")}
+          className={cn("min-h-0 flex-1 overflow-auto", current !== tab.id && "hidden")}
         >
           {current === tab.id ? renderTab(tab.id) : null}
         </div>

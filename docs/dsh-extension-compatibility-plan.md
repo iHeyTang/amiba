@@ -29,7 +29,7 @@ are required in addition to new-plugin tests.
 | Scope | Status | Acceptance |
 | --- | --- | --- |
 | Plugin settings tabs | implementation + focused tests + real Desktop file: integration passed; visual review pending | Real localized tabs/panels; existing inventory and filters preserved; unload falls back |
-| Plugin config cards/forms | keyed cards implemented/tested; three official built-in forms still open | Host config read/write, actual schema, existing settings preserved |
+| Plugin config cards/forms | keyed cards plus three built-in forms implemented; controller/UI tests, real Host save/reset and visual review passed | Host config read/write, actual schema, existing settings preserved |
 | Sidebar additive actions | implementation + focused tests + real Desktop wide/narrow/unload passed | Correct owner, no empty wrapper, collapsed/expanded behavior |
 | Workspace/directory selection | open | Open/cancel/picked/error lifecycle, one workspace mutation authority |
 | Session export | native plugin enabled + dialog adapted/tested; actual Desktop ZIP saved; ordinary Web download verification pending | Native command download on Web/Desktop without duplicate existing action |
@@ -143,3 +143,34 @@ projections; existing active-session fallback behavior is preserved.
   footer, actual ZIP save, plugin HMR and detach all passed in the same run.
 - This does not certify official `clear()` or catalog-addressed child rendering;
   those navigation semantics remain to be audited separately.
+
+### Built-in configuration forms
+
+Runtime inventory now supplies the official `shell`, `agent-loop`, and
+`web-search-deepseek` cards using Amiba primitives. The pinned settings package
+exposes a standalone controller entry containing the exact controller regions
+from its client bundle. This is statically bundled into the adapter: importing
+the disabled whole settings UI as a dynamic client dependency was rejected by
+the real module loader. The package's original settings page remains disabled.
+A test verifies controller-region identity before exercising the standalone code.
+Controller scope subscriptions and credential invalidation subscriptions are tied
+to the owning plugin fiber. Existing inventory is still the default selected tab.
+
+The official search controller previously treated an existing configured key as
+proof that a replacement key saved, even after rejection. Both its original and
+standalone implementations now check the write result and retain failed drafts.
+
+- Four real-controller tests passed: staged save/reset, invalid numbers, rejected
+  field saves, blank secrets, successful keys and rejected key replacement.
+- Four UI tests passed: input/write gating, masked secrets, discard, unchanged
+  empty inventory layout and tab selection/unload. External tab panels now scroll
+  so longer configuration forms remain reachable.
+
+- Final complete Desktop build and production verification passed. Real installed
+  Desktop smoke saved and reset a field through each of the three forms, verified
+  editing alone did not write, and checked that the password input remained blank.
+  Screenshots reviewed at the top and bottom of the scrolling configuration panel.
+  Credential success/rejection uses isolated controller fixtures, not real secrets.
+- The same real run passed plugin-tab shadow/unload fallback, footer width,
+  explicit session open, conversation view injection/unload, actual native ZIP
+  download, plugin HMR/detach and preservation of the installed user profile.
