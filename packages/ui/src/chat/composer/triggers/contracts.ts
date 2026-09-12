@@ -17,6 +17,7 @@
 import type {
   ClientSessionContext,
   ComposerAttachment,
+  ConversationInputState,
   CommandClaim,
   ConsumeTokenRequest,
   InputTriggerSource,
@@ -158,6 +159,7 @@ export interface ComposerImageOps {
 }
 
 export interface ComposerTriggerRuntime {
+  inputStateSource?(sessionId: string): ObservableSnapshot<ConversationInputState | undefined>;
   bindImages?(sessionId: string, ops: ComposerImageOps): () => void;
   /** Register an original browser image in the official runtime registry. */
   registerDraftImage?(file: File): ComposerDraftImageRegistration | undefined;

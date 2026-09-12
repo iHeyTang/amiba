@@ -308,6 +308,10 @@ export interface ChatSurfaceProps {
      * is byte-identical to before.
      */
     inputOverlay?: ReactNode;
+    inputDock?: ReactNode;
+    composerDock?: ReactNode;
+    inputLeft?: ReactNode;
+    inputRight?: ReactNode;
     /** Session-scoped plugin notices and tool annotations. */
     notice?: MessageNoticeRenderer;
     progress?: () => ReactNode;
@@ -2063,6 +2067,10 @@ export default function ChatSurface({
       approvalModePicker
       planSeat={slots?.planSeat}
       inputOverlay={slots?.inputOverlay}
+      inputDock={slots?.inputDock}
+      composerDock={slots?.composerDock}
+      inputLeft={slots?.inputLeft}
+      inputRight={slots?.inputRight}
       permissionSessionId={sessions.activeId}
       topAffordance={
         editingQueueId != null ? (

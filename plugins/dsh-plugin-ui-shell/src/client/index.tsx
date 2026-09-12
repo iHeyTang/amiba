@@ -750,6 +750,10 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // (`[data-composer-card]`), which is the anchor the official
           // occupants position against and probe with `closest()`.
           "conversation.input.overlay": { kind: "list", scope: "session" },
+          "conversation.input.dock": { kind: "list", scope: "session" },
+          "conversation.composer.dock": { kind: "list", scope: "session" },
+          "conversation.input.left": { kind: "list", scope: "session" },
+          "conversation.input.right": { kind: "list", scope: "session" },
           // Official vocabulary: the KEYED per-tool call row, from
           // @deepseek-ai/dsh-client-ui-tool (keyed, session scope, owner
           // ToolCallOwnerProps). Registration key = the wire tool name, an

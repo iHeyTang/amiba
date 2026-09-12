@@ -446,8 +446,8 @@ export type ToolCallToolviewOwnerProps = OwnerOf<"tool.call.toolview">;
 //     the actual Host inbox into the exact installed InputState type while
 //     all owners are bound. References use full @label UTF-16 ranges in rc.2,
 //     not the native trigger scanner's single-placeholder coordinates.
-//     Owner dispatch and useInput/inputActions registration remain separate
-//     integration work. An unavailable editor/session must not be masked by
+//     The four input-region owner dispatches are mounted while these real
+//     sources are available; useInput/inputActions registration remains separate. An unavailable editor/session must not be masked by
 //     an invented empty complete state; local pending messages are not Host
 //     inbox rows. Full conversation service adoption also requires the same
 //     image authority and native send/cancel semantics.
@@ -787,3 +787,5 @@ export type { DirectoryFlowOwnerProps } from "@deepseek-ai/dsh-client-ui-workspa
 
 /** Exact input-state currency of the installed official input region. */
 export type ConversationInputState = OwnerOf<"conversation.input.left">["input"];
+
+export type ConversationInputZoneOwner = OwnerOf<"conversation.input.left">;

@@ -22,7 +22,7 @@ function card(container: HTMLElement): HTMLElement {
   return frame as HTMLElement;
 }
 
-function renderComposer(props: { inputOverlay?: ReactNode } = {}) {
+function renderComposer(props: { inputOverlay?: ReactNode; inputDock?: ReactNode; composerDock?: ReactNode; inputLeft?: ReactNode; inputRight?: ReactNode; actionsLeft?: ReactNode } = {}) {
   return render(
     <Composer value="" onChange={() => {}} onSubmit={() => {}} {...props} />,
   );
@@ -87,14 +87,41 @@ describe("Composer conversation.input.overlay seat", () => {
   });
 });
 
-it("keeps persistent accessory content outside and below the menu anchor", () => {
+it("preserves the existing persistent accessory inside the composer card", () => {
   const { container } = render(<EmptyStateVisualProvider render={({defaultVisual}) => defaultVisual} accessory={() => <span data-test-accessory="" />}>
     <Composer value="" onChange={() => {}} onSubmit={() => {}} inputOverlay={<div data-input-overlay="" />} />
   </EmptyStateVisualProvider>);
   const frame = card(container);
   const accessory = container.querySelector('[data-composer-accessory]')!;
-  expect(frame.contains(accessory)).toBe(false);
-  expect(accessory.parentElement).toBe(frame.parentElement);
-  expect(frame.compareDocumentPosition(accessory) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(frame.contains(accessory)).toBe(true);
+  expect(accessory.closest("[data-composer-card]")).toBe(frame);
   expect(container.querySelector('[data-input-overlay]')!.parentElement).toBe(frame);
+});
+
+
+describe("additive official input regions", () => {
+  it("keeps docks outside the card and controls in the existing tool row", () => {
+    const { container } = renderComposer({
+      inputDock: <div data-region="above"/>, composerDock: <div data-region="below"/>,
+      inputLeft: <span data-region="left"/>, inputRight: <span data-region="right"/>,
+      actionsLeft: <span data-region="native"/>,
+    });
+    const frame = card(container);
+    const region = (name: string) => container.querySelector(`[data-region="${name}"]`)!;
+    expect(region("above").parentElement).toBe(frame.parentElement);
+    expect(region("below").parentElement).toBe(frame.parentElement);
+    expect(region("above").compareDocumentPosition(frame) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(frame.compareDocumentPosition(region("below")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(region("left").previousElementSibling).toBe(region("native"));
+    expect(frame.contains(region("left"))).toBe(true);
+    expect(frame.contains(region("right"))).toBe(true);
+    expect(region("right").nextElementSibling?.tagName).toBe("BUTTON");
+  });
+  it("adds no markup for dispatched empty regions", () => {
+    const Empty = () => null;
+    const view = renderComposer();
+    const baseline = view.container.innerHTML;
+    view.rerender(<Composer value="" onChange={() => {}} onSubmit={() => {}} inputDock={<Empty/>} composerDock={<Empty/>} inputLeft={<Empty/>} inputRight={<Empty/>}/>);
+    expect(view.container.innerHTML).toBe(baseline);
+  });
 });

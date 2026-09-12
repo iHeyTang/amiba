@@ -1026,3 +1026,13 @@ pipelines retain mounted component state.
 - 4 项合成状态、25 项输入桥接和 3 项图片注册表测试通过（32 项），UI/Shell 类型检查通过。测试使用有完整 id/messageId/placement/content/preview/text 的 Host 队列行，核对其原对象身份和更新通知。
 - 此步骤为真实 InputZone/公共输入提供者的数据来源，尚未注册 useInput/inputActions 或输入区域扩展入口；未绑定会话的动作语义和队列恢复仍需处理，不能据此宣称完整输入服务已完成。已清理 SDK 注释中过时的单占位引用假设。
 - `/tmp/amiba-combined-input-desktop-build.log` 完整 Desktop 构建退出 0；`/tmp/amiba-combined-input-desktop-smoke.log` 的 `--compat --input-state --command-images --child-continuation --child-navigation --child-reload` 退出 0。真实桌面合成状态读取到原草稿、扩展添加同次调用内的 imageIds 及全部四种输入阶段；queue 与实际 SessionFace 当前队列保持同一引用，重复读取复用快照。既有图片、提交、子会话与完整兼容回归同轮通过。此桌面用例验证真实队列来源，非空队列更新和重新绑定由前述状态测试覆盖，尚不代表完整队列编辑/恢复链路已验证。
+
+### 四个官方输入区域的真实接入（2026-09-13）
+
+- 声明并派发 conversation.input.dock、conversation.composer.dock、conversation.input.left、conversation.input.right，均使用实际 rc.2 的 list/session/InputZone 契约。InputRegion 订阅真实 ConversationSnapshot 与合成原输入状态，只在两个 owner 都存在时调用扩展；会话替换后旧源不再更新区域。
+- 位置遵循官方契约：input.dock 在卡片上方，composer.dock 在下方，left 在原工具行已有控制项后，right 在模型控件后、发送按钮前。通过原 FullScreenChatView/ChatSurface/Composer 传递；裸 React 节点无额外盒子或 CSS，空入口不增加 DOM、间距或样式。原输入器和已有控制项保留。
+- 6 项 Composer 入口/空节点测试、28 项输入管线、2 项区域 owner/订阅测试、4 项合成状态测试通过（40 项）；UI/Shell 类型检查通过。
+- 旧 accessory 断言要求辅助内容在卡片外，使用 HEAD 原 Composer 和原测试独立复跑同样失败（/tmp/amiba-input-regions-baseline-test.log）。现有产品已将其放在卡片内，因此修正过时断言并保持实际布局，不为测试移动原组件。临时基线文件已清理。
+- 这些区域由 owner 接收真实 session/input，无需伪造 useInput。依赖尚未提供的 useInput/inputActions、完整 conversation 服务或其他私有依赖的扩展仍需后续适配；本步骤不宣称全部组件可直接使用。
+- `/tmp/amiba-input-regions-desktop-build.log` 完整构建退出 0；`/tmp/amiba-input-regions-desktop-smoke4.log` 的 `--compat --input-state --command-images --child-continuation --child-navigation --child-reload` 退出 0。四个真实插件入口传入正确 sessionId、真实 Host queue 和原草稿，文字/图片变化更新 owner；位置符合上下 dock 和工具行左右区。卸载保留同一个原编辑器节点，卡片类名及宽高恢复至挂载前。截图 amiba-input-regions.png 已查看，现有操作保持可见。
+- 首次桌面夹具将 React 打入插件包导致 process 未定义；改为 external 复用运行时 React。随后位置断言错误地要求插件元素直接邻接原控件，实际运行时会包装插件元素；截图和 DOM 确认位置正确后，按区域分支与原卡片/发送按钮的相对顺序核对，未更改产品代码绕过该断言。前三次失败不计为通过证据。

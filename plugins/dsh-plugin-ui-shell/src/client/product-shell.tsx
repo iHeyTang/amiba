@@ -1,3 +1,4 @@
+import { InputRegion } from "./input-region.js";
 import { TurnTail, TurnText, useTurnTailAnchors } from "./turn-tail.js";
 import { DirectoryChooserContext, type DirectoryChooser } from "@amiba/ui";
 import type { DirectoryFlow } from "./directory-flow.js";
@@ -157,6 +158,10 @@ export type AmibaShellSlot =
   | "amiba.workbench.panel"
   | "conversation.input.plan"
   | "conversation.input.overlay"
+  | "conversation.input.dock"
+  | "conversation.composer.dock"
+  | "conversation.input.left"
+  | "conversation.input.right"
   | "conversation.view"
   | "conversation.chat.turnTail"
   | "conversation.chat.assistant-actions"
@@ -826,6 +831,10 @@ function ProductShellInner({
                 // bridge) and renders nothing while none is current, which is also
                 // why the home/draft composer keeps Amiba's own trigger menu.
                 inputOverlay: renderSlot("conversation.input.overlay", {}),
+                inputDock: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.input.dock", owner)} />,
+                composerDock: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.composer.dock", owner)} />,
+                inputLeft: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.input.left", owner)} />,
+                inputRight: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.input.right", owner)} />,
                 messageText: (runtimeTurn, children, openFile, timeline) => <TurnText timeline={timeline} source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} fileMentions={fileMentions}>{children}</TurnText>,
                 turnTailAnchors,
                 turnTail: (runtimeTurn, openFile) => <TurnTail source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} render={owner => renderSlotChain("conversation.chat.turnTail", owner)} />,

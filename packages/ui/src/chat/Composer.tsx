@@ -274,6 +274,10 @@ export interface ComposerProps {
    * (Quick-Ask) pass nothing and behave exactly as before.
    */
   inputOverlay?: ReactNode;
+  inputDock?: ReactNode;
+  composerDock?: ReactNode;
+  inputLeft?: ReactNode;
+  inputRight?: ReactNode;
   /** Runtime session used to distinguish pinned permissions from new-task defaults. */
   permissionSessionId?: string;
   /** Visual treatment for the modal overlay behind model and Profile dialogs. */
@@ -442,6 +446,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       approvalModePicker,
       planSeat,
       inputOverlay,
+      inputDock,
+      composerDock,
+      inputLeft,
+      inputRight,
       permissionSessionId,
       pickerDialogSize = "default",
       pickerOverlayVariant = "dimmed",
@@ -918,6 +926,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         )}
       >
         {extrasAbove}
+        {inputDock}
         {contextRail ? (
           <div
             data-composer-context-rail=""
@@ -1059,6 +1068,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   flex-row wrapper would spend one gap on nothing. */}
               {planSeat ? planSeat({ locked: disabled }) : null}
               {actionsLeft}
+              {inputLeft}
             </div>
             {modelPicker
               ? permissionSessionId
@@ -1078,6 +1088,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     },
                   })
               : null}
+            {inputRight}
             {sendButtonNode}
           </div>
           {/* Official conversation.input.overlay seat: a BARE dispatch, no
@@ -1088,6 +1099,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               editor and the tool row in reading order. */}
           {inputOverlay}
         </div>
+        {composerDock}
         {/* Hidden fallback file input. Renders once at the bottom of
             the wrapper so the picker click-fallback path works on
             browsers without `showOpenFilePicker`. */}

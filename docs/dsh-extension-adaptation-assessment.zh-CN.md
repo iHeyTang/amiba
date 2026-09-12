@@ -16,19 +16,19 @@
 | 6 | `conversation.chat.turnTail` | 桌面接入已验证，Web 待验证 | 使用真实回合与结束序号；支持有回复、仅工具和空回合的位置。官方产出文件行、文件打开及目录 IPC 已验证；常规结束回复、折叠过程正文和思考标记清理后的文件名链接已通过桌面验证；实时中断回复，以及正常/中断回复整页重载后的文件链接均已通过桌面验证；保留原始节点位置的 Markdown 变换已验证；独立 Web 仍在核对。 |
 | 7 | `conversation.composer` | 不能同时原样接管 | 完整接管该区域可能替换现有界面或创建第二套控制器。需拆出附加能力；不能宣称完整兼容。 |
 | 8 | `conversation.composer.bar` | 不能同时原样接管 | 完整接管该区域可能替换现有界面或创建第二套控制器。需拆出附加能力；不能宣称完整兼容。 |
-| 9 | `conversation.composer.dock` | 可以设计适配，尚未验证 | 需要真实引用占位偏移、草稿图片 ID、版本与提交阶段；不替换现有 Lexical 输入器。 |
+| 9 | `conversation.composer.dock` | 入口已接入，桌面验证通过 | 按官方位置传递真实 session/input，草稿及图片变化实时更新；卸载保留原编辑器及卡片尺寸。依赖 useInput/inputActions 或私有服务的具体组件仍需继续适配。 |
 | 10 | `conversation.details.tool` | 可行方向，待验证 | 旧版工具详情入口需真实调用定位及详情生命周期；新版已移除此键。 |
 | 11 | `conversation.hero.agentPreset` | 只能按组件分别适配 | 这是已有界面的替换入口。可复用服务或增加可选展示，但默认能力和样式必须保留。 |
 | 12 | `conversation.hero.brand.mark` | 新版契约，待验证 | 属于新版品牌替换入口；只能在用户主动选择替换时采用，默认品牌不变。 |
 | 13 | `conversation.hero.workspace` | 只能按组件分别适配 | 这是已有界面的替换入口。可复用服务或增加可选展示，但默认能力和样式必须保留。 |
 | 14 | `conversation.hero.workspace.directoryFlow` | 已接入，首页插件实测通过 | 打开、选择、取消、重开及旧回调隔离已实测；保留首页路径写入。默认原生组件至系统对话框接口的链路已验证（系统返回值用测试替身）；浏览器选择器读取、创建、选择及局部样式已在桌面 Web 渲染器实测；独立 Web 部署另核对。 |
 | 15 | `conversation.input.attachments` | rc.2 已有契约，可以适配，尚未完成 | 实际 npm rc.2 已注册此插槽。官方描述包含浏览器 File、草稿 ID 和 previewUrl；原上传、移除与命令成功消费的浏览器注册已完成桌面验证；官方草稿反向添加及移除已通过原输入器桌面验证；图片列表的同步读取、订阅与 pruneImages 已通过桌面验证；完整官方输入提供者与队列恢复仍待接通，不能混用 Host staging ID。 |
-| 16 | `conversation.input.dock` | 可以设计适配，尚未验证 | 需要真实引用占位偏移、草稿图片 ID、版本与提交阶段；不替换现有 Lexical 输入器。 |
-| 17 | `conversation.input.left` | 可以设计适配，尚未验证 | 需要真实引用占位偏移、草稿图片 ID、版本与提交阶段；不替换现有 Lexical 输入器。 |
+| 16 | `conversation.input.dock` | 入口已接入，桌面验证通过 | 按官方位置传递真实 session/input，草稿及图片变化实时更新；卸载保留原编辑器及卡片尺寸。依赖 useInput/inputActions 或私有服务的具体组件仍需继续适配。 |
+| 17 | `conversation.input.left` | 入口已接入，桌面验证通过 | 按官方位置传递真实 session/input，草稿及图片变化实时更新；卸载保留原编辑器及卡片尺寸。依赖 useInput/inputActions 或私有服务的具体组件仍需继续适配。 |
 | 18 | `conversation.input.model` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 19 | `conversation.input.overlay` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 20 | `conversation.input.plan` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
-| 21 | `conversation.input.right` | 可以设计适配，尚未验证 | 需要真实引用占位偏移、草稿图片 ID、版本与提交阶段；不替换现有 Lexical 输入器。 |
+| 21 | `conversation.input.right` | 入口已接入，桌面验证通过 | 按官方位置传递真实 session/input，草稿及图片变化实时更新；卸载保留原编辑器及卡片尺寸。依赖 useInput/inputActions 或私有服务的具体组件仍需继续适配。 |
 | 22 | `conversation.message.images` | 新版契约，待验证 | 需要新版消息图片数据和资源读取接口，不是增加图片容器即可。 |
 | 23 | `conversation.session` | 不能同时原样接管 | 完整接管该区域可能替换现有界面或创建第二套控制器。需拆出附加能力；不能宣称完整兼容。 |
 | 24 | `conversation.session.header` | 只能按组件分别适配 | 这是已有界面的替换入口。可复用服务或增加可选展示，但默认能力和样式必须保留。 |
