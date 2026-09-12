@@ -14,6 +14,7 @@ export function createElectronAdapter(
 
   return {
     kind: "desktop",
+    appUpdates: bridge.appUpdates,
     desktopPet: bridge.desktopPet,
     windowChrome: bridge.windowChrome,
 

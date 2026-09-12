@@ -691,7 +691,21 @@ export interface WorkspaceDevelopmentAdapter {
   ): () => void;
 }
 
+export type AppUpdateState = {
+  status: "idle" | "disabled" | "checking" | "available" | "downloading" | "downloaded" | "error";
+  currentVersion: string;
+  version?: string;
+  percent?: number;
+  error?: string;
+};
+
 export interface PlatformAdapter {
+  appUpdates?: {
+    getState(): Promise<AppUpdateState>;
+    check(): Promise<AppUpdateState>;
+    install(): Promise<void>;
+    onChanged(listener: (state: AppUpdateState) => void): () => void;
+  };
   desktopPet?: DesktopPetBridge;
   kind: "desktop" | "web";
   /**

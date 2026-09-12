@@ -241,7 +241,7 @@ export function projectRuntimeSessionHistory(
     const compact = compactionUpdate(event);
     if (compact) {
       if (!turn) turn = beginTurn(event);
-    turn.closing.apply(event);
+      turn.closing.apply(event);
       upsertCompactionTimeline(turn.timeline!, compact);
       continue;
     }
@@ -329,6 +329,7 @@ export function projectRuntimeSessionHistory(
       continue;
     }
     if (!turn) turn = beginTurn(event);
+    turn.closing.apply(event);
     if (event.type === "assistant/chunk") {
       const chunk = record(event.data.chunk);
       if (typeof chunk?.text !== "string") continue;

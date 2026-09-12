@@ -56,6 +56,16 @@ ipcRenderer.on("ui:open-settings", () => {
 });
 
 const api = {
+  appUpdates: {
+    getState: (): Promise<import("@amiba/app-runtime/platform").AppUpdateState> => ipcRenderer.invoke("app-updates:state"),
+    check: (): Promise<import("@amiba/app-runtime/platform").AppUpdateState> => ipcRenderer.invoke("app-updates:check"),
+    install: (): Promise<void> => ipcRenderer.invoke("app-updates:install"),
+    onChanged: (listener: (state: import("@amiba/app-runtime/platform").AppUpdateState) => void) => {
+      const handler = (_event: unknown, state: import("@amiba/app-runtime/platform").AppUpdateState) => listener(state);
+      ipcRenderer.on("app-updates:changed", handler);
+      return () => { ipcRenderer.removeListener("app-updates:changed", handler); };
+    },
+  },
   embeddedPage: {
     request: (input: import("../shared/embedded-page").EmbeddedPageRequest) =>
       ipcRenderer.invoke("embedded-page:request", input) as Promise<void>,

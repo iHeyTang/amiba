@@ -1,3 +1,4 @@
+import { registerAppUpdates, finishPendingUpdate } from "./updates";
 import { installDesktopPetWindow } from "./desktop-pet-window";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -574,6 +575,7 @@ if (!gotSingleInstanceLock) {
     installDshClientWebSocketHeaders();
     installPermissionRequestHandler();
     registerIpcHandlers();
+    registerAppUpdates();
     const assertExtensionSender = (event: Electron.IpcMainInvokeEvent) => {
       if (
         !mainWindow ||
@@ -751,7 +753,7 @@ app.on("before-quit", async (event) => {
   delete process.env.AMIBA_RUNTIME_GATEWAY_URL;
   delete process.env.AMIBA_RUNTIME_GATEWAY_TOKEN;
   _runtimeShutdownDone = true;
-  app.quit();
+  if (!finishPendingUpdate()) app.quit();
 });
 
 // Electron docs explicitly require us to release global shortcuts before
