@@ -836,3 +836,22 @@ pipelines retain mounted component state.
 - These results verify the corrected carrier and regressions. Actual durable
   parent/child navigation and continuation fixtures, read-only UI controls and
   public openSubagent-from-Home remain to be completed and tested.
+
+### Real catalog-child Desktop navigation (2026-09-12)
+
+- Added opt-in `--child-navigation` to the installed-plugin Desktop smoke.
+  The temporary Host fixture creates a real session with parentSession/origin
+  metadata and an in-turn v2 subagent/descriptor, then appends its own transcript.
+  The fixture explicitly injects sessions; ordinary root fixture tracking ignores
+  child creation so parent test state is not replaced.
+- Initial fixture attempts exposed missing service injection and missing descriptor
+  identity. Actual catalog projection requires the descriptor, not just origin.
+  Neither failed attempt is counted as successful navigation verification.
+- Full `--compat --reopen-prose --child-navigation` passed against the built
+  Desktop (`/tmp/amiba-child-navigation-descriptor-smoke.log`). It verifies real
+  catalog discovery, public openSubagent from an active parent, child-only transcript,
+  exact retained parent address, parent return, child reopen and all existing
+  compatibility regression checks. No production UI or style changes in this step.
+- This fixture verifies persisted event reading, not actual model execution.
+  Home-origin openSubagent intent, read-only controls, cold child reload and real
+  continuation remain open.
