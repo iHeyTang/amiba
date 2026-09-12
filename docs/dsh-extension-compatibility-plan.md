@@ -271,3 +271,37 @@ openDirectory, the returned path reaches the Home control, and session IDs remai
 unchanged. Full regression smoke passed (`/tmp/amiba-default-native-picker-smoke.log`).
 This verifies the production bridge, not a human interaction with the OS window.
 The browser directory picker still requires activation, rendering and style checks.
+
+### Browser directory picker investigation and scoped styles (verification pending)
+
+The smoke can now use `--browse-directory` to set a temporary SSH launch signal,
+which makes the official auto-picker compose its browse backend and client. The
+actual directory listing and Cancel interaction succeeded. Visual inspection
+found a transparent dialog painting over the Home composer: the official theme
+is intentionally excluded, leaving the browser's aliases unresolved.
+
+Added `official-directory.css`, scoped exclusively to the pinned rc.2 browser and
+create-folder dialog CSS-module roots. It maps aliases to Amiba tokens and supplies
+the missing dialog surface. No global official aliases are introduced. A fresh
+Desktop build is running; runtime computed-style assertions and screenshot review
+must pass before claiming the styling fixed. Directory path editing, creation and
+selection remain to be tested with this real browse occupant.
+
+
+### Browser directory dialog verified
+
+Full production build and `--compat --browse-directory` smoke passed. Computed
+styles prove the dialog background is opaque and the official background alias is
+absent on the product shell. Both main and create-folder dialog screenshots were
+visually reviewed. Through the official backend the test edits a real path,
+creates a folder inside the temporary profile, selects it, and verifies its real
+filesystem identity and the absence of new sessions. Cancel/reopen and all earlier
+settings/export/project/view/HMR checks also passed. Log:
+`/tmp/amiba-browser-directory-final.log`.
+
+The browser backend returns lexical absolute paths; Home intentionally retains
+that path. Unlike project-service normalization, tests compare its realpath only
+when checking filesystem identity. The Open button must be awaited until enabled
+after the post-create directory scan. No production behavior changes were needed
+for those two test corrections. This run used the browser picker in Electron's
+web renderer; a standalone Web deployment remains separately unverified.

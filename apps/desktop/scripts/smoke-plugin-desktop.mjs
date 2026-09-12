@@ -26,6 +26,7 @@ const authorProjects = author ? [...(await workspacePackages(root)).values()].fi
 const env = {
   ...process.env,
   AMIBA_USER_DATA_DIR: profile,
+  ...(process.argv.includes("--browse-directory") ? { SSH_CONNECTION: "amiba-directory-test" } : {}),
   ...(authorProjects ? { AMIBA_DSH_DEV_PROJECTS: JSON.stringify(authorProjects) } : {}),
   AMIBA_DSH_DEV_PORT: String(dshPort),
   AMIBA_DSH_RUNTIME_DIR: path.join(
@@ -182,6 +183,37 @@ try {
     await evaluate("window.__directoryOff();void 0");
     assert.ok(await evaluate("window.__probeCtx.slots.entriesOfSlot('conversation.hero.workspace.directoryFlow').length > 0 && window.__probeCtx.slots.entriesOfSlot('sidebar.workspaces.directoryFlow').length > 0"), "default picker registrations must remain in both directory slots");
     console.log("Home directory slot passed real registration, cancellation, reopen, stale callback rejection and existing path adoption.");
+    if (process.argv.includes("--browse-directory")) {
+      await evaluate(`${directoryButton}.click()`);
+      await wait(() => evaluate("Boolean(document.querySelector('[role=dialog]'))"));
+      await writeFile(path.join(tmpdir(), "amiba-directory-browser.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+      const directoryStyle = await evaluate("({background:getComputedStyle(document.querySelector('[role=dialog]')).backgroundColor,foreground:getComputedStyle(document.querySelector('[role=dialog]')).color,shellAlias:getComputedStyle(document.querySelector('[data-amiba-product-shell]')).getPropertyValue('--dsw-alias-bg-layer-2')})");
+      assert.notEqual(directoryStyle.background, 'rgba(0, 0, 0, 0)', "browser picker must have an opaque dialog background");
+      assert.notEqual(directoryStyle.background, directoryStyle.foreground);
+      assert.equal(directoryStyle.shellAlias, '', "official aliases must stay local to the plugin dialog");
+      await evaluate("Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).find(n=>n.textContent==='Cancel'||n.textContent==='取消').click()");
+      await wait(() => evaluate("!document.querySelector('[role=dialog]')"));
+      await evaluate(`${directoryButton}.click()`);
+      await wait(() => evaluate("Boolean(document.querySelector('button[aria-label=\"Edit path\"]'))"));
+      await evaluate("document.querySelector('button[aria-label=\"Edit path\"]').click()");
+      await wait(() => evaluate("Boolean(document.querySelector('input[aria-label=\"Edit path\"]'))"));
+      await evaluate(`(() => {const input=document.querySelector('input[aria-label="Edit path"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(profile)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+      await evaluate("document.querySelector('input[aria-label=\"Edit path\"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))");
+      await wait(() => evaluate(`!document.querySelector('input[aria-label="Edit path"]') && document.querySelector('[role=dialog]')?.textContent.includes(${JSON.stringify(path.basename(profile))})`));
+      await evaluate("Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).find(n=>n.textContent==='New folder').click()");
+      await wait(() => evaluate("Boolean(document.querySelector('input[aria-label=\"Folder name\"]'))"));
+      await writeFile(path.join(tmpdir(), "amiba-directory-browser-create.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+      await evaluate("(() => {const input=document.querySelector('input[aria-label=\"Folder name\"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'browser-created');input.dispatchEvent(new Event('input',{bubbles:true}));})()");
+      await evaluate("document.querySelector('input[aria-label=\"Folder name\"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))");
+      await wait(() => evaluate("!document.querySelector('input[aria-label=\"Folder name\"]') && document.querySelector('[role=dialog]')?.textContent.includes('browser-created')"));
+      const createdBrowserPath = await realpath(path.join(profile, "browser-created"));
+      await wait(() => evaluate("Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).some(n=>n.textContent==='Open'&&!n.disabled)"));
+      await evaluate("Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).find(n=>n.textContent==='Open').click()");
+      await wait(() => evaluate(`!document.querySelector('[role=dialog]') && ${directoryButton}?.title.endsWith('/browser-created')`));
+      assert.equal(await realpath(await evaluate(`${directoryButton}.title`)), createdBrowserPath);
+      assert.deepEqual(await evaluate("window.__probeCtx.sessions.list.getSnapshot().ids"), directorySessionsBefore);
+      console.log("Official browser picker passed local styles, cancellation, path editing, real directory creation and Home selection without creating a session.");
+    } else {
     // Exercise the installed native occupant through preload + main IPC, replacing
     // only the OS-dialog boundary in the temporary native fixture.
     await mkdir(path.join(profile, "native-picked"), { recursive: true });
@@ -195,6 +227,7 @@ try {
     assert.deepEqual(await evaluate("window.__probeCtx.sessions.list.getSnapshot().ids"), directorySessionsBefore);
     console.log("Default native picker passed installed component, platform callback and main IPC with preserved defaultPath (OS dialog response stubbed).");
 
+    }
     // Real SlotCore + module-loader + renderer integration on the file: surface.
     const namespace = await evaluate(`(async () => {
       const ctx = window.__probeCtx;

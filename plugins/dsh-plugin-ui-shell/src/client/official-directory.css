@@ -1,0 +1,23 @@
+/* Pinned rc.2 directory browser CSS-module roots. Scope every alias to these
+ * plugin dialogs: the excluded official theme must not repaint Amiba's shell. */
+.ZuhsRW_dialog[role="dialog"],
+.ZuhsRW_createDialog[role="dialog"] {
+  --dsw-alias-bg-layer-2: hsl(var(--popover));
+  --dsw-alias-label-primary: hsl(var(--popover-foreground));
+  --dsw-alias-label-secondary: hsl(var(--muted-foreground));
+  --dsw-alias-label-tertiary: hsl(var(--muted-foreground));
+  --dsw-alias-label-caption: hsl(var(--muted-foreground) / 0.65);
+  --dsw-alias-border-l2: hsl(var(--border));
+  --dsw-alias-border-l3: hsl(var(--border));
+  --dsw-alias-interactive-bg-hover: hsl(var(--accent));
+  --dsw-alias-interactive-bg-active: hsl(var(--accent));
+  --dsw-alias-button-info-fill: hsl(var(--primary));
+  --dsw-alias-state-error-primary: hsl(var(--destructive));
+  --dsw-alias-scrollbar-bg-l2: hsl(var(--muted-foreground) / 0.25);
+  --dsw-alias-scrollbar-hover-l2: hsl(var(--muted-foreground) / 0.45);
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.18), 0 0 0 100vmax rgb(0 0 0 / 0.2);
+}
