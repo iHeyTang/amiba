@@ -1246,3 +1246,13 @@ pipelines retain mounted component state.
 - 编辑队列项后同时读取官方 running、Stop 控件和原 Queue 控件。实际记录为 running:true、stopVisible:false、queueVisible:true。源码明确规定 busy + 空输入显示 Stop，busy + 可提交输入显示 Queue；因此该观测是保留的原有交互，不是旧终止事件覆盖新运行状态的证据。
 - 新增严格断言已通过最终组合桌面回归 /tmp/amiba-running-mode-smoke.log（退出 0），包括真实停止、重启、排队草稿、再次解析、Host 冷重启、插件及既有兼容检查。未修改任何生产代码、UI 或样式，复用 f9a8c9a 的已验证构建。
 - 撤销上一轮待查的这条疑似竞态；不将此结果扩展为所有断线/流内容恢复已经验证。后续继续核对完整输入、离屏操作、图片与官方队列生命周期。
+
+
+### 可见草稿的共用编辑规则（2026-09-13）
+
+- 从真实 Lexical 的 $setInputDraft 提取 atomicTextEdit，沿用 UTF-16 最小差异和完整原子边界扩展。现有编辑器仍用原坐标映射及 $spliceTriggerText；没有替换编辑器、引用样式或交互。段落分隔等结构原子仍由现有扫描器提供。
+- 原生结构化文档增加可见文本投影与 updatePublicDraftDocument：有效官方引用投影为完整 @label，其他原生 mention 保留原 token 表达；编辑引用内部只解散被编辑的引用，新增文字始终保持普通文字，未修改的引用字段完整保留。与此前 legacy token setter 分开，保留旧原生调用的含义。
+- ComposerDraftSource 新增内部 setDisplayText，使用该文档编辑并沿用修订隔离和串行存储。明确空草稿仍取消待完成恢复；普通 token 文字不会因保存/恢复而变成真实引用。此方法尚未接到官方离屏 inputActions，不声明公开入口已经可用。
+- 新增 11 个逐例对照测试：同一结构化草稿分别经真实 Lexical public edit 和驻留文档 public edit，核对实际 text/mention 节点及最终可见文本完全一致；涵盖原样、前后追加、中文/Emoji 引用内部修改、跨引用替换、换行、删除、新增 token 文字及清空。另验证公开文档编辑的保存/恢复和引用解散。相关测试共 93 项通过（/tmp/amiba-public-document-tests.log），UI 类型检查通过（/tmp/amiba-public-document-types.log）。
+- 完整 Desktop 构建通过（/tmp/amiba-public-document-build.log），最终组合回归 /tmp/amiba-public-document-smoke.log 退出 0，含现有公开输入、驻留引用、队列与整页刷新、运行状态、命令/图片、动态插件、轨迹及子会话冷重启。未修改样式或 JSX 结构。
+- 后续仍需将驻留文档接到标准会话提供者，并统一离屏快照、公开修订号/occurrence 身份、phase、图片和官方队列；本项仅完成其可复用的文字/引用转换，不代表完整 useInput 兼容。

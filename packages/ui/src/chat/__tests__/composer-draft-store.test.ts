@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import type { StorageAdapter } from "@amiba/app-runtime/platform";
+import { composerDraftDisplayText } from "../composer-draft-document";
 import { createComposerDraftSource, sessionComposerDraft } from "../composer-draft-store";
 
 function storage() {
@@ -139,4 +140,23 @@ it("publishes a node-kind change even when the canonical text stays identical", 
   expect(changed).toHaveBeenCalledTimes(1);
   source.setParts([{ kind: "text", text: token }]);
   expect(changed).toHaveBeenCalledTimes(1);
+});
+
+
+it("persists public text edits without interpreting new token-shaped text as a reference", async () => {
+  const {adapter}=storage();
+  const source=createComposerDraftSource(adapter,"public");
+  const off=source.subscribe(()=>{});
+  source.set("@[dsh.reference:files|id|Label|clip]");
+  const text="prefix @Label literal @[dsh.reference:missing|id|literal|clip]";
+  source.setDisplayText("prefix @Label");
+  source.setDisplayText(text);
+  await tick();
+  const restored=createComposerDraftSource(adapter,"public"),offRestored=restored.subscribe(()=>{});
+  await tick();
+  expect(composerDraftDisplayText(restored.getDocument())).toBe(text);
+  expect(restored.getDocument().parts.filter(part=>part.kind==="mention")).toHaveLength(1);
+  restored.setDisplayText(text.replace("@Label","@Edited"));
+  expect(restored.getDocument().parts).toEqual([{kind:"text",text:text.replace("@Label","@Edited")}]);
+  offRestored();off();
 });

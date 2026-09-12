@@ -1,3 +1,4 @@
+import { atomicTextEdit } from "../atomic-text-edit";
 import { $isDecoratorNode } from "lexical";
 import { $isMentionNode } from "../MentionNode";
 import { $scanDraft, $spliceTriggerText } from "./lexical-draft";
@@ -22,21 +23,9 @@ export function $setInputDraft(next: string): boolean {
     nativeCursor = leaf.end;
   }
   if (nativeCursor < scan.draft.length) append(scan.draft.slice(nativeCursor), nativeCursor, scan.draft.length, true);
-  if (draft === next) return false;
-  let start = 0;
-  while (start < draft.length && start < next.length && draft[start] === next[start]) start++;
-  let end = draft.length;
-  let nextEnd = next.length;
-  while (end > start && nextEnd > start && draft[end - 1] === next[nextEnd - 1]) { end--; nextEnd--; }
-  let from = start;
-  let to = end;
-  // Editing through a chip dissolves only that occurrence into literal text.
-  // A partial paragraph separator is similarly expanded to real node edges.
-  for (const segment of segments) {
-    if (!segment.atomic) continue;
-    if (from > segment.start && from < segment.end) from = segment.start;
-    if (to > segment.start && to < segment.end) to = segment.end;
-  }
+  const edit = atomicTextEdit(draft, next, segments.filter(segment => segment.atomic));
+  if (!edit) return false;
+  const { from, to } = edit;
   const nativeOffset = (offset: number): number | undefined => {
     for (const segment of segments) {
       if (offset === segment.start) return segment.nativeStart;
@@ -48,6 +37,5 @@ export function $setInputDraft(next: string): boolean {
   const nativeFrom = nativeOffset(from);
   const nativeTo = nativeOffset(to);
   if (nativeFrom === undefined || nativeTo === undefined) return false;
-  return $spliceTriggerText(nativeFrom, nativeTo,
-    draft.slice(from, start) + next.slice(start, nextEnd) + draft.slice(end, to));
+  return $spliceTriggerText(nativeFrom, nativeTo, edit.text);
 }

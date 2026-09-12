@@ -1,4 +1,4 @@
-import { composerDraftDocument, decodeComposerDraft, updateLegacyDraftDocument, type ComposerDraftDocument } from "./composer-draft-document";
+import { composerDraftDocument, decodeComposerDraft, updateLegacyDraftDocument, updatePublicDraftDocument, type ComposerDraftDocument } from "./composer-draft-document";
 import type { ParsedPart } from "./composer/serialize";
 import type { StorageAdapter } from "@amiba/app-runtime/platform";
 
@@ -6,6 +6,8 @@ export interface ComposerDraftSource {
   getSnapshot(): string;
   getDocument(): ComposerDraftDocument;
   setParts(parts: readonly ParsedPart[]): void;
+  /** Full visible text, preserving unedited references without parsing new tokens. */
+  setDisplayText(text: string): void;
   subscribe(listener: () => void): () => void;
   set(value: string | ((previous: string) => string)): void;
 }
@@ -55,6 +57,11 @@ export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: 
       revision++;
       publish(next);
       save(next);
+    },
+    setDisplayText(text) {
+      const next = updatePublicDraftDocument(document, text);
+      revision++;
+      if (publish(next) || text === "") save(next);
     },
     subscribe(listener) {
       listeners.add(listener);

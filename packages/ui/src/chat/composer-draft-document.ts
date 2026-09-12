@@ -1,3 +1,4 @@
+import { atomicTextEdit } from "./composer/atomic-text-edit";
 import { parseTokens, type ParsedPart } from "./composer/serialize";
 
 export interface ComposerDraftDocument {
@@ -75,4 +76,32 @@ export function updateLegacyDraftDocument(current: ComposerDraftDocument, text: 
   };
   const replacement = current.text.slice(from, start) + text.slice(start, nextEnd) + current.text.slice(end, to);
   return composerDraftDocument([...slice(0, from), ...parseTokens(replacement), ...slice(to, current.text.length)]);
+}
+
+
+const publicPartText = (part: ParsedPart): string => part.kind === "text" ? part.text
+  : part.mention.type === "dsh.reference" && part.mention.payload.source && part.mention.payload.ref
+    ? `@${part.mention.display}` : part.raw;
+
+/** Same visible coordinates as the mounted editor's official input projection. */
+export function composerDraftDisplayText(document: ComposerDraftDocument): string {
+  return document.parts.map(publicPartText).join("");
+}
+
+/** Public edits insert literal text; only untouched actual references remain references. */
+export function updatePublicDraftDocument(current: ComposerDraftDocument, text: string): ComposerDraftDocument {
+  let offset = 0;
+  const segments = current.parts.map(part => {
+    const start = offset;
+    offset += publicPartText(part).length;
+    return {part, start, end: offset};
+  });
+  const edit = atomicTextEdit(composerDraftDisplayText(current), text,
+    segments.filter(segment => segment.part.kind === "mention"));
+  if (!edit) return current;
+  const slice = (first: number, last: number): ParsedPart[] => segments.flatMap(({part,start,end}) => {
+    if (start >= last || end <= first) return [];
+    return [part.kind === "text" ? {kind:"text" as const, text:part.text.slice(Math.max(0,first-start),last-start)} : part];
+  });
+  return composerDraftDocument([...slice(0,edit.from), {kind:"text",text:edit.text}, ...slice(edit.to,offset)]);
 }

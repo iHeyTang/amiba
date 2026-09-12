@@ -16,7 +16,9 @@ import {
   type LexicalNode,
 } from "lexical";
 import { describe, expect, it, vi } from "vitest";
-import { MentionNode } from "../MentionNode";
+import { composerDraftDocument, composerDraftDisplayText, legacyDraftDocument, updatePublicDraftDocument } from "../../composer-draft-document";
+import { $readComposerParts } from "../composer-parts";
+import { $createMentionNode, MentionNode } from "../MentionNode";
 import type { MentionData } from "../providers/types";
 import { CommandClaimStore } from "../triggers/claim";
 import {
@@ -427,4 +429,39 @@ it.each(["adjudicating", "submitting"] as const)("allows user draft edits during
   editor.setEditable(false);
   expect(ops.editInputDraft!("readonly")).toBe(false);
   expect(ops.readInputDraft!().draft).toBe("新草稿😀");
+});
+
+
+describe("mounted and resident public draft edit agreement", () => {
+  const literal = "@[dsh.reference:missing|id|literal|clip]";
+  const initial = composerDraftDocument([
+    {kind:"text",text:"before😀 "},
+    ...legacyDraftDocument("@[dsh.reference:files|a|同😀|clip]").parts,
+    {kind:"text",text:"\n\n between "},
+    ...legacyDraftDocument("@[dsh.reference:files|b|末尾|clip]").parts,
+    {kind:"text",text:" literal "+literal},
+  ]);
+  const display = composerDraftDisplayText(initial);
+  it.each([
+    display, display+" suffix", "prefix "+display,
+    display.replace("同😀","改😀"), display.replace("末尾","尾"),
+    display.replace("before😀 ",""), display.replace("\n\n", "\n"),
+    display.replace("@同😀\n\n between @末尾", "replacement"),
+    display+" "+literal, "", literal,
+  ])("produces the same actual nodes for %j", next => {
+    const editor=makeEditor("");
+    editor.update(()=>{
+      const paragraph=$createParagraphNode();
+      for(const part of initial.parts) paragraph.append(part.kind==="text" ? $createTextNode(part.text) : $createMentionNode(part.mention));
+      $getRoot().clear().append(paragraph);
+    },{discrete:true});
+    const ops=createTriggerEditorOps(editor,new CommandClaimStore(),new DraftRevision());
+    ops.editInputDraft!(next);
+    const resident=updatePublicDraftDocument(initial,next);
+    let mounted=initial;
+    editor.getEditorState().read(()=>{mounted=composerDraftDocument($readComposerParts());});
+    expect(resident).toEqual(mounted);
+    expect(composerDraftDisplayText(resident)).toBe(next);
+    if(next===display) expect(resident).toBe(initial);
+  });
 });
