@@ -537,9 +537,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // in lock-step with Amiba's own per-window sessions store. The official
     // side's external switches route through the existing Amiba
     // open-session path.
-    const sessionsBridge = createSessionsBridge(ctx.sessions, (sessionId) => {
+    const sessionsBridge = createSessionsBridge(ctx.sessions, (sessionId, subagent) => {
       window.dispatchEvent(
-        new CustomEvent("amiba:open-session", { detail: { sessionId } }),
+        new CustomEvent("amiba:open-session", { detail: { sessionId, ...(subagent ? { subagent } : {}) } }),
       );
     }, () => window.dispatchEvent(new CustomEvent("amiba:clear-session")));
     // The OFFICIAL input-trigger pipeline. Services are resolved lazily on

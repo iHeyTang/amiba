@@ -44,6 +44,8 @@
  * internal selection loss retains the existing Amiba-authoritative behavior.
  */
 
+import type { AgentSubagentAddress } from "@amiba/app-runtime/platform";
+
 /** Minimal observable snapshot of the official session list this bridge reads. */
 export interface OfficialSessionListSnapshot {
   /** Host-list order (catalog children can be openable without appearing here). */
@@ -69,7 +71,7 @@ export interface OfficialSessionsFace {
     subscribe(listener: () => void): () => void;
   };
   /** Retained direct-parent addresses also make a catalog child openable. */
-  subagentAddress?(id: string): { readonly childSessionId: string } | undefined;
+  subagentAddress?(id: string): AgentSubagentAddress | undefined;
   /** Select a listed or retained catalog-addressed session as current. */
   open(id: string): void;
   /** Clear the current selection into the no-session view state. */
@@ -92,7 +94,7 @@ export interface AmibaSessionsBridge {
  */
 export function createSessionsBridge(
   sessions: OfficialSessionsFace,
-  onExternalOpen: (sessionId: string) => void,
+  onExternalOpen: (sessionId: string, subagent?: AgentSubagentAddress) => void,
   onExternalClear?: () => void,
 ): AmibaSessionsBridge {
   /** Amiba's latest projected selection ("" = none) — the authority. */
@@ -206,7 +208,9 @@ export function createSessionsBridge(
       // through setActive, which no-ops against the already-current id).
       selectionRevision++;
       pending = null;
-      onExternalOpen(current);
+      const address = sessions.subagentAddress?.(current);
+      if (address?.childSessionId === current) onExternalOpen(current, { ...address });
+      else onExternalOpen(current);
       return;
     }
     // Amiba holds no selection (or the official side cleared): runtime

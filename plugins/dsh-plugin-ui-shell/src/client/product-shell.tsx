@@ -17,6 +17,7 @@ import {
 import {
   getPlatform,
   type AgentModelSelection,
+  type AgentSubagentAddress,
 } from "@amiba/app-runtime/platform";
 import type {
   SessionListState,
@@ -527,7 +528,7 @@ function ProductShellInner({
         : [],
     [platform.workspaceFiles],
   );
-  const pendingOpenSessionRef = useRef<string | null>(null);
+  const pendingOpenSessionRef = useRef<{ sessionId: string; subagent?: AgentSubagentAddress } | null>(null);
   const externalNavigationRevision = useRef(0);
 
   useEffect(() => () => client.dispose(), [client]);
@@ -657,17 +658,17 @@ function ProductShellInner({
   const { onboardingStepId, completeOnboardingStep } = settings;
 
   const openSession = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string, subagent?: AgentSubagentAddress) => {
       const target = sessionId.trim();
       if (!target) return;
       if (!sessions.ready) {
-        pendingOpenSessionRef.current = target;
+        pendingOpenSessionRef.current = { sessionId: target, subagent };
         return;
       }
       const revision = ++externalNavigationRevision.current;
       await sessions.refresh();
       if (revision !== externalNavigationRevision.current) return;
-      await sessions.openTab(target);
+      await sessions.openTab(target, subagent);
       if (revision !== externalNavigationRevision.current) return;
       await platform.storage.set({ [SIDEBAR_VIEW_KEY]: "chats" });
       closeSettings();
@@ -683,9 +684,8 @@ function ProductShellInner({
 
   useEffect(() => {
     const listener = (event: Event) => {
-      const sessionId = (event as CustomEvent<{ sessionId?: unknown }>).detail
-        ?.sessionId;
-      if (typeof sessionId === "string") void openSession(sessionId);
+      const detail = (event as CustomEvent<{ sessionId?: unknown; subagent?: AgentSubagentAddress }>).detail;
+      if (typeof detail?.sessionId === "string") void openSession(detail.sessionId, detail.subagent);
     };
     window.addEventListener("amiba:open-session", listener);
     return () => window.removeEventListener("amiba:open-session", listener);
@@ -695,7 +695,7 @@ function ProductShellInner({
     if (!sessions.ready || !pendingOpenSessionRef.current) return;
     const target = pendingOpenSessionRef.current;
     pendingOpenSessionRef.current = null;
-    void openSession(target);
+    void openSession(target.sessionId, target.subagent);
   }, [openSession, sessions.ready]);
 
   useEffect(() => {

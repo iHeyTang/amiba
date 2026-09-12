@@ -748,3 +748,19 @@ pipelines retain mounted component state.
 - Official navigation events do not yet supply this optional address. End-to-end
   event integration, child prompt/interrupt semantics and Desktop renderer/build
   verification remain open; these unit tests do not establish full child support.
+
+### Official addressed-open event wiring (2026-09-12)
+
+- Official selection forwarding now copies the retained child address into the
+  existing `amiba:open-session` event. ProductShell passes it to native `openTab`
+  and retains it if the session store is not ready yet. Clear still discards the
+  entire deferred request and invalidates outstanding navigation revisions.
+- Ordinary opens keep their existing event semantics. All 22 selection bridge
+  tests and shell typecheck passed; the added check verifies exact direct-parent
+  identity and that the forwarded object does not alias the runtime's address.
+- Before Desktop end-to-end verification, child interaction transport must be
+  completed: the existing DshChatEngineClient unconditionally calls session.create
+  and session.prompt, and abort calls session.cancel. Addressed continuable children
+  instead need subagent.prompt/subagent.interrupt; one-shot children must honor the
+  official read-only semantics. Its mux subscription behavior also needs checking.
+  Public openSubagent intent from Home remains distinct from marked public open.

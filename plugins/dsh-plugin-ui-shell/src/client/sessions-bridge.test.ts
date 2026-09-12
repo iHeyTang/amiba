@@ -20,7 +20,7 @@ function officialSessionsDouble(initial?: {
 }) {
   let ids: string[] = initial?.ids ?? [];
   let current: string | undefined = initial?.current;
-  const addresses = new Map<string, { childSessionId: string }>();
+  const addresses = new Map<string, { parentSessionId: string; childSessionId: string; mode: "one-shot" | "continuable" }>();
   const listeners = new Set<() => void>();
   const notify = () => {
     for (const listener of [...listeners]) listener();
@@ -49,7 +49,7 @@ function officialSessionsDouble(initial?: {
   return {
     face,
     retainAddress(id: string) {
-      addresses.set(id, { childSessionId: id });
+      addresses.set(id, { parentSessionId: "parent", childSessionId: id, mode: "continuable" });
       notify();
     },
     forgetAddress(id: string) {
@@ -84,6 +84,22 @@ const flushMicrotasks = () =>
   new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("sessions selection bridge", () => {
+  it("forwards the retained direct-parent address when a plugin opens a child", () => {
+    const official = officialSessionsDouble({ ids: ["parent"], current: "parent" });
+    official.retainAddress("child");
+    const onExternalOpen = vi.fn();
+    const bridge = createSessionsBridge(official.face, onExternalOpen);
+    bridge.setActive("parent");
+    official.requestOpen("child");
+    expect(onExternalOpen).toHaveBeenCalledTimes(1);
+    expect(onExternalOpen).toHaveBeenCalledWith("child", {
+      parentSessionId: "parent", childSessionId: "child", mode: "continuable",
+    });
+    const sent = onExternalOpen.mock.calls[0]![1];
+    expect(sent).not.toBe(official.face.subagentAddress!("child"));
+    bridge.dispose();
+  });
+
   it("defers a failed immediate child open and retries on the next catalog update", async () => {
     const official = officialSessionsDouble({ ids: ["parent"], current: "parent" });
     official.retainAddress("child");
