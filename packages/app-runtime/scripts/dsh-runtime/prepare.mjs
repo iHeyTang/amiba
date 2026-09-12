@@ -1,4 +1,4 @@
-import { canReuseAddedDependencies } from "./reuse-dependencies.mjs";
+import { canReuseAddedDependencies, patchSetDigest, canReusePatchSet } from "./reuse-dependencies.mjs";
 import { validateDependencyLock, validatePluginBuildSources } from "./dependency-lock.mjs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -306,6 +306,9 @@ if (args.has("--update-lock")) {
 }
 const dependencyLockContent = await fsp.readFile(dependencyLock, "utf8");
 validateDependencyLock(JSON.parse(appPackageJsonContent), JSON.parse(await fsp.readFile(dependencyManifest, "utf8")), JSON.parse(dependencyLockContent));
+const workspaceManifest = JSON.parse(await fsp.readFile(path.join(workspaceDir, "package.json"), "utf8"));
+const reviewedPatches = workspaceManifest.pnpm?.patchedDependencies ?? {};
+const patchSetHash = await patchSetDigest(reviewedPatches, file => fsp.readFile(path.resolve(workspaceDir, file), "utf8"));
 const dependencyLockHash = createHash("sha256").update(dependencyLockContent).digest("hex");
 const appTreeHash = createHash("sha256")
   .update(appPackageJsonContent)
@@ -326,6 +329,7 @@ function expectedMarker() {
     dependencyInstallMode: "locked-npm-v1",
     appTreeHash,
     dependencyLockHash,
+    patchSetHash,
     platform: process.platform,
     arch: process.arch,
   };
@@ -675,6 +679,8 @@ async function reuseAppDependencyTree(appDir) {
     );
     // Only reuse trees created by the registry-only installer, never earlier injected trees.
     if (installedMarker.dependencyInstallMode !== "locked-npm-v1") return false;
+    // An older or differently patched tree must start from locked registry files.
+    if (!canReusePatchSet(installedMarker, patchSetHash)) return false;
     const sameDependencies = installedMarker.appTreeHash === appTreeHash;
     const existingPromotions = !sameDependencies && installedMarker.dependencyLockHash === dependencyLockHash && Boolean(installedMarker.appTreeHash) && await canReuseAddedDependencies(
       JSON.parse(await fsp.readFile(path.join(outputDir, "app", "package.json"), "utf8")),
@@ -750,8 +756,7 @@ try {
   }
   // npm does not consume pnpm.patchedDependencies. Apply the same reviewed
   // patches to the managed tree, including when dependencies were reused.
-  const workspaceManifest = JSON.parse(await fsp.readFile(path.join(workspaceDir, "package.json"), "utf8"));
-  for (const [specifier, patchPath] of Object.entries(workspaceManifest.pnpm?.patchedDependencies ?? {})) {
+  for (const [specifier, patchPath] of Object.entries(reviewedPatches)) {
     const split = specifier.lastIndexOf("@");
     const name = specifier.slice(0, split);
     const version = specifier.slice(split + 1);

@@ -633,3 +633,18 @@ the cleared session or changing the surrounding shell chrome.
   need no manual cache repair; verify/cancel navigation already inside native
   openTab metadata/history loading. Directory adoption must preserve explicit
   Amiba bindings and default-directory choices. Broader compatibility stays open.
+
+### Managed dependency cache checks patch identity
+
+Runtime preparation now records a digest of sorted patched package specifiers
+and their patch contents, independent of patch file location. Reuse requires
+this digest as well as the existing dependency/platform checks. A legacy marker,
+modified patch, removed patch or different patched version starts from locked
+registry files, so a partially old patch set cannot be copied into an upgrade.
+
+The two dependency-reuse tests cover unchanged/reordered patches, changed
+contents, removals, changed versions and legacy markers. The real upgrade build
+started from the existing marker without a patch digest, ran locked npm ci,
+applied the reviewed patches from clean files and completed the production
+Desktop bundle. The resulting marker contains patchSetHash. No manual cache
+repair was used for this validation.
