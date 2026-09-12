@@ -714,3 +714,19 @@ pipelines retain mounted component state.
 - This is transport groundwork, not complete child navigation: address discovery,
   shell open/reopen metadata, selection intent, child prompt/interrupt semantics
   and actual renderer verification remain open. No UI or stylesheet changed.
+
+### Retained child selection projection (2026-09-12)
+
+- The selection bridge now recognizes official `subagentAddress(id)` as an
+  openable target even when the child is absent from root-list `ids`. Re-selecting
+  an existing addressed child no longer leaves official scoped slots deferred.
+- Deferred selection checks address availability again in its queued callback;
+  disappearance, reappearance and newer deselection preserve cancellation rules.
+  Immediate open failures also return to deferral instead of losing the target.
+- A regression test exposed synchronous re-entry through the bridge's own
+  `clear()` notification following a failed open. Own clear notifications now
+  update the observed current selection and return without recursively opening.
+- All 21 selection bridge tests and shell typecheck passed. This proves bridge
+  state behavior, not full child UI support. Public `openSubagent` intent from
+  Home, native child metadata/address persistence, history wiring and child
+  interaction semantics still need integration and renderer verification.

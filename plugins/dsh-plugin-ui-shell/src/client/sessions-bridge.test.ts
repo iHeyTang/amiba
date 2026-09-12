@@ -20,11 +20,13 @@ function officialSessionsDouble(initial?: {
 }) {
   let ids: string[] = initial?.ids ?? [];
   let current: string | undefined = initial?.current;
+  const addresses = new Map<string, { childSessionId: string }>();
   const listeners = new Set<() => void>();
   const notify = () => {
     for (const listener of [...listeners]) listener();
   };
   const face: OfficialSessionsFace = {
+    subagentAddress: (id) => addresses.get(id),
     list: {
       getSnapshot: (): OfficialSessionListSnapshot => ({ ids, current }),
       subscribe: (listener) => {
@@ -33,7 +35,7 @@ function officialSessionsDouble(initial?: {
       },
     },
     open: vi.fn((id: string) => {
-      if (!ids.includes(id)) {
+      if (!ids.includes(id) && !addresses.has(id)) {
         throw new Error(`sessions.select: unknown session ${id}`);
       }
       current = id;
@@ -46,6 +48,14 @@ function officialSessionsDouble(initial?: {
   };
   return {
     face,
+    retainAddress(id: string) {
+      addresses.set(id, { childSessionId: id });
+      notify();
+    },
+    forgetAddress(id: string) {
+      addresses.delete(id);
+      notify();
+    },
     /** Simulate the host list gaining rows (stream/list refresh). */
     setIds(next: string[]) {
       ids = next;
@@ -74,6 +84,78 @@ const flushMicrotasks = () =>
   new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("sessions selection bridge", () => {
+  it("defers a failed immediate child open and retries on the next catalog update", async () => {
+    const official = officialSessionsDouble({ ids: ["parent"], current: "parent" });
+    official.retainAddress("child");
+    const open = official.face.open;
+    official.face.open = vi.fn().mockImplementationOnce(() => {
+      throw new Error("catalog changed while selecting");
+    }).mockImplementation(open);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const bridge = createSessionsBridge(official.face, vi.fn());
+    try {
+      bridge.setActive("child");
+      expect(official.current).toBeUndefined();
+      official.retainAddress("child");
+      await flushMicrotasks();
+      expect(official.current).toBe("child");
+      expect(official.face.open).toHaveBeenCalledTimes(2);
+    } finally {
+      bridge.dispose();
+      log.mockRestore();
+    }
+  });
+
+  it("reopens a retained catalog child absent from the root list", () => {
+    const official = officialSessionsDouble({ ids: ["parent"] });
+    official.retainAddress("child");
+    const onExternalOpen = vi.fn();
+    const bridge = createSessionsBridge(official.face, onExternalOpen);
+    bridge.setActive("child");
+    bridge.setActive("parent");
+    bridge.setActive("child");
+    expect(official.current).toBe("child");
+    expect(official.face.open).toHaveBeenNthCalledWith(3, "child");
+    expect(onExternalOpen).not.toHaveBeenCalled();
+    bridge.dispose();
+  });
+
+  it("resolves a deferred child when its address arrives without a root-list row", async () => {
+    const official = officialSessionsDouble({ ids: ["parent"] });
+    const bridge = createSessionsBridge(official.face, vi.fn());
+    bridge.setActive("child");
+    official.retainAddress("child");
+    await flushMicrotasks();
+    expect(official.current).toBe("child");
+    bridge.dispose();
+  });
+
+  it("rechecks a queued child's address and retries when it becomes available again", async () => {
+    const official = officialSessionsDouble({ ids: ["parent"] });
+    const bridge = createSessionsBridge(official.face, vi.fn());
+    bridge.setActive("child");
+    official.retainAddress("child");
+    official.forgetAddress("child");
+    await flushMicrotasks();
+    expect(official.face.open).not.toHaveBeenCalled();
+    official.retainAddress("child");
+    await flushMicrotasks();
+    expect(official.current).toBe("child");
+    bridge.dispose();
+  });
+
+  it("does not reopen a deferred child after Amiba deselects", async () => {
+    const official = officialSessionsDouble();
+    const bridge = createSessionsBridge(official.face, vi.fn());
+    bridge.setActive("child");
+    official.retainAddress("child");
+    bridge.setActive("");
+    await flushMicrotasks();
+    expect(official.face.open).not.toHaveBeenCalled();
+    expect(official.current).toBeUndefined();
+    bridge.dispose();
+  });
+
   it("opens listed ids directly and suppresses the echo", () => {
     const official = officialSessionsDouble({ ids: ["s1", "s2"] });
     const onExternalOpen = vi.fn();
