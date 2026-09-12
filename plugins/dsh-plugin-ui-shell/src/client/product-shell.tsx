@@ -528,6 +528,7 @@ function ProductShellInner({
     [platform.workspaceFiles],
   );
   const pendingOpenSessionRef = useRef<string | null>(null);
+  const externalNavigationRevision = useRef(0);
 
   useEffect(() => () => client.dispose(), [client]);
 
@@ -663,8 +664,11 @@ function ProductShellInner({
         pendingOpenSessionRef.current = target;
         return;
       }
+      const revision = ++externalNavigationRevision.current;
       await sessions.refresh();
+      if (revision !== externalNavigationRevision.current) return;
       await sessions.openTab(target);
+      if (revision !== externalNavigationRevision.current) return;
       await platform.storage.set({ [SIDEBAR_VIEW_KEY]: "chats" });
       closeSettings();
     },
@@ -693,6 +697,16 @@ function ProductShellInner({
     pendingOpenSessionRef.current = null;
     void openSession(target);
   }, [openSession, sessions.ready]);
+
+  useEffect(() => {
+    const listener = () => {
+      externalNavigationRevision.current++;
+      pendingOpenSessionRef.current = null;
+      void sessions.deselect();
+    };
+    window.addEventListener("amiba:clear-session", listener);
+    return () => window.removeEventListener("amiba:clear-session", listener);
+  }, [sessions.deselect]);
 
   // R1 amiba→official selection projection: every activeId transition
   // (including the mount-time empty selection, which converges a restored

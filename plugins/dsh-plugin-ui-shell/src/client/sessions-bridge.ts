@@ -39,9 +39,9 @@
  * empty window). That is the deliberate ecosystem open (a plugin calling
  * ``ctx.sessions.open``); it routes through the existing Amiba open-session
  * path (the ``amiba:open-session`` event → product-shell ``openSession``).
- * An official ``clear()`` is NOT forwarded (Amiba has no external deselect
- * path today) — recorded asymmetry, benign: official seats simply render
- * nothing until the next projection.
+ * Public clear requests carrying pinned runtime intent metadata forward to
+ * Amiba deselect. The bridge suppresses its own clear projection; unmarked
+ * internal selection loss retains the existing Amiba-authoritative behavior.
  */
 
 /** Minimal observable snapshot of the official session list this bridge reads. */
@@ -62,6 +62,8 @@ export interface OfficialSessionsFace {
     readonly sessionId: string;
     readonly source: string;
   };
+  /** Identity changes only for public clear requests in the pinned runtime. */
+  readonly lastClearRequest?: object;
   list: {
     getSnapshot(): OfficialSessionListSnapshot;
     subscribe(listener: () => void): () => void;
@@ -89,6 +91,7 @@ export interface AmibaSessionsBridge {
 export function createSessionsBridge(
   sessions: OfficialSessionsFace,
   onExternalOpen: (sessionId: string) => void,
+  onExternalClear?: () => void,
 ): AmibaSessionsBridge {
   /** Amiba's latest projected selection ("" = none) — the authority. */
   let lastPushed = "";
@@ -99,6 +102,12 @@ export function createSessionsBridge(
   let disposed = false;
   let lastSeenOpenRequest = sessions.lastOpenRequest;
   let selectionRevision = 0;
+  let lastSeenClearRequest = sessions.lastClearRequest;
+  let projectingClear = false;
+  const clearProjection = () => {
+    projectingClear = true;
+    try { sessions.clear(); } finally { projectingClear = false; }
+  };
 
   const tryOpen = (id: string): boolean => {
     try {
@@ -120,7 +129,7 @@ export function createSessionsBridge(
   const project = (id: string, snapshot: OfficialSessionListSnapshot): void => {
     const current = snapshot.current ?? "";
     if (id === "") {
-      if (current !== "") sessions.clear();
+      if (current !== "") clearProjection();
       return;
     }
     if (current === id) return;
@@ -128,13 +137,16 @@ export function createSessionsBridge(
       tryOpen(id);
       return;
     }
-    if (current !== "") sessions.clear();
+    if (current !== "") clearProjection();
     pending = id;
   };
 
   const handleListChange = (): void => {
     if (disposed) return;
     const snapshot = sessions.list.getSnapshot();
+    const clearRequest = sessions.lastClearRequest;
+    const explicitClear = clearRequest !== undefined && clearRequest !== lastSeenClearRequest && !projectingClear;
+    lastSeenClearRequest = clearRequest;
     const request = sessions.lastOpenRequest;
     const newRequest = request !== lastSeenOpenRequest;
     const explicitOpen =
@@ -146,6 +158,14 @@ export function createSessionsBridge(
       request?.source === "initial" &&
       request.sessionId === snapshot.current;
     lastSeenOpenRequest = request;
+    if (explicitClear && onExternalClear) {
+      selectionRevision++;
+      pending = null;
+      lastSeenCurrent = "";
+      lastPushed = "";
+      onExternalClear();
+      return;
+    }
     if (pending !== null && snapshot.ids.includes(pending)) {
       const target = pending;
       const revision = selectionRevision;

@@ -1,6 +1,8 @@
+diff --git a/lib/client.js b/lib/client.js
+index ba3cb21f72709cc91a733d4080266e452d6435d5..c1ada61653d65e68d14bf32ee33b26fbeb082dd9 100644
 --- a/lib/client.js
 +++ b/lib/client.js
-@@ -8964,8 +8964,17 @@
+@@ -8964,8 +8964,17 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
  			* Select a listed or retained catalog-addressed session as current.
  			* @param id - listed or addressed session id.
  			*/
@@ -20,7 +22,15 @@
  			}
  			/**
  			* Open a healthy catalog child through its direct-parent address.
-@@ -9897,7 +9906,7 @@
+@@ -9009,6 +9018,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
+ 			* per the masked-gap contract until the next open() moves the stage.
+ 			*/
+ 			clear() {
++				this.lastClearRequest = {};
+ 				this.manager.clearSelection();
+ 			}
+ 			/**
+@@ -9897,7 +9907,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
  					state = "connecting";
  					this.connectWorkspace(target).then((sessionId) => {
  						if (disposed) return;

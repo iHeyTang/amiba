@@ -541,7 +541,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       window.dispatchEvent(
         new CustomEvent("amiba:open-session", { detail: { sessionId } }),
       );
-    });
+    }, () => window.dispatchEvent(new CustomEvent("amiba:clear-session")));
     // The OFFICIAL input-trigger pipeline. Services are resolved lazily on
     // every call (`ctx.get`) so boot order stays free and a disabled row is
     // simply an absent service rather than a crash.

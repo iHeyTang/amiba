@@ -608,3 +608,28 @@ inserting a timeline row, which would otherwise change tool-only layout.
   text already exists; this change does not rewrite that display policy.
   Custom Markdown transformations, Web/remote behavior and the remaining
   extension ledger are still open.
+
+### Official public clear bridged to native deselection
+
+The pinned runtime now marks public clear requests before its synchronous
+selection notification. The bridge forwards only a new marked request, suppresses
+its own clear projection, and cancels deferred opens. Unmarked internal selection
+loss retains the existing Amiba-authoritative policy. The shell invokes the
+existing sessions.deselect action, preserving tabs, messages and native layout.
+A navigation revision also prevents a superseded list refresh from reopening
+the cleared session or changing the surrounding shell chrome.
+
+- 16 bridge tests and Shell typecheck passed. Tests cover explicit clear, own
+  projection echoes, unmarked internal loss and cancellation of a deferred id.
+- Full Desktop build passed after reverting the previous patch in the derived
+  managed cache so preparation could apply the updated complete patch.
+- Real installed-plugin smoke calls sessions.clear, checks empty selection and
+  absent transcript, verifies unchanged session ids and reopens the same transcript.
+  The complete --compat --reopen-prose run passed, including files, directories,
+  settings, ZIP, HMR and detach. During capture the main window became hidden;
+  restoring it through the existing native open-in-main action let the same run
+  complete without a restart.
+- Follow-ups: include patch identity in dependency-cache reuse so patch upgrades
+  need no manual cache repair; verify/cancel navigation already inside native
+  openTab metadata/history loading. Directory adoption must preserve explicit
+  Amiba bindings and default-directory choices. Broader compatibility stays open.

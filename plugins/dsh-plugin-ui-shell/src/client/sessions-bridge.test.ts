@@ -60,6 +60,10 @@ function officialSessionsDouble(initial?: {
       Object.assign(face, { lastOpenRequest: { sessionId: id, source } });
       face.open(id);
     },
+    requestClear() {
+      Object.assign(face, {lastClearRequest: {}});
+      face.clear();
+    },
     get current() {
       return current;
     },
@@ -303,5 +307,37 @@ it("preserves catalog-style navigation after an earlier marked open", () => {
   opened.mockClear();
   official.setCurrent("s2");
   expect(opened).toHaveBeenCalledWith("s2");
+  bridge.dispose();
+});
+
+it("forwards explicit clear into deselect without closing or reopening a session", async () => {
+  const official=officialSessionsDouble({ids:["s1"]});
+  const open=vi.fn(),clear=vi.fn();
+  const bridge=createSessionsBridge(official.face,open,clear);
+  bridge.setActive("s1");
+  official.requestClear();
+  expect(clear).toHaveBeenCalledTimes(1);
+  expect(official.current).toBeUndefined();
+  bridge.setActive("");
+  expect(clear).toHaveBeenCalledTimes(1);
+  bridge.setActive("pending");
+  official.requestClear();
+  official.setIds(["s1","pending"]);
+  await flushMicrotasks();
+  expect(official.current).toBeUndefined();
+  expect(clear).toHaveBeenCalledTimes(2);
+  bridge.dispose();
+});
+it("suppresses bridge clear echoes and retains unmarked runtime-loss behavior", () => {
+  const official=officialSessionsDouble({ids:["s1"]});
+  const originalClear=official.face.clear;
+  official.face.clear=()=>{Object.assign(official.face,{lastClearRequest:{}});originalClear();};
+  const clear=vi.fn();
+  const bridge=createSessionsBridge(official.face,vi.fn(),clear);
+  bridge.setActive("s1");
+  official.setCurrent(undefined);
+  expect(official.current).toBe("s1");
+  bridge.setActive("draft");
+  expect(clear).not.toHaveBeenCalled();
   bridge.dispose();
 });

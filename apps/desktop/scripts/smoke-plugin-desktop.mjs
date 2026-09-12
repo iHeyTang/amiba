@@ -352,6 +352,14 @@ try {
     await wait(() => evaluate("window.__nativeChatNode.isConnected && !window.__nativeChatNode.hidden && !document.body.textContent.includes('COMPAT_VIEW:') && !Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility view')"));
     await writeFile(path.join(tmpdir(), "amiba-conversation-native-view.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
     console.log("Conversation view passed: actual session props/injection, selection, preserved native chat and unload fallback.");
+    const beforeClearIds = await evaluate("window.__probeCtx.sessions.list.getSnapshot().ids");
+    await evaluate("window.__probeCtx.sessions.clear();void 0");
+    await wait(() => evaluate("window.__probeCtx.sessions.list.getSnapshot().current===undefined && !document.body.textContent.includes('COMPAT_TURN_REPLY')"));
+    assert.deepEqual(await evaluate("window.__probeCtx.sessions.list.getSnapshot().ids"), beforeClearIds, "clear must retain every session");
+    await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY') && window.__probeCtx.sessions.list.getSnapshot().current===window.__compatSessionId"));
+    console.log("Official sessions.clear passed native deselection, retained session inventory and reopening the same transcript.");
+
     await evaluate(`window.__turnTailOff=window.__probeCtx.slots.register({name:'conversation.chat.turnTail',select:owner=>[7,8].includes(owner.turn.turn)?true:null},(owner)=>{window.__turnTailOwners??={};window.__turnTailOwners[owner.turn.turn]=owner;window.__turnTailOwner=owner;return 'COMPAT_TURN_TAIL:'+owner.turn.turn+':'+owner.seq;});void 0`);
     await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY') && document.body.textContent.includes('COMPAT_TURN_TAIL:7:')"));
     assert.ok(await evaluate("window.__turnTailOwner.turn===window.__probeCtx.sessions.binding(window.__compatSessionId).session.getSnapshot().chat.timeline.turns.get(7)"), "turn-tail receives the exact engine timeline object");
