@@ -78,3 +78,24 @@ CDN 更新清单应采用短缓存或不缓存；版本化安装包可长期缓�
 ## 尚需真实环境验证
 
 脚本和状态测试不等同于三个平台安装验证。需要发布仓库、国内 CDN、签名和 Windows/Intel 构建环境才能完成公开分发验收。不要把仅能打包的 unsigned Mac 构建视作已验证的自动更新发布版本。
+
+## 本机 Windows 构建调查（2026-09-12）
+
+- 此 Mac 为 Apple Silicon；Docker Desktop 已安装，启动后报告 `linux/aarch64`。
+- `node-pty` 与 `uiohook-napi` 的现有包包含 Windows x64 预编译文件，但这不能证明整个运行时可交叉构建。
+- Homebrew `wine-stable` 当前被标记为 disabled，原因是 `fails_gatekeeper_check`。
+- 实测官方 `electronuserland/builder:wine`（digest `sha256:41ae540902461b6cbc988987db79547fcc10cda04d2a6c6367504f59d4b37c64`，Wine 11.0）在 `linux/amd64` 下运行校验过的官方 Windows Node 22.22.0 x64 时，启动即退出 134：
+
+```text
+wine: dlls/ntdll/unix/virtual.c:267: anon_mmap_fixed:
+Assertion `!((UINT_PTR)start & host_page_mask)' failed.
+qemu: uncaught target signal 6 (Aborted)
+```
+
+Docker 的 `UseVirtualizationFramework` 与 `UseVirtualizationFrameworkRosetta` 均为 true。设置独立 `WINEPREFIX` 和 `WINEARCH=win64` 后同样失败，因此当前没有可用的 Windows Docker/Wine 构建证据；失败发生在执行项目代码之前。
+
+本机 Windows 虚拟机仍是一条可行的环境路线。Apple Silicon 可运行 Windows 11 ARM，再使用 **x64 Node** 运行构建脚本；Windows ARM 的 x64 应用模拟能力由 Microsoft 支持，但 amiba 全套构建、安装与更新仍需实测。也可继续调查 Wine/模拟层兼容性，不应把上述特定组合失败理解为所有 Mac 均不能构建 Windows。
+
+参考：[Microsoft x64 模拟说明](https://learn.microsoft.com/en-us/windows/arm/apps-on-arm-x86-emulation)、[UTM Windows 安装指南](https://docs.getutm.app/guides/windows/)、[Homebrew Wine 状态](https://formulae.brew.sh/cask/wine-stable)。
+
+GitHub 发布仓库已在线确认是公开的 `iHeyTang/amiba`，当前 CLI 身份具有 ADMIN 权限，调查时尚无 Release。CDN 现阶段按需求只保留 POST 适配器，未选定实际接口不会阻塞本轮适配代码。
