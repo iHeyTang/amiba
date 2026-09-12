@@ -14,6 +14,15 @@ Apple Silicon 上的 Intel 构建可在独立 checkout 中，通过 Rosetta 运�
 
 如果只想在配置发布服务前验证本地安装包，可运行 `pnpm release:build <target> --local-only`。此模式禁用更新源与 macOS 签名，产物不可通过发布脚本上传。正式发布模式要求代码签名成功。
 
+Rosetta 下使用 Intel Node 的示例（`/path/to/node-darwin-x64` 换为已校验的官方 x64 Node 解压目录，在独立 checkout 内运行）：
+
+```sh
+export PATH="/path/to/node-darwin-x64/bin:$PATH"
+node -p 'process.arch' # 必须输出 x64
+pnpm install --frozen-lockfile
+pnpm release:build darwin-x64 --local-only
+```
+
 构建前设置环境变量（Windows 使用 PowerShell 的 `$env:NAME='value'`）：
 
 ```sh
