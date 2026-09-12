@@ -6,7 +6,7 @@ import {
   Github,
   RefreshCw,
 } from "lucide-react";
-import { getPlatform } from "@amiba/app-runtime/platform";
+import { type AppUpdateState, getPlatform } from "@amiba/app-runtime/platform";
 import { useT } from "@amiba/i18n";
 import {
   Button,
@@ -42,6 +42,18 @@ export function ProfileMenu({
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [updatesOpen, setUpdatesOpen] = useState(false);
+  const [update, setUpdate] = useState<AppUpdateState>({ status: "disabled", currentVersion: APP_VERSION });
+  const updater = getPlatform().appUpdates;
+  const updateError = (error: unknown) => setUpdate(state => ({ ...state, status: "error", error: String(error) }));
+  useEffect(() => {
+    if (!updater) return;
+    let alive = true;
+    let receivedEvent = false;
+    const off = updater.onChanged(state => { receivedEvent = true; if (alive) setUpdate(state); });
+    void updater.getState().then(state => { if (alive && !receivedEvent) setUpdate(state); }).catch(error => { if (alive) updateError(error); });
+    return () => { alive = false; off(); };
+  }, [updater]);
+  const checkUpdates = () => { void updater?.check().catch(updateError); };
   const openingDialog = useRef(false);
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const name = profile.nickname || t("options.personal.defaultName");
@@ -198,6 +210,7 @@ export function ProfileMenu({
               openingDialog.current = true;
               setOpen(false);
               setUpdatesOpen(true);
+              checkUpdates();
             }}
             className={row}
           >
@@ -206,7 +219,7 @@ export function ProfileMenu({
               {t("options.personal.currentVersion")}
             </span>
             <span className="text-xs text-muted-foreground">
-              v{APP_VERSION}
+              v{update.currentVersion}
             </span>
           </button>
           {notice && (
@@ -230,13 +243,22 @@ export function ProfileMenu({
           <DialogHeader>
             <DialogTitle>{t("options.personal.checkUpdates")}</DialogTitle>
             <p className="pt-1 text-sm text-muted-foreground">
-              {t("options.personal.currentVersion")} · v{APP_VERSION}
+              {t("options.personal.currentVersion")} · v{update.currentVersion}
             </p>
             <DialogDescription>
-              {t("options.personal.updatesComingSoon")}
+              {t(`options.personal.update.${update.status}`, { version: update.version ?? "", percent: String(Math.round(update.percent ?? 0)) })}
             </DialogDescription>
           </DialogHeader>
+          {update.status === "downloading" && (
+            <progress aria-label={t("options.personal.update.progress")} className="h-2 w-full accent-primary" max={100} value={update.percent ?? 0} />
+          )}
+          {update.status === "error" && <p role="alert" className="break-words text-xs text-muted-foreground">{update.error}</p>}
           <DialogFooter>
+            {update.status === "downloaded" ? (
+              <Button onClick={() => { void updater?.install().catch(updateError); }}>{t("options.personal.update.install")}</Button>
+            ) : updater && update.status !== "disabled" && (
+              <Button disabled={["checking", "available", "downloading"].includes(update.status)} onClick={checkUpdates}>{t("options.personal.checkUpdates")}</Button>
+            )}
             <DialogClose asChild>
               <Button>{t("common.close")}</Button>
             </DialogClose>

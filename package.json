@@ -27,11 +27,16 @@
     "sdk:pack": "bash scripts/sdk-pack.sh",
     "sdk:verify-scaffold": "bash scripts/verify-scaffold.sh",
     "runtime:lock": "pnpm --dir packages/app-runtime runtime:lock",
-    "verify:browser": "node scripts/verify-browser-pluginization.mjs"
+    "verify:browser": "node scripts/verify-browser-pluginization.mjs",
+    "release:build": "node scripts/release/build.mjs",
+    "release:upload": "node scripts/release/upload.mjs",
+    "release:cdn": "node scripts/release/sync-cdn.mjs",
+    "release:verify-online": "node scripts/release/verify-online.mjs"
   },
   "devDependencies": {
     "prettier": "3.3.3",
-    "typescript": "5.6.3"
+    "typescript": "5.6.3",
+    "yaml": "2.8.1"
   },
   "pnpm": {
     "patchedDependencies": {

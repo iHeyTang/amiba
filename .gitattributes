@@ -1,0 +1,2 @@
+# Runtime patches target LF files unpacked from npm on every operating system.
+*.patch text eol=lf

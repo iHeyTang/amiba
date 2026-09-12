@@ -1,3 +1,4 @@
+import { packageCommand, applyRuntimePatch } from "./process-tools.mjs";
 import { canReuseAddedDependencies } from "./reuse-dependencies.mjs";
 import { validateDependencyLock, validatePluginBuildSources } from "./dependency-lock.mjs";
 import { createHash } from "node:crypto";
@@ -46,7 +47,7 @@ const catalogVersions = await (async () => {
     path.join(workspaceDir, "pnpm-workspace.yaml"),
     "utf8",
   );
-  const block = source.match(/^catalog:\n((?:[ \t]+.*\n?)*)/mu);
+  const block = source.replace(/\r\n/gu, "\n").match(/^catalog:\n((?:[ \t]+.*\n?)*)/mu);
   if (!block) return new Map();
   const entries = new Map();
   for (const line of block[1].split("\n")) {
@@ -412,7 +413,8 @@ function pnpmBinary(root) {
 }
 
 function run(command, commandArgs, options = {}) {
-  const result = spawnSync(command, commandArgs, {
+  const [executable, argv] = packageCommand(command, commandArgs);
+  const result = spawnSync(executable, argv, {
     cwd: options.cwd ?? runtimePackageDir,
     env: options.env ?? process.env,
     encoding: "utf8",
@@ -758,13 +760,7 @@ try {
     const packageDir = path.join(appDir, "node_modules", name);
     const installed = JSON.parse(await fsp.readFile(path.join(packageDir, "package.json"), "utf8"));
     if (installed.version !== version) fail(`Patch version mismatch for ${specifier}`);
-    const args = ["--batch", "-p1", "-i", path.resolve(workspaceDir, patchPath)];
-    const check = spawnSync("patch", ["--dry-run", "--forward", ...args], { cwd: packageDir, encoding: "utf8" });
-    if (check.status === 0) run("patch", ["--forward", ...args], { cwd: packageDir });
-    else {
-      const applied = spawnSync("patch", ["--dry-run", "--reverse", ...args], { cwd: packageDir, encoding: "utf8" });
-      if (applied.status !== 0) fail(`Cannot apply or verify ${specifier}: ${check.stderr || check.stdout}`);
-    }
+    applyRuntimePatch(packageDir, path.resolve(workspaceDir, patchPath));
   }
   const amibaScope = path.join(appDir, "node_modules", "@amiba");
   await fsp.mkdir(amibaScope, { recursive: true });
