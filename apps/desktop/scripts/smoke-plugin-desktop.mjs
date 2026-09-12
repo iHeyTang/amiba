@@ -772,7 +772,20 @@ try {
           await wait(()=>evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child') && document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length===1"));
           assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft"), "");
           await evaluate(queueSourceCode);
-          console.log("Full renderer reload restored exactly one pending native queue item and kept the cleared composer empty");
+          await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+          console.log("Full renderer reload restored exactly one pending native queue item, kept the cleared composer empty and recovered the running Stop control");
+          if(process.argv.includes("--running-baseline")) {
+            const abortedBefore=await evaluate("(async()=>{const log=await window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_CHILD_ABORTED'});return log.entries.length})()");
+            await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]').click();void 0");
+            await wait(async()=> (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_CHILD_ABORTED'})")).entries.length>abortedBefore);
+            await wait(()=>evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+            assert.equal(await evaluate("document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length"),1);
+            assert.equal(await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_WAIT_FOR_STOP')"),true);
+            assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-continuable-child')"),true);
+            await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+            console.log("Restored native Stop interrupted the actual Host turn, preserved the pending queue and allowed a new turn through the same composer");
+          }
+
         }
         await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]').click();void 0");
         await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.draft===${JSON.stringify(queuedDraft.draft)}`));

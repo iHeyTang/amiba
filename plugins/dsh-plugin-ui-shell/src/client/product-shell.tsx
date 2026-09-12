@@ -328,10 +328,12 @@ function productCapabilities(): ChatSurfaceCapabilities {
   };
 }
 
-function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string) => AgentSubagentAddress | undefined): DshChatEngineClient {
+function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string) => AgentSubagentAddress | undefined,
+  sessionActivity: ProductShellProps["conversationSource"]): DshChatEngineClient {
   return new DshChatEngineClient({
     client: dshClient,
     resolveSubagent,
+    sessionActivity,
     attachments: getPlatform().agentAttachments,
     resolveSession: async (payload) => {
       const platform = getPlatform();
@@ -505,7 +507,10 @@ function ProductShellInner({
   const childAddressSource = useRef<(id: string) => AgentSubagentAddress | undefined>(() => undefined);
   childAddressSource.current = (id) => sessions.sessions.find((session) => session.id === id)?.subagentAddress
     ?? conversationSource(id)?.getSnapshot().subagent?.address;
-  const client = useMemo(() => createChatClient(dshClient, (id) => childAddressSource.current(id)), [dshClient]);
+  const activitySource = useRef(conversationSource);
+  activitySource.current = conversationSource;
+  const client = useMemo(() => createChatClient(dshClient, (id) => childAddressSource.current(id),
+    (id) => activitySource.current(id)), [dshClient]);
   const capabilities = useMemo(productCapabilities, []);
   const homeDirectory = useSyncExternalStore(directoryFlows.home.subscribe, directoryFlows.home.getSnapshot, directoryFlows.home.getSnapshot);
   const workspaceDirectory = useSyncExternalStore(directoryFlows.workspace.subscribe, directoryFlows.workspace.getSnapshot, directoryFlows.workspace.getSnapshot);

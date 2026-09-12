@@ -1227,3 +1227,14 @@ pipelines retain mounted component state.
 - 新增回归在修复前失败（/tmp/amiba-queue-reload-before.log：1 失败、11 通过），修复后队列及触发管线共 43 项通过（/tmp/amiba-queue-reload-tests.log）。UI 类型检查、完整 Desktop 构建通过（/tmp/amiba-queue-reload-types.log、/tmp/amiba-queue-reload-build.log）。
 - 最终组合桌面验证 /tmp/amiba-queue-reload-smoke2.log 退出 0。刷新后编辑原条目、再次解析引用并点击原 Send now，真实 Host 旧生成被中断，模型收到准确的新文本，队列清空。驻留草稿、动态 Cordis、轨迹正常配置启停、命令、图片、输入状态、子会话及嵌套 Host 冷重启和插件开发生命周期一并通过。
 - 本项补上上一轮缺少的实际 renderer 重载证据。尚未补齐刷新后执行中会话的全部状态：DshChatEngine 的新实例仅在观察到 turn 事件后建立被动运行态，subscribe 初始缺少状态时发出 absent；普通输入器 busy/Stop 的恢复仍需接入权威状态基线，不能把本次队列修正当成这项工作已完成。
+
+
+### 官方会话运行状态的原生快照桥接（2026-09-13）
+
+- 已有 conversationSource 返回真实 rc.2 SessionFace，其 ConversationSnapshot.running 由官方运行状态维护。ProductShell 将该现有来源提供给 DshChatEngineClient，不创建第二套 ConversationController，也不重新实现 Host 状态查询。
+- 原生快照增加可选 hostRunning。当前 renderer 不拥有本地 turn controller 时读入官方 running；本地提交仍由本地 controller 保护，迟到的 idle 基线不能清空正在提交的任务。来源按会话隔离，重复布尔值不重复发快照；替换、clear 和 dispose 释放订阅，销毁后的回调忽略。
+- ChatSurface 的原 busy/Stop 使用该快照字段；只有活动状态、没有本地 turn 内容时仍发 absent，不虚构 begin 或助手占位消息。原 SurfaceActivity 同时恢复 thinking/idle，用户问题与审批继续拥有 waiting 优先级，恢复标记仍保留。
+- 原生聊天客户端 23 项、UI 活动/队列/触发管线 50 项，共 73 项测试通过（/tmp/amiba-running-baseline-tests2.log、/tmp/amiba-running-baseline-ui-tests.log）。Runtime、Shell 和 UI 类型检查通过；完整 Desktop 构建通过（/tmp/amiba-running-baseline-build.log）。
+- 最终组合桌面回归 /tmp/amiba-running-baseline-smoke.log 退出 0。整页刷新时真实子会话仍在生成，恢复原 Stop 控件、空输入框和唯一队列项；点击原 Stop 后真实 Host 记录中断，队列保留；同一输入框可继续启动任务，排队草稿编辑和重新解析发送通过。动态 Cordis、轨迹配置、命令、图片、输入状态、子会话及嵌套 Host 冷重启、插件开发生命周期同时通过，未修改 JSX 结构或 CSS。
+- 仍有需追查的观测：恢复后的 Stop / 新一轮提交已分别满足按钮出现条件，但之后编辑队列前的诊断仍记录 stopVisible:false。当前测试未在该点同步读取官方 running 与本地事件序列，不能据此确定具体竞态原因，也不能据整体退出 0 宣称所有再启动状态已完善。下一步须对照新一轮 Host 真实开始、官方 running 和原生终止事件，排除旧事件覆盖新一轮状态。
+- 本桥接面向拥有官方 SessionFace 的 ProductShell；无该来源的独立客户端仍维持既有快照行为。中途刷新后的全部流内容恢复、完整官方 useInput/队列/图片状态继续单独核对。

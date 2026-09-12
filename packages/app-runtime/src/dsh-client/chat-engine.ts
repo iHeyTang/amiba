@@ -37,8 +37,15 @@ interface SessionState extends ChatRuntimeState {
   passive?: boolean;
 }
 
+export interface DshSessionActivitySource {
+  getSnapshot(): { running: boolean };
+  subscribe(listener: () => void): () => void;
+}
+
 export interface DshChatEngineOptions {
   client: DshApiClient;
+  /** Existing official session face; no second conversation controller. */
+  sessionActivity?: (sessionId: string) => DshSessionActivitySource | undefined;
   /** Current durable navigation address, including children whose parent is cold. */
   resolveSubagent?: (sessionId: string) => AgentSubagentAddress | undefined;
   attachments?: AgentAttachmentsAdapter;
@@ -171,6 +178,7 @@ async function waitUntilSubscribed(
  */
 export class DshChatEngineClient implements ChatEngineClient {
   private readonly states = new Map<string, SessionState>();
+  private readonly activities = new Map<string, { source: DshSessionActivitySource; running: boolean; off(): void }>();
   private readonly snapshotListeners = new Set<SnapshotListener>();
   private readonly streamListeners = new Set<StreamListener>();
   // Host-owned interaction waits, keyed session → requestId/approvalId.
@@ -193,7 +201,29 @@ export class DshChatEngineClient implements ChatEngineClient {
       [...(this.questionLedger.get(sessionId)?.values() ?? [])],
       [...(this.approvalLedger.get(sessionId)?.values() ?? [])],
     );
+    // A locally submitted turn remains authoritative until its own terminal
+    // event. A delayed Host baseline must not clear that pending submission.
+    const activity = this.activities.get(sessionId);
+    if (activity && !this.states.get(sessionId)?.controller) frame.hostRunning = activity.running;
     for (const listener of this.snapshotListeners) listener(frame);
+  }
+
+  private bindActivity(sessionId: string): void {
+    const source = this.options.sessionActivity?.(sessionId);
+    const previous = this.activities.get(sessionId);
+    if (source === previous?.source) return;
+    previous?.off();
+    this.activities.delete(sessionId);
+    if (!source) return;
+    const binding = { source, running: source.getSnapshot().running, off: () => {} };
+    this.activities.set(sessionId, binding);
+    binding.off = source.subscribe(() => {
+      if (this.disposed || this.activities.get(sessionId) !== binding) return;
+      const running = source.getSnapshot().running;
+      if (running === binding.running) return;
+      binding.running = running;
+      this.emitSnapshot(sessionId);
+    });
   }
 
   private emit(sessionId: string, event: StreamEvent): void {
@@ -580,11 +610,15 @@ export class DshChatEngineClient implements ChatEngineClient {
   }
 
   subscribe(sessionId: string): void {
+    if (this.disposed) return;
+    this.bindActivity(sessionId);
     this.ensureInteractionWatcher();
     this.emitSnapshot(sessionId);
   }
 
   requestSnapshot(sessionId: string): void {
+    if (this.disposed) return;
+    this.bindActivity(sessionId);
     this.emitSnapshot(sessionId);
   }
 
@@ -645,6 +679,8 @@ export class DshChatEngineClient implements ChatEngineClient {
   }
 
   clear(sessionId: string): void {
+    this.activities.get(sessionId)?.off();
+    this.activities.delete(sessionId);
     this.abort(sessionId);
     this.states.delete(sessionId);
   }
@@ -739,6 +775,8 @@ export class DshChatEngineClient implements ChatEngineClient {
     this.watchController.abort();
     for (const state of this.states.values()) state.controller?.abort();
     this.states.clear();
+    for (const activity of this.activities.values()) activity.off();
+    this.activities.clear();
     this.questionLedger.clear();
     this.approvalLedger.clear();
     this.snapshotListeners.clear();

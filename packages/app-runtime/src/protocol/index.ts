@@ -414,7 +414,10 @@ export type ClientToEngineMessage =
       answers: UserQuestionAnswerItem[];
     };
 
-export type SnapshotFrame =
+export type SnapshotFrame = {
+  /** Authoritative session activity when this renderer does not own the turn. */
+  hostRunning?: boolean;
+} & (
   | {
       type: "snapshot";
       sessionId: string;
@@ -445,7 +448,8 @@ export type SnapshotFrame =
       sessionId: string;
       kind: "completed";
       state: ChatRuntimeState;
-    };
+    }
+);
 
 export type EngineToClientMessage =
   | SnapshotFrame

@@ -133,3 +133,15 @@ it("coordinates regional and global claims without hiding unrelated regions", ()
   b.release();
   overlay.release();
 });
+
+
+it("projects restored Host activity without a synthetic turn while retaining interaction priority", () => {
+  const source=createSurfaceActivity("restored");
+  source.snapshot({type:"snapshot",sessionId:"restored",kind:"absent",hostRunning:true});
+  expect(source.activity.getSnapshot()).toMatchObject({phase:"thinking",restored:true});
+  source.snapshot({type:"snapshot",sessionId:"restored",kind:"absent",hostRunning:true,
+    pendingQuestions:[{requestId:"question",questions:[]}]});
+  expect(source.activity.getSnapshot().phase).toBe("waiting");
+  source.snapshot({type:"snapshot",sessionId:"restored",kind:"absent",hostRunning:false});
+  expect(source.activity.getSnapshot()).toMatchObject({phase:"idle",restored:true});
+});

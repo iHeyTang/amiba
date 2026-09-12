@@ -552,3 +552,49 @@ it("keeps finalized text provenance in passive snapshots without mutating an ear
   expect(live[1].state.timeline[0]).toMatchObject({text:"report.txt",sourceRanges:[{start:0,end:10,runtimeStep:2,runtimeSeq:4}]});
   engine.dispose();
 });
+
+describe("official running baseline", () => {
+  function source(initial: boolean) {
+    let running=initial;
+    const listeners=new Set<()=>void>();
+    return {getSnapshot:()=>({running}),subscribe:vi.fn((listener:()=>void)=>{listeners.add(listener);return()=>listeners.delete(listener);}),
+      set(value:boolean){running=value;for(const listener of listeners)listener();},listeners};
+  }
+  const quietClient = () => ({async *events(signal:AbortSignal){await new Promise<void>(resolve=>{if(signal.aborted)resolve();else signal.addEventListener("abort",()=>resolve(),{once:true});});}} as unknown as DshApiClient);
+  it("restores Host activity without synthesizing a turn or assistant bubble and follows its idle edge", () => {
+    const activity=source(true), frames:SnapshotFrame[]=[],events:StreamEvent[]=[];
+    const engine=new DshChatEngineClient({client:quietClient(),sessionActivity:()=>activity});
+    engine.onSnapshot(frame=>frames.push(frame));engine.onStreamEvent((_id,event)=>events.push(event));
+    engine.subscribe("restored");
+    expect(frames.at(-1)).toEqual({type:"snapshot",sessionId:"restored",kind:"absent",hostRunning:true});
+    const count=frames.length;activity.set(true);expect(frames).toHaveLength(count);
+    activity.set(false);
+    expect(frames.at(-1)).toEqual({type:"snapshot",sessionId:"restored",kind:"absent",hostRunning:false});
+    expect(events).toEqual([]);
+    engine.dispose();expect(activity.listeners.size).toBe(0);
+  });
+  it("isolates sessions, replaces sources, and ignores stale notifications after clear or dispose", () => {
+    const one=source(true),two=source(false),replacement=source(false),frames:SnapshotFrame[]=[];
+    let first=one;
+    const engine=new DshChatEngineClient({client:Object.assign(quietClient(),{cancel:vi.fn(async()=>{})}),sessionActivity:id=>id==="one"?first:two});
+    engine.onSnapshot(frame=>frames.push(frame));engine.subscribe("one");engine.subscribe("two");engine.subscribe("one");
+    expect(one.subscribe).toHaveBeenCalledOnce();
+    first=replacement;engine.requestSnapshot("one");
+    expect(one.listeners.size).toBe(0);
+    const count=frames.length;one.set(false);expect(frames).toHaveLength(count);
+    two.set(true);expect(frames.at(-1)).toMatchObject({sessionId:"two",hostRunning:true});
+    engine.clear("one");expect(replacement.listeners.size).toBe(0);
+    engine.dispose();expect(two.listeners.size).toBe(0);expect(replacement.listeners.size).toBe(0);
+    const finalCount=frames.length;two.set(false);engine.subscribe("two");expect(frames).toHaveLength(finalCount);
+  });
+  it("does not let a delayed idle baseline override a locally pending submission", () => {
+    const activity=source(true),frames:SnapshotFrame[]=[];
+    const client=Object.assign(quietClient(),{createSession:async()=>({sessionId:"session-1"}),openEvents:()=>new Promise(()=>{})});
+    const engine=new DshChatEngineClient({client,sessionActivity:()=>activity});
+    engine.onSnapshot(frame=>frames.push(frame));engine.subscribe("session-1");engine.submit(payload());
+    activity.set(false);
+    expect(frames.at(-1)).toMatchObject({kind:"live",state:{streaming:true}});
+    expect(frames.at(-1)?.hostRunning).toBeUndefined();
+    engine.dispose();
+  });
+});

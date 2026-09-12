@@ -60,7 +60,9 @@ export function createSurfaceActivity(sessionId: string) {
               : frame.kind === "completed"
                 ? "completed"
                 : "thinking";
-      if (frame.kind === "live")
+      if (frame.hostRunning === true) base = "thinking";
+      else if (frame.hostRunning === false && frame.kind === "live") base = "idle";
+      if (frame.kind === "live" && frame.hostRunning !== false)
         frame.state.toolProgress
           .filter((t) => t.status === "running")
           .forEach((t) => tools.add(t.toolCallId));

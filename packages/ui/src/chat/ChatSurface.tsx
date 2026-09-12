@@ -980,7 +980,7 @@ export default function ChatSurface({
       // `pendingTurnRef` is set the instant runChatTurn posts submit,
       // so it's the authoritative "we're mid-submission" signal.
       if (pendingTurnRef.current?.sessionId === sessionId) return;
-      setBusy(false);
+      setBusy(frame.hostRunning ?? false);
       resetApprovals();
       resetQuestions();
       // Interaction waits outlive turn state: DSH keeps unanswered
@@ -1025,7 +1025,7 @@ export default function ChatSurface({
     //     made the label jump to the latest turn after a reload.
     const { state } = frame;
     stream.hydrateFromSnapshot(state);
-    setBusy(state.streaming);
+    setBusy(frame.hostRunning ?? state.streaming);
     setPendingApprovals(state.pendingApprovals ?? []);
     setPendingQuestions(state.pendingQuestions ?? []);
     setActiveTurnId(state.turnId ?? null);
