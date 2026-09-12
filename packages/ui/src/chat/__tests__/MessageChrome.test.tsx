@@ -1478,3 +1478,41 @@ it("places one tail per exact engine turn and preserves empty-slot DOM", () => {
   rerender(<MessageTurns messages={[...messages.slice(0,-1),{...messages.at(-1)!,streaming:true}]} openTurnFile={openFile} turnTail={tail}/>);
   expect(screen.queryByRole("button",{name:"Tail 7"})).toBeNull();
 });
+
+
+it("keeps execution-only and empty-row tails without changing the declined layout", () => {
+  const messages: UiMessage[] = [
+    {uiId:"u",role:"user",content:"run"},
+    {uiId:"tools",role:"assistant",content:"",runtimeTurn:7,toolProgress:[{tool:"bash",toolCallId:"tail-call",status:"completed",args:{command:"echo ok"}}]},
+    {uiId:"empty",role:"assistant",content:"",runtimeTurn:8},
+  ];
+  const {container,rerender}=render(<MessageTurns messages={messages}/>);
+  const baseline=container.innerHTML;
+  rerender(<MessageTurns messages={messages} openTurnFile={()=>{}} turnTail={()=>null}/>);
+  expect(container.innerHTML).toBe(baseline);
+  rerender(<MessageTurns messages={messages} openTurnFile={()=>{}} turnTail={turn=><button>Tail {turn}</button>}/>);
+  expect(screen.getAllByRole("button",{name:/Tail [78]/}).map(n=>n.textContent)).toEqual(["Tail 7","Tail 8"]);
+  expect(container.querySelector('[data-conversation-user-turn]')?.textContent).toContain("Tail 8");
+});
+
+
+it("inserts unrepresented closed-turn tails by engine sequence without stored messages or idle wrappers", () => {
+  const anchors=[{runtimeTurn:7,endSeq:12},{runtimeTurn:8,endSeq:25}];
+  const messages: UiMessage[]=[
+    {uiId:"user-seven",role:"user",content:"first request",runtimeSeq:10},
+    {uiId:"user-eight",role:"user",content:"second request",runtimeSeq:20},
+  ];
+  const {container,rerender}=render(<MessageTurns messages={messages}/>);
+  const baseline=container.innerHTML;
+  rerender(<MessageTurns messages={messages} turnTailAnchors={anchors} openTurnFile={()=>{}} turnTail={()=>null}/>);
+  expect(container.innerHTML).toBe(baseline);
+  rerender(<MessageTurns messages={messages} turnTailAnchors={anchors} openTurnFile={()=>{}} turnTail={turn=><button>Tail {turn}</button>}/>);
+  expect(container.querySelector('[data-conversation-user-turn="user-seven"]')?.textContent).toContain("Tail 7");
+  expect(container.querySelector('[data-conversation-user-turn="user-eight"]')?.textContent).toContain("Tail 8");
+  expect(messages).toHaveLength(2);
+  rerender(<MessageTurns messages={[]} turnTailAnchors={anchors} openTurnFile={()=>{}} turnTail={()=>null}/>);
+  expect(container.innerHTML).toBe("");
+  rerender(<MessageTurns messages={[]} turnTailAnchors={anchors} openTurnFile={()=>{}} turnTail={turn=><button>Tail {turn}</button>}/>);
+  expect(container.children).toHaveLength(2);
+  expect(container.firstElementChild?.tagName).toBe("BUTTON");
+});

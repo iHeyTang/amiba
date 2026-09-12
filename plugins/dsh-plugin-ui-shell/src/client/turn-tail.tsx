@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import type {
   ConversationSnapshot,
   ObservableSnapshot,
@@ -29,6 +29,12 @@ export function TurnTail({
   openFile: (path: string) => void;
   render: (owner: TurnTailOwnerProps) => ReactNode;
 }) {
+  const snapshot = useConversationSnapshot(source);
+  const owner = turnTailOwner(snapshot, runtimeTurn, openFile);
+  return owner ? render(owner) : null;
+}
+
+function useConversationSnapshot(source?: ObservableSnapshot<ConversationSnapshot>) {
   const subscribe = useCallback(
     (listener: () => void) => source?.subscribe(listener) ?? (() => {}),
     [source],
@@ -37,7 +43,15 @@ export function TurnTail({
     () => source?.getSnapshot() ?? null,
     [source],
   );
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const owner = turnTailOwner(snapshot, runtimeTurn, openFile);
-  return owner ? render(owner) : null;
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+/** Preserve engine order even when the product has no visible assistant row. */
+export function useTurnTailAnchors(source?: ObservableSnapshot<ConversationSnapshot>) {
+  const snapshot = useConversationSnapshot(source);
+  return useMemo(() => snapshot?.chat.timeline.turnOrder.flatMap(runtimeTurn => {
+    const turn = snapshot.chat.timeline.turns.get(runtimeTurn);
+    return turn?.status === "closed" && turn.end && turn.data.get("turn-tail")
+      ? [{ runtimeTurn, endSeq: turn.end.seq }] : [];
+  }) ?? [], [snapshot]);
 }

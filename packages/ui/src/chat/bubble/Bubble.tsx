@@ -1687,6 +1687,7 @@ export function UserStickyBubble({
  */
 export function MessageTurns({
   turnTail,
+  turnTailAnchors,
   openTurnFile,
   assistantActions,
   messages,
@@ -1699,6 +1700,7 @@ export function MessageTurns({
 }: {
   assistantActions?: (messageId: string) => ReactNode;
   turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
+  turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
   openTurnFile?: (path: string) => void;
   messages: UiMessage[];
   sessionId?: string;
@@ -1723,8 +1725,20 @@ export function MessageTurns({
     replies: UiMessage[];
     userOrdinal: number;
   };
+  // Presentation-only anchors never enter the session store or submission history.
+  const anchoredMessages = [...messages];
+  const presentTurns = new Set(messages.filter(message => message.role === "assistant").map(message => message.runtimeTurn));
+  for (const anchor of [...(turnTailAnchors ?? [])].sort((a, b) => a.endSeq - b.endSeq)) {
+    if (presentTurns.has(anchor.runtimeTurn)) continue;
+    presentTurns.add(anchor.runtimeTurn);
+    const next = anchoredMessages.findIndex(message => message.runtimeSeq !== undefined && message.runtimeSeq > anchor.endSeq);
+    anchoredMessages.splice(next < 0 ? anchoredMessages.length : next, 0, {
+      uiId: `turn-tail-anchor:${anchor.runtimeTurn}`, role: "assistant", content: "",
+      runtimeTurn: anchor.runtimeTurn, runtimeSeq: anchor.endSeq,
+    });
+  }
   const lastMessageForTurn = new Map<number, string>();
-  for (const message of messages) {
+  for (const message of anchoredMessages) {
     if (message.role === "assistant" && message.runtimeTurn !== undefined)
       lastMessageForTurn.set(message.runtimeTurn, message.uiId);
   }
@@ -1737,7 +1751,7 @@ export function MessageTurns({
     if (message.role !== "assistant") continue;
     for (const event of message.toolProgress ?? []) callOwners.set(event.toolCallId, message);
   }
-  const visibleMessages = messages.filter(message => {
+  const visibleMessages = anchoredMessages.filter(message => {
     const placement = message.notice?.placement;
     if (placement?.kind !== "execution" || !sessionId || placement.sessionId !== sessionId) return true;
     const target = callOwners.get(placement.callId);
@@ -1763,6 +1777,30 @@ export function MessageTurns({
     <>
       {turns.map((turn, i) => {
         const replyItems = buildTurnReplyItems(turn.replies);
+        // Rendering can fold assistant rows into an execution disclosure or omit
+        // an empty row. Locate the tail after the row's final rendered item,
+        // without splitting the existing disclosure or adding idle DOM.
+        const lastItemForMessage = new Map<string, number>();
+        replyItems.forEach((item, index) => {
+          if (item.kind === "message") lastItemForMessage.set(item.message.uiId, index);
+          else if (item.kind === "execution") {
+            for (const message of item.messages) lastItemForMessage.set(message.uiId, index);
+          } else lastItemForMessage.set(item.id.slice("boundary:".length), index);
+        });
+        const tailsAfter = new Map<number, number[]>();
+        let previousItem = -1;
+        for (const message of turn.replies) {
+          previousItem = Math.max(previousItem, lastItemForMessage.get(message.uiId) ?? -1);
+          if (message.role !== "assistant" || message.streaming || message.runtimeTurn === undefined ||
+              lastMessageForTurn.get(message.runtimeTurn) !== message.uiId) continue;
+          tailsAfter.set(previousItem, [...(tailsAfter.get(previousItem) ?? []), message.runtimeTurn]);
+        }
+        const renderTailsAfter = (index: number) => openTurnFile && turnTail
+          ? tailsAfter.get(index)?.map(runtimeTurn => <Fragment key={runtimeTurn}>{turnTail(runtimeTurn, openTurnFile)}</Fragment>)
+          : null;
+        if (!turn.user && replyItems.length === 0) {
+          return <Fragment key={`empty-turns-${i}`}>{renderTailsAfter(-1)}</Fragment>;
+        }
         const reviewResource = turn.replies.some((message) => message.streaming)
           ? null
           : workspaceReviewResourceFromEvents(
@@ -1792,17 +1830,17 @@ export function MessageTurns({
               />
             )}
             <ExecutionNoticesContext.Provider value={executionNotices}>
-            {replyItems.map((item) => {
+            {renderTailsAfter(-1)}
+            {replyItems.map((item, itemIndex) => {
               if (item.kind === "execution") {
                 return (
-                  <TurnExecutionDisclosure
-                    key={item.id}
+                  <Fragment key={item.id}><TurnExecutionDisclosure
                     messages={item.messages}
-                  />
+                  />{renderTailsAfter(itemIndex)}</Fragment>
                 );
               }
               if (item.kind === "boundary") {
-                return <RunBoundary key={item.id} state={item.state} />;
+                return <Fragment key={item.id}><RunBoundary state={item.state} />{renderTailsAfter(itemIndex)}</Fragment>;
               }
 
               return (
@@ -1812,8 +1850,7 @@ export function MessageTurns({
                   suppressRunBoundary={item.suppressRunBoundary}
                   onOpenAgentDestination={onOpenAgentDestination}
                 />
-                {item.message.role === "assistant" && !item.message.streaming && item.message.runtimeTurn !== undefined && lastMessageForTurn.get(item.message.runtimeTurn) === item.message.uiId && openTurnFile
-                  ? turnTail?.(item.message.runtimeTurn, openTurnFile) : null}
+                {renderTailsAfter(itemIndex)}
                 {item.message.role === "assistant" && !item.message.streaming && item.message.assistantMessageId
                   ? assistantActions?.(item.message.assistantMessageId) : null}
                 {item.message.role === "assistant" && <MessageDecoration sessionId={sessionId} messageId={item.message.uiId} streaming={!!item.message.streaming} />}

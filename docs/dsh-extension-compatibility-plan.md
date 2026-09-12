@@ -402,3 +402,27 @@ directory, ZIP, view, HMR and detach checks passed in that same run.
 Remaining: live turn/data updates, actual file opening through the contribution,
 execution-only presentation, and completed turns with no visible reply at all. Do not claim full turn-tail support
 until that placement and end-to-end validation are resolved.
+
+
+### Turn-tail placement beyond visible replies
+
+The UI now locates each tail after the last rendered item belonging to the exact
+engine turn, including execution disclosures and run boundaries. Existing
+execution groups are not split merely because a chain exists. Closed turns with
+no projected assistant row receive presentation-only anchors ordered by the
+engine end sequence; these never enter persisted messages or submission history.
+No content is emitted for an unclaimed chain, including a conversation with no
+visible messages. Session changes dispose the old source and discard its anchors.
+
+- 43 message chrome tests and 4 adapter tests passed, covering execution-only
+  replies, empty history, sequence placement, session switches and unchanged
+  empty-slot DOM. Shell typecheck and full Desktop production build passed.
+- Real installed Desktop smoke passed: a Host turn remains invisible to the
+  tail chain while open, then publishes its exact end sequence after a no-reply
+  completion. The contributed opener displays actual file contents through the
+  existing workbench. Dynamic unregister removes both historical and live tails;
+  settings, directory, ZIP, view, HMR and detach regressions pass in the same run.
+- The raw official session.create({cwd}) does not itself establish Amiba's
+  separate per-session file-workspace binding. The file-opening smoke explicitly
+  binds its temporary session before opening a file; this must not be counted as
+  automatic workspace parity for official session creation/navigation.

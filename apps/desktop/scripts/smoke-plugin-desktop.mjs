@@ -62,7 +62,7 @@ async function wait(check) {
       throw new Error("App exited: " + logs.slice(-5000));
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  if (socket?.readyState === 1) logs += JSON.stringify(await evaluate("(async()=>({hmr:Array.from(window.__probeCtx?.loader.entries()??[]).filter(e=>e.options.name.includes('hmr')||e.options.name.includes('probe')).map(e=>({name:e.options.name,state:e.fiber?.state,inject:e.fiber?.inject})),frames:window.__probeFrames?.map(s=>{try{const f=JSON.parse(s);return {type:f.type,id:f.id,rev:f.rev}}catch{return s}}),diagnostics:(await window.amiba.agentDiagnostics.logs({limit:100})).entries.filter(e=>/PROBE|DOWNLOAD|hmr|error/i.test(e.message))}))()").catch(String));
+  if (socket?.readyState === 1) logs += JSON.stringify(await evaluate("(async()=>({body:document.body.innerText.slice(-8000),hmr:Array.from(window.__probeCtx?.loader.entries()??[]).filter(e=>e.options.name.includes('hmr')||e.options.name.includes('probe')).map(e=>({name:e.options.name,state:e.fiber?.state,inject:e.fiber?.inject})),frames:window.__probeFrames?.map(s=>{try{const f=JSON.parse(s);return {type:f.type,id:f.id,rev:f.rev}}catch{return s}}),diagnostics:(await window.amiba.agentDiagnostics.logs({limit:100})).entries.filter(e=>/PROBE|DOWNLOAD|hmr|error/i.test(e.message))}))()").catch(String));
   logs += "\nNative events: " + await readFile(path.join(profile,"native-events.jsonl"),"utf8").catch(String);
   throw new Error("App UI timeout: " + logs.slice(-18000) + "\nCLI: " + cliLogs);
 }
@@ -134,8 +134,8 @@ try {
   }
   // Write only to this smoke's temporary session, through the real Host log.
   const fixtureCwd = await realpath(profile);
-  const turnFixture = process.argv.includes("--compat") ? `ctx.on('session/created',(s:any)=>{if(!${JSON.stringify([profile, fixtureCwd])}.includes(s.header.cwd)||s.events.some((e:any)=>e.type==='turn/start'&&e.data.turn===7))return;s.append('turn/start',{turn:7});s.append('user/message',{id:'compat-user',role:'user',source:{kind:'user'},content:[{type:'text',text:'COMPAT_TURN_INPUT'}]},{surfaceOp:'append'});s.append('step/start',{turn:7,step:1});s.append('assistant/message',{turn:7,step:1,message:{id:'compat-assistant',role:'assistant',source:{kind:'model',provider:'compat',model:'fixture'},content:[{type:'text',text:'COMPAT_TURN_REPLY'}]}},{surfaceOp:'append'});s.append('step/end',{turn:7,step:1});s.append('turn/end',{turn:7,reason:{kind:'completed'}});console.log('AMIBA_PROBE_TURN '+s.id);});` : "";
-  const source = version => native ? `export const inject=['amibaRuntimeGateway']; export async function apply(ctx:any) { ${turnFixture} let lease:string|undefined;let disposed=false;ctx.effect(()=>async()=>{disposed=true;if(lease)await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease})});lease=await ctx.amibaRuntimeGateway.call('amiba_native_attach',{packageName:'dsh-plugin-probe',instanceId:'probe-'+Date.now()});if(disposed){await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease});return}console.log('AMIBA_PROBE_HOST_${version}'); }` : hostSource(version);
+  const turnFixture = process.argv.includes("--compat") ? `let fixtureSession:any;ctx.on('session/created',(s:any)=>{if(!${JSON.stringify([profile, fixtureCwd])}.includes(s.header.cwd)||s.events.some((e:any)=>e.type==='turn/start'&&e.data.turn===7))return;fixtureSession=s;s.append('turn/start',{turn:7});s.append('user/message',{id:'compat-user',role:'user',source:{kind:'user'},content:[{type:'text',text:'COMPAT_TURN_INPUT'}]},{surfaceOp:'append'});s.append('step/start',{turn:7,step:1});s.append('assistant/message',{turn:7,step:1,message:{id:'compat-assistant',role:'assistant',source:{kind:'model',provider:'compat',model:'fixture'},content:[{type:'text',text:'COMPAT_TURN_REPLY'}]}},{surfaceOp:'append'});s.append('step/end',{turn:7,step:1});s.append('turn/end',{turn:7,reason:{kind:'completed'}});console.log('AMIBA_PROBE_TURN '+s.id);});ctx.effect(()=>{const watcher=watch(${JSON.stringify(profile)},()=>{const s=fixtureSession;if(!s)return;if(existsSync(${JSON.stringify(path.join(profile,'turn-tail-open'))})&&!s.events.some((e:any)=>e.type==='turn/start'&&e.data.turn===8)){s.append('turn/start',{turn:8});s.append('user/message',{id:'compat-empty-user',role:'user',source:{kind:'user'},content:[{type:'text',text:'COMPAT_EMPTY_TURN_INPUT'}]},{surfaceOp:'append'});}if(existsSync(${JSON.stringify(path.join(profile,'turn-tail-close'))})&&!s.events.some((e:any)=>e.type==='turn/end'&&e.data.turn===8)){s.append('turn/end',{turn:8,reason:{kind:'blocked'}});}});return()=>watcher.close();});` : "";
+  const source = version => native ? `import {watch,existsSync} from 'node:fs';export const inject=['amibaRuntimeGateway']; export async function apply(ctx:any) { ${turnFixture} let lease:string|undefined;let disposed=false;ctx.effect(()=>async()=>{disposed=true;if(lease)await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease})});lease=await ctx.amibaRuntimeGateway.call('amiba_native_attach',{packageName:'dsh-plugin-probe',instanceId:'probe-'+Date.now()});if(disposed){await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease});return}console.log('AMIBA_PROBE_HOST_${version}'); }` : hostSource(version);
   await writeFile(path.join(project, "src/index.ts"), source(1));
   await writeFile(path.join(project, "src/client.ts"), clientSource(1));
   cli = spawn(process.execPath, [process.env.AMIBA_SMOKE_CLI || path.join(root, "apps/cli/dist/cli.js"), "--dsh-home", home, "plugin", "dev"], { cwd: project, env: {...process.env}, stdio: ["ignore", "pipe", "pipe"] });
@@ -351,13 +351,27 @@ try {
     await wait(() => evaluate("window.__nativeChatNode.isConnected && !window.__nativeChatNode.hidden && !document.body.textContent.includes('COMPAT_VIEW:') && !Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility view')"));
     await writeFile(path.join(tmpdir(), "amiba-conversation-native-view.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
     console.log("Conversation view passed: actual session props/injection, selection, preserved native chat and unload fallback.");
-    await evaluate(`window.__turnTailOff=window.__probeCtx.slots.register({name:'conversation.chat.turnTail',select:owner=>owner.turn.turn===7?true:null},(owner)=>{window.__turnTailOwner=owner;return 'COMPAT_TURN_TAIL:'+owner.turn.turn+':'+owner.seq;});void 0`);
+    await evaluate(`window.__turnTailOff=window.__probeCtx.slots.register({name:'conversation.chat.turnTail',select:owner=>[7,8].includes(owner.turn.turn)?true:null},(owner)=>{window.__turnTailOwners??={};window.__turnTailOwners[owner.turn.turn]=owner;window.__turnTailOwner=owner;return 'COMPAT_TURN_TAIL:'+owner.turn.turn+':'+owner.seq;});void 0`);
     await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY') && document.body.textContent.includes('COMPAT_TURN_TAIL:7:')"));
     assert.ok(await evaluate("window.__turnTailOwner.turn===window.__probeCtx.sessions.binding(window.__compatSessionId).session.getSnapshot().chat.timeline.turns.get(7)"), "turn-tail receives the exact engine timeline object");
     assert.ok(await evaluate("window.__turnTailOwner.seq===window.__turnTailOwner.turn.data.get('turn-tail').closing.finalNode.seq && typeof window.__turnTailOwner.openFile==='function'"), "tail uses the closing assistant sequence and a file opener");
+    // The raw official create API does not establish Amiba's file-workspace binding.
+    await evaluate(`window.amiba.workspaces.bind(window.__compatSessionId, ${JSON.stringify(profile)})`);
+    const fileWorkspace = await evaluate("window.amiba.workspaces.getCurrent(window.__compatSessionId)");
+    assert.ok(fileWorkspace && (await realpath(fileWorkspace)).startsWith(await realpath(profile)), "file fixture must stay inside the temporary workspace");
+    const openedFile = path.join(fileWorkspace, "compat-open.txt");
+    await writeFile(openedFile, "COMPAT_FILE_OPENED");
+    await evaluate(`window.__turnTailOwners[7].openFile(${JSON.stringify(openedFile)});void 0`);
+    await wait(() => evaluate("document.querySelector('[data-workspace-file-preview]')?.textContent.includes('COMPAT_FILE_OPENED')"));
+    await writeFile(path.join(profile, "turn-tail-open"), "open");
+    await wait(() => evaluate("window.__probeCtx.sessions.binding(window.__compatSessionId).session.getSnapshot().chat.timeline.turns.get(8)?.status==='open'"));
+    assert.ok(await evaluate("!document.body.textContent.includes('COMPAT_TURN_TAIL:8:')"), "open empty turns must not render a completed tail");
+    await writeFile(path.join(profile, "turn-tail-close"), "close");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_TAIL:8:')"));
+    assert.ok(await evaluate("window.__turnTailOwners[8].seq===window.__turnTailOwners[8].turn.end.seq && window.__turnTailOwners[8].turn.data.get('turn-tail').closing===null"), "empty live turn uses the exact end sequence with no invented assistant");
     await evaluate("window.__turnTailOff();void 0");
     await wait(() => evaluate("!document.body.textContent.includes('COMPAT_TURN_TAIL:') && document.body.textContent.includes('COMPAT_TURN_REPLY')"));
-    console.log("Turn-tail passed actual Host history, exact engine turn/closing sequence, and dynamic mount/unmount.");
+    console.log("Turn-tail passed actual Host history and live empty completion, exact engine turn/sequence, real file opening, and dynamic mount/unmount.");
     let projectFolder = path.join(profile, "directory-project");
     let extraFolder = path.join(profile, "directory-extra");
     await mkdir(projectFolder, { recursive: true });

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import React from "react";
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { TurnTail, turnTailOwner } from "./turn-tail";
+import { TurnTail, turnTailOwner, useTurnTailAnchors } from "./turn-tail";
 afterEach(cleanup);
 function fixture(closing: number | null = 12) {
   const data = {
@@ -78,4 +78,22 @@ it("binds session methods and cleans up the old subscription on session changes"
   expect(listeners.size).toBe(0);
   expect(container.innerHTML).toBe("");
   unmount();
+});
+
+
+it("publishes only real closed turn endpoints and drops anchors on session change", () => {
+  const turn = {status:"open",end:null as any,data:{get:()=>({})}};
+  let snapshot:any={chat:{timeline:{turnOrder:[7],turns:new Map([[7,turn]])}}};
+  const listeners=new Set<()=>void>();
+  const source={getSnapshot(){return snapshot;},subscribe(fn:()=>void){listeners.add(fn);return ()=>{listeners.delete(fn);};}};
+  const {result,rerender}=renderHook(({current})=>useTurnTailAnchors(current),{initialProps:{current:source as any}});
+  expect(result.current).toEqual([]);
+  act(()=>{
+    snapshot={chat:{timeline:{turnOrder:[7],turns:new Map([[7,{...turn,status:"closed",end:{seq:91}}]])}}};
+    for(const fn of listeners)fn();
+  });
+  expect(result.current).toEqual([{runtimeTurn:7,endSeq:91}]);
+  rerender({current:undefined});
+  expect(result.current).toEqual([]);
+  expect(listeners.size).toBe(0);
 });

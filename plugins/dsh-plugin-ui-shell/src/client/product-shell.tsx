@@ -1,4 +1,4 @@
-import { TurnTail } from "./turn-tail.js";
+import { TurnTail, useTurnTailAnchors } from "./turn-tail.js";
 import { DirectoryChooserContext, type DirectoryChooser } from "@amiba/ui";
 import type { DirectoryFlow } from "./directory-flow.js";
 import type { ConversationViewEntry } from "./conversation-view-source.js";
@@ -494,6 +494,7 @@ function ProductShellInner({
   }, [directoryFlows, homeDirectory.available, workspaceDirectory.available, platform]);
   const viewEntries = useSyncExternalStore(conversationViews.subscribe, conversationViews.getSnapshot, conversationViews.getSnapshot);
   const sessions = useSessions();
+  const turnTailAnchors = useTurnTailAnchors(sessions.activeId ? conversationSource(sessions.activeId) : undefined);
   // Host-side session changes (a plugin creating a task session, a blank
   // session getting its first turn) reach the official list live; re-read
   // Amiba's own index whenever the facts it renders change, so the sidebar
@@ -805,6 +806,7 @@ function ProductShellInner({
                 // bridge) and renders nothing while none is current, which is also
                 // why the home/draft composer keeps Amiba's own trigger menu.
                 inputOverlay: renderSlot("conversation.input.overlay", {}),
+                turnTailAnchors,
                 turnTail: (runtimeTurn, openFile) => <TurnTail source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} render={owner => renderSlotChain("conversation.chat.turnTail", owner)} />,
                 assistantActions: (messageId) => renderSlot("conversation.chat.assistant-actions", { messageId: messageId as import("@amiba/extension-sdk").AssistantActionOwnerProps["messageId"] }),
                 toolView: renderToolViewSeat,

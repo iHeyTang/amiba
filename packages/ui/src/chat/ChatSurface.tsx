@@ -324,6 +324,7 @@ export interface ChatSurfaceProps {
      */
     assistantActions?: (messageId: string) => ReactNode;
     turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
+    turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
     toolView?: ToolCallSeatRenderer;
     /**
      * renderSlot-backed dispatch of Amiba's KEYED `amiba.conversation.question`
@@ -2249,6 +2250,7 @@ export default function ChatSurface({
                         <MessageTurns
                           assistantActions={slots?.assistantActions}
                           turnTail={slots?.turnTail}
+                          turnTailAnchors={slots?.turnTailAnchors}
                           openTurnFile={path => openWorkspaceFile({ path })}
                           sessionId={sessions.activeId ?? undefined}
                           messages={messages}
