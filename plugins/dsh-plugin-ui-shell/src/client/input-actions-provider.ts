@@ -32,10 +32,10 @@ export function createInputActionsProvider(bridge: AmibaInputTriggerBridge): Ses
         inputActions = Object.freeze({
           setDraft(text: string) {
             const draft = bridge.inputDraftFor(sessionId);
-            if (!draft) throw new Error("Input editor is not mounted for this session");
-            if (draft.draft === text) return;
+            if (draft?.draft === text) return;
             if (!bridge.editInputDraft(sessionId, text)) {
-              throw new Error("Input editor cannot accept draft edits");
+              throw new Error(draft ? "Input editor cannot accept draft edits"
+                : "Input editor is not mounted or the resident draft cannot accept edits");
             }
           },
           addImages: ids => bridge.addInputImages(sessionId, ids),

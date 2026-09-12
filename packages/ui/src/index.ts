@@ -38,3 +38,6 @@ export {
 } from "./navigation/PaneHeaderBar";
 
 export * from "./directory-chooser";
+
+// Native session state shared with the product shell's standard input adapter.
+export { sessionComposerDraft } from "./chat/composer-draft-store";

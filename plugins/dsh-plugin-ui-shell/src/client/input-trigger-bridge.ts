@@ -57,6 +57,11 @@ function imageRegistry(value: unknown): ImageRegistry | undefined {
 
 /** Everything the bridge needs from the client root context. */
 export interface InputTriggerBridgeDeps {
+  /** Same per-session document as the original Composer; optional for other hosts. */
+  residentDraft?(sessionId: string): {
+    subscribe(listener: () => void): () => void;
+    setDisplayText(text: string): void;
+  };
   /** Actual Host inbox state, distinct from the native local pending queue. */
   sessionFor?(sessionId: string): InputQueueSession | undefined;
   /** Browser image registry implementing the pinned image operations. */
@@ -216,12 +221,14 @@ export function createInputTriggerBridge(
   return {
     bindInputSession(sessionId, session) {
       const binding = { session };
+      const offDraft = deps.residentDraft?.(sessionId).subscribe(() => {});
       inputSessions.set(sessionId, binding);
       notifyInputSessions();
       let active = true;
       return () => {
         if (!active) return;
         active = false;
+        offDraft?.();
         if (inputSessions.get(sessionId) !== binding) return;
         inputSessions.delete(sessionId);
         notifyInputSessions();
@@ -289,7 +296,17 @@ export function createInputTriggerBridge(
     },
     submitInput: (sessionId) => submitters.get(sessionId)?.submit() ?? false,
     inputDraftSource,
-    editInputDraft: (sessionId, text) => editors.get(sessionId)?.ops.editInputDraft?.(text) ?? false,
+    editInputDraft(sessionId, text) {
+      const editor = editors.get(sessionId);
+      // A mounted editor's phase/read-only refusal must not fall through.
+      if (editor) return editor.ops.editInputDraft?.(text) ?? false;
+      const session = inputSessions.get(sessionId)?.session;
+      if (!session || session.getSnapshot().subagent?.address.mode === "one-shot") return false;
+      const draft = deps.residentDraft?.(sessionId);
+      if (!draft) return false;
+      draft.setDisplayText(text);
+      return true;
+    },
     setInputDraft: (sessionId, text, expectedRevision) => editors.get(sessionId)?.draft.write(text, expectedRevision) ?? false,
     inputDraftFor: (sessionId) => editors.get(sessionId)?.draft.read(),
     draftSources: () => draftSources,

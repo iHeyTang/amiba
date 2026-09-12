@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ConversationInputActions } from "@amiba/extension-sdk";
 import { createInputActionsProvider } from "./input-actions-provider.js";
-import { createInputTriggerBridge } from "./input-trigger-bridge.js";
+import { createComposerDraftSource } from "../../../../packages/ui/src/chat/composer-draft-store";
+import { composerDraftDisplayText } from "../../../../packages/ui/src/chat/composer-draft-document";
+import { createInputTriggerBridge, type InputTriggerBridgeDeps } from "./input-trigger-bridge.js";
 
-function fixture() {
+function fixture(residentDraft?: InputTriggerBridgeDeps["residentDraft"]) {
   const bridge = createInputTriggerBridge({
+    residentDraft,
     scopeOf: () => ({ on: () => () => {} }) as never,
     subscribeSessions: () => () => {}, inputTriggers: () => undefined, commandUi: () => undefined,
   });
@@ -110,4 +113,67 @@ it("uses the materializing session before ID lookup and releases owner subscript
   expect(next.listeners.size).toBe(0);
   expect(source.getSnapshot()).toBeUndefined();
   off();
+});
+
+
+it("edits the addressed resident document offscreen and never bypasses a mounted editor's refusal", () => {
+  const sources=new Map<string,ReturnType<typeof createComposerDraftSource>>();
+  let watches=0;
+  const sourceFor=(id:string)=>{
+    let source=sources.get(id);
+    if(!source){source=createComposerDraftSource();sources.set(id,source);}
+    return source;
+  };
+  const {actions,bind,provider,bridge}=fixture(id=>{
+    const source=sourceFor(id);
+    return {setDisplayText:source.setDisplayText,subscribe(listener){watches++;const off=source.subscribe(listener);return()=>{watches--;off();};}};
+  });
+  const source=sourceFor("a");
+  source.set("@[dsh.reference:files|id|Label|clip]");
+  const action=actions("a"),other=bind("b");
+  action.setDraft("@Label literal @[dsh.reference:missing|id|literal|clip]");
+  expect(composerDraftDisplayText(source.getDocument())).toBe("@Label literal @[dsh.reference:missing|id|literal|clip]");
+  expect(source.getDocument().parts.filter(part=>part.kind==="mention")).toHaveLength(1);
+  expect(other.read()).toBe("initial");
+  expect(bridge.inputDraftFor("a")).toBeUndefined();
+  const mounted=bind("a");mounted.edit.mockReturnValue(false);
+  const before=source.getDocument();
+  expect(()=>action.setDraft("not admitted")).toThrow("cannot accept");
+  expect(source.getDocument()).toBe(before);
+  mounted.off();action.setDraft("@Edited literal @[dsh.reference:missing|id|literal|clip]");
+  expect(source.getDocument().parts).toEqual([{kind:"text",text:"@Edited literal @[dsh.reference:missing|id|literal|clip]"}]);
+  expect(bridge.editInputDraft("unowned","not admitted")).toBe(false);
+  expect(sources.has("unowned")).toBe(false);
+  provider.dispose();expect(watches).toBe(0);
+  expect(()=>action.setDraft("after disposal")).toThrow("cannot accept");
+  other.off();
+});
+
+it("honors the actual offscreen one-shot session's read-only address", () => {
+  const source=createComposerDraftSource();
+  const {provider}=fixture(()=>source);
+  let mode:"one-shot"|"continuable"="one-shot";
+  const owner={sessionId:"child",session:{getSnapshot:()=>({queue:[],subagent:{address:{mode}}}),subscribe:()=>()=>{}},
+    ctx:{effect:(effect:()=>()=>void)=>effect()}};
+  const action=provider.resolve(owner as never).props!.inputActions as ConversationInputActions;
+  expect(()=>action.setDraft("readonly")).toThrow("cannot accept");
+  expect(source.getSnapshot()).toBe("");
+  mode="continuable";action.setDraft("allowed");
+  expect(source.getSnapshot()).toBe("allowed");
+  provider.dispose();
+});
+
+it("keeps the replacement owner's resident watch and releases stale owner watches exactly once", () => {
+  const source=createComposerDraftSource();
+  let watches=0;
+  const {provider}=fixture(()=>({setDisplayText:source.setDisplayText,subscribe(listener){watches++;const off=source.subscribe(listener);return()=>{watches--;off();};}}));
+  const owner=()=>({sessionId:"same",session:{getSnapshot:()=>({queue:[]}),subscribe:()=>()=>{}},ctx:{effect:(effect:()=>()=>void)=>effect()}});
+  const first=owner(),second=owner();
+  const actions=provider.resolve(first as never).props!.inputActions as ConversationInputActions;
+  expect(watches).toBe(1);
+  expect(provider.resolve(second as never).props!.inputActions).toBe(actions);
+  expect(watches).toBe(1);
+  actions.setDraft("replacement resident draft");
+  expect(source.getSnapshot()).toBe("replacement resident draft");
+  provider.dispose();provider.dispose();expect(watches).toBe(0);
 });

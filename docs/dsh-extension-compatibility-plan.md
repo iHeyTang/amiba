@@ -1256,3 +1256,12 @@ pipelines retain mounted component state.
 - 新增 11 个逐例对照测试：同一结构化草稿分别经真实 Lexical public edit 和驻留文档 public edit，核对实际 text/mention 节点及最终可见文本完全一致；涵盖原样、前后追加、中文/Emoji 引用内部修改、跨引用替换、换行、删除、新增 token 文字及清空。另验证公开文档编辑的保存/恢复和引用解散。相关测试共 93 项通过（/tmp/amiba-public-document-tests.log），UI 类型检查通过（/tmp/amiba-public-document-types.log）。
 - 完整 Desktop 构建通过（/tmp/amiba-public-document-build.log），最终组合回归 /tmp/amiba-public-document-smoke.log 退出 0，含现有公开输入、驻留引用、队列与整页刷新、运行状态、命令/图片、动态插件、轨迹及子会话冷重启。未修改样式或 JSX 结构。
 - 后续仍需将驻留文档接到标准会话提供者，并统一离屏快照、公开修订号/occurrence 身份、phase、图片和官方队列；本项仅完成其可复用的文字/引用转换，不代表完整 useInput 兼容。
+
+
+### 标准 inputActions 的离屏草稿写入（2026-09-13）
+
+- Shell 通过 UI 根模块导出的 sessionComposerDraft 使用原输入器同一驻留文档。真实会话提供者持有和释放订阅；标准 inputActions.setDraft 在原编辑器离屏时按会话 ID 写入该文档，沿用前一轮可见文本编辑规则与串行保存。未绑定会话拒绝写入，旧提供者释放不会解除新提供者的所有权。
+- 已挂载输入器始终走原编辑器操作，阶段或只读拒绝不能绕过；离屏的一次性子会话按真实 SessionFace 的 one-shot 地址拒绝。没有替换编辑器、JSX 或 CSS。
+- 输入状态来源、触发桥与动作提供者共 37 项测试通过（/tmp/amiba-offscreen-input-tests3.log）；Shell 和 UI 类型检查通过（/tmp/amiba-offscreen-input-types2.log、/tmp/amiba-offscreen-input-ui-types.log）。完整 Desktop 构建通过（/tmp/amiba-offscreen-input-build.log）。
+- 最终组合桌面回归 /tmp/amiba-offscreen-input-smoke.log 退出 0。探针保存官方 sessions.provide 的真实 inputActions，切换到另一会话后调用原会话 setDraft；当前输入框保持为空，切回及整页刷新后，原真实引用及新增普通文字完整保留。实际一次性子会话离屏后的标准写入也明确拒绝。原队列、刷新恢复、运行状态、命令与图片、动态 Cordis、轨迹、子会话及嵌套 Host 冷重启、插件生命周期一并通过。
+- 范围限定：此次验证已有绑定、先前打开过的会话的离屏写入，不声明首次异步恢复前的同步写入已覆盖全部恢复情况。完整 useInput、离屏公开快照、严格修订号与 occurrence 身份、离屏图片和提交、完整官方队列仍待适配；不会生成虚假的离屏修订号或绕过原提交准入。

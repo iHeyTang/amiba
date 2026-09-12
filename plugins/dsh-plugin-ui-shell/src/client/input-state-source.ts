@@ -1,7 +1,9 @@
 import type { ConversationInputState, ObservableSnapshot } from "@amiba/extension-sdk";
 import type { InputDraftSource, InputImagesSource } from "./input-trigger-bridge.js";
 
-export type InputQueueSession = ObservableSnapshot<Pick<ConversationInputState, "queue">>;
+export type InputQueueSession = ObservableSnapshot<Pick<ConversationInputState, "queue"> & {
+  subagent?: { address: { mode: "one-shot" | "continuable" } } | null;
+}>;
 export interface InputStateSource {
   getSnapshot(): ConversationInputState | undefined;
   subscribe(listener: () => void): () => void;
