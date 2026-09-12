@@ -1175,3 +1175,12 @@ pipelines retain mounted component state.
 - Host 版 dsh-api-remotes 的直接类型导入会把 Host sessions 声明并入本包 Client 的 Context 类型，导致 SessionStore 与 Client session API 冲突；已移除该导入，改为读取实际服务的窄接口。没有修改官方类型声明或 Client 会话能力来消除报错。
 - 9 项准备逻辑测试通过（/tmp/amiba-parent-recovery-tests2.log），覆盖真实身份传递、已驻留父复用、一次性/未知版本/祖先描述符跳过、普通新会话、存储错误、缺失 lookup、自指父身份及归属拒绝。Shell 类型检查通过（/tmp/amiba-parent-recovery-types2.log）。冷重启探针移除测试端 agents.resume，改为要求原生发送流程独立恢复父会话并续聊。
 - 完整 Desktop 构建通过（/tmp/amiba-parent-recovery-build.log）；最终组合桌面回归 /tmp/amiba-parent-recovery-smoke.log 退出 0。真实 Host PID 更换并刷新 renderer 后，测试未调用 agents.resume，也未创建父/子会话；原输入框发送触发生产 prepareSubmit 自动恢复普通根父会话，子会话返回真实新回复。一次性子会话恢复、原有命令/图片/输入/轨迹/Cordis/文件/配置/插件生命周期均通过，UI 结构和样式未改。
+
+
+### 嵌套子会话的驻留条件与草稿保留（2026-09-13）
+
+- 核对实际 rc.2 dsh-subagent 的公共声明：followup 把冷恢复与一条新用户消息的 FIFO 投递合并；startContinuable 是建立新子会话，interrupt 不恢复冷实例，没有独立的无消息恢复入口。内部 continuation.coldResume/materialize 不是公开服务契约。不能为了自动唤醒嵌套父会话而注入额外用户消息，或用 generic Agent lookup 绕过归属。
+- 新增 --child-nested-restart：在真实子 Agent 执行期间通过官方 startContinuable 建立真实孙会话，使用独立测试模型回复，再更换第二个真实 Host PID并刷新 renderer。孙会话的历史及目录来自持久化数据；初次发送因其直接父也为冷子会话而拒绝，原输入框中的 COMPAT_NESTED_FOLLOWUP 完整保留，未生成孙会话回复。
+- 测试通过原输入框向父会话发送明确的新请求，测试模型模拟一个仍在运行的父任务。此时父会话确实驻留；返回孙会话，直接发送保留的草稿即可得到真实 COMPAT_NESTED_REPLY COMPAT_NESTED_FOLLOWUP。最后通过原停止按钮中止父任务，完成插件卸载检查。没有测试端直接恢复父/孙 Agent。
+- 首轮 /tmp/amiba-nested-cold-smoke.log 暴露测试误以为已完成的子会话仍驻留：ctx.agents.get 返回 undefined。实际 continuation 的 settlement watcher 会在 Agent 空闲且无存活子实例时释放它。测试已改为在 Agent stream 执行期间创建孙会话、在父请求仍运行时重试孙会话，不再把历史可读或刚完成请求等同于驻留。
+- 最终 /tmp/amiba-nested-cold-smoke2.log 退出 0，包含原有完整兼容回归及两次真实 Host 冷重启。只扩展测试与边界说明，复用已验证的生产构建；不宣称当前已具备无消息自动恢复冷嵌套父会话的能力。

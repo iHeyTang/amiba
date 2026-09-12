@@ -81,7 +81,7 @@
 | 同版本 Host 插件、工具、生命周期 | 原生机制可用 | 每个插件声明的服务和外部依赖仍必须满足。 |
 | 官方组件样式 | 可适配，待完成 | 需提供局部样式资源，不能全局覆盖 Amiba 主题。 |
 | 官方完整 useInput/inputActions | 尚不能宣称全部支持 | inputActions 已通过 sessions.provide 连接原输入器的草稿、图片和提交操作；尚未挂载的输入器会明确拒绝官方草稿写入。原生文本及完整引用身份已按会话保存，切换和 renderer 重载恢复、显式清空、旧异步读写隔离均已验证；官方 useInput、离屏 inputActions、图片状态及队列恢复语义仍需继续适配，不能宣称完整支持。 |
-| 可续聊子会话的 Host 冷重启恢复 | 可以适配，有明确前提 | 历史和目录可从磁盘恢复。实际 rc.2 的 subagent.prompt 要求直接父 Agent 已驻留，否则返回 subagent-parent-unavailable；通过官方 agents.resume 恢复原父会话后，真实子会话冷恢复和原输入框续聊已验证。产品发送准备流程现已通过官方配置的 Agent lookup 自动恢复普通根父会话，真实冷重启续聊已通过；若冷父会话本身也是子会话，仍保留官方归属拒绝，嵌套 owner 恢复另需适配。 |
+| 可续聊子会话的 Host 冷重启恢复 | 可以适配，有明确前提 | 历史和目录可从磁盘恢复。实际 rc.2 的 subagent.prompt 要求直接父 Agent 已驻留，否则返回 subagent-parent-unavailable；通过官方 agents.resume 恢复原父会话后，真实子会话冷恢复和原输入框续聊已验证。产品发送准备流程现已通过官方配置的 Agent lookup 自动恢复普通根父会话，真实冷重启续聊已通过；若冷父会话本身也是子会话，当前公共接口没有单独的无消息恢复操作，不能把它当根会话恢复或自动投递虚构消息。拒绝时保留草稿、父会话实际运行后发送原草稿，均已通过真实嵌套冷重启验证。 |
 | 一次性子会话的继续发送和停止 | 当前官方契约不支持 | 实际 rc.2 Session.prompt 将 one-shot 判为只读；Session.cancel 同样拒绝。只能读取其记录，不能伪装成普通会话来继续或取消。 |
 | 可继续子会话的图片输入 | 当前官方客户端不支持 | 实际 rc.2 Session.prompt 明确拒绝包含 image 的子会话续聊；文本续聊和停止可通过 subagent.prompt / subagent.interrupt 适配。此结论限定当前版本。 |
 | 会话 ZIP 导出 | Desktop 已实测，Web 待实测 | Desktop file: 不能靠普通相对链接下载，已增加限定到运行时导出端点的原生交接。 |

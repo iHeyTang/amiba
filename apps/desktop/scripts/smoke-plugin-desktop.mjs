@@ -14,6 +14,9 @@ import assert from "node:assert/strict";
 if (process.argv.includes("--child-cold-restart") && !["--compat", "--child-navigation", "--child-continuation"].every(flag => process.argv.includes(flag))) {
   throw new Error("--child-cold-restart requires --compat --child-navigation --child-continuation");
 }
+if (process.argv.includes("--child-nested-restart") && !process.argv.includes("--child-cold-restart")) {
+  throw new Error("--child-nested-restart requires --child-cold-restart");
+}
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const profile = await mkdtemp(path.join(tmpdir(), "amiba-plugin-app-"));
 async function port() {
@@ -920,6 +923,52 @@ try {
     await wait(() => evaluate("document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_COLD_FOLLOWUP')"));
     await wait(() => evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
     console.log("Cold Host process replacement restored continuable child history and native submit automatically recovered its persisted parent through the configured official resolver");
+  }
+  if (process.argv.includes("--child-nested-restart")) {
+    await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0).focus();void 0");
+    await call("Input.insertText", { text: "COMPAT_NESTED_CREATE" });
+    await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_NESTED_CREATED'})")).entries.length > 0);
+    const openNested = async () => {
+      await wait(() => evaluate("(async()=>{await window.__probeCtx.sessions.refreshSubagents('compat-continuable-child');return window.__probeCtx.sessions.list.getSnapshot().subagentsByParent['compat-continuable-child']?.entries.some(e=>e.kind==='child'&&e.id==='compat-nested-child')})()"));
+      await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-child',childSessionId:'compat-nested-child',mode:'continuable'});void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_NESTED_REPLY COMPAT_NESTED_INITIAL') && !!window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child')"));
+    };
+    const sendText = async text => {
+      await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0).focus();void 0");
+      if (text) await call("Input.insertText", { text });
+      await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+      await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    };
+    await openNested();
+    const before = await evaluate("window.amiba.agentDiagnostics.status()");
+    const restarted = await evaluate("window.amiba.agentDiagnostics.restart()");
+    assert.ok(restarted.healthy && restarted.pid !== before.pid);
+    assert.throws(() => process.kill(before.pid, 0), error => error.code === "ESRCH");
+    await evaluate("window.__beforeNestedRestart=true;void 0");
+    await call("Page.reload", {});
+    await wait(async () => { try { return await evaluate("!window.__beforeNestedRestart && !!window.__probeCtx?.sessions"); } catch { return false; } });
+    await evaluate("window.__probeCtx.layout.openChat();void 0");
+    await openNested();
+    await sendText("COMPAT_NESTED_FOLLOWUP");
+    await wait(() => evaluate(`document.body.textContent.includes("Couldn't open the conversation") && window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child')?.draft==='COMPAT_NESTED_FOLLOWUP'`));
+    assert.ok(!await evaluate("document.body.textContent.includes('COMPAT_NESTED_REPLY COMPAT_NESTED_FOLLOWUP')"));
+    console.log("Cold nested parent ownership refusal preserved the original grandchild draft without sending a synthetic wake-up message");
+    await wait(() => evaluate("(async()=>{await window.__probeCtx.sessions.refreshSubagents('compat-continuable-parent');return window.__probeCtx.sessions.list.getSnapshot().subagentsByParent['compat-continuable-parent']?.entries.some(e=>e.kind==='child'&&e.id==='compat-continuable-child')})()"));
+    await evaluate("window.__probeCtx.sessions.open('compat-continuable-child');void 0");
+    await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')"));
+    await sendText("COMPAT_NESTED_PARENT_WAKE");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_NESTED_PARENT_WAKE')"));
+    await openNested();
+    assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child').draft"), "COMPAT_NESTED_FOLLOWUP");
+    await sendText("");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_NESTED_REPLY COMPAT_NESTED_FOLLOWUP')"));
+    console.log("An actually running parent continuation enabled the persisted nested child to submit its retained draft through the original composer");
+    await evaluate("window.__probeCtx.sessions.open('compat-continuable-child');void 0");
+    await wait(() => evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+    await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]').click();void 0");
+    await wait(() => evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
   }
   await evaluate("window.__probePoll=setInterval(()=>window.amiba.agentDiagnostics.status().catch(()=>{}),50)");
   cli.kill("SIGINT");
