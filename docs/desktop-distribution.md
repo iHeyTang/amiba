@@ -48,6 +48,7 @@ macOS 自动更新必须签名；面向公开分发还需 Apple Developer ID 和
 在 Actions 的 **Desktop build and release → Run workflow** 中选择：
 
 - `target=all`、`mode=test`：生成三个架构的未签名测试包，关闭客户端更新，产物保留在 Actions Artifacts 7 天。
+- `target=win32-x64`、`mode=verify`、`run_id=<已有构建 ID>`：复用原 EXE 验证安装与终端运行，不重新编译、不发布。
 - `target=win32-x64`、`mode=release`、`publish_draft=true`：生成 Windows 发布包并上传草稿 Release，允许没有代码签名证书。
 - `target=all`、`mode=release`、`publish_draft=true`：三个架构发布包全部通过后，依次上传同一个草稿 Release。必须先配置 Mac 签名与公证 secrets。
 
@@ -62,7 +63,7 @@ gh workflow run desktop-release.yml --repo iHeyTang/amiba --ref feat/amiba-distr
 
 推送 `v<桌面 package.json 版本>` 标签会触发所有架构的 release 构建并上传草稿；版本不匹配会失败。当前验证分支 `feat/amiba-distribution` 的普通 push 自动执行 test 构建。
 
-构建后校验更新清单的版本、目标架构和 SHA-512，运行内置 Node 与 Electron 原生 PTY。Mac 额外校验 DMG 和 ZIP；Windows 在临时 CI 机器里静默安装 EXE 后检查安装结果。安装包生成后即保存 Artifacts，运行检查失败时也保留文件便于排查；只有检查通过才允许上传 Release。上传 Release 时先验证所有目标文件，再顺序上传，草稿绑定实际构建提交。
+构建后校验更新清单的版本、目标架构和 SHA-512，运行内置 Node 与 Electron 原生 PTY。Mac 额外校验 DMG 和 ZIP；Windows 在临时 CI 机器里静默安装 EXE 后检查安装结果。安装包生成后即保存 Artifacts，运行检查失败时也保留文件便于排查；只有检查通过才允许上传 Release。上传 Release 时先验证所有目标文件，再顺序上传，草稿绑定实际构建提交。CI 上传后再次下载草稿资产，并按原构建记录检查 SHA-512。
 
 仓库 Variables 的 `AMIBA_UPDATE_URLS` 可指定 CDN 下载目录；GitHub 下载源作为兜底。发布用 Secrets：Mac 的 `CSC_LINK`、`CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`；Windows 可选 `WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD`。
 
@@ -99,6 +100,18 @@ CDN 更新清单应采用短缓存或不缓存；版本化安装包可长期缓�
 打包版本启动 30 秒后检查，此后每 6 小时检查。发现更新后后台下载，用户从左下角菜单查看进度并选择“重启并安装”。下载完成后不会在后台强制重启。安装前执行应用现有运行时关闭流程。
 
 开发运行或没有内嵌源配置时显示此构建不支持更新。手动检查与后台检查共用任务，避免重复下载；所有源失败后显示错误并允许重试。
+
+## 已完成的云端验证（2026-09-12～13）
+
+| 目标 | 结果 | 运行记录 |
+| --- | --- | --- |
+| Mac ARM | DMG/ZIP 校验、内置 Node、Electron PTY 通过并上传 Artifacts | [构建任务](https://github.com/iHeyTang/amiba/actions/runs/34700278843/job/103570718220) |
+| Mac Intel | DMG/ZIP 校验、内置 Node、Electron PTY 通过并上传 Artifacts | [构建任务](https://github.com/iHeyTang/amiba/actions/runs/34700278843/job/103570718233) |
+| Windows x64 | 构建、静默安装、内置 Node、Electron PTY、Release 上传与回读校验通过 | [完整发布验证](https://github.com/iHeyTang/amiba/actions/runs/34703422870) |
+
+Windows `v0.1.0` 已由 Actions 上传为草稿 Release，包含 EXE、blockmap 和 `latest-x64.yml`；源提交为 `bb21937fc78604eede7cc3eb1eca9e97030714b2`。上传后重新下载的所有文件均通过原始构建记录的 SHA-512 校验。
+
+Windows 托管机器上的实际安装约需 6 分半钟，检查允许最多 15 分钟；完整运行时使安装包和安装耗时较大。Mac 云端包为关闭自动更新的未签名测试包。Artifacts 保留 7 天。
 
 ## 尚需真实环境验证
 
