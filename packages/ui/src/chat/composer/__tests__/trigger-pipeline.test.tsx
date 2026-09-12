@@ -544,3 +544,21 @@ describe("claimed commands with staged images", () => {
     expect(attachmentsRef.current!.attachments).toHaveLength(outcomeKind==="success"?0:1);
   });
 });
+
+
+describe("enter adjudication attachment envelope", () => {
+  it.each([0, 2])("reports %i images to the official controller", async (count) => {
+    const controller=controllerDouble(fixtureSource());
+    const adjudicate=vi.spyOn(controller,"adjudicate").mockResolvedValue("handled");
+    const attachments:import("@amiba/app-runtime/core").Attachment[]=[
+      ...Array.from({length:count},(_,index)=>({uiId:`image-${index}`,attachmentId:`stored-${index}`,name:`photo-${index}.png`,mime:"image/png",size:3,kind:"image" as const})),
+      {uiId:"doc",attachmentId:"doc",name:"notes.txt",mime:"text/plain",size:3,kind:"text"},
+    ];
+    const onSubmit=vi.fn();
+    render(<ControlledComposer initial="/fixture" sessionId="s1" runtime={runtimeFor(controller)} controller={controller} onSubmit={onSubmit} initialAttachments={attachments}/>);
+    await waitFor(()=>expect(controller.tracked.length).toBeGreaterThan(0));
+    act(()=>screen.getByRole("button",{name:/send/iu}).click());
+    await waitFor(()=>expect(adjudicate).toHaveBeenCalledWith("/fixture",expect.any(AbortSignal),{images:count}));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});

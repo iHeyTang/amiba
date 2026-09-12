@@ -921,3 +921,10 @@ pipelines retain mounted component state.
 - 原图序列化 8 项、输入管线 14 项、消息展示 49 项、桥接 11 项测试通过（82 项）；UI/Shell 类型检查及完整 Desktop 构建通过。
 - `/tmp/amiba-command-images-smoke2.log` 退出 0：`--compat --command-images --child-continuation --child-navigation --child-reload` 从原隐藏文件输入上传真实 PNG，通过官方 source 的命令判定和原发送按钮执行，断言插件收到的完整 base64、文件名及 MIME 与上传文件相同，成功后附件与草稿被消费。同轮子会话发送、停止、只读、重载及现有完整兼容回归通过。首次 smoke 因未等待附件上传完成点击了禁用按钮；已补等待，不将该失败算作成功证据。
 - 这只补齐命令携带图片的提交路径，尚不表示完整 `useInput/inputActions` 的草稿、引用和附件 ID 服务已接入。
+
+### 官方提交判定的附件数量（2026-09-13）
+
+- 实际 rc.2 的 `InputTriggerController.adjudicate(line, signal, envelope)` 将第三参数直接传给每个 source 的 `matchEnter`。官方 commands source 会读取 `envelope.images`，且不会补默认值。此前 Amiba 的结构类型和调用都遗漏该必需参数。
+- 先复现 0 张及 2 张图片的两项失败，再补充真实图片数量；普通文件不计入该数量。公共结构类型直接引用官方 source 回调参数，避免再次把必需字段漏掉。24 项相关测试与 UI 类型检查通过。
+- 完整输入服务的后续约束：官方 `SessionProvideChannel` 拒绝同名 hook/prop 的重复提供者；现有 `input` / `inputActions` 来自 ui-conversation 的 InputHub。完整桥接必须接到该唯一提供者及真实编辑器状态，不能叠加第二套同名提供者或只提供空快照。
+- 完整 Desktop 构建通过；`/tmp/amiba-input-envelope-smoke.log` 的 `--compat --command-images` 退出 0，真实官方 source 在 `matchEnter` 阶段收到 `{images:1}`，随后命令仍收到原图字节。既有完整兼容 smoke 同轮通过，未修改布局或 CSS。

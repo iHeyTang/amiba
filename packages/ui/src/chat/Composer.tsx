@@ -577,7 +577,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           trigger.setAttemptInFlight(true);
           let outcome;
           try {
-            outcome = await controller.adjudicate(trimmed, attempt.signal);
+            outcome = await controller.adjudicate(trimmed, attempt.signal, {
+              images: attachments?.attachments.filter((item) => item.kind === "image").length ?? 0,
+            });
           } catch (error) {
             setCommandNotice(
               error instanceof Error ? error.message : String(error),

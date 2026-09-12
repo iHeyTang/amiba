@@ -373,7 +373,7 @@ try {
       const imagePath = path.join(profile, "command-image.png");
       const imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJ1sAAAAASUVORK5CYII=";
       await writeFile(imagePath, Buffer.from(imageData,"base64"));
-      await evaluate(`window.__commandImages=[];window.__imageClaim={token:'/compat-image ',images:true,submit:async(args,ctx,images)=>{window.__commandImages.push({args,images});return {kind:'success',text:'COMPAT_IMAGE_COMMAND_OK'}}};window.__imageSourceOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-image-source',trigger:'/',order:-100,candidates:async()=>[],onPick:()=>({claim:window.__imageClaim}),matchEnter:async(_session,line)=>{window.__imageAdjudicated=(window.__imageAdjudicated||0)+1;return line.startsWith('/compat-image ')?{claim:window.__imageClaim}:undefined}});void 0`);
+      await evaluate(`window.__commandImages=[];window.__imageClaim={token:'/compat-image ',images:true,submit:async(args,ctx,images)=>{window.__commandImages.push({args,images});return {kind:'success',text:'COMPAT_IMAGE_COMMAND_OK'}}};window.__imageSourceOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-image-source',trigger:'/',order:-100,candidates:async()=>[],onPick:()=>({claim:window.__imageClaim}),matchEnter:async(_session,line,_signal,envelope)=>{window.__imageEnvelope=envelope;window.__imageAdjudicated=(window.__imageAdjudicated||0)+1;return line.startsWith('/compat-image ')?{claim:window.__imageClaim}:undefined}});void 0`);
       await evaluate("Array.from(document.querySelectorAll('[data-composer-card]')).find(n=>n.getClientRects().length>0).parentElement.querySelector('input[type=file]').id='compat-image-input';void 0");
       const documentNode = await call("DOM.getDocument");
       const fileNode = await call("DOM.querySelector", {nodeId:documentNode.root.nodeId,selector:'#compat-image-input'});
@@ -391,6 +391,7 @@ try {
         }
       }
       await wait(() => evaluate("window.__commandImages.length===1"));
+      assert.deepEqual(await evaluate("window.__imageEnvelope"), {images:1});
       assert.deepEqual(await evaluate("window.__commandImages[0]"), {args:"describe",images:[{mediaType:"image/png",data:imageData,name:"command-image.png"}]});
       await wait(() => evaluate("!document.body.textContent.includes('command-image.png')"));
       assert.equal(await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).find(n=>n.getClientRects().length>0).textContent"), "");

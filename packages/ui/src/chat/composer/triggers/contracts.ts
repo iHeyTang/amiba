@@ -18,6 +18,7 @@ import type {
   ClientSessionContext,
   CommandClaim,
   ConsumeTokenRequest,
+  InputTriggerSource,
   MenuState,
   ObservableSnapshot,
   PickOutcome,
@@ -78,7 +79,7 @@ export interface ComposerTriggerController {
   /** Space adjudication over the just-completed leading token. */
   onSpace(): boolean;
   /** Enter adjudication; rejects when a polled source's warmup failed. */
-  adjudicate(line: string, signal: AbortSignal): Promise<PickOutcome>;
+  adjudicate(line: string, signal: AbortSignal, envelope: Parameters<NonNullable<InputTriggerSource["matchEnter"]>>[3]): Promise<PickOutcome>;
   /** Serialize one reference occurrence to its model form via its codec. */
   serializeReference(
     source: string,
