@@ -74,6 +74,8 @@ export type OfficialPopupController = CommandPopupController & {
 };
 
 export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
+  /** Live editor projection; absent until that session has an attached editor. */
+  inputDraftFor(sessionId: string): ReturnType<NonNullable<TriggerEditorOps["readInputDraft"]>> | undefined;
   /** Publish Amiba's own sources; returns the aggregate disposer. */
   registerSources(sources: readonly InputTriggerSource[], drafts?: boolean): () => void;
   /** Resolve the official controller for a session (seat + composer share it). */
@@ -85,10 +87,12 @@ export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
 export function createInputTriggerBridge(
   deps: InputTriggerBridgeDeps,
 ): AmibaInputTriggerBridge {
+  const editors = new Map<string, TriggerEditorOps>();
   let draftSources: readonly InputTriggerSource[] = [];
   const listeners = new Set<() => void>();
   const notify = () => { for (const listener of listeners) listener(); };
   return {
+    inputDraftFor: (sessionId) => editors.get(sessionId)?.readInputDraft?.(),
     draftSources: () => draftSources,
     registerSources(sources, drafts = false) {
       const service = deps.inputTriggers();
@@ -141,6 +145,7 @@ export function createInputTriggerBridge(
     bindEditor(sessionId: string, ops: TriggerEditorOps): () => void {
       const actx = deps.scopeOf(sessionId);
       if (actx === undefined) return () => {};
+      editors.set(sessionId, ops);
       // Each listener answers `true` ONLY when its verb reports an observed
       // mutation; `undefined` is the bail protocol's "not handled here", so
       // an unapplied outcome falls through exactly as it must.
@@ -159,6 +164,7 @@ export function createInputTriggerBridge(
         ),
       ];
       return () => {
+        if (editors.get(sessionId) === ops) editors.delete(sessionId);
         for (const off of offs) off();
       };
     },

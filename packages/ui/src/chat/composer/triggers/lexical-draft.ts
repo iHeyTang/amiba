@@ -4,12 +4,14 @@
  * The official trigger pipeline speaks in flat draft offsets: `track(draft,
  * caret, …)` detects a token span, and every pick outcome carries a
  * `TokenSpan { start, end, draftRev }` into that same string. Amiba's editor
- * is a Lexical tree, so every op here converts between the two.
+ * is a Lexical tree, so every op here converts between the two. This is
+ * Amiba's menu coordinate space; public InputState has a separate full-label
+ * projection in input-draft.ts.
  *
  * THE DRAFT PROJECTION. A mention chip contributes exactly ONE character —
- * U+FFFC (OBJECT REPLACEMENT CHARACTER) — to the trigger draft, which is the
- * official placeholder convention (`ReferenceInsert`: "the draft holds one
- * U+FFFC placeholder per occurrence"). This is NOT cosmetic:
+ * U+FFFC (OBJECT REPLACEMENT CHARACTER) — to Amiba's trigger draft. This
+ * preserves the existing menu/caret convention; the pinned official public
+ * input contract instead represents complete @labels. This is NOT cosmetic:
  *
  *   - `MentionNode.getTextContent()` is the canonical `@[type:body]` TOKEN,
  *     because that string IS Amiba's persisted composer value. Feeding that

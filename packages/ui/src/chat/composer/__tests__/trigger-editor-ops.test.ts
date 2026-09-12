@@ -241,3 +241,37 @@ describe("the claim integrity watch", () => {
     expect(claims.get()).toBeNull();
   });
 });
+
+
+describe("public input draft projection", () => {
+  it("keeps full display offsets and distinct stable identities without changing trigger coordinates", () => {
+    const {editor,ops,revision}=setup("");
+    const ref={source:"fixture",ref:"same",label:"文档",clipboardText:"@original"};
+    expect(ops.insertReference(ref,span(0,0))).toBe(true);
+    expect(ops.insertReference(ref,span(2,2))).toBe(true);
+    const first=ops.readInputDraft!();
+    expect(first.draft).toBe("@文档 @文档 ");
+    expect(first.occurrences.map(item=>[item.offset,item.length,item.clipboardText])).toEqual([[0,3,"@original"],[4,3,"@original"]]);
+    expect(first.occurrences[0].occurrenceId).not.toBe(first.occurrences[1].occurrenceId);
+    expect(ops.readInputDraft!()).toBe(first);
+    expect(draftOf(editor)).toBe(`${PLACEHOLDER} ${PLACEHOLDER} `);
+    expect(ops.insertText("😀 ",span(0,0))).toBe(true);
+    revision.bump();
+    const next=ops.readInputDraft!();
+    expect(next.draftRev).toBe(1);
+    expect(next.occurrences.map(item=>item.offset)).toEqual([3,7]);
+    expect(next.occurrences.map(item=>item.occurrenceId)).toEqual(first.occurrences.map(item=>item.occurrenceId));
+    expect(first.draft).toBe("@文档 @文档 ");
+    expect(Object.isFrozen(next.occurrences[0])).toBe(true);
+  });
+
+  it("preserves native tokens and paragraph boundaries without inventing reference owners", () => {
+    const {editor,ops}=setup("Before");
+    editor.update(()=>{
+      const paragraph=$createParagraphNode();
+      paragraph.append(new MentionNode({type:"file",payload:{path:"notes.txt"},display:"notes.txt"}));
+      $getRoot().append(paragraph);
+    },{discrete:true});
+    expect(ops.readInputDraft!()).toMatchObject({draft:"Before\n\n@[file:notes.txt]",occurrences:[]});
+  });
+});

@@ -107,7 +107,23 @@ export interface ComposerTriggerController {
  * counter, so a CAS-passing outcome whose splice is a no-op still answers
  * `false`.
  */
+/** The text/reference portion of official InputState, read from the live editor. */
+export interface ComposerInputDraft {
+  readonly draft: string;
+  readonly draftRev: number;
+  readonly occurrences: readonly {
+    readonly occurrenceId: number;
+    readonly source: string;
+    readonly ref: string;
+    readonly offset: number;
+    readonly length: number;
+    readonly label: string;
+    readonly clipboardText: string;
+  }[];
+}
+
 export interface TriggerEditorOps {
+  readInputDraft?(): ComposerInputDraft;
   beginCommand(claim: CommandClaim, span: TokenSpan): boolean;
   insertReference(reference: ReferenceInsert, span: TokenSpan): boolean;
   consumeToken(guard: ConsumeTokenGuard): boolean;

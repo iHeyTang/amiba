@@ -1,3 +1,4 @@
+import { InputDraftProjection } from "./input-draft";
 /**
  * The four scoped `slash/input-*` verbs, implemented against Amiba's Lexical
  * editor.
@@ -113,7 +114,11 @@ export function createTriggerEditorOps(
     span.start <= span.end &&
     span.end <= draftLength;
 
+  const inputDraft = new InputDraftProjection();
   return {
+    readInputDraft() {
+      return editor.getEditorState().read(() => inputDraft.read(revision.value));
+    },
     beginCommand(claim: CommandClaim, span: TokenSpan): boolean {
       const entered = transact(editor, () => {
         const before = $scanDraft();

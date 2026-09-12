@@ -1,3 +1,4 @@
+import { $getRoot } from "lexical";
 /**
  * THE DRIVER. Everything upstream's ui-conversation InputBar supplies to the
  * official trigger pipeline, supplied here from Amiba's Lexical composer.
@@ -64,8 +65,11 @@ export function OfficialTriggerPlugin({
       editorState.read(() => {
         const scan = $scanDraft();
         const caret = $caretOffset(scan);
-        if (scan.draft !== lastDraft) {
-          lastDraft = scan.draft;
+        // Identity/label changes can leave the one-character trigger draft
+        // unchanged, but still invalidate a public input/reference snapshot.
+        const persistedDraft = $getRoot().getTextContent();
+        if (persistedDraft !== lastDraft) {
+          lastDraft = persistedDraft;
           revision.bump();
           // Token integrity watch: an edit that breaks the claim prefix
           // releases command mode (upstream `watchClaim`).

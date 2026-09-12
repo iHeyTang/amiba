@@ -231,3 +231,19 @@ describe("service resolution", () => {
     ).rejects.toThrow(/resolved no scope/u);
   });
 });
+
+
+it("exposes only the current bound editor's input projection", () => {
+  const bridge=bridgeOver(scopeDouble());
+  const first={draft:"first",draftRev:1,occurrences:[]};
+  const second={draft:"second",draftRev:2,occurrences:[]};
+  expect(bridge.inputDraftFor("s1")).toBeUndefined();
+  const disposeFirst=bridge.bindEditor("s1",{...opsDouble(true),readInputDraft:()=>first});
+  expect(bridge.inputDraftFor("s1")).toBe(first);
+  expect(bridge.inputDraftFor("s2")).toBeUndefined();
+  const disposeSecond=bridge.bindEditor("s1",{...opsDouble(true),readInputDraft:()=>second});
+  disposeFirst();
+  expect(bridge.inputDraftFor("s1")).toBe(second);
+  disposeSecond();
+  expect(bridge.inputDraftFor("s1")).toBeUndefined();
+});
