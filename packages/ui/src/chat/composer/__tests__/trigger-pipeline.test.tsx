@@ -647,6 +647,7 @@ it("isolates a new session's submitting phase from an older command settlement",
   await waitFor(()=>expect(submitClaim).toHaveBeenCalledTimes(1));
   rerender(<ControlledComposer {...props} sessionId="s2"/>);
   act(()=>editDraft.current("/image second"));
+  await waitFor(()=>expect(controller.ops).not.toBeNull());
   expect(controller.ops!.readInputDraft!().phase).toBe("plain");
   enter();click();
   await waitFor(()=>expect(submitClaim).toHaveBeenCalledTimes(2));

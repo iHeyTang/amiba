@@ -1126,3 +1126,13 @@ pipelines retain mounted component state.
 - 重新加载 renderer 后，真实 trajectory Client fiber 启动，官方会话根 ui-conversation 仍不在 Host 图中。原工具折叠组按现有默认状态恢复；测试展开后点击工具扩展 inspect，官方轨迹选中实际 pkg-2 调用并显示原结果，局部字号为 13px。
 - 正常移除条目并重新加载后，轨迹视图消失，唯一 Amiba 根页面及原 Chat 恢复。此路径验证配置和启动依赖，不声称新插件可以免刷新启用，也不将其当作跨刷新未发送草稿持久化的证据；输入状态持久化仍在完整输入适配范围内。上一项免刷新 ctx.plugin 卸载的原编辑器/草稿保留证据仍成立。
 - 最终组合回归 /tmp/amiba-trajectory-loader-smoke5.log 退出 0，包含命令历史重载、输入状态、图片、子会话续聊/停止/导航/重载、产出文件、配置及清理。早期日志 1/3 验证了需刷新，日志 2 暴露测试 Host 未声明 clientModules 注入（已修正），日志 4 暴露重载后测试未展开原工具折叠组（已修正）。本轮仅扩展验证脚本和文档，复用已通过构建的生产代码。
+
+
+### 原生会话草稿与引用持久化（2026-09-13）
+
+- 原输入器改用按会话驻留的草稿源，通过平台 StorageAdapter 保存 version:1 的原生 token 文本。沿用 MentionSerializePlugin 的无损格式，保存 source、ref、label、clipboardText，不将公开显示字符串当作引用身份；首页草稿保持独立。
+- 写入按会话串行，订阅释放存储监听；恢复读取带修订号和读取代次隔离，不能覆盖后续编辑或显式空草稿。离屏写入尚未完成时不读取旧磁盘值。异步 setter 绑定原会话，首次发送创建会话后工作目录失败则恢复到实际新会话。
+- 官方编辑器绑定延后至序列化更新之后的微任务，避免将上一会话 Lexical 树短暂发布给新会话。早期桌面探针捕获该瞬态；最终验证第二会话收到的每一帧均为空。试验性的同步 Lexical flush 导致原触发管线回归，已完全撤销，保留原异步序列化机制。
+- 真实官方触发源插入含中文、Emoji、分隔符的引用，经过会话切换和完整 renderer reload 后逐字段验证身份；第二会话普通草稿也独立恢复，两边显式清空均保留。截图 amiba-resident-reference-draft.png 已查看，原输入器和引用样式保持。
+- 草稿源、RichComposerEditor、触发管线及待发送队列共 49 项测试通过（/tmp/amiba-resident-draft-tests5.log）；UI 类型检查通过（types5），完整 Desktop 构建通过（build4）。最终组合桌面回归 /tmp/amiba-resident-draft-smoke3.log 退出 0，涵盖本项、动态 Cordis、正常轨迹配置启停、命令、输入状态、图片和子会话续聊/停止/导航/重载。
+- 本项补齐原生文本与引用的生命周期，没有改变附件策略或 UI 样式。官方 useInput、离屏 inputActions、图片驻留及队列恢复仍未全部接通；不据此声明完整输入兼容。

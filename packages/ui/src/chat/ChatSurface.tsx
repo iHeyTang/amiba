@@ -1,3 +1,4 @@
+import { useSessionComposerDraft } from "./use-session-composer-draft";
 import { useConversationSubmitHandoff } from "./useConversationSubmitHandoff";
 import { usePrepareConversationSubmit } from "./conversation-submit";
 import { createSurfaceActivity } from "../primitives/surface-activity";
@@ -464,7 +465,7 @@ export default function ChatSurface({
     resolveChatSurfaceMode(sessions.activeId) === "conversation";
   const workspacePane = useWorkspacePane();
 
-  const [input, setInput] = useState("");
+  const [input, setInput, setSessionInput] = useSessionComposerDraft(sessions.activeId);
   const handledNewConversationRequestRef = useRef(newConversationRequestKey);
   const defaultProfileIdRef = useRef("default");
   const [draftAgent, setDraftAgent] = useState<AgentExecutionContext>({
@@ -1611,7 +1612,7 @@ export default function ChatSurface({
           // The send path has already consumed the composer values. Restore
           // them so the user can choose another directory and retry without
           // losing the prompt or its attachments.
-          setInput(text);
+          setSessionInput(sessionId, text);
           setAttachments(attachmentsForTurn);
           return;
         }
@@ -1636,7 +1637,7 @@ export default function ChatSurface({
       } catch (e) {
         const message = String((e as Error)?.message || e);
         setWorkspaceError(message);
-        setInput(text);
+        setSessionInput(sessionId, text);
         setAttachments(attachmentsForTurn);
         return;
       }

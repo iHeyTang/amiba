@@ -518,6 +518,41 @@ try {
       await wait(() => evaluate("document.body.textContent.includes('COMPAT_COMMAND_RESULT')&&!document.body.textContent.includes('COMPAT_CUSTOM_RESULT')"));
       console.log("Official keyed command row received the actual Host lifecycle and args; renderer reload upgraded one durable result without duplication, and unregister restored its native presentation");
     }
+    if (process.argv.includes("--resident-draft")) {
+      const originalId = await evaluate("window.__compatSessionId");
+      const otherCwd = path.join(profile,"draft-other");
+      await mkdir(otherCwd,{recursive:true});
+      const otherId = await evaluate(`window.__probeCtx.sessions.create({cwd:${JSON.stringify(otherCwd)}})`);
+      const sourceCode = `window.__draftReferenceOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-resident-ref',trigger:'@',order:-100,candidates:async()=>[],onPick:()=>({}),matchSpace:(_session,token)=>token==='@keep'?{insert:{source:'compat-resident-ref',ref:'file|id]',label:'引用😀',clipboardText:'clip|]😀'}}:undefined,codec:{serialize:ref=>'<resident>'+ref+'</resident>'}});void 0`;
+      await evaluate(sourceCode);
+      await wait(() => evaluate("Boolean(window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId))"));
+      await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'@keep');void 0");
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor(window.__compatSessionId).onSpace()"),true);
+      await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.occurrences.length===1"));
+      const originalDraft = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
+      const expectedReference = {source:'compat-resident-ref',ref:'file|id]',label:'引用😀',clipboardText:'clip|]😀'};
+      assert.deepEqual(Object.fromEntries(Object.keys(expectedReference).map(k=>[k,originalDraft.occurrences[0][k]])),expectedReference);
+      await evaluate(`window.__otherDraftFrames=[];window.__otherDraftOff=window.__probeCtx.composerInputs.inputDraftSource(${JSON.stringify(otherId)}).subscribe(()=>window.__otherDraftFrames.push(window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft));window.__probeCtx.sessions.open(${JSON.stringify(otherId)});void 0`);
+      await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft===''`));
+      assert.ok((await evaluate("window.__otherDraftFrames")).filter(value=>value!==null).every(value=>value===''), "new session must never publish the previous session draft");
+      await evaluate(`window.__probeCtx.composerInputs.setInputDraft(${JSON.stringify(otherId)},'COMPAT_SECOND_DRAFT');window.__otherDraftOff();window.__probeCtx.sessions.open(${JSON.stringify(originalId)});void 0`);
+      await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(originalId)})?.draft===${JSON.stringify(originalDraft.draft)}`));
+      await evaluate("window.__draftReferenceOff();window.__residentDraftBoot=true;void 0");
+      await call("Page.reload",{});
+      await wait(() => evaluate("!window.__residentDraftBoot && !!window.__probeCtx?.sessions"));
+      await evaluate(`window.__compatSessionId=${JSON.stringify(originalId)};window.__probeCtx.sessions.open(window.__compatSessionId);void 0`);
+      await evaluate(sourceCode);
+      await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===${JSON.stringify(originalDraft.draft)}`));
+      const restored = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
+      assert.deepEqual(Object.fromEntries(Object.keys(expectedReference).map(k=>[k,restored.occurrences[0][k]])),expectedReference);
+      await writeFile(path.join(tmpdir(),"amiba-resident-reference-draft.png"),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+      await evaluate(`window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'');window.__probeCtx.sessions.open(${JSON.stringify(otherId)});void 0`);
+      await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft==='COMPAT_SECOND_DRAFT'`));
+      await evaluate(`window.__probeCtx.composerInputs.setInputDraft(${JSON.stringify(otherId)},'');window.__probeCtx.sessions.open(window.__compatSessionId);window.__draftReferenceOff();void 0`);
+      await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===''") );
+      console.log("Native session drafts and full reference identity survived switching and renderer reload; explicit clears stayed cleared");
+    }
     if (process.argv.includes("--input-state")) {
       await evaluate("window.__inputSource=window.__probeCtx.composerInputs.inputDraftSource(window.__compatSessionId);window.__inputObserved=[];window.__inputOff=window.__inputSource.subscribe(()=>{const s=window.__inputSource.getSnapshot();window.__inputObserved.push(s?{draft:s.draft,phase:s.phase}:null)});window.__initialInput=window.__inputSource.getSnapshot();void 0");
       assert.equal(await evaluate("window.__initialInput.phase"), "plain");

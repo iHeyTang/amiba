@@ -46,10 +46,19 @@ export function OfficialTriggerPlugin({
   // The four scoped bail listeners, for as long as this editor is mounted.
   useEffect(() => {
     if (runtime === undefined || !sessionId) return;
-    return runtime.bindEditor(
-      sessionId,
-      createTriggerEditorOps(editor, claims, revision, () => editor.isEditable() && trigger.guard().tier !== "frozen"),
-    );
+    let active = true;
+    let off: (() => void) | undefined;
+    // MentionSerializePlugin commits external/session draft changes in the
+    // preceding microtask. Do not publish the outgoing node tree under the
+    // incoming session, or force a synchronous Lexical flush during React effects.
+    queueMicrotask(() => {
+      if (!active) return;
+      off = runtime.bindEditor(
+        sessionId,
+        createTriggerEditorOps(editor, claims, revision, () => editor.isEditable() && trigger.guard().tier !== "frozen"),
+      );
+    });
+    return () => { active = false; off?.(); };
   }, [claims, editor, revision, runtime, sessionId]);
 
   // `commandUi` returns focus to the composer after a popup settles.

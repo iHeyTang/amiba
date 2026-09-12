@@ -36,7 +36,7 @@
 | 26 | `conversation.session.header.corner` | 新版契约，待验证 | 需要核对新版头部区域及其 owner；可考虑附加位置。 |
 | 27 | `conversation.session.header.lineage` | 新版契约，待验证 | 需要真实会话派生关系数据和导航回调。 |
 | 28 | `conversation.session.header.utilities` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
-| 29 | `conversation.trajectory.images` | 新版契约，待验证 | 依赖尚未接入的轨迹视图和图片数据接口。 |
+| 29 | `conversation.trajectory.images` | 新版契约，待验证 | 现已接入 rc.2 轨迹视图；仍需核对新版图片数据接口及该入口契约。 |
 | 30 | `conversation.view` | 可以适配，已验证 | 增加插件视图标签；保留原对话及草稿。依赖完整输入服务的视图另算。 |
 | 31 | `details` | 不能同时原样接管 | 完整接管该区域可能替换现有界面或创建第二套控制器。需拆出附加能力；不能宣称完整兼容。 |
 | 32 | `main` | 不能同时原样接管 | 完整接管该区域可能替换现有界面或创建第二套控制器。需拆出附加能力；不能宣称完整兼容。 |
@@ -80,7 +80,7 @@
 | 官方 sessions.open | 已适配并实测 | 插件可从首页主动打开会话；启动恢复不会因此替换首页。clear 已接入现有取消选择并通过桌面验证；读取历史/元数据期间的取消竞态已修复并通过状态测试；真实目录子会话的打开、返回父会话、首页主动打开、只读输入及渲染器重载已通过桌面验证；可续聊子会话通过原输入框文本发送和停止已完成真实桌面验证；冷 Host 恢复另核对。 |
 | 同版本 Host 插件、工具、生命周期 | 原生机制可用 | 每个插件声明的服务和外部依赖仍必须满足。 |
 | 官方组件样式 | 可适配，待完成 | 需提供局部样式资源，不能全局覆盖 Amiba 主题。 |
-| 官方完整 useInput/inputActions | 尚不能宣称全部支持 | inputActions 已通过 sessions.provide 连接原输入器的草稿、图片和提交操作；尚未挂载的输入器会明确拒绝草稿写入。useInput、离屏草稿及队列恢复语义仍需继续适配，不能宣称完整支持。 |
+| 官方完整 useInput/inputActions | 尚不能宣称全部支持 | inputActions 已通过 sessions.provide 连接原输入器的草稿、图片和提交操作；尚未挂载的输入器会明确拒绝官方草稿写入。原生文本及完整引用身份已按会话保存，切换和 renderer 重载恢复、显式清空、旧异步读写隔离均已验证；官方 useInput、离屏 inputActions、图片状态及队列恢复语义仍需继续适配，不能宣称完整支持。 |
 | 一次性子会话的继续发送和停止 | 当前官方契约不支持 | 实际 rc.2 Session.prompt 将 one-shot 判为只读；Session.cancel 同样拒绝。只能读取其记录，不能伪装成普通会话来继续或取消。 |
 | 可继续子会话的图片输入 | 当前官方客户端不支持 | 实际 rc.2 Session.prompt 明确拒绝包含 image 的子会话续聊；文本续聊和停止可通过 subagent.prompt / subagent.interrupt 适配。此结论限定当前版本。 |
 | 会话 ZIP 导出 | Desktop 已实测，Web 待实测 | Desktop file: 不能靠普通相对链接下载，已增加限定到运行时导出端点的原生交接。 |
