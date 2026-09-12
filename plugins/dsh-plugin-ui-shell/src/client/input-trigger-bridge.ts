@@ -73,9 +73,16 @@ export type OfficialPopupController = CommandPopupController & {
   retry(): void;
 };
 
+type InputDraft = ReturnType<NonNullable<TriggerEditorOps["readInputDraft"]>>;
+export interface InputDraftSource {
+  getSnapshot(): InputDraft | undefined;
+  subscribe(listener: () => void): () => void;
+}
+
 export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
   /** Live editor projection; absent until that session has an attached editor. */
   inputDraftFor(sessionId: string): ReturnType<NonNullable<TriggerEditorOps["readInputDraft"]>> | undefined;
+  inputDraftSource(sessionId: string): InputDraftSource;
   /** Publish Amiba's own sources; returns the aggregate disposer. */
   registerSources(sources: readonly InputTriggerSource[], drafts?: boolean): () => void;
   /** Resolve the official controller for a session (seat + composer share it). */
@@ -87,12 +94,38 @@ export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
 export function createInputTriggerBridge(
   deps: InputTriggerBridgeDeps,
 ): AmibaInputTriggerBridge {
-  const editors = new Map<string, TriggerEditorOps>();
+  const editors = new Map<string, { ops: TriggerEditorOps }>();
+  const draftListeners = new Map<string, Set<() => void>>();
+  const draftSourcesBySession = new Map<string, InputDraftSource>();
+  const notifyDraft = (id: string) => { for (const listener of draftListeners.get(id) ?? []) listener(); };
+  const inputDraftSource = (id: string): InputDraftSource => {
+    let source = draftSourcesBySession.get(id);
+    if (!source) {
+      source = {
+        getSnapshot: () => editors.get(id)?.ops.readInputDraft?.(),
+        subscribe(listener) {
+          let subscribers = draftListeners.get(id);
+          if (!subscribers) { subscribers = new Set(); draftListeners.set(id, subscribers); }
+          subscribers.add(listener);
+          let active = true;
+          return () => {
+            if (!active) return;
+            active = false;
+            subscribers.delete(listener);
+            if (!subscribers.size && draftListeners.get(id) === subscribers) draftListeners.delete(id);
+          };
+        },
+      };
+      draftSourcesBySession.set(id, source);
+    }
+    return source;
+  };
   let draftSources: readonly InputTriggerSource[] = [];
   const listeners = new Set<() => void>();
   const notify = () => { for (const listener of listeners) listener(); };
   return {
-    inputDraftFor: (sessionId) => editors.get(sessionId)?.readInputDraft?.(),
+    inputDraftSource,
+    inputDraftFor: (sessionId) => editors.get(sessionId)?.ops.readInputDraft?.(),
     draftSources: () => draftSources,
     registerSources(sources, drafts = false) {
       const service = deps.inputTriggers();
@@ -145,26 +178,31 @@ export function createInputTriggerBridge(
     bindEditor(sessionId: string, ops: TriggerEditorOps): () => void {
       const actx = deps.scopeOf(sessionId);
       if (actx === undefined) return () => {};
-      editors.set(sessionId, ops);
+      const binding = { ops };
+      editors.set(sessionId, binding);
+      const current = () => editors.get(sessionId) === binding;
+      const offDraft = ops.subscribeInputDraft?.(() => { if (current()) notifyDraft(sessionId); });
+      notifyDraft(sessionId);
       // Each listener answers `true` ONLY when its verb reports an observed
       // mutation; `undefined` is the bail protocol's "not handled here", so
       // an unapplied outcome falls through exactly as it must.
       const offs = [
         actx.on("slash/input-begin-command", (request) =>
-          ops.beginCommand(request.claim, request.span) ? true : undefined,
+          current() && ops.beginCommand(request.claim, request.span) ? true : undefined,
         ),
         actx.on("slash/input-insert-reference", (request) =>
-          ops.insertReference(request.reference, request.span) ? true : undefined,
+          current() && ops.insertReference(request.reference, request.span) ? true : undefined,
         ),
         actx.on("slash/input-consume-token", (request) =>
-          ops.consumeToken(request.guard) ? true : undefined,
+          current() && ops.consumeToken(request.guard) ? true : undefined,
         ),
         actx.on("slash/input-insert-text", (request) =>
-          ops.insertText(request.text, request.span) ? true : undefined,
+          current() && ops.insertText(request.text, request.span) ? true : undefined,
         ),
       ];
       return () => {
-        if (editors.get(sessionId) === ops) editors.delete(sessionId);
+        offDraft?.();
+        if (current()) { editors.delete(sessionId); notifyDraft(sessionId); }
         for (const off of offs) off();
       };
     },

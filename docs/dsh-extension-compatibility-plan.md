@@ -942,3 +942,10 @@ pipelines retain mounted component state.
 - 从真实 Lexical 树读取完整草稿和官方引用表：同名引用按节点身份分配不同稳定 occurrenceId；保留 source/ref/label/clipboardText，UTF-16 偏移计入中文、Emoji、段落间隔。没有官方 owner 的原生/旧芯片保留原持久化 token，不伪造引用来源。未改变内容时复用冻结快照，后续编辑不会修改已交出的快照。
 - `createTriggerEditorOps.readInputDraft` 与 Shell 的 `inputDraftFor(sessionId)` 已连通真实编辑器；没有编辑器时返回 undefined，旧绑定卸载不移除新绑定。菜单 revision 现在也识别完整持久化内容变化，避免引用身份/标签改变而占位字符串未变时漏更新。
 - 39 项编辑器/输入管线及 12 项桥接测试通过；UI/Shell 类型检查通过。仅新增读取投影和绑定入口，**尚未**替代官方 useInput/inputActions 提供者，也尚不包含图片 ID、阶段、队列或完整公共写入桥接。该投影是下一步单一输入提供者适配的数据来源，不能据此宣称完整输入服务已支持。此步未改 CSS 或布局，未重复桌面烟测。
+
+### 实时输入草稿订阅（2026-09-13）
+
+- 在真实编辑器读取投影之上增加 `subscribeInputDraft` 和 Shell `inputDraftSource(sessionId)`：每个会话拥有稳定 source，绑定、编辑、替换与卸载通知相应订阅者；无编辑器时 snapshot 为 undefined。没有重复注册官方 input 提供者。
+- 公开 draftRev 现在按完整草稿/引用投影独立递增，不依赖触发菜单更新监听器的执行顺序。绑定期间每次编辑先刷新投影，再通知监听者；即使中途没有读取、编辑后恢复原文，版本仍递增，避免旧 span 被误当作当前操作。
+- 每次编辑器绑定拥有独立身份；旧绑定的事件、bail 操作与清理都不能作用于替换后的编辑器，即使两次绑定复用同一个 ops 对象。订阅清理幂等，旧清理不会移除后来注册的监听者。
+- 41 项编辑器/输入管线和 16 项桥接测试，以及 UI/Shell 类型检查通过。此步未改布局或 CSS、未重复桌面构建。公开官方 useInput/inputActions 提供者、写入操作、图片 ID 和提交阶段仍待接入；这里完成的是其所需的实时数据源与生命周期。

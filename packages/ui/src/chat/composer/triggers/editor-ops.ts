@@ -117,7 +117,15 @@ export function createTriggerEditorOps(
   const inputDraft = new InputDraftProjection();
   return {
     readInputDraft() {
-      return editor.getEditorState().read(() => inputDraft.read(revision.value));
+      return editor.getEditorState().read(() => inputDraft.read());
+    },
+    subscribeInputDraft(listener) {
+      return editor.registerUpdateListener(({ editorState }) => {
+        // Advance public revisions even when no subscriber reads this update;
+        // editing away and back must still invalidate an earlier span.
+        editorState.read(() => inputDraft.read());
+        listener();
+      });
     },
     beginCommand(claim: CommandClaim, span: TokenSpan): boolean {
       const entered = transact(editor, () => {

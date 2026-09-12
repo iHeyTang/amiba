@@ -124,6 +124,7 @@ export interface ComposerInputDraft {
 
 export interface TriggerEditorOps {
   readInputDraft?(): ComposerInputDraft;
+  subscribeInputDraft?(listener: () => void): () => void;
   beginCommand(claim: CommandClaim, span: TokenSpan): boolean;
   insertReference(reference: ReferenceInsert, span: TokenSpan): boolean;
   consumeToken(guard: ConsumeTokenGuard): boolean;

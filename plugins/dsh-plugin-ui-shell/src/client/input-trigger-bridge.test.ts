@@ -247,3 +247,75 @@ it("exposes only the current bound editor's input projection", () => {
   disposeSecond();
   expect(bridge.inputDraftFor("s1")).toBeUndefined();
 });
+
+
+it("streams input snapshots through edit, replacement and detach without stale editor events", () => {
+  const scope=scopeDouble();
+  const bridge=bridgeOver(scope);
+  const source=bridge.inputDraftSource("s1");
+  expect(bridge.inputDraftSource("s1")).toBe(source);
+  const seen:Array<string|undefined>=[];
+  const off=source.subscribe(()=>seen.push(source.getSnapshot()?.draft));
+  let draft={draft:"one",draftRev:0,occurrences:[]};
+  let emit!:()=>void;
+  const unsubscribe=vi.fn();
+  const oldOps={...opsDouble(true),readInputDraft:()=>draft,subscribeInputDraft:(listener:()=>void)=>{emit=listener;return unsubscribe;}};
+  const oldDispose=bridge.bindEditor("s1",oldOps);
+  expect(seen).toEqual(["one"]);
+  draft={...draft,draft:"two",draftRev:1};
+  emit();
+  expect(seen).toEqual(["one","two"]);
+  const newOps={...opsDouble(true),readInputDraft:()=>({draft:"replacement",draftRev:0,occurrences:[]})};
+  const dispose=bridge.bindEditor("s1",newOps);
+  emit(); // The old editor is still mounted briefly during replacement.
+  expect(seen).toEqual(["one","two","replacement"]);
+  expect(scope.bail("slash/input-insert-text",{text:"x",span:SPAN})).toBe(true);
+  expect(oldOps.insertText).not.toHaveBeenCalled();
+  expect(newOps.insertText).toHaveBeenCalledOnce();
+  oldDispose();
+  expect(unsubscribe).toHaveBeenCalledOnce();
+  expect(source.getSnapshot()?.draft).toBe("replacement");
+  dispose();
+  expect(seen).toEqual(["one","two","replacement",undefined]);
+  off();
+  const another=bridge.bindEditor("s1",newOps);
+  expect(seen).toHaveLength(4);
+  another();
+});
+
+it("does not broadcast another session's input changes", () => {
+  const bridge=bridgeOver(scopeDouble());
+  const listener=vi.fn();
+  const off=bridge.inputDraftSource("s1").subscribe(listener);
+  const detach=bridge.bindEditor("s2",opsDouble(true));
+  detach();
+  expect(listener).not.toHaveBeenCalled();
+  off();
+});
+
+
+it("keeps a replacement binding even when it reuses the same editor operations", () => {
+  const bridge=bridgeOver(scopeDouble());
+  const snapshot={draft:"same",draftRev:0,occurrences:[]};
+  const ops={...opsDouble(true),readInputDraft:()=>snapshot};
+  const oldDispose=bridge.bindEditor("s1",ops);
+  const newDispose=bridge.bindEditor("s1",ops);
+  oldDispose();
+  expect(bridge.inputDraftFor("s1")).toBe(snapshot);
+  newDispose();
+  expect(bridge.inputDraftFor("s1")).toBeUndefined();
+});
+
+it("does not remove newer listeners when an old subscription is disposed twice", () => {
+  const bridge=bridgeOver(scopeDouble());
+  const source=bridge.inputDraftSource("s1");
+  const oldOff=source.subscribe(()=>{});
+  oldOff();
+  const listener=vi.fn();
+  const off=source.subscribe(listener);
+  oldOff();
+  const detach=bridge.bindEditor("s1",opsDouble(true));
+  expect(listener).toHaveBeenCalledOnce();
+  off();
+  detach();
+});

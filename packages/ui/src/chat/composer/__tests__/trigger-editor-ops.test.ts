@@ -15,7 +15,7 @@ import {
   createEditor,
   type LexicalNode,
 } from "lexical";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MentionNode } from "../MentionNode";
 import type { MentionData } from "../providers/types";
 import { CommandClaimStore } from "../triggers/claim";
@@ -274,4 +274,36 @@ describe("public input draft projection", () => {
     },{discrete:true});
     expect(ops.readInputDraft!()).toMatchObject({draft:"Before\n\n@[file:notes.txt]",occurrences:[]});
   });
+});
+
+
+it("publishes live editor changes with stable snapshots and an independent public revision", () => {
+  const {ops}=setup("first");
+  const first=ops.readInputDraft!();
+  const notify=vi.fn(()=>ops.readInputDraft!());
+  const off=ops.subscribeInputDraft!(notify);
+  expect(ops.insertText("!",span(5,5))).toBe(true);
+  expect(notify).toHaveBeenCalled();
+  const next=ops.readInputDraft!();
+  expect(next).toMatchObject({draft:"first!",draftRev:first.draftRev+1});
+  expect(ops.readInputDraft!()).toBe(next);
+  expect(first.draft).toBe("first");
+  notify.mockClear();
+  off();
+  expect(ops.insertText("?",span(6,6))).toBe(true);
+  expect(notify).not.toHaveBeenCalled();
+});
+
+
+it("advances the public revision when edits return to the same draft between reads", () => {
+  const {ops}=setup("text");
+  const first=ops.readInputDraft!();
+  const off=ops.subscribeInputDraft!(()=>{});
+  ops.insertText("!",span(4,4));
+  ops.insertText("",span(4,5));
+  const next=ops.readInputDraft!();
+  expect(next.draft).toBe(first.draft);
+  expect(next.draftRev).toBe(first.draftRev+2);
+  expect(next).not.toBe(first);
+  off();
 });

@@ -9,7 +9,7 @@ export class InputDraftProjection {
   private snapshot: ComposerInputDraft | undefined;
   private fingerprint = "";
 
-  read(draftRev: number): ComposerInputDraft {
+  read(): ComposerInputDraft {
     let draft = "";
     const occurrences: ComposerInputDraft["occurrences"][number][] = [];
     const visit = (node: LexicalNode): void => {
@@ -40,11 +40,11 @@ export class InputDraftProjection {
       draft += node.getTextContent();
     };
     visit($getRoot());
-    const next = { draft, draftRev, occurrences };
+    const next = { draft, occurrences };
     const fingerprint = JSON.stringify(next);
     if (this.snapshot && fingerprint === this.fingerprint) return this.snapshot;
     this.fingerprint = fingerprint;
-    this.snapshot = Object.freeze({ ...next, occurrences: Object.freeze(occurrences.map((occurrence) => Object.freeze(occurrence))) });
+    this.snapshot = Object.freeze({ ...next, draftRev: this.snapshot ? this.snapshot.draftRev + 1 : 0, occurrences: Object.freeze(occurrences.map((occurrence) => Object.freeze(occurrence))) });
     return this.snapshot;
   }
 }
