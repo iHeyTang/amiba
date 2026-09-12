@@ -12,7 +12,7 @@ export function continuableChildFixture(root, profile) {
       async *stream(options:any) {
         const input = options.messages.filter((m:any)=>m.role==='user')
           .flatMap((m:any)=>m.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text))
-          .reverse().find((text:string)=>/^COMPAT_(INITIAL_CHILD|NATIVE_FOLLOWUP|WAIT_FOR_STOP)$/.test(text)) || '';
+          .reverse().find((text:string)=>/^COMPAT_(INITIAL_CHILD|NATIVE_FOLLOWUP|COLD_FOLLOWUP|WAIT_FOR_STOP)$/.test(text)) || '';
         const text = options.sessionId==='compat-continuable-child'
           ? 'COMPAT_CONTINUABLE_REPLY '+input : 'COMPAT_PARENT_SETTLED';
         console.log('AMIBA_PROBE_MODEL '+options.sessionId+' '+input);
@@ -33,9 +33,16 @@ export function continuableChildFixture(root, profile) {
     const registration=ctx.llm.registerAdapter(['compat-local'],new FixtureAdapter());
     ctx.effect(()=>()=>registration());
     let started=false;
+    let parentResumed=false;
     ctx.effect(()=>{
       const watcher=watch(${JSON.stringify(profile)},()=>{
-        if(started || !existsSync(${JSON.stringify(path.join(profile, 'continuable-create'))}))return;
+        if(!parentResumed && existsSync(${JSON.stringify(path.join(profile, 'cold-resume-parent'))})) {
+          parentResumed=true;
+          void ctx.agents.resume({resumeSessionId:'compat-continuable-parent',agentOptions:{provider:'compat-local',model:'fixture'}})
+            .then((parent:any)=>{ctx.effect(()=>()=>parent.dispose());console.log('AMIBA_PROBE_COLD_PARENT_RESUMED');})
+            .catch((error:any)=>console.error('AMIBA_PROBE_COLD_PARENT_ERROR',error));
+        }
+        if(started || existsSync(${JSON.stringify(path.join(profile, 'cold-restart'))}) || !existsSync(${JSON.stringify(path.join(profile, 'continuable-create'))}))return;
         started=true;
         void (async()=>{
           const parent=await ctx.agents.create({sessionId:'compat-continuable-parent',meta:{cwd:${JSON.stringify(path.join(profile, 'continuable'))}},agentOptions:{provider:'compat-local',model:'fixture'}});

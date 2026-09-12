@@ -1156,3 +1156,12 @@ pipelines retain mounted component state.
 - 36 项 Bridge、公开动作、输入状态和新绑定测试通过（/tmp/amiba-input-revision-tests2.log），包括无订阅者的最终编辑、旧清理回调、重复访问、引用编号不复用、状态阶段变化、编辑离开后返回相同文本、公开修订号转换及缺少可读状态时拒绝条件写入。Shell 类型检查通过（/tmp/amiba-input-revision-types.log）。
 - 桌面驻留草稿探针增加：返回原会话后修订号必须递增，使用离开前修订号的写入必须拒绝，原引用草稿保持。完整 useInput、离屏输入操作及驻留图片状态仍需继续接通。
 - 完整 Desktop 构建及最终组合桌面回归均退出 0（/tmp/amiba-input-revision-build.log、/tmp/amiba-input-revision-smoke.log）。真实会话返回后的过期写入被拒绝，既有 input-state 探针的最新修订号写入成功、旧修订号拒绝也通过；引用恢复、命令四阶段、图片、轨迹、动态 Cordis、子会话及插件开发生命周期保持通过。未修改 UI 结构或样式。
+
+
+### 子会话的真实 Host 冷重启验证（2026-09-13）
+
+- 新增 --child-cold-restart 组合探针，要求同时运行 compat、child-navigation 和 child-continuation。通过现有 agentDiagnostics.restart 更换实际 Host PID，确认旧 PID 已不存在，再完整刷新 renderer；不是只清理前端缓存或模拟断线。
+- 重启标记使 Host 测试插件停止创建会话/工具记录，仅重新注册测试模型适配器及原探针。一次性子会话从持久化数据恢复历史、直接父地址和目录，原输入框只读；返回父会话正常。可续聊子会话也能读取原历史；实际官方 subagentAddress 仅返回已发现的地址，先刷新父目录再按 ID 打开可建立地址，不能假定读取历史就等于已发现目录关系。
+- 首次完整续聊失败的确切原因来自实际 npm rc.2 dsh-host-apiproxy/lib/index.js 的 subagent.prompt：ctx.agents.get(parentSessionId) 缺失时返回 subagent-parent-unavailable。它要求直接父 Agent 已驻留，不会在此入口自动恢复父会话。错误已通过原输入器展示，不能改成成功或绕过父子归属检查。
+- 测试接着通过 ctx.agents.resume({resumeSessionId:原父ID,agentOptions:原测试模型配置}) 恢复同一个已持久化父会话，未新建父/子会话、未注入回复。再次通过原输入框发送后，官方 subagents.coldResume 从原子会话描述恢复运行实例，测试模型生成 COMPAT_CONTINUABLE_REPLY COMPAT_COLD_FOLLOWUP。该结果证明条件满足后可冷恢复续聊；产品的自动父恢复入口、配置恢复及并发恢复管理仍需适配，不将测试端恢复父会话当成生产能力已补齐。
+- 初次日志 /tmp/amiba-child-cold-restart-smoke.log 暴露目录地址未发现；第二次 /tmp/amiba-child-cold-restart-smoke2.log 记录父 Agent 不驻留的真实错误。最终 /tmp/amiba-child-cold-restart-smoke3.log 退出 0，包含上述父恢复后的真实续聊及原有完整兼容回归、插件卸载/原配置保留。本轮只增加验证脚本及文档，复用上一轮已验证的生产构建。
