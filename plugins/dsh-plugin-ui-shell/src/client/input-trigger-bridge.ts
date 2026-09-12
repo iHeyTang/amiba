@@ -90,6 +90,11 @@ export type OfficialPopupController = CommandPopupController & {
 };
 
 type InputDraft = ReturnType<NonNullable<TriggerEditorOps["readInputDraft"]>>;
+export interface InputImagesSource {
+  getSnapshot(): readonly ComposerAttachment[] | undefined;
+  subscribe(listener: () => void): () => void;
+}
+
 export interface InputDraftSource {
   getSnapshot(): InputDraft | undefined;
   subscribe(listener: () => void): () => void;
@@ -97,6 +102,8 @@ export interface InputDraftSource {
 
 export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
   inputImagesFor(sessionId: string): readonly ComposerAttachment[] | undefined;
+  inputImagesSource(sessionId: string): InputImagesSource;
+  pruneInputImages(sessionId: string, ids: readonly ComposerAttachment["id"][]): void;
   addInputImages(sessionId: string, ids: readonly ComposerAttachment["id"][]): boolean;
   removeInputImage(sessionId: string, id: ComposerAttachment["id"]): void;
   submitInput(sessionId: string): boolean;
@@ -116,6 +123,39 @@ export function createInputTriggerBridge(
   deps: InputTriggerBridgeDeps,
 ): AmibaInputTriggerBridge {
   const imageBindings = new Map<string, { ops: ComposerImageOps }>();
+  const imageSources = new Map<string, InputImagesSource>();
+  const imageListeners = new Map<string, Set<() => void>>();
+  const notifyImages = (id: string) => { for (const listener of imageListeners.get(id) ?? []) listener(); };
+  const inputImagesSource = (id: string): InputImagesSource => {
+    let source = imageSources.get(id);
+    if (!source) {
+      let snapshot: readonly ComposerAttachment[] | undefined;
+      source = {
+        getSnapshot() {
+          const images = imageBindings.get(id)?.ops.getImages();
+          if (!images) return snapshot = undefined;
+          if (!snapshot || snapshot.length !== images.length || images.some((image, i) => image !== snapshot![i])) {
+            snapshot = Object.freeze([...images]);
+          }
+          return snapshot;
+        },
+        subscribe(listener) {
+          let listeners = imageListeners.get(id);
+          if (!listeners) { listeners = new Set(); imageListeners.set(id, listeners); }
+          listeners.add(listener);
+          let active = true;
+          return () => {
+            if (!active) return;
+            active = false;
+            listeners.delete(listener);
+            if (!listeners.size && imageListeners.get(id) === listeners) imageListeners.delete(id);
+          };
+        },
+      };
+      imageSources.set(id, source);
+    }
+    return source;
+  };
   const leases = new WeakMap<object, Map<ComposerAttachment["id"], number>>();
   const retain = (registry: ImageRegistry, image: ComposerAttachment): ComposerDraftImageRegistration => {
     let counts = leases.get(registry);
@@ -170,9 +210,24 @@ export function createInputTriggerBridge(
     bindImages(sessionId, ops) {
       const binding = { ops };
       imageBindings.set(sessionId, binding);
-      return () => { if (imageBindings.get(sessionId) === binding) imageBindings.delete(sessionId); };
+      const off = ops.subscribeImages?.(() => {
+        if (imageBindings.get(sessionId) === binding) notifyImages(sessionId);
+      });
+      notifyImages(sessionId);
+      let active = true;
+      return () => {
+        if (!active) return;
+        active = false;
+        off?.();
+        if (imageBindings.get(sessionId) === binding) {
+          imageBindings.delete(sessionId);
+          notifyImages(sessionId);
+        }
+      };
     },
-    inputImagesFor: sessionId => imageBindings.get(sessionId)?.ops.getImages(),
+    inputImagesSource,
+    inputImagesFor: sessionId => inputImagesSource(sessionId).getSnapshot(),
+    pruneInputImages: (sessionId, ids) => imageBindings.get(sessionId)?.ops.pruneImages?.(ids),
     addInputImages(sessionId, ids) {
       const binding = imageBindings.get(sessionId);
       if (!binding?.ops.canAdd()) return false;

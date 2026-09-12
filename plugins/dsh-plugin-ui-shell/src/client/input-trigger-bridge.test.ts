@@ -446,3 +446,56 @@ describe("session-scoped draft image operations", () => {
     expect(bridge.addInputImages("s1", [image.id])).toBe(false);
   });
 });
+
+describe("observable image sources and pruning", () => {
+  it("publishes stable snapshots and isolates replacement bindings and stale notifications", () => {
+    const bridge = bridgeOver(scopeDouble());
+    const source = bridge.inputImagesSource("s1");
+    expect(bridge.inputImagesSource("s1")).toBe(source);
+    const image = { kind: "image" as const, id: "image-one" as never, file: {} as File, previewUrl: "blob:one" };
+    let images = [image];
+    let notify!: () => void;
+    const stop = vi.fn();
+    const ops = {
+      getImages: () => [...images], canAdd: () => true, addImages() {}, removeImage() {},
+      subscribeImages: (listener: () => void) => { notify = listener; return stop; },
+    };
+    const seen: unknown[] = [];
+    source.subscribe(() => seen.push(source.getSnapshot()));
+    expect(source.getSnapshot()).toBeUndefined();
+    const old = bridge.bindImages!("s1", ops);
+    const first = source.getSnapshot();
+    expect(first).toEqual([image]);
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(source.getSnapshot()).toBe(first);
+    images = [];
+    notify();
+    expect(source.getSnapshot()).toEqual([]);
+    expect(first).toEqual([image]);
+    const replacement = bridge.bindImages!("s1", { ...ops, getImages: () => [image], subscribeImages: undefined });
+    const count = seen.length;
+    notify();
+    old();
+    old();
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(seen).toHaveLength(count);
+    expect(bridge.inputImagesFor("s1")).toEqual([image]);
+    expect(bridge.inputImagesFor("s2")).toBeUndefined();
+    replacement();
+    expect(source.getSnapshot()).toBeUndefined();
+    expect(seen).toHaveLength(count + 1);
+  });
+
+  it("routes maintenance pruning independently of admission locks", () => {
+    const bridge = bridgeOver(scopeDouble());
+    const pruneImages = vi.fn();
+    const off = bridge.bindImages!("s1", { getImages: () => [], canAdd: () => false, addImages() {}, removeImage() {}, pruneImages });
+    bridge.pruneInputImages("s1", ["still-live" as never]);
+    bridge.pruneInputImages("other", []);
+    expect(pruneImages).toHaveBeenCalledTimes(1);
+    expect(pruneImages).toHaveBeenCalledWith(["still-live"]);
+    off();
+    bridge.pruneInputImages("s1", []);
+    expect(pruneImages).toHaveBeenCalledTimes(1);
+  });
+});

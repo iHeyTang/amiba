@@ -153,3 +153,59 @@ describe("extension-created draft images", () => {
     expect(supplied.release).toHaveBeenCalledTimes(1);
   });
 });
+
+it("publishes synchronous stable image snapshots and prunes only registered draft images", async () => {
+  successfulRead();
+  const first = registry().registerDraftImage(new File(["bytes"], "drop.png", { type: "image/png" }));
+  const second = { image: { ...first.image, id: "keep-image" as ComposerAttachment["id"] }, release: vi.fn() };
+  const { result } = renderHook(() => useComposerAttachments({ getSessionId: () => "session" }));
+  const observations: ComposerAttachment[][] = [];
+  const off = result.current.subscribeDraftImages!(() => observations.push([...result.current.getDraftImages!()]));
+  const nativeFile = { uiId: "text-file", attachmentId: "text-host", kind: "text" as const, name: "notes.txt", mime: "text/plain", size: 3 };
+  let before!: readonly ComposerAttachment[];
+  act(() => {
+    result.current.setAttachments([nativeFile]);
+    result.current.addDraftImages!([first, second]);
+    before = result.current.getDraftImages!();
+    expect(before).toEqual([first.image, second.image]);
+    expect(result.current.getDraftImages!()).toBe(before);
+    expect(Object.isFrozen(before)).toBe(true);
+    // Maintenance pruning must work even while upload admission is busy.
+    expect(result.current.canAddDraftImages!()).toBe(false);
+    result.current.pruneDraftImages!([second.image.id]);
+    expect(result.current.getDraftImages!()).toEqual([second.image]);
+  });
+  expect(result.current.attachments.some(a => a.uiId === nativeFile.uiId)).toBe(true);
+  expect(before).toEqual([first.image, second.image]);
+  expect(first.release).toHaveBeenCalledTimes(1);
+  expect(second.release).not.toHaveBeenCalled();
+  await waitFor(() => expect(result.current.attachmentBusy).toBe(false));
+  expect(observations).toEqual([[first.image, second.image], [second.image]]);
+  const stable = result.current.getDraftImages!();
+  act(() => result.current.pruneDraftImages!([second.image.id]));
+  expect(result.current.getDraftImages!()).toBe(stable);
+  off();
+  off();
+  act(() => result.current.pruneDraftImages!([]));
+  expect(result.current.attachments).toEqual([nativeFile]);
+  expect(second.release).toHaveBeenCalledTimes(1);
+  expect(observations).toHaveLength(2);
+});
+
+it("does not resurrect a late upload after its input hook is unmounted", async () => {
+  let finish!: (value: unknown) => void;
+  let uiId = "";
+  storage.read.mockImplementation((_file: File, opts: { uiId: string }) => {
+    uiId = opts.uiId;
+    return new Promise(resolve => { finish = resolve; });
+  });
+  storage.remove.mockClear();
+  const supplied = registry().registerDraftImage(new File(["bytes"], "pending.png", { type: "image/png" }));
+  const { result, unmount } = renderHook(() => useComposerAttachments({ getSessionId: () => "session" }));
+  act(() => result.current.addDraftImages!([supplied]));
+  await waitFor(() => expect(finish).toBeDefined());
+  unmount();
+  await act(async () => finish({ attachment: { uiId, attachmentId: "late-upload" } }));
+  expect(supplied.release).toHaveBeenCalledTimes(1);
+  expect(storage.remove).toHaveBeenCalledWith({ uiId, attachmentId: "late-upload" });
+});

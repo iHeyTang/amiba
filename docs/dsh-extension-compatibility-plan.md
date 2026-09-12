@@ -1007,3 +1007,13 @@ pipelines retain mounted component state.
 - 8 项附件、28 项输入管线、23 项桥接及 3 项注册表测试通过（62 项），UI/Shell 类型检查通过。新增冻结判定测试使用斜杠草稿触发实际 adjudication；最初普通文字未触发该回调，已修正测试输入。
 - 这是内部会话附件桥接，尚未注册完整官方 input/inputActions 提供者。同步完整 imageIds 快照、pruneImages、队列恢复及其他全量兼容项仍待完成。
 - `/tmp/amiba-input-images-desktop-build.log` 完整 Desktop 构建退出 0；`/tmp/amiba-input-images-desktop-smoke.log` 的 `--compat --input-state --command-images --child-continuation --child-navigation --child-reload` 退出 0。扩展用浏览器 File 创建草稿，通过 addInputImages 进入原卡片；混入缺失 ID 整批拒绝且保留原草稿；添加后立即 submit 返回 false，上传完成后原命令收到正确文件名和全部 base64 原图，成功消费对应草稿。立即添加后移除验证没有残留卡片及浏览器注册项。原输入提交、原生图片上传、子会话执行/停止/只读/重载及既有完整兼容回归同轮通过。
+
+### 实时图片草稿快照与失效引用清理（2026-09-13）
+
+- 新增 inputImagesSource 会话数据源：稳定 source、冻结数组快照、未变化时复用快照；添加/移除/清理和绑定/解绑均可观察。原 Composer 保持一次图片绑定，通过原附件 hook 的订阅推送变化，附件更新不再临时解绑成 undefined。旧编辑器通知和旧清理不作用于替换后的绑定，清理幂等。
+- 原附件状态增加同步引用，由统一 setAttachments 按最新列表应用函数更新一次，再驱动 React 展示；图片快照和通知在操作内更新。扩展在同次调用 addInputImages 后可立即读取原图片 ID，remove/prune 后可立即读到新列表。上传进度变化不创建无意义的新图片快照。
+- 新增 pruneInputImages/pruneDraftImages，按可用草稿 ID 清理对应原生芯片，保持非注册图片及普通文件；按官方契约，维护性 prune 不受提交/上传 admission 锁阻止。成功上传后只有暂存元数据变化，不重复发图片列表通知。
+- 卸载时清空同步附件引用，晚到的上传结果因此进入既有“芯片已移除”路径并删除 Host 暂存文件；不再使已卸载输入器持有晚到的文件。浏览器注册释放规则和共享持有计数保持。
+- 10 项附件、28 项输入管线、25 项桥接及 3 项注册表测试通过（66 项），UI/Shell 类型检查通过。覆盖同次添加/清理同步读取、旧快照不可变、保留普通文件、忙碌期间 prune、元数据变化不重复通知、晚上传清理及绑定替换隔离。
+- 尚未将文字/图片/真实 Host 队列合成官方 InputState 并注册 input/inputActions 提供者；队列恢复及其他剩余兼容项仍在完整目标范围内。
+- `/tmp/amiba-image-source-desktop-build.log` 完整 Desktop 构建退出 0；`/tmp/amiba-image-source-desktop-smoke.log` 的 `--compat --input-state --command-images --child-continuation --child-navigation --child-reload` 退出 0。真实输入器添加图片的同一次调用立即读到 ID；订阅捕获添加和 prune 后的列表，重复读取复用快照且过程中没有暂时解绑的 undefined；上传忙碌中先保留一张再清空，待上传全部结束仍为空，注册资源均已释放。既有原生/扩展图片命令、输入提交、子会话及完整兼容回归同轮通过。

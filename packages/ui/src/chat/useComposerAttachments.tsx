@@ -39,7 +39,6 @@ import { Plus } from "lucide-react"
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -75,9 +74,12 @@ export interface UseComposerAttachmentsResult {
   attachments: Attachment[]
   /** Browser-owned images only; never Host staging IDs. */
   draftImages?: readonly ComposerAttachment[]
+  getDraftImages?(): readonly ComposerAttachment[]
   canAddDraftImages?(): boolean
   addDraftImages?(images: readonly ComposerDraftImageRegistration[]): void
   removeDraftImage?(id: ComposerAttachment["id"]): void
+  pruneDraftImages?(ids: readonly ComposerAttachment["id"][]): void
+  subscribeDraftImages?(listener: () => void): () => void
   setAttachments: Dispatch<SetStateAction<Attachment[]>>
   /** True while any chip is still uploading. */
   attachmentUploading: boolean
@@ -134,12 +136,32 @@ export interface UseComposerAttachmentsResult {
 export function useComposerAttachments(
   opts: UseComposerAttachmentsOptions,
 ): UseComposerAttachmentsResult {
-  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [attachments, setAttachmentState] = useState<Attachment[]>([])
+  const attachmentState = useRef(attachments)
+  const imageSnapshot = useRef<readonly ComposerAttachment[]>(Object.freeze([]))
   const mounted = useRef(true)
   const uploads = useRef(0)
+  const imageListeners = useRef(new Set<() => void>())
   const draftImages = useRef(new Map<string, NonNullable<ReturnType<NonNullable<ComposerTriggerRuntime["registerDraftImage"]>>>>())
+  // Keep imperative extension reads synchronous while React renders the same
+  // attachment list. Functional updates run once against the latest value.
+  const setAttachments = useCallback<Dispatch<SetStateAction<Attachment[]>>>(update => {
+    const next = typeof update === "function" ? update(attachmentState.current) : update
+    if (!mounted.current) return
+    attachmentState.current = next
+    const images = next.flatMap(a => {
+      const registration = draftImages.current.get(a.uiId)
+      return registration ? [registration.image] : []
+    })
+    const previous = imageSnapshot.current
+    const changed = previous.length !== images.length || images.some((image, i) => image !== previous[i])
+    if (changed) imageSnapshot.current = Object.freeze(images)
+    setAttachmentState(next)
+    if (changed) for (const listener of imageListeners.current) listener()
+  }, [])
+  const getDraftImages = useCallback(() => imageSnapshot.current, [])
   useEffect(() => {
-    const retained = new Set(attachments.map(a => a.uiId))
+    const retained = new Set(attachmentState.current.map(a => a.uiId))
     for (const [uiId, registration] of draftImages.current) {
       if (!retained.has(uiId)) {
         draftImages.current.delete(uiId)
@@ -151,6 +173,9 @@ export function useComposerAttachments(
     mounted.current = true
     return () => {
       mounted.current = false
+      attachmentState.current = []
+      imageSnapshot.current = Object.freeze([])
+      imageListeners.current.clear()
       for (const registration of draftImages.current.values()) registration.release()
       draftImages.current.clear()
     }
@@ -262,10 +287,21 @@ export function useComposerAttachments(
       if (registration.image.id === id) removeAttachment(uiId)
     }
   }, [removeAttachment])
-  const visibleDraftImages = useMemo(() => attachments.flatMap(a => {
-    const registered = draftImages.current.get(a.uiId)
-    return registered ? [registered.image] : []
-  }), [attachments])
+  const pruneDraftImages = useCallback((ids: readonly ComposerAttachment["id"][]) => {
+    const available = new Set(ids)
+    for (const [uiId, registration] of draftImages.current) {
+      if (!available.has(registration.image.id)) removeAttachment(uiId)
+    }
+  }, [removeAttachment])
+  const subscribeDraftImages = useCallback((listener: () => void) => {
+    imageListeners.current.add(listener)
+    let active = true
+    return () => {
+      if (!active) return
+      active = false
+      imageListeners.current.delete(listener)
+    }
+  }, [])
 
   const clearAttachments = useCallback(() => {
     setAttachments((prev) => {
@@ -371,10 +407,13 @@ export function useComposerAttachments(
 
   return {
     attachments,
-    draftImages: visibleDraftImages,
+    draftImages: imageSnapshot.current,
+    getDraftImages,
     canAddDraftImages,
     addDraftImages,
     removeDraftImage,
+    pruneDraftImages,
+    subscribeDraftImages,
     setAttachments,
     attachmentUploading,
     attachmentBusy,

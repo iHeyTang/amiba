@@ -150,6 +150,8 @@ export interface ComposerDraftImageRegistration {
 
 export interface ComposerImageOps {
   getImages(): readonly ComposerAttachment[];
+  subscribeImages?(listener: () => void): () => void;
+  pruneImages?(ids: readonly ComposerAttachment["id"][]): void;
   canAdd(): boolean;
   addImages(images: readonly ComposerDraftImageRegistration[]): void;
   removeImage(id: ComposerAttachment["id"]): void;

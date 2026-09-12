@@ -399,6 +399,8 @@ try {
     }
     if (process.argv.includes("--command-images")) {
       await evaluate("window.__draftImageRegistry=window.__probeCtx.get('composerImages');window.__createDraftImages=window.__draftImageRegistry.createDraftImages;window.__registeredImages=[];window.__draftImageRegistry.createDraftImages=function(files){const images=window.__createDraftImages.call(this,files);window.__registeredImages.push(...images);return images};void 0");
+      await evaluate("window.__imageInputSource=window.__probeCtx.composerInputs.inputImagesSource(window.__compatSessionId);window.__imageSnapshots=[];window.__imageInputOff=window.__imageInputSource.subscribe(()=>window.__imageSnapshots.push(window.__imageInputSource.getSnapshot()?.map(image=>image.id)??null));void 0");
+      assert.deepEqual(await evaluate("window.__imageInputSource.getSnapshot()"), []);
       const imagePath = path.join(profile, "command-image.png");
       const imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJ1sAAAAASUVORK5CYII=";
       await writeFile(imagePath, Buffer.from(imageData,"base64"));
@@ -430,7 +432,7 @@ try {
       await evaluate(`window.__extensionImage=window.__draftImageRegistry.createDraftImages([new File([Uint8Array.from(atob(${JSON.stringify(imageData)}),c=>c.charCodeAt(0))],'extension-image.png',{type:'image/png'})])[0];void 0`);
       assert.equal(await evaluate("window.__probeCtx.composerInputs.addInputImages(window.__compatSessionId,[window.__extensionImage.id,'missing-draft-id'])"), false);
       assert.equal(await evaluate("window.__draftImageRegistry.draftImages([window.__extensionImage.id]).length"), 1);
-      assert.deepEqual(await evaluate("(()=>{const bridge=window.__probeCtx.composerInputs;bridge.setInputDraft(window.__compatSessionId,'/compat-image extension');return [bridge.addInputImages(window.__compatSessionId,[window.__extensionImage.id]),bridge.submitInput(window.__compatSessionId)]})()"), [true,false]);
+      assert.deepEqual(await evaluate("(()=>{const bridge=window.__probeCtx.composerInputs;bridge.setInputDraft(window.__compatSessionId,'/compat-image extension');return [bridge.addInputImages(window.__compatSessionId,[window.__extensionImage.id]),bridge.submitInput(window.__compatSessionId),bridge.inputImagesFor(window.__compatSessionId)[0]?.id===window.__extensionImage.id]})()"), [true,false,true]);
       await wait(() => evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).some(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')&&!n.disabled)"));
       assert.equal(await evaluate("window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId)[0].id===window.__extensionImage.id"), true);
       assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"), true);
@@ -443,6 +445,16 @@ try {
       await evaluate("window.__removedImage=window.__draftImageRegistry.createDraftImages([new File([window.__extensionImage.file],'removed-image.png',{type:'image/png'})])[0];window.__probeCtx.composerInputs.addInputImages(window.__compatSessionId,[window.__removedImage.id]);window.__probeCtx.composerInputs.removeInputImage(window.__compatSessionId,window.__removedImage.id);void 0");
       await wait(() => evaluate("window.__draftImageRegistry.draftImages([window.__removedImage.id]).length===0&&!document.body.textContent.includes('removed-image.png')"));
       console.log("Extension-created images entered the native upload and command path with original bytes and identity; missing IDs were rejected atomically and immediate removal released the draft");
+      await wait(() => evaluate("window.__probeCtx.composerInputs.addInputImages(window.__compatSessionId,[])"));
+      assert.deepEqual(await evaluate("(()=>{const registry=window.__draftImageRegistry;const bridge=window.__probeCtx.composerInputs;window.__pruneImages=registry.createDraftImages([window.__extensionImage.file,window.__extensionImage.file]);const added=bridge.addInputImages(window.__compatSessionId,window.__pruneImages.map(image=>image.id));bridge.pruneInputImages(window.__compatSessionId,[window.__pruneImages[1].id]);const remaining=window.__imageInputSource.getSnapshot();return [added,remaining.length,remaining[0]?.id===window.__pruneImages[1].id,remaining===window.__imageInputSource.getSnapshot()]})()"), [true,1,true,true]);
+      await evaluate("window.__probeCtx.composerInputs.pruneInputImages(window.__compatSessionId,[]);void 0");
+      await wait(() => evaluate("window.__draftImageRegistry.draftImages(window.__pruneImages.map(image=>image.id)).length===0"));
+      await wait(() => evaluate("window.__probeCtx.composerInputs.addInputImages(window.__compatSessionId,[])"));
+      assert.deepEqual(await evaluate("window.__imageInputSource.getSnapshot()"), []);
+      assert.ok(await evaluate("window.__imageSnapshots.some(ids=>ids?.length===1&&ids[0]===window.__pruneImages[1].id)"));
+      assert.ok(await evaluate("window.__imageSnapshots.every(ids=>Array.isArray(ids))"), "attachment updates must not temporarily detach the bound image source");
+      await evaluate("window.__imageInputOff();void 0");
+      console.log("Real image subscriptions reported synchronous additions and pruning with stable snapshots and no transient detached state");
       await evaluate("window.__draftImageRegistry.createDraftImages=window.__createDraftImages;void 0");
       console.log("Native image upload registered the original browser File and released its compatible draft registry entry after successful submission");
       await evaluate("window.__imageSourceOff();void 0");

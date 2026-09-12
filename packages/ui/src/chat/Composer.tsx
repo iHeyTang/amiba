@@ -664,13 +664,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         return !!binding && !binding.disabled && !commandAttemptRef.current && !resolvingMentionRef.current;
       };
       return triggerRuntime.bindImages(permissionSessionId, {
-        getImages: () => current()?.attachments?.draftImages ?? [],
+        getImages: () => current()?.attachments?.getDraftImages?.() ?? current()?.attachments?.draftImages ?? [],
+        subscribeImages: listener => current()?.attachments?.subscribeDraftImages?.(listener) ?? (() => {}),
+        pruneImages: ids => current()?.attachments?.pruneDraftImages?.(ids),
         canAdd: () => writable() && !current()?.attachments?.attachmentBusy &&
           !current()?.attachments?.attachmentUploading && !!current()?.attachments?.canAddDraftImages?.(),
         addImages: images => current()?.attachments?.addDraftImages?.(images),
         removeImage: id => { if (writable()) current()?.attachments?.removeDraftImage?.(id); },
       });
-    }, [permissionSessionId, triggerRuntime, attachments?.draftImages]);
+    }, [permissionSessionId, triggerRuntime, !!attachments]);
 
     // Default canSubmit if not provided.
     const effectiveCanSubmit =
