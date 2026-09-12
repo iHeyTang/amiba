@@ -47,7 +47,7 @@ const catalogVersions = await (async () => {
     path.join(workspaceDir, "pnpm-workspace.yaml"),
     "utf8",
   );
-  const block = source.match(/^catalog:\n((?:[ \t]+.*\n?)*)/mu);
+  const block = source.replace(/\r\n/gu, "\n").match(/^catalog:\n((?:[ \t]+.*\n?)*)/mu);
   if (!block) return new Map();
   const entries = new Map();
   for (const line of block[1].split("\n")) {

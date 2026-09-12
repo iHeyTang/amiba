@@ -41,6 +41,22 @@ pnpm release:build darwin-arm64
 
 macOS 自动更新必须签名；面向公开分发还需 Apple Developer ID 和公证。按 electron-builder 25 的环境变量配置 `CSC_LINK`、`CSC_KEY_PASSWORD` 及 `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID`，或使用其支持的 API key。Windows 配置对应代码签名证书。不要向仓库提交证书或密码。
 
+## GitHub Actions 构建
+
+工作流 `.github/workflows/desktop-release.yml` 使用三个原生托管环境：Windows x64 (`windows-2022`)、Mac Intel (`macos-15-intel`)、Mac ARM (`macos-15`)。不需要把当前 Mac 注册为 runner。Node 固定为 22.22.0，Python 固定为 3.11，以兼容现有原生模块工具链。
+
+在 Actions 的 **Desktop build and release → Run workflow** 中选择：
+
+- `target=all`、`mode=test`：生成三个架构的未签名测试包，关闭客户端更新，产物保留在 Actions Artifacts 7 天。
+- `target=win32-x64`、`mode=release`、`publish_draft=true`：生成 Windows 发布包并上传草稿 Release，允许没有代码签名证书。
+- `target=all`、`mode=release`、`publish_draft=true`：三个架构发布包全部通过后，依次上传同一个草稿 Release。必须先配置 Mac 签名与公证 secrets。
+
+推送 `v<桌面 package.json 版本>` 标签会触发所有架构的 release 构建并上传草稿；版本不匹配会失败。当前验证分支 `feat/amiba-distribution` 的普通 push 自动执行 test 构建。
+
+构建后校验更新清单的版本、目标架构和 SHA-512，运行内置 Node 与 Electron 原生 PTY。Mac 额外校验 DMG 和 ZIP；Windows 在临时 CI 机器里静默安装 EXE 后检查安装结果。测试通过才上传产物。上传 Release 时先验证所有目标文件，再顺序上传，草稿绑定实际构建提交。
+
+仓库 Variables 的 `AMIBA_UPDATE_URLS` 可指定 CDN 下载目录；GitHub 下载源作为兜底。发布用 Secrets：Mac 的 `CSC_LINK`、`CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`；Windows 可选 `WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD`。
+
 ## GitHub 和国内 CDN
 
 先执行 `gh auth login`；仓库应为公开发布仓库，客户端不包含 GitHub 凭据。
@@ -77,7 +93,7 @@ CDN 更新清单应采用短缓存或不缓存；版本化安装包可长期缓�
 
 ## 尚需真实环境验证
 
-脚本和状态测试不等同于三个平台安装验证。需要发布仓库、国内 CDN、签名和 Windows/Intel 构建环境才能完成公开分发验收。不要把仅能打包的 unsigned Mac 构建视作已验证的自动更新发布版本。
+脚本和状态测试不等同于三个平台安装验证。公开分发前仍需 Mac Developer ID 签名、公证，以及真实版本升级验收。CDN 按当前需求只预留 POST 接口。不要把仅能打包的 unsigned Mac 构建视作已验证的自动更新发布版本。
 
 ## 本机 Windows 构建调查（2026-09-12）
 
