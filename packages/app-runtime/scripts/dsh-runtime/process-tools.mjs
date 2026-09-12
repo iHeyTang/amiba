@@ -20,7 +20,7 @@ export function packageCommand(command, args, options = {}) {
 export function applyRuntimePatch(packageDir, patchFile) {
   // Git is available on every supported build host. Use a directory outside the
   // checkout so repository-relative prefix filtering cannot skip ignored files.
-  const args = ['apply', '--unsafe-paths', `--directory=${realpathSync(packageDir)}`, '-p1'];
+  const args = ['-c', 'core.autocrlf=false', 'apply', '--unsafe-paths', `--directory=${realpathSync(packageDir)}`, '-p1'];
   const invoke = extra => spawnSync('git', [...args, ...extra, path.resolve(patchFile)], { cwd: os.tmpdir(), encoding: 'utf8' });
   const check = invoke(['--check']);
   if (check.error) throw check.error;

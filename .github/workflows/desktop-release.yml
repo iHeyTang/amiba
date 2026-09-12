@@ -68,6 +68,10 @@ jobs:
           node-version: 22.22.0
           architecture: ${{ matrix.arch }}
           cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: ${{ matrix.arch }}
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Verify release tooling
@@ -90,6 +94,8 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: pnpm release:build ${{ matrix.target }}
+      - name: Smoke test packaged runtime and installer
+        run: node scripts/release/smoke-package.mjs ${{ matrix.target }}
       - name: Save installers and update metadata
         uses: actions/upload-artifact@v4
         with:
