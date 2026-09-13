@@ -22,4 +22,12 @@ Local hooks reject commits outside linked feature worktrees and pushes to remote
 
 ## Release versions
 
-Run `pnpm release:version patch` (or minor/major) in a feature worktree and submit both package.json version changes in a PR. After it merges, run Amiba Desktop on main with mode=release and target=all. The workflow publishes the merged version without creating a version commit. An already published version is rejected. Desktop packaging remains main-only; the separate PR checks workflow performs lightweight validation before merging.
+Run `pnpm release:version patch` (or minor/major) in a feature worktree and submit both package.json version changes in a PR. After it merges, run Desktop Release on main. It always builds all three platforms and publishes the merged version without creating a version commit. An already published version is rejected.
+
+## CI and test installers
+
+`ci.yml` runs lightweight validation on PRs and main pushes, retaining the required `PR checks` job name. `runtime-dependencies.yml` runs the existing three-platform runtime integration checks on PRs and main pushes. Neither workflow creates installers or publishes releases.
+
+For test installers, manually run Desktop Build (`desktop-build.yml`) on main with `mode=test` and the desired target. Use `mode=verify` with an existing `run_id` to recheck installers without rebuilding. Test artifacts expire after 7 days; no scheduled packaging is enabled.
+
+Desktop Release (`desktop-release.yml`) is manual-only and runs CI before packaging. Choose the macOS signing mode; all three platforms must pass packaging and smoke tests before publication. Builds use the run's pinned commit. No main push triggers packaging or publication.

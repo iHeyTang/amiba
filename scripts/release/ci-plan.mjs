@@ -13,6 +13,15 @@ export function installerName(version, target) {
   const [platform, arch] = target.split('-');
   return `Amiba-${version}-${platform === 'darwin' ? 'mac' : 'win'}-${arch}.${platform === 'darwin' ? 'dmg' : 'exe'}`;
 }
+export function workflowInputs(event, env) {
+  const inputs = { ...event.inputs };
+  if (env.AMIBA_CI_MODE === 'release') {
+    if (env.GITHUB_EVENT_NAME !== 'workflow_dispatch') throw new Error('Release requires a manual workflow dispatch');
+    return { ...inputs, mode: 'release', target: 'all' };
+  }
+  if (inputs.mode === 'release') throw new Error('Use the dedicated Desktop Release workflow to publish');
+  return inputs;
+}
 export function ciPlan({ ref = '', inputs = {}, version }) {
   if (ref !== 'refs/heads/main') throw new Error('Desktop CI only runs on main');
   parseVersion(version);
@@ -31,12 +40,13 @@ export function ciPlan({ ref = '', inputs = {}, version }) {
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH));
+  const inputs = workflowInputs(event, process.env);
   let version = productVersion();
   let commit = process.env.GITHUB_SHA;
-  let plan = ciPlan({ ref: process.env.GITHUB_REF, inputs: event.inputs, version });
+  let plan = ciPlan({ ref: process.env.GITHUB_REF, inputs, version });
   if (plan.mode === 'release') {
-    ({ version, commit } = prepareRelease({ env: process.env, macSigning: event.inputs?.mac_signing || 'unsigned' }));
-    plan = ciPlan({ ref: process.env.GITHUB_REF, inputs: event.inputs, version });
+    ({ version, commit } = prepareRelease({ env: process.env, macSigning: inputs.mac_signing || 'unsigned' }));
+    plan = ciPlan({ ref: process.env.GITHUB_REF, inputs, version });
   }
   fs.appendFileSync(process.env.GITHUB_OUTPUT, `commit=${commit}\nversion=${version}\nmatrix=${JSON.stringify(plan.matrix)}\nmode=${plan.mode}\npublish=${plan.publish}\n`);
 }
