@@ -135,6 +135,26 @@ describe("persistent guide", () => {
     fireEvent.click(screen.getByText("Start using Amiba"));
     await waitFor(() => expect(close).toHaveBeenCalledOnce());
   });
+  it("returns to the pet welcome and can restart without completing a step", async () => {
+    const { props, store } = fixture();
+    props.renderSlot = ((name: string, owner: GuideStepOwner) =>
+      name === "amiba.onboarding.companion"
+        ? null
+        : owner.renderActions(
+            <button onClick={() => owner.backToWelcome?.()}>
+              Back to welcome
+            </button>,
+          )) as GuideProps["renderSlot"];
+    render(<Guide {...props} />);
+    fireEvent.click(await screen.findByText("Let's get set up"));
+    fireEvent.click(await screen.findByText("Back to welcome"));
+    expect(await screen.findByText("Let's get set up")).toBeInTheDocument();
+    expect(screen.queryByText("Start with a small idea.")).toBeNull();
+    expect(screen.queryByText("Back to welcome")).toBeNull();
+    expect(store.mark).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Let's get set up"));
+    expect(await screen.findByText("Back to welcome")).toBeInTheDocument();
+  });
   it("renders step actions in the shared footer and submits the body form from there", async () => {
     const { props, store } = fixture();
     props.renderSlot = ((

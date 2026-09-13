@@ -117,6 +117,16 @@ async function openKey(props: ReturnType<typeof fixture>) {
   await screen.findByLabelText("TokenDance API Key");
 }
 describe("provider setup pages", () => {
+  it("returns from provider selection to welcome without writing configuration", async () => {
+    const props = fixture();
+    const backToWelcome = vi.fn();
+    render(<ProviderOnboarding {...props} backToWelcome={backToWelcome} />);
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(backToWelcome).toHaveBeenCalledOnce();
+    expect(props.adapter.configure).not.toHaveBeenCalled();
+    expect(props.complete).not.toHaveBeenCalled();
+  });
+
   it("keeps selection separate from configuration and navigates using the shared footer", async () => {
     const props = fixture();
     render(<ProviderOnboarding {...props} />);

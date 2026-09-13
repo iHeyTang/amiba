@@ -157,83 +157,95 @@ export function Guide({
     >
       <DialogContent
         hideDefaultClose
-        className="grid h-[min(760px,90vh)] max-w-4xl grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 md:h-[min(640px,90vh)] md:grid-cols-[224px_minmax(0,1fr)] md:grid-rows-1"
+        className={`flex max-h-[90vh] max-w-3xl flex-col gap-0 overflow-hidden p-0 ${started ? "h-[min(760px,90vh)]" : "h-[min(480px,90vh)]"}`}
         onInteractOutside={(e) => e.preventDefault()}
       >
         <DialogTitle className="sr-only">{t("guide.settings")}</DialogTitle>
         <DialogDescription className="sr-only">
           {t("guide.description")}
         </DialogDescription>
-        <aside className="flex flex-col bg-muted/50 p-5 md:p-6">
+        <aside
+          className={`flex flex-col px-6 pt-6 sm:px-8 ${started ? "shrink-0 bg-muted/50 pb-5" : "min-h-0 flex-1"}`}
+        >
           <div className="flex items-center gap-2 text-xs tracking-wide text-muted-foreground">
             <span className="font-semibold text-foreground">AMIBA</span>
             <span aria-hidden="true">/</span>
             {t("guide.companionLabel")}
           </div>
-          <div className="flex items-center gap-3 pt-3 md:my-auto md:flex-col md:gap-4 md:py-8">
+          <div
+            className={`flex gap-4 ${started ? "items-center pt-3" : "min-h-0 flex-1 flex-col items-center justify-center py-6 text-center"}`}
+          >
             <div className="flex h-28 w-28 shrink-0 items-center justify-center">
               {renderSlot("amiba.onboarding.companion", { mood })}
             </div>
             <p
               role={error ? "alert" : "status"}
-              className="rounded-2xl bg-background px-4 py-4 text-sm leading-relaxed"
+              className={`text-sm leading-relaxed ${started ? "rounded-2xl bg-background px-4 py-4" : "max-w-sm px-2"}`}
             >
               {message}
             </p>
           </div>
         </aside>
-        <div className="flex min-h-0 min-w-0 flex-col px-6 pb-5 pt-6 md:px-8 md:pt-8">
-          <div className="min-h-0 flex-1 overflow-y-auto pb-6">
-            {!started && (
-              <div className="flex h-full flex-col justify-center gap-4">
-                <h2 className="text-2xl font-semibold tracking-tight">
-                  {t("guide.introTitle")}
-                </h2>
-                <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-                  {t("guide.introBody")}
-                </p>
-              </div>
-            )}
-            {ready && (
-              <div className="flex h-full flex-col justify-center gap-4">
-                <h2 className="text-2xl font-semibold tracking-tight">
-                  {t("guide.finishTitle")}
-                </h2>
-                <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-                  {t("guide.finishBody")}
-                </p>
-              </div>
-            )}
-            {started && rows.length > 1 && (
-              <ol
-                aria-label={t("guide.settings")}
-                className="flex flex-wrap gap-3 text-xs text-muted-foreground"
-              >
-                {rows.map((row, index) => (
-                  <li
-                    key={row.id}
-                    aria-current={active?.id === row.id ? "step" : undefined}
-                    className={
-                      active?.id === row.id ? "font-medium text-foreground" : ""
-                    }
-                  >
-                    {progress?.skipped?.includes(row.id)
-                      ? "–"
-                      : progress?.completed.includes(row.id)
-                        ? "✓"
-                        : index + 1}{" "}
-                    · {row.label}
-                  </li>
-                ))}
-              </ol>
-            )}
-            {active &&
-              renderSlot(
-                "amiba.onboarding.step",
-                { complete, say, openSection, renderActions },
-                { only: active.id },
+        <div
+          className={`flex min-h-0 min-w-0 flex-col px-6 pb-5 sm:px-8 ${started ? "flex-1 pt-6" : "shrink-0"}`}
+        >
+          {started && (
+            <div
+              data-guide-scroll
+              className="min-h-0 flex-1 overflow-y-auto pb-6 pt-1"
+            >
+              {ready && (
+                <div className="flex h-full flex-col justify-center gap-4">
+                  <h2 className="text-2xl font-semibold tracking-tight">
+                    {t("guide.finishTitle")}
+                  </h2>
+                  <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+                    {t("guide.finishBody")}
+                  </p>
+                </div>
               )}
-          </div>
+              {started && rows.length > 1 && (
+                <ol
+                  aria-label={t("guide.settings")}
+                  className="flex flex-wrap gap-3 text-xs text-muted-foreground"
+                >
+                  {rows.map((row, index) => (
+                    <li
+                      key={row.id}
+                      aria-current={active?.id === row.id ? "step" : undefined}
+                      className={
+                        active?.id === row.id
+                          ? "font-medium text-foreground"
+                          : ""
+                      }
+                    >
+                      {progress?.skipped?.includes(row.id)
+                        ? "–"
+                        : progress?.completed.includes(row.id)
+                          ? "✓"
+                          : index + 1}{" "}
+                      · {row.label}
+                    </li>
+                  ))}
+                </ol>
+              )}
+              {active &&
+                renderSlot(
+                  "amiba.onboarding.step",
+                  {
+                    complete,
+                    say,
+                    openSection,
+                    renderActions,
+                    backToWelcome: () => {
+                      setDialogue(undefined);
+                      setStarted(false);
+                    },
+                  },
+                  { only: active.id },
+                )}
+            </div>
+          )}
           <footer
             className="flex shrink-0 flex-wrap items-center gap-2 border-t pt-4"
             aria-label={t("guide.navigation")}

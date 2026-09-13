@@ -7,6 +7,8 @@ export interface GuideStepOwner {
   /** Pet dialogue; never include secrets or raw API responses. */
   say(message: string, mood?: GuideMood): void;
   openSection(id: string): void;
+  /** Return to the welcome screen without completing this step. */
+  backToWelcome?(): void;
   /** Render step navigation into the guide’s shared bottom-right action area. */
   renderActions(actions: ReactNode): ReactNode;
 }
