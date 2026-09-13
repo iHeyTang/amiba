@@ -11,6 +11,8 @@ export interface AmibaAttachmentRecord {
   size: number;
   kind: AmibaAttachmentKind;
   createdAt: string;
+  /** Durable message references; draft cleanup must not erase these bytes. */
+  retainedBy?: string[];
 }
 
 export interface AmibaStoredAttachment extends AmibaAttachmentRecord {
@@ -44,6 +46,7 @@ function decodeBase64(value: string): Uint8Array {
 
 /** DSH-owned opaque object store. No caller-controlled path reaches fs APIs. */
 export class AmibaAttachmentStore {
+  private readonly writes = new Map<string, Promise<unknown>>();
   private readonly objectRoot: string;
   private readonly metadataRoot: string;
 
@@ -126,29 +129,65 @@ export class AmibaAttachmentStore {
     if (
       record.attachmentId !== attachmentId ||
       record.size !== data.byteLength ||
-      !["image", "text", "pdf"].includes(record.kind)
+      !["image", "text", "pdf"].includes(record.kind) ||
+      (record.retainedBy !== undefined && (!Array.isArray(record.retainedBy) || record.retainedBy.some(id => typeof id !== "string" || !id)))
     ) {
       throw new Error("Attachment metadata does not match its object.");
     }
     return { ...record, data: new Uint8Array(data) };
   }
 
-  async remove(attachmentId: string): Promise<{ attachmentId: string; deleted: boolean }> {
+  private serial<T>(attachmentId: string, operation: () => Promise<T>): Promise<T> {
     assertAttachmentId(attachmentId);
-    const outcomes = await Promise.allSettled([
-      unlink(this.objectPath(attachmentId)),
-      unlink(this.metadataPath(attachmentId)),
-    ]);
-    let deleted = false;
-    for (const outcome of outcomes) {
-      if (outcome.status === "fulfilled") {
-        deleted = true;
-        continue;
+    const previous = this.writes.get(attachmentId) ?? Promise.resolve();
+    const next = previous.catch(() => {}).then(operation);
+    this.writes.set(attachmentId, next);
+    void next.finally(() => {
+      if (this.writes.get(attachmentId) === next) this.writes.delete(attachmentId);
+    }).catch(() => {});
+    return next;
+  }
+
+  async retainForSession(attachmentId: string, sessionId: string): Promise<void> {
+    if (!sessionId.trim() || sessionId.length > 512 || /[\x00-\x1f]/u.test(sessionId)) throw new Error("Invalid attachment session id.");
+    return this.serial(attachmentId, async () => {
+      const { data: _data, ...record } = await this.read(attachmentId);
+      if (record.retainedBy?.includes(sessionId)) return;
+      const next = { ...record, retainedBy: [...(record.retainedBy ?? []), sessionId] };
+      const target = this.metadataPath(attachmentId);
+      const temporary = `${target}.${randomUUID()}.tmp`;
+      try {
+        await writeFile(temporary, `${JSON.stringify(next)}\n`, { flag: "wx", mode: 0o600 });
+        await rename(temporary, target);
+      } finally {
+        await unlink(temporary).catch(error => { if (error.code !== "ENOENT") throw error; });
       }
-      if ((outcome.reason as NodeJS.ErrnoException).code !== "ENOENT") {
-        throw outcome.reason;
+    });
+  }
+
+  async remove(attachmentId: string): Promise<{ attachmentId: string; deleted: boolean }> {
+    return this.serial(attachmentId, async () => {
+      try {
+        const record = await this.read(attachmentId);
+        if (record.retainedBy?.length) return { attachmentId, deleted: false };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
-    }
-    return { attachmentId, deleted };
+      const outcomes = await Promise.allSettled([
+        unlink(this.objectPath(attachmentId)),
+        unlink(this.metadataPath(attachmentId)),
+      ]);
+      let deleted = false;
+      for (const outcome of outcomes) {
+        if (outcome.status === "fulfilled") {
+          deleted = true;
+          continue;
+        }
+        if ((outcome.reason as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw outcome.reason;
+        }
+      }
+      return { attachmentId, deleted };
+    });
   }
 }

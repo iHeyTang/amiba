@@ -214,6 +214,9 @@ export function createDshPlatformAdapters(
         },
       });
     },
+    async retainForSession(attachmentId: string, sessionId: string) {
+      await client.call("amibaAttachments/retainForSession", { args: { attachmentId, sessionId } });
+    },
     readForPrompt: (attachmentId: string) =>
       client.call<{
         attachmentId: string;

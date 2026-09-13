@@ -1305,3 +1305,13 @@ pipelines retain mounted component state.
 - 原生图片注册、图片恢复、附件所有权、队列和 Composer 触发管线共 79 项测试通过（/tmp/amiba-sending-files-tests2.log），包括受控等待期间删除队列副本和原图片、重叠发送、同一发送内重复 ID、准备拒绝后的释放及无自动删除。UI 类型检查通过（/tmp/amiba-sending-files-types2.log）。
 - 完整 Desktop 构建通过（/tmp/amiba-sending-files-build.log）；组合桌面回归 /tmp/amiba-sending-files-smoke.log 退出 0，覆盖原有图片注册/恢复/清理、队列发送、刷新、离屏草稿、命令、动态插件、轨迹及子会话冷重启。未修改 JSX 或 CSS，原卡片尺寸及样式检查通过。受控暂停发送期间的竞争条件由上述 hook 测试验证，未把现有桌面组合探针宣称为该竞争条件的专用端到端验证。
 - 本保留表仅属于当前 renderer，不是 Host 的持久化引用表。跨窗口同时操作、已发送历史中的长期文件引用、跨重启所有权仍需由 Host 层继续核对；完整官方图片及输入生命周期尚未全部完成。
+
+### Host 持久化附件会话引用（2026-09-13）
+
+- 确认原 Host removeAttachment 直接删除对象及元数据，无法识别另一窗口或会话已经引用该文件。本轮在原元数据增加可选 retainedBy，会话引用使用原文件 ID，不复制文件或改动消息展示。
+- 新 retainForSession 原子替换元数据，对重复会话幂等；同一 Store 的同一文件按顺序处理引用登记与删除，登记成功后普通 remove 返回 deleted:false。元数据校验检查引用字段，未登记文件保持原删除流程。重新创建 Store 后仍读取持久化引用。
+- 增加同名 Typert Remote 描述与 Host 方法，原桌面及通用 DSH 平台适配器调用该接口。AgentAttachmentsAdapter 使用可选方法维持其他宿主兼容；实际 Amiba 适配器提供它。原 DshChatEngine 在只读地址检查后、会话解析/创建和附件读取之前等待引用登记，涵盖图片及文本/PDF附件 ID，重复 ID 只登记一次。
+- 存储 5 项测试通过（/tmp/amiba-host-file-refs-tests2.log），含多会话幂等引用、重建 Store 后保留原字节、登记与删除并发排序和普通草稿删除。运行时 32 项通过（/tmp/amiba-host-file-refs-runtime-tests3.log），其中真实引擎测试延迟登记回包，确认完成前既不读取图片也不调用 prompt。Runtime、附件插件及 Desktop 主进程类型检查通过（/tmp/amiba-host-file-refs-types.log、/tmp/amiba-host-file-refs-plugin-types.log、/tmp/amiba-host-file-refs-desktop-types.log）。
+- 完整 Desktop 构建通过（/tmp/amiba-host-file-refs-build.log）。新增 --host-file-refs 使用原 Electron DSH HTTP 通道调用真实 put、retainForSession、removeAttachment、readForPrompt，确认删除返回 false 且完整字节仍可读取。首轮误把该原生 HTTP 服务声明为 Client Cordis 服务 remote.amibaAttachments，导致探针等待不存在的服务；修正为实际原生通道后通过，未添加虚构客户端服务。
+- 最终组合回归 /tmp/amiba-host-file-refs-smoke2.log 退出 0，同时通过未登记队列图片最终清理、浏览器注册恢复、整页刷新、输入与命令、动态插件、轨迹、子会话及嵌套 Host 冷重启等原回归。Store 重建后的引用持久性由存储测试验证，不把组合中的 Host 冷重启等同于已专门复查该新增引用。
+- 范围：新登记引用在模型执行前写入，提交失败也保留文件，以免损坏已记录或可重试内容。当前没有旧历史迁移或 release-session 回收流程，尚不能声明长期存储生命周期完整。引擎收到提交前的 UI 准备阶段仍只有当前窗口临时保留；多 Host 进程同时写同一目录不在本轮验证范围。没有 JSX/CSS 改动。

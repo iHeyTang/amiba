@@ -502,6 +502,10 @@ export class DshChatEngineClient implements ChatEngineClient {
       const address = suppliedAddress ? { ...suppliedAddress } : undefined;
       if (address && address.childSessionId !== sessionId) throw new Error("Subagent address does not match the requested session");
       if (address?.mode === "one-shot") throw new Error("One-shot subagent conversations are read-only");
+      for (const attachmentId of new Set(payload.attachments?.map(item => item.attachmentId) ?? [])) {
+        await this.options.attachments?.retainForSession?.(attachmentId, sessionId);
+      }
+
       if (!address) {
         const resolved = (await this.options.resolveSession?.(payload, controller.signal)) ?? {};
         await client.createSession(

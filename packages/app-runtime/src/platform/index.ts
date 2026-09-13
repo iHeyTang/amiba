@@ -153,6 +153,8 @@ export interface AgentAttachmentsAdapter {
     mime: string;
     bytes: Uint8Array;
   }): Promise<{ attachmentId: string }>;
+  /** Persist a message reference before reading or submitting its bytes. */
+  retainForSession?(attachmentId: string, sessionId: string): Promise<void>;
   readForPrompt(attachmentId: string): Promise<{
     attachmentId: string;
     name: string;

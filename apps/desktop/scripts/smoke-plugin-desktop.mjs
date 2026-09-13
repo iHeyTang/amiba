@@ -907,6 +907,17 @@ try {
           await wait(()=>evaluate(`window.__probeCtx.get('composerImages').draftImages([${JSON.stringify(finalImageId)}]).length===0`));
           console.log("Restored queued image registered a real browser File with exact original bytes and a distinct draft ID; renderer reload and final registry release passed");
           console.log("Actual queued image bytes survived cancel edit, chip removal and session switching; deleting the last queue owner removed its stored file");
+          if(process.argv.includes("--host-file-refs")) {
+            const result=await evaluate("(async()=>{const call=async(method,args)=>{const rpcId=crypto.randomUUID();const response=await window.amiba.dshClient.fetch({url:'/api/amibaAttachments/'+method,method:'POST',headers:{'content-type':'application/json'},body:new TextEncoder().encode(JSON.stringify({type:'client-request',rpcId,method:'amibaAttachments/'+method,payload:{args}}))});const envelope=JSON.parse(new TextDecoder().decode(response.body));if(envelope.rpcId!==rpcId)throw new Error('Invalid attachment RPC envelope');return envelope.result;};const created=await call('put',{name:'retained.txt',mime:'text/plain',kind:'text',dataBase64:btoa('retained bytes')});if(!created.ok)throw new Error(JSON.stringify(created));const id=created.value.attachmentId;const retained=await call('retainForSession',{attachmentId:id,sessionId:window.__compatSessionId});const removed=await call('removeAttachment',{attachmentId:id});const read=await call('readForPrompt',{attachmentId:id});return {retained,removed,read};})()");
+            assert.equal(result.retained.ok,true);
+            assert.equal(result.retained.value.retained,true);
+            assert.equal(result.removed.ok,true);
+            assert.equal(result.removed.value.deleted,false);
+            assert.equal(result.read.ok,true);
+            assert.equal(result.read.value.dataBase64,Buffer.from('retained bytes').toString('base64'));
+            console.log("Real Host attachment remote retained session-referenced bytes against a later draft deletion request");
+          }
+
         }
 
       }

@@ -192,11 +192,14 @@ describe("DshChatEngineClient", () => {
       kind: "image" as const,
       dataBase64: "AQID",
     }));
+    let retained!: () => void;
+    const retainForSession = vi.fn(() => new Promise<void>(resolve => { retained = resolve; }));
     const engine = new DshChatEngineClient({
       client,
       attachments: {
         put: vi.fn(),
         remove: vi.fn(),
+        retainForSession,
         readForPrompt,
       },
     });
@@ -215,10 +218,16 @@ describe("DshChatEngineClient", () => {
         ],
       }),
     );
+    await eventually(() => expect(retainForSession).toHaveBeenCalledOnce());
+    expect(readForPrompt).not.toHaveBeenCalled();
+    expect(prompt).not.toHaveBeenCalled();
+    retained();
     await eventually(() => expect(prompt).toHaveBeenCalledOnce());
     expect(readForPrompt).toHaveBeenCalledWith(
       "att_0123456789abcdef0123456789abcdef",
     );
+    expect(retainForSession).toHaveBeenCalledWith("att_0123456789abcdef0123456789abcdef", "session-1");
+    expect(retainForSession.mock.invocationCallOrder[0]).toBeLessThan(readForPrompt.mock.invocationCallOrder[0]);
     const promptCall = prompt.mock.calls[0] as unknown as [string, unknown];
     expect(promptCall[1]).toEqual([
       { type: "text", text: "what is this?" },

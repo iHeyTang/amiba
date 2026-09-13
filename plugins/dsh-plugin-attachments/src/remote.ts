@@ -23,12 +23,14 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
   interface TypertRemoteNamespaceMap {
     amibaAttachments: {
       put(name: string, mime: string, kind: AmibaAttachmentKind, dataBase64: string): Promise<RemoteResult<AmibaAttachmentRecord>>;
+      retainForSession(attachmentId: string, sessionId: string): Promise<RemoteResult<{ attachmentId: string; retained: boolean }>>;
       readForPrompt(attachmentId: string): Promise<RemoteResult<AmibaPromptAttachment>>;
       removeAttachment(attachmentId: string): Promise<RemoteResult<{ attachmentId: string; deleted: boolean }>>;
     };
   }
   interface TypertRemoteMap {
     "amibaAttachments/put": TypertRemoteNamespaceMap["amibaAttachments"]["put"];
+    "amibaAttachments/retainForSession": TypertRemoteNamespaceMap["amibaAttachments"]["retainForSession"];
     "amibaAttachments/readForPrompt": TypertRemoteNamespaceMap["amibaAttachments"]["readForPrompt"];
     "amibaAttachments/removeAttachment": TypertRemoteNamespaceMap["amibaAttachments"]["removeAttachment"];
   }
@@ -51,6 +53,10 @@ export const AMIBA_ATTACHMENTS_REMOTE: TypertRemoteContribution = {
     descriptor("readForPrompt", [
       { name: "attachmentId", wire: "attachmentId", source: "json", codec: { mode: "strict", typeSymbol: "@amiba/attachments#id", schema: idSchema } },
     ], { mode: "strict", typeSymbol: "@amiba/attachments#prompt", schema: promptSchema }),
+    descriptor("retainForSession", [
+      { name: "attachmentId", wire: "attachmentId", source: "json", codec: { mode: "strict", typeSymbol: "@amiba/attachments#id", schema: idSchema } },
+      { name: "sessionId", wire: "sessionId", source: "json", codec: stringCodec },
+    ], { mode: "strict", typeSymbol: "@amiba/attachments#retained", schema: z.object({ attachmentId: idSchema, retained: z.boolean() }) }),
     descriptor("removeAttachment", [
       { name: "attachmentId", wire: "attachmentId", source: "json", codec: { mode: "strict", typeSymbol: "@amiba/attachments#id", schema: idSchema } },
     ], { mode: "strict", typeSymbol: "@amiba/attachments#removed", schema: z.object({ attachmentId: idSchema, deleted: z.boolean() }) }),

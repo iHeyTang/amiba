@@ -206,3 +206,11 @@ describe("createDshPlatformAdapters", () => {
     });
   });
 });
+
+
+it("routes durable attachment references to the Host remote",async()=>{
+  const seen:Array<{method:string;payload:unknown}>=[];
+  const adapters=createDshPlatformAdapters(rpcClient(()=>({retained:true}),seen));
+  await adapters.agentAttachments.retainForSession!("att-id","session-id");
+  expect(seen).toEqual([{method:"amibaAttachments/retainForSession",payload:{args:{attachmentId:"att-id",sessionId:"session-id"}}}]);
+});
