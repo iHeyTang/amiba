@@ -77,3 +77,18 @@ test('changing or removing a plugin invalidates runtime dependency reuse even wh
     assert.notEqual(after.dependencyLockHash, before.dependencyLockHash);
   }
 });
+
+test('static resource packages retain files without retaining an unused executable graph', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-assets-'));
+  try {
+    for (const [name, manifest] of Object.entries({studio:{dependencies:{devserver:'1.0.0'}},devserver:{}})) {
+      const folder=path.join(dir,'node_modules',name); fs.mkdirSync(folder,{recursive:true});
+      fs.writeFileSync(path.join(folder,'package.json'),JSON.stringify({name,version:'1.0.0',...manifest}));
+    }
+    fs.writeFileSync(path.join(dir,'node_modules/studio/index.html'),'<h1>Studio</h1>');
+    isolatePluginDependencies(dir,{name:'pet',dependencies:{studio:'1.0.0'}},{packages:{}},{assetDependencies:['studio']});
+    assert.equal(fs.readFileSync(path.join(dir,'node_modules/studio/index.html'),'utf8'),'<h1>Studio</h1>');
+    assert.ok(!fs.existsSync(path.join(dir,'node_modules/devserver')));
+    assert.notEqual(distributionHashes('host','lock',['pet'],[{}]).appTreeHash,distributionHashes('host','lock',['pet'],[{assetDependencies:['studio']}]).appTreeHash);
+  } finally { fs.rmSync(dir,{recursive:true,force:true}); }
+});

@@ -31,7 +31,9 @@ export function checkHostContract(manifest, hostLock) {
 // npm installs and validates the complete dependency graph first. Keep only the
 // private graph in the artifact; host peers resolve through the parent runtime.
 // This preserves separate versions inside standalone applications (e.g. Studio).
-export function isolatePluginDependencies(directory, manifest, hostLock) {
+export function isolatePluginDependencies(directory, manifest, hostLock, policy = {}) {
+  const assets = new Set(policy.assetDependencies ?? []);
+  for (const name of assets) if (!(name in manifest.dependencies)) throw new Error(`${manifest.name}: asset dependency ${name} must be a direct private dependency`);
   const packages = new Map();
   function inventory(modules) {
     if (!fs.existsSync(modules)) return;
@@ -50,6 +52,7 @@ export function isolatePluginDependencies(directory, manifest, hostLock) {
   }
   inventory(path.join(directory, 'node_modules'));
   const keep = new Set();
+  const expanded = new Set();
   function resolve(from, name) {
     for (let current = from; current.startsWith(directory); current = path.dirname(current)) {
       const candidate = path.join(current, 'node_modules', name);
@@ -68,8 +71,10 @@ export function isolatePluginDependencies(directory, manifest, hostLock) {
       if (optional) return;
       throw new Error(`${manifest.name}: missing private dependency ${name} from ${from}`);
     }
-    if (keep.has(location)) return;
+    if (expanded.has(location)) return;
     keep.add(location);
+    if (from === directory && assets.has(name)) return;
+    expanded.add(location);
     for (const [child, spec] of Object.entries(installed.dependencies ?? {})) visit(location, child, spec, child in (installed.optionalDependencies ?? {}));
     for (const [child, spec] of Object.entries(installed.optionalDependencies ?? {})) visit(location, child, spec, true);
     for (const [child, spec] of Object.entries(installed.peerDependencies ?? {})) visit(location, child, spec, installed.peerDependenciesMeta?.[child]?.optional);
@@ -91,8 +96,8 @@ export function isolatePluginDependencies(directory, manifest, hostLock) {
   return [...keep].map(location => path.relative(directory, location));
 }
 
-export function distributionHashes(hostManifest, hostLock, pluginLocks) {
-  const dependencyLockHash = createHash('sha256').update(hostLock).update(pluginLocks.join('\0')).digest('hex');
+export function distributionHashes(hostManifest, hostLock, pluginLocks, policies = []) {
+  const dependencyLockHash = createHash('sha256').update(hostLock).update(pluginLocks.join('\0')).update(JSON.stringify(policies)).digest('hex');
   const appTreeHash = createHash('sha256').update(hostManifest).update(dependencyLockHash).digest('hex');
   return { dependencyLockHash, appTreeHash };
 }

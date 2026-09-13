@@ -288,7 +288,7 @@ if (args.has('--validate-only')) {
   console.log(`Validated distributable plugin sources and runtime lock for ${dependencyTarget}`);
   process.exit(0);
 }
-const { dependencyLockHash, appTreeHash } = distributionHashes(appPackageJsonContent, dependencyLockContent, pluginLockContents);
+const { dependencyLockHash, appTreeHash } = distributionHashes(appPackageJsonContent, dependencyLockContent, pluginLockContents, pluginPackages.map(plugin => plugin.amiba?.distribution ?? {}));
 
 function fail(message) {
   throw new Error(`[dsh:runtime] ${message}`);
@@ -742,7 +742,7 @@ try {
         cwd: pluginDestination,
         env: { ...process.env, PATH: `${managedNodePath(stage)}${path.delimiter}${process.env.PATH ?? ''}`, npm_config_cache: path.join(runtimePackageDir, '.cache', 'dsh-runtime', 'npm') },
       });
-      isolatePluginDependencies(pluginDestination, install.manifest, hostLock);
+      isolatePluginDependencies(pluginDestination, install.manifest, hostLock, pluginPackages[index].amiba?.distribution);
     }
 
     // On a reused app tree, `pluginDestination/lib` may already exist from

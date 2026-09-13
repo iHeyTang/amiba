@@ -43,3 +43,7 @@ jobs:
         run: pnpm runtime:prepare
       - name: Smoke test plugin composition
         run: pnpm runtime:smoke
+      - name: Test private memory native dependencies
+        run: node scripts/release/smoke-memory.cjs packages/app-runtime/resources/dsh-runtime
+      - name: Test packaged Studio assets
+        run: node scripts/release/smoke-pets.mjs packages/app-runtime/resources/dsh-runtime

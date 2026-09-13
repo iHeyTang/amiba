@@ -11,6 +11,8 @@ Run `pnpm runtime:lock` after manifest changes. To update only one plugin, run `
 
 Each plugin is installed in its own `app/node_modules/@amiba/<plugin>/node_modules` tree. npm first validates and installs its locked graph, including platform-specific native scripts. Artifact assembly retains the graph reachable from private dependencies and removes compatible host interface copies and unrelated installation packages. Shared interfaces resolve to the parent host. Different private package versions remain independent. A standalone embedded application may retain its own incompatible React version; it must not use that instance to render into the host's React tree.
 
+`amiba.distribution.assetDependencies` identifies direct packages used only for prebuilt static resources, such as Mofli Studio. Their package files remain, but their executable dependency graph is not retained. `requiredFiles` validates the plugin-owned resource paths. Do not mark packages this way if the plugin executes their code. These policies participate in cache identity.
+
 Client-only libraries already bundled by Vite must be reviewed before removing runtime dependencies: modules, subprocess entry points, workers, static files and dynamically resolved packages may still need their original package files. Dependency relocation alone does not justify deleting any of them.
 
 The emitted plugin package includes compiled code, declared resources, its private dependency tree, a portable manifest and its installation lock. The existing DSH loader resolves it at the standard package location. Runtime staging is verified before replacing the previous runtime; failed assembly leaves the previous runtime available. User data remains outside plugin artifacts.

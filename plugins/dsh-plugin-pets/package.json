@@ -91,5 +91,15 @@
     "@amiba/dsh-plugin-onboarding": {
       "optional": true
     }
+  },
+  "amiba": {
+    "distribution": {
+      "assetDependencies": [
+        "@mofli/studio"
+      ],
+      "requiredFiles": [
+        "node_modules/@mofli/studio/dist/index.html"
+      ]
+    }
   }
 }
