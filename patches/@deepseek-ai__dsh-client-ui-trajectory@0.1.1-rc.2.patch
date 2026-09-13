@@ -1,0 +1,66 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -6591,6 +6591,19 @@
+ 			if (change.kind === "tools") return "Tools Updated";
+ 			return "System Prompt and Tools Updated";
+ 		}
++		/** Durable image currency; keep legacy inline images on their existing path. */
++		function trajectoryImageAttachment(value) {
++			if (typeof value !== "object" || value === null || Array.isArray(value)) return void 0;
++			const positive = (n) => typeof n === "number" && Number.isSafeInteger(n) && n > 0;
++			if (typeof value.attachmentId !== "string" || !value.attachmentId || typeof value.mediaType !== "string"
++				|| !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(value.mediaType)
++				|| !positive(value.bytes) || !positive(value.width) || !positive(value.height)
++				|| (value.name !== void 0 && typeof value.name !== "string")) return void 0;
++			const dimensions = value.originalDimensions;
++			if (dimensions !== void 0 && (typeof dimensions !== "object" || dimensions === null || Array.isArray(dimensions)
++				|| !positive(dimensions.width) || !positive(dimensions.height))) return void 0;
++			return value;
++		}
+ 		function assistantSourceBlock(block) {
+ 			switch (block.kind) {
+ 				case "text": return {
+@@ -6609,7 +6622,8 @@
+ 				};
+ 				case "image": return {
+ 					type: "image",
+-					content: stringifySourceValue(block.attachment)
++					content: stringifySourceValue(block.attachment),
++					...(trajectoryImageAttachment(block.attachment) === void 0 ? {} : { attachment: block.attachment })
+ 				};
+ 				case "other": return sourceBlock(block.block);
+ 			}
+@@ -6625,11 +6639,13 @@
+ 				type: type === "reasoning" ? "thinking" : type,
+ 				content: block.text
+ 			};
++			const attachment = block.type === "image" ? trajectoryImageAttachment(block.attachment) : void 0;
+ 			const imageSrc = sourceImage(block);
+ 			const imageAlt = typeof block.alt === "string" ? block.alt : void 0;
+ 			return {
+ 				type,
+ 				content: imageSrc === void 0 ? stringifySourceValue(value) : "",
++				...(attachment === void 0 ? {} : { attachment }),
+ 				...imageSrc !== void 0 ? { imageSrc } : {},
+ 				...imageAlt !== void 0 ? { imageAlt } : {}
+ 			};
+diff --git a/lib/types/client/trajectory-record.d.ts b/lib/types/client/trajectory-record.d.ts
+--- a/lib/types/client/trajectory-record.d.ts
++++ b/lib/types/client/trajectory-record.d.ts
+@@ -1,5 +1,6 @@
+ /** Shared trajectory record data and formatting contracts. */
+ import type { HTMLAttributes } from 'react';
++import type { MessageImagesOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client';
+ import type { ConversationPromptSnapshot } from '@deepseek-ai/dsh-client-runtime/client';
+ /** Closed set of trajectory record kinds. */
+ export type TrajectoryCellKind = 'system' | 'user' | 'context' | 'compacted' | 'message' | 'tool' | 'subtool';
+@@ -16,6 +17,8 @@
+ export interface TrajectorySourceBlock {
+     type: string;
+     content: string;
++    /** Durable reference, in addition to the unchanged legacy inline image fields. */
++    attachment?: MessageImagesOwnerProps['images'][number]['attachment'];
+     imageSrc?: string;
+     imageAlt?: string;
+     callId?: string;

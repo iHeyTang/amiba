@@ -5,6 +5,14 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：轨迹持久图片记录补丁基础（2026-09-13）
+
+新增固定 rc.2 的 trajectory 依赖补丁草稿（patches/@deepseek-ai__dsh-client-ui-trajectory@0.1.1-rc.2.patch），尚未登记到 patchedDependencies 或应用到生产运行时。补丁在 sourceBlock 和 assistantSourceBlock 中保留通过校验的原 attachment 对象，使用新版 TrajectorySourceBlock 的 attachment 字段；类型通过已有 ui-conversation peer 的 canonical 图片 owner 派生，不增加另一套图片身份。原 content 字符串、imageSrc/imageAlt、工具调用 ID/名称和旧图片路径全部保留，此阶段不修改 UI 渲染。
+
+新增 trajectory-images.test.mjs：复制实际已安装 rc.2 包的相关文件到临时目录，先用系统 patch 校验并应用真实补丁（若已应用则验证可反向匹配），再执行补丁后的实际投影函数。4 项测试通过，覆盖普通与助手图片、原引用身份、重复出现及顺序、原文本/inline 字段、无效/暂存元数据拒绝、旧 URL 协议限制和助手工具导航字段。日志 /tmp/amiba-trajectory-image-record-tests.log。测试不改 managed runtime，不用复制出的另一套投影实现代替待测代码。
+
+后续仍需补 conversation.trajectory.images 声明与实际渲染、复用会话授权 loader、无插件时的原轨迹回退、inline/持久图片混排、预览与详情的 compact 语义，然后登记补丁及 lock、验证 runtime prepare 的应用和完整桌面构建/真实轨迹界面。当前 pnpm 工作区尚未直接引入 trajectory，补丁登记时要处理依赖图与锁的一致性，不能仅改 resources 的临时文件。轨迹入口仍未算作已接入；全部目标和 33/10/21 统计不变。
+
 ## 最新进展：仅由嵌套事件引用的图片（2026-09-13）
 
 夹具新增第三张有效 PNG（3×1），在 Host 保存后只写入 tool/code-dispatch 的 content；用户消息和普通 tool/result 分别使用另外两张不同字节的图片。断言三者具有不同的 attachmentId，避免把已被其他记录引用的图片误当作嵌套授权验证。
