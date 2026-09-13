@@ -1,5 +1,6 @@
 import { bindInputDraft, type InputDraftCursor } from "./input-draft-binding.js";
 import { createResidentImageStaging, type PreparedInputImages } from "./resident-image-staging.js";
+import { CommandClaimStore, createResidentInputTransaction } from "@amiba/ui/composer-runtime";
 /**
  * Bridge between Amiba's composer (plain React, `@amiba/ui`) and the OFFICIAL
  * input-trigger pipeline (`ctx.inputTriggers`, `ctx.commandUi`) — the piece
@@ -60,10 +61,12 @@ function imageRegistry(value: unknown): ImageRegistry | undefined {
 export interface InputTriggerBridgeDeps {
   /** Same per-session document as the original Composer; optional for other hosts. */
   residentDraft?(sessionId: string): {
+    getDocument?: import("@amiba/ui").ComposerDraftSource["getDocument"];
     subscribe(listener: () => void): () => void;
     setDisplayText(text: string): void;
     readInputDraft(): ReturnType<NonNullable<TriggerEditorOps["readInputDraft"]>>;
   };
+  mentionProviders?(sessionId: string): import("@amiba/ui").TriggerProvider[];
   /** Actual Host inbox state, distinct from the native local pending queue. */
   sessionFor?(sessionId: string): InputQueueSession | undefined;
   /** Browser image registry implementing the pinned image operations. */
@@ -206,7 +209,21 @@ export function createInputTriggerBridge(
   const residentInputs = new Map<string, {
     source: NonNullable<ReturnType<NonNullable<InputTriggerBridgeDeps["residentDraft"]>>>;
     draft?: ReturnType<typeof bindInputDraft>;
+    projection?: { base: ReturnType<NonNullable<TriggerEditorOps["readInputDraft"]>>; status: ReturnType<CommandClaimStore["getInputStatus"]>; value: ReturnType<NonNullable<TriggerEditorOps["readInputDraft"]>> };
   }>();
+  const commandClaims = new Map<string, CommandClaimStore>();
+  const transactions = new Map<string, ReturnType<typeof createResidentInputTransaction>>();
+  const transactionSources = new Map<string, NonNullable<ReturnType<NonNullable<InputTriggerBridgeDeps["residentDraft"]>>>>();
+  const emptySubmission = Object.freeze({ pending: false, notice: null });
+  const submissionSources = new Map<string, NonNullable<ReturnType<NonNullable<ComposerTriggerRuntime["inputSubmissionSource"]>>>>();
+  const claimsFor = (id: string) => {
+    let claims = commandClaims.get(id);
+    if (!claims) {
+      claims = new CommandClaimStore(); commandClaims.set(id, claims);
+      claims.subscribe(() => { readDraft(id); notifyDraft(id); });
+    }
+    return claims;
+  };
   const cursorFor = (id: string) => {
     let cursor = draftCursors.get(id);
     if (!cursor) { cursor = { revision: -1, occurrence: 0 }; draftCursors.set(id, cursor); }
@@ -217,19 +234,26 @@ export function createInputTriggerBridge(
     if (editor) return editor.draft.read();
     const resident = residentInputs.get(id);
     if (!resident) return undefined;
-    resident.draft ??= bindInputDraft({ readInputDraft: resident.source.readInputDraft } as TriggerEditorOps, cursorFor(id));
+    resident.draft ??= bindInputDraft({ readInputDraft: () => {
+      const base = resident.source.readInputDraft(), status = claimsFor(id).getInputStatus();
+      const previous = resident.projection;
+      if (previous?.base === base && previous.status === status) return previous.value;
+      const value = Object.freeze({ ...base, ...status, draftRev: Math.max(base.draftRev, previous ? previous.value.draftRev + 1 : 0) });
+      resident.projection = { base, status, value };
+      return value;
+    } } as TriggerEditorOps, cursorFor(id));
     return resident.draft.read();
   };
   const canEditResidentImages = (id: string) => {
     const session = inputSessions.get(id)?.session;
-    const phase = editors.get(id)?.draft.read()?.phase;
+    const phase = readDraft(id)?.phase;
     return !!session && residentInputs.has(id) && session.getSnapshot().subagent?.address.mode !== "one-shot" &&
       phase !== "adjudicating" && phase !== "submitting";
   };
-  const filterResidentImages = (id: string, keep: (image: ComposerAttachment) => boolean) => {
+  const filterResidentImages = (id: string, keep: (image: ComposerAttachment, registration: ComposerDraftImageRegistration) => boolean) => {
     const images = residentImages.get(id);
     if (!images) return;
-    const retained = images.filter(item => keep(item.image));
+    const retained = images.filter(item => keep(item.image, item));
     if (retained.length === images.length) return;
     if (retained.length) residentImages.set(id, retained);
     else residentImages.delete(id);
@@ -264,7 +288,38 @@ export function createInputTriggerBridge(
   let draftSources: readonly InputTriggerSource[] = [];
   const listeners = new Set<() => void>();
   const notify = () => { for (const listener of listeners) listener(); };
-  return {
+  const transactionFor = (id: string) => {
+    let transaction = transactions.get(id);
+    const source = residentInputs.get(id)?.source;
+    if (transaction && transactionSources.get(id) !== source && !transaction.getSnapshot().pending) transaction = undefined;
+    if (!transaction && source?.getDocument) {
+      transaction = createResidentInputTransaction({
+        sessionId: id, source: { ...source, getDocument: source.getDocument }, claims: claimsFor(id),
+        available: () => !editors.has(id) && residentInputs.get(id)?.source === source && !!inputSessions.get(id) &&
+          inputSessions.get(id)!.session.getSnapshot().subagent?.address.mode !== "one-shot" && !bridge.isSessionRunning!(id),
+        controller: () => bridge.controllerFor(id), providers: () => deps.mentionProviders?.(id) ?? [],
+        images: () => residentImages.get(id) ?? [], prepare: (images, signal) => imageStaging.acquire(images, signal),
+        consume: images => { const consumed = new Set(images); filterResidentImages(id, (_image, registration) => !consumed.has(registration)); },
+        send: request => residentSender ? residentSender.send(request) : Promise.resolve({ kind: "rejected", error: "The resident conversation sender is unavailable." }),
+        submitClaim: (claim, args, images) => bridge.submitClaim!(id, claim, args, images),
+        changed: () => { notifyDraft(id); imageBindings.get(id)?.transfer?.(); },
+      });
+      transactions.set(id, transaction);
+      transactionSources.set(id, source);
+    }
+    return transaction;
+  };
+  const bridge: AmibaInputTriggerBridge = {
+    commandClaimsFor: claimsFor,
+    inputSubmissionSource(id) {
+      let source = submissionSources.get(id);
+      if (!source) {
+        source = { getSnapshot: () => transactions.get(id)?.getSnapshot() ?? emptySubmission, subscribe: listener => inputDraftSource(id).subscribe(listener) };
+        submissionSources.set(id, source);
+      }
+      return source;
+    },
+    clearInputSubmissionNotice: id => transactions.get(id)?.clearNotice(),
     isSessionRunning: id => (inputSessions.get(id)?.session ?? deps.sessionFor?.(id))?.getSnapshot().running === true,
     bindInputSession(sessionId, session) {
       const binding = { session };
@@ -273,7 +328,9 @@ export function createInputTriggerBridge(
       if (resident) residentInputs.set(sessionId, resident);
       inputSessions.set(sessionId, binding);
       const offDraft = source?.subscribe(() => {
-        if (inputSessions.get(sessionId) !== binding || editors.has(sessionId)) return;
+        if (inputSessions.get(sessionId) !== binding) return;
+        transactions.get(sessionId)?.draftChanged();
+        if (editors.has(sessionId)) return;
         readDraft(sessionId);
         notifyDraft(sessionId);
       });
@@ -288,6 +345,7 @@ export function createInputTriggerBridge(
         offDraft?.();
         if (inputSessions.get(sessionId) !== binding) return;
         inputSessions.delete(sessionId);
+        transactions.get(sessionId)?.cancel();
         residentInputs.delete(sessionId);
         filterResidentImages(sessionId, () => false);
         notifyInputSessions();
@@ -394,7 +452,12 @@ export function createInputTriggerBridge(
       submitters.set(sessionId, binding);
       return () => { if (submitters.get(sessionId) === binding) submitters.delete(sessionId); };
     },
-    submitInput: (sessionId) => submitters.get(sessionId)?.submit() ?? false,
+    submitInput(sessionId) {
+      if (transactions.get(sessionId)?.getSnapshot().pending) return false;
+      const native = submitters.get(sessionId);
+      if (native) return native.submit();
+      return transactionFor(sessionId)?.submit() ?? false;
+    },
     bindResidentTurnSender(send) {
       const binding = { send };
       residentSender = binding;
@@ -482,6 +545,7 @@ export function createInputTriggerBridge(
     },
 
     bindEditor(sessionId: string, ops: TriggerEditorOps): () => void {
+      transactions.get(sessionId)?.cancel();
       const actx = deps.scopeOf(sessionId);
       if (actx === undefined) return () => {};
       const cursor = cursorFor(sessionId);
@@ -543,4 +607,5 @@ export function createInputTriggerBridge(
       return Promise.resolve().then(() => claim.submit(args, actx, images));
     },
   };
+  return bridge;
 }

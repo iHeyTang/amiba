@@ -181,7 +181,11 @@ export type {
   ComposerTriggerController,
   ComposerTriggerRuntime,
   ResidentTurnRequest,
+  ResidentInputSubmissionState,
   TriggerEditorOps,
 } from "./composer/triggers/contracts";
+export { CommandClaimStore } from "./composer/triggers/claim";
+export { createResidentInputTransaction } from "./internal/resident-input-transaction";
+export type { ComposerDraftSource } from "./composer-draft-store";
 
 export { WorkspaceTextMentionsContext } from "./workspace-file-links";

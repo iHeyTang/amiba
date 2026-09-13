@@ -1390,6 +1390,18 @@ pipelines retain mounted component state.
 
 ## 附件准备与交接记录
 
+### 后续进展：标准离屏输入事务
+
+标准 inputActions.submit 已连接驻留输入事务及上一节的后台发送器。事务直接读取原生结构化草稿，复用 expandMentionPartsAsync、真实会话 InputTriggerController、CommandClaimStore、commandImages 和原上传准备缓存。官方引用交给 codec；普通文字不重新解析成引用。首次 slash 提交判定命令，第二次执行原 claim；共享命令状态可以交回原输入器。新增无界面的 composer-runtime 导出入口，避免状态逻辑加载终端视图。
+
+事务发布真实 adjudicating/submitting/claimed/plain 状态和错误提示，重复提交被阻止。草稿修改及编辑器返回会取消尚未派发的准备；后台发送器在实际引擎派发前调用 onDispatch，因此目录、检查点等准备期间也可以取消。已派发后仅在原文档身份未变时清空文本，仅消费捕获的图片注册，保留后来输入的新草稿。错误和未确认回执保留输入；命令失败保留 claim 供显式重试。原输入器订阅这份事务状态并阻止重复发送，沿用原布局和提示区域。
+
+验证：输入及原触发管线 43 项测试、桥接/提供者/图片/快照 49 项测试通过；UI 与插件类型检查通过；完整构建、完整桌面兼容回归通过。--resident-input 实测标准离屏真实引用只解析一次、形似 token 的普通文字原样进入模型、前台编辑器和草稿不变、离屏图片命令收到原始 PNG 字节并释放注册、离屏 claim 切回原输入器后继续执行。原有队列、图片、子会话及冷重启等回归也通过。日志：/tmp/amiba-resident-transaction-tests.log、/tmp/amiba-resident-transaction-bridge-tests.log、/tmp/amiba-resident-transaction-ui-types.log、/tmp/amiba-resident-transaction-plugin-types.log、/tmp/amiba-resident-transaction-build.log、/tmp/amiba-resident-transaction-smoke2.log。
+
+首次桌面用例同时改动引用前后的文本，触发现有单区间替换语义，把整个引用替换为普通文字；测试改为两次独立编辑并先确认引用仍存在后重跑通过，未修改原编辑语义。失败保留和派发后新草稿隔离由状态测试验证，桌面新用例侧重成功路径与原输入器交接。
+
+仍未完成：忙碌目标的离屏排队及完整 Host inbox/原生队列对齐、跨挂载引用 ID 连续性和外观/失效/粘贴语义、后台模型图片输入的独立实测。当前没有将这些项目标记为完成。下面保留较早的附件准备阶段记录，其中当时尚未接通的标准提交现已推进到本节状态。
+
 驻留图片增加按原始注册实例缓存的上传准备与引用持有。并发准备和失败重试复用同一 Host 文件；取消调用不会丢弃仍属于草稿的已上传文件。删除草稿图片后，待进行中的上传和发送持有释放再清理文件。发送持有期间暂缓交给原输入器，交接后文件清理由原输入器和队列负责。
 
 原输入器增加已准备图片的接收路径：保留浏览器 File 和草稿 ID，采用原 Host 附件 ID，仅创建新的原生附件行 ID，不再次上传或解析会话。原上传路径和界面布局不变。

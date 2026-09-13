@@ -170,9 +170,19 @@ export interface ResidentTurnRequest {
   text: string;
   attachments: readonly import("@amiba/app-runtime/core").Attachment[];
   signal?: AbortSignal;
+  /** Internal transaction boundary, immediately before engine dispatch. */
+  onDispatch?(): void;
+}
+
+export interface ResidentInputSubmissionState {
+  readonly pending: boolean;
+  readonly notice: string | null;
 }
 
 export interface ComposerTriggerRuntime {
+  commandClaimsFor?(sessionId: string): import("./claim").CommandClaimStore;
+  inputSubmissionSource?(sessionId: string): ObservableSnapshot<ResidentInputSubmissionState>;
+  clearInputSubmissionNotice?(sessionId: string): void;
   isSessionRunning?(sessionId: string): boolean;
   bindResidentTurnSender?(send: (request: ResidentTurnRequest) => Promise<import("@amiba/app-runtime/protocol").SubmitReceipt>): () => void;
   inputStateSource?(sessionId: string): ObservableSnapshot<ConversationInputState | undefined>;

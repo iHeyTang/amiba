@@ -1,4 +1,7 @@
 import type { ComposerDraftDocument } from "./composer-draft-document";
+const EMPTY_RESIDENT_SUBMISSION = Object.freeze({ pending: false, notice: null });
+const emptySubmissionSnapshot = () => EMPTY_RESIDENT_SUBMISSION;
+const noSubmissionSubscription = () => () => {};
 import type { ComposerDraftSource } from "./composer-draft-store";
 import { parseTokens } from "./composer/serialize";
 import { commandImages } from "./composer/command-attachments";
@@ -38,6 +41,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ClipboardEventHandler,
   type CSSProperties,
   type ReactNode,
@@ -526,7 +530,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 
     // A command-mode submit failure, or a reference serialization failure.
     // Never a silent downgrade: the draft is kept and the reason is shown.
-    const [commandNotice, setCommandNotice] = useState<string | null>(null);
+    const submissionSource = useMemo(() => permissionSessionId ? triggerRuntime?.inputSubmissionSource?.(permissionSessionId) : undefined, [permissionSessionId, triggerRuntime]);
+    const residentSubmission = useSyncExternalStore(submissionSource?.subscribe ?? noSubmissionSubscription, submissionSource?.getSnapshot ?? emptySubmissionSnapshot, emptySubmissionSnapshot);
+    const [nativeCommandNotice, setCommandNotice] = useState<string | null>(null);
+    const commandNotice = nativeCommandNotice ?? residentSubmission.notice;
 
     // Single normal-send path. Order mirrors upstream's `onEnter`:
     //   1. command mode (a claim owns Enter),
@@ -559,11 +566,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     }, []);
     useEffect(() => {
       commandAttemptRef.current = null;
-      trigger.setAttemptInFlight(false);
+      if (!submissionSource?.getSnapshot().pending) trigger.setAttemptInFlight(false);
       return () => { commandAttemptRef.current = null; };
     }, [permissionSessionId]);
     const handleSend = useCallback(async (draft = value) => {
-      if (disabled || commandAttemptRef.current || resolvingMentionRef.current) return;
+      if (disabled || commandAttemptRef.current || resolvingMentionRef.current || submissionSource?.getSnapshot().pending) return;
+      if (permissionSessionId) triggerRuntime?.clearInputSubmissionNotice?.(permissionSessionId);
       const handled = routeSubmit(draft, {
         send: () => {},
         ctx: slashUiActions ?? {},
@@ -678,7 +686,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           trigger.setAttemptInFlight(false);
         }
       }
-    }, [value, draftSource, slashUiActions, providerRegistry, onSubmit, onChange, trigger, attachments, permissionSessionId, disabled]);
+    }, [value, draftSource, slashUiActions, providerRegistry, onSubmit, onChange, trigger, attachments, permissionSessionId, disabled, submissionSource, triggerRuntime]);
 
     const queuedResolverRef = useRef({ disabled, providerRegistry, trigger });
     queuedResolverRef.current = { disabled, providerRegistry, trigger };
@@ -709,7 +717,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       const current = () => imageBindingRef.current.sessionId === permissionSessionId ? imageBindingRef.current : undefined;
       const writable = () => {
         const binding = current();
-        return !!binding && !binding.disabled && !commandAttemptRef.current && !resolvingMentionRef.current;
+        return !!binding && !binding.disabled && !commandAttemptRef.current && !resolvingMentionRef.current && !triggerRuntime.inputSubmissionSource?.(permissionSessionId).getSnapshot().pending;
       };
       return triggerRuntime.bindImages(permissionSessionId, {
         getImages: () => current()?.attachments?.getDraftImages?.() ?? current()?.attachments?.draftImages ?? [],
@@ -751,14 +759,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 
     // Default canSubmit if not provided.
     const effectiveCanSubmit =
-      canSubmit !== undefined ? canSubmit : !!value.trim();
+      !residentSubmission.pending && (canSubmit !== undefined ? canSubmit : !!value.trim());
 
     const submitBindingRef = useRef<{ sessionId: string | undefined; submit: () => boolean }>({ sessionId: permissionSessionId, submit: () => false });
     submitBindingRef.current = {
       sessionId: permissionSessionId,
       submit: () => {
         const draft = innerRef.current?.getValue();
-        if (draft === undefined || disabled || commandAttemptRef.current || resolvingMentionRef.current ||
+        if (draft === undefined || disabled || commandAttemptRef.current || resolvingMentionRef.current || submissionSource?.getSnapshot().pending ||
           attachments?.attachmentBusy || attachments?.attachmentUploading ||
           (attachments?.canAddDraftImages && !attachments.canAddDraftImages())) return false;
         const admitted = canSubmitDraft?.(draft) ?? (canSubmit === undefined ? !!draft.trim() : effectiveCanSubmit);

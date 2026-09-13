@@ -814,6 +814,40 @@ try {
         await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-parent',childSessionId:'compat-continuable-child',mode:'continuable'});void 0");
         await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child') && document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_RESIDENT_BACKEND') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
         console.log("Resident backend received actual Host admission, sent to the addressed child without foreground navigation or draft mutation, and restored the real reply on return");
+        if (process.argv.includes("--resident-input")) {
+          await evaluate("window.__residentChildActions=window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions;window.__residentCodecCalls=0;window.__residentRefOff=window.__probeCtx.inputTriggers.registerSource({name:'resident-ref',trigger:'@',candidates:async()=>[],onPick:()=>({}),matchSpace:(_s,token)=>token==='@resident'?{insert:{source:'resident-ref',ref:'id',label:'Resident引用',clipboardText:'resident clip'}}:undefined,codec:{serialize:async ref=>{window.__residentCodecCalls++;return '<resident:'+ref+'>'}}});window.__residentChildActions.setDraft('@resident');void 0");
+          await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor('compat-continuable-child').onSpace()"), true);
+          await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.occurrences.length===1"));
+          const suffix = ' literal @[dsh.reference:unknown|id|label|clip]';
+          await evaluate(`window.__residentChildActions.setDraft(window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft+${JSON.stringify(suffix)});void 0`);
+          await evaluate("window.__residentChildActions.setDraft('COMPAT_LITERAL_RESIDENT '+window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft);void 0");
+          await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.occurrences.length===1 && window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft.startsWith('COMPAT_LITERAL_RESIDENT ')") );
+          await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+          await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId) && !window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')"));
+          const expectedText = await evaluate("(()=>{const s=window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot();const o=s.occurrences[0];return s.draft.slice(0,o.offset)+'<resident:id>'+s.draft.slice(o.offset+o.length)})()");
+          await evaluate("window.__residentStandardEditor=Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).find(n=>n.getClientRects().length);window.__residentStandardDraft=window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft;window.__residentChildActions.submit();window.__residentChildActions.submit();void 0");
+          await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(expectedText))));
+          await wait(() => evaluate("window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot()?.draft==='' && !window.__probeCtx.composerInputs.inputSubmissionSource('compat-continuable-child').getSnapshot().pending && !window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"));
+          assert.equal(await evaluate("window.__residentCodecCalls"), 1);
+          assert.equal(await evaluate("window.__residentStandardEditor.isConnected && window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft===window.__residentStandardDraft"), true);
+          const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJ1sAAAAASUVORK5CYII=";
+          await evaluate(`window.__residentCommandPayloads=[];window.__residentCommandClaim={token:'/resident-standard ',images:true,submit:async(args,actx,images)=>{window.__residentCommandPayloads.push({args,images,realScope:actx===window.__probeCtx.sessions.scope('compat-continuable-child')});return {kind:'success',text:'RESIDENT_STANDARD_OK'}}};window.__residentCommandOff=window.__probeCtx.inputTriggers.registerSource({name:'resident-standard',trigger:'/',candidates:async()=>[],onPick:()=>({claim:window.__residentCommandClaim}),matchEnter:(_ctx,line)=>line.startsWith('/resident-standard ')?{claim:window.__residentCommandClaim}:undefined});window.__residentStandardImages=window.__probeCtx.get('composerImages').createDraftImages([new File([Uint8Array.from(atob(${JSON.stringify(png)}),c=>c.charCodeAt(0))],'resident-standard.png',{type:'image/png'})]);window.__residentChildActions.addImages(window.__residentStandardImages.map(image=>image.id));window.__residentChildActions.setDraft('/resident-standard offscreen');window.__residentChildActions.submit();void 0`);
+          await wait(() => evaluate("window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot()?.phase==='claimed'"));
+          await evaluate("window.__residentChildActions.submit();void 0");
+          await wait(() => evaluate("window.__residentCommandPayloads.length===1 && window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot()?.draft===''"));
+          assert.deepEqual(await evaluate("window.__residentCommandPayloads[0]"), { args: 'offscreen', realScope: true, images: [{ mediaType: 'image/png', data: png, name: 'resident-standard.png' }] });
+          assert.equal(await evaluate("window.__probeCtx.get('composerImages').draftImages(window.__residentStandardImages.map(image=>image.id)).length"), 0);
+          await evaluate("window.__residentChildActions.setDraft('/resident-standard handoff');window.__residentChildActions.submit();void 0");
+          await wait(() => evaluate("window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot()?.phase==='claimed'"));
+          await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-parent',childSessionId:'compat-continuable-child',mode:'continuable'});void 0");
+          await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.phase==='claimed'"));
+          await evaluate("window.__residentChildActions.submit();void 0");
+          await wait(() => evaluate("window.__residentCommandPayloads.length===2 && window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.draft===''") );
+          assert.deepEqual(await evaluate("window.__residentCommandPayloads[1]"), { args: 'handoff', realScope: true, images: [] });
+          await evaluate("window.__residentRefOff();window.__residentCommandOff();void 0");
+          console.log("Standard offscreen submit resolved the actual reference once, preserved literal tokens and foreground input, delivered exact command image bytes, and transferred a retained command claim to the original composer");
+        }
       }
       if (process.argv.includes("--queue-draft")) {
         await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_WAIT_FOR_STOP');window.__probeCtx.composerInputs.submitInput('compat-continuable-child');void 0");

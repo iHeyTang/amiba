@@ -35,6 +35,27 @@ function fixture(residentDraft?: InputTriggerBridgeDeps["residentDraft"]) {
 }
 
 describe("official input action provider", () => {
+  it("submits a resident draft through standard actions and retains edits made after dispatch", async () => {
+    const source = createComposerDraftSource();
+    const { bridge, actions } = fixture(() => source);
+    const action = actions("a");
+    let finish!: (value: import("@amiba/app-runtime/protocol").SubmitReceipt) => void;
+    const send = vi.fn<Parameters<NonNullable<typeof bridge.bindResidentTurnSender>>[0]>(request => {
+      request.onDispatch?.();
+      return new Promise(resolve => { finish = resolve; });
+    });
+    bridge.bindResidentTurnSender!(send);
+    action.setDraft("background message");
+    action.submit(); action.submit();
+    expect(bridge.inputStateSource("a").getSnapshot()?.phase).toBe("adjudicating");
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    expect(send.mock.calls[0][0]).toMatchObject({ sessionId: "a", text: "background message" });
+    expect(bridge.inputStateSource("a").getSnapshot()?.phase).toBe("submitting");
+    action.setDraft("new text");
+    finish({ kind: "accepted" });
+    await vi.waitFor(() => expect(bridge.inputSubmissionSource!("a").getSnapshot().pending).toBe(false));
+    expect(bridge.inputStateSource("a").getSnapshot()).toMatchObject({ draft: "new text", phase: "plain" });
+  });
   it("retains stable actions and targets only their session's current editor", () => {
     const { actions, bind } = fixture();
     const first = bind("a"), other = bind("b"), action = actions("a");

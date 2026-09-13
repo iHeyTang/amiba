@@ -67,7 +67,7 @@ export function useComposerTriggers(
 ): ComposerTriggerSession {
   const { runtime, sessionId, disabled = false } = options;
   const draftSources = useSyncExternalStore(runtime?.subscribe ?? noSubscribe, runtime?.draftSources ?? emptySources, emptySources);
-  const claims = useMemo(() => new CommandClaimStore(), [sessionId]);
+  const claims = useMemo(() => sessionId && runtime?.commandClaimsFor ? runtime.commandClaimsFor(sessionId) : new CommandClaimStore(), [runtime, sessionId]);
   const revision = useMemo(() => new DraftRevision(), []);
   const attemptRef = useRef(false);
   const disabledRef = useRef(disabled);
@@ -100,8 +100,12 @@ export function useComposerTriggers(
   // A session switch abandons any command mode: the claim belonged to the
   // draft that just went away.
   useEffect(() => {
+    if (runtime?.commandClaimsFor && sessionId) return () => {
+      if (runtime.inputSubmissionSource?.(sessionId).getSnapshot().pending) return;
+      claims.release(); claims.setAttemptPhase(null);
+    };
     claims.release();
-  }, [claims, sessionId]);
+  }, [claims, runtime, sessionId]);
 
   const resolver = useMemo<ReferenceResolver>(() => {
     if (controller !== undefined) return controller;
@@ -125,7 +129,7 @@ export function useComposerTriggers(
               runtime.submitClaim!(sessionId, claim, args, images)
           : null,
       guard(): TriggerGuard {
-        if (attemptRef.current || disabledRef.current) return { tier: "frozen" };
+        if (attemptRef.current || disabledRef.current || (sessionId && runtime?.inputSubmissionSource?.(sessionId).getSnapshot().pending)) return { tier: "frozen" };
         return { tier: claims.get() !== null ? "claimed" : "plain" };
       },
       setAttemptInFlight(inFlight: boolean, phase: "adjudicating" | "submitting" = "adjudicating") {

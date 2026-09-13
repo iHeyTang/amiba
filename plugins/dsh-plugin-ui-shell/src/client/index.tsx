@@ -1,4 +1,4 @@
-import { sessionComposerDraft } from "@amiba/ui";
+import { sessionComposerDraft, makeWorkspaceFilesProvider } from "@amiba/ui";
 import { createInputActionsProvider } from "./input-actions-provider.js";
 import { createDraftImageRegistry } from "./draft-image-registry.js";
 import { registerConversationNodes } from "@deepseek-ai/dsh-client-ui-conversation/headless";
@@ -562,6 +562,10 @@ export async function apply(ctx: ClientContext): Promise<void> {
     }, "native composer draft images");
     const triggerRuntime = createInputTriggerBridge({
       residentDraft: sessionId => sessionComposerDraft(getPlatform().storage, sessionId),
+      mentionProviders: sessionId => {
+        const files = getPlatform().workspaceFiles;
+        return files ? [makeWorkspaceFilesProvider(files, sessionId)] : [];
+      },
       images: () => composerImages,
       sessionFor: sessionId => ctx.sessions.binding(sessionId as never)?.session,
       scopeOf: (sessionId) =>
