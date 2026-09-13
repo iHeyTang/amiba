@@ -55,6 +55,13 @@ export function Guide({
     [progressHost],
   );
   const [started, setStarted] = useState(false);
+  const [expanding, setExpanding] = useState(false);
+  useEffect(() => {
+    if (!expanding) return;
+    // A height transition may not fire in short windows or reduced-motion mode.
+    const timeout = window.setTimeout(() => setExpanding(false), 240);
+    return () => window.clearTimeout(timeout);
+  }, [expanding]);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -163,7 +170,11 @@ export function Guide({
     >
       <DialogContent
         hideDefaultClose
-        className={`flex max-h-[90vh] max-w-3xl flex-col gap-0 overflow-hidden p-0 transition-none ${started ? "h-[min(760px,90vh)]" : "h-[min(480px,90vh)]"}`}
+        className={`flex max-h-[90vh] max-w-3xl flex-col gap-0 overflow-hidden p-0 transition-[height] duration-200 motion-reduce:transition-none ${started ? "h-[min(760px,90vh)]" : "h-[min(480px,90vh)]"}`}
+        onTransitionEnd={(e) => {
+          if (e.target === e.currentTarget && e.propertyName === "height")
+            setExpanding(false);
+        }}
         onInteractOutside={(e) => e.preventDefault()}
       >
         <DialogTitle className="sr-only">{t("guide.settings")}</DialogTitle>
@@ -202,7 +213,7 @@ export function Guide({
           {started && (
             <div
               data-guide-scroll
-              className="min-h-0 flex-1 overflow-y-auto pb-6 pt-1"
+              className={`min-h-0 flex-1 pb-6 pt-1 ${expanding ? "overflow-hidden" : "overflow-y-auto"}`}
             >
               {ready && (
                 <div className="flex h-full flex-col justify-center gap-4">
@@ -250,6 +261,7 @@ export function Guide({
                     renderProgress,
                     backToWelcome: () => {
                       setDialogue(undefined);
+                      setExpanding(false);
                       setStarted(false);
                     },
                   },
@@ -284,7 +296,12 @@ export function Guide({
                   {t("guide.retry")}
                 </Button>
               ) : !started ? (
-                <Button onClick={() => setStarted(true)}>
+                <Button
+                  onClick={() => {
+                    setExpanding(true);
+                    setStarted(true);
+                  }}
+                >
                   {t("guide.start")}
                 </Button>
               ) : ready ? (
