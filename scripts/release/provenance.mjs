@@ -4,7 +4,8 @@ export function sourceIdentity(mode, env = process.env) {
   const result = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' });
   const sourceCommit = result.stdout?.trim();
   if (result.status !== 0 || !/^[a-f0-9]{40}$/.test(sourceCommit || '')) throw new Error('Cannot resolve build commit');
-  if (env.GITHUB_SHA && env.GITHUB_SHA !== sourceCommit) throw new Error('Checkout does not match CI commit');
+  const expectedCommit = env.AMIBA_RELEASE_COMMIT || env.GITHUB_SHA;
+  if (expectedCommit && expectedCommit !== sourceCommit) throw new Error('Checkout does not match CI commit');
   const status = spawnSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' });
   if (status.status !== 0) throw new Error('Cannot inspect checkout');
   const dirty = !!status.stdout.trim();

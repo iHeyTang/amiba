@@ -4,7 +4,9 @@
 
 ## 版本管理
 
-产品版本唯一来源是 `apps/desktop/package.json`。UI 设置页和菜单在构建时直接读取该版本，桌面更新桥读取 Electron `app.getVersion()`，安装包、更新清单与 Release 标签使用相同版本。根 package.json 由升版命令同步；内部 workspace 包有自己的版本，不作为产品版本。
+产品版本唯一来源是 `apps/desktop/package.json`。UI 设置页和菜单在构建时直接读取该版本，桌面更新桥读取 Electron `app.getVersion()`，安装包、更新清单与 Release 标签使用相同版本。根 package.json 由自动发版或本地升版命令同步；内部 workspace 包有自己的版本，不作为产品版本。
+
+本地维护版本时可使用以下命令；GitHub 一键发版不需要提前执行：
 
 ```sh
 pnpm release:version patch # 0.1.0 -> 0.1.1
@@ -13,15 +15,15 @@ pnpm release:version major # 主版本加一，其余归零
 pnpm release:version:check
 ```
 
-一次发布只运行一种升版命令，然后提交并合并到 main，再从 main 手动运行 release 模式。普通 main 构建不自动升版。当前仅支持稳定版 `major.minor.patch`；预发布渠道尚未开放。
+GitHub 发版只需在 **Actions → Amiba Desktop → Run workflow** 选择 `main`、`mode=release`、`target=all`，`bump` 默认 `patch`（也可选 `minor` / `major`），`run_id` 留空。流水线检查配置、自动升版并提交到 main、并发构建三个平台、检查并回读全部附件、生成更新说明，最后自动公开 Release。不需要手动提交版本或发布草稿。普通 main 构建不自动升版。当前仅支持稳定版 `major.minor.patch`；预发布渠道尚未开放。
 
-Actions Artifacts 名称为 `amiba-<版本>-<平台架构>-<test|release|verify>-<run_id>-<attempt>`，例如 `amiba-0.1.1-win32-x64-test-123456-1`。内部安装包保留 `Amiba-0.1.1-win-x64.exe` 等标准名称；latest 更新清单保持固定名称，供客户端查询。历史 Artifacts 不会自动改名。
+Actions 软件包直接保留 `Amiba-<版本>-<系统>-<架构>.dmg/.zip/.exe` 文件名，内部校验文件放在 `metadata-<版本>-<平台架构>`。latest 更新清单保持固定名称，供客户端查询。历史 Artifacts 不会自动改名。
 
 产物清单记录版本、源码 SHA、构建编号、模式和工作区是否有未提交内容。正式本地构建要求工作区干净。发布前验证产物来自预期提交；同一 CI 发布的所有平台还必须属于同一运行和重试编号。
 
 正式构建在准备运行时之前查询 GitHub 的全部 Release：版本必须高于所有已发布稳定版本，公开同版本禁止覆盖；同版本草稿和已有标签必须指向本次源码提交。上传时再次检查，避免构建期间发布状态发生变化。旧草稿来自其他提交时必须升版，或显式清理旧草稿后重新发布，脚本不会自动覆盖它。正式构建需要已登录 gh，CI 使用 github.token。
 
-旧构建缺少来源记录，不能通过新的发布校验，需要重新构建；Windows verify 模式仍兼容旧 Artifact 名称用于安装验证。当前 `v0.1.0` 历史草稿属于早期提交，新代码正式发布应先升版。
+旧构建缺少来源记录，不能通过新的发布校验，需要重新构建；Windows verify 模式仍兼容旧 Artifact 名称用于安装验证。当前 `v0.1.0` 历史草稿属于早期提交，一键发版会从当前版本递增，不覆盖它。
 
 ## 安装包内容与体积检查
 
@@ -80,23 +82,26 @@ macOS 自动更新必须签名；面向公开分发还需 Apple Developer ID 和
 
 - `target=all`、`mode=test`：生成三个架构的未签名测试包，关闭客户端更新，产物保留在 Actions Artifacts 7 天。
 - `target=all`（或单个平台）、`mode=verify`、`run_id=<已有构建 ID>`：复用原安装包验证运行，不重新编译、不发布。Windows 静默安装 EXE，Mac 解压更新 ZIP 并检查 DMG。
-- `target=win32-x64`、`mode=release`、`publish_draft=false`：单独生成 Windows 发布候选包，允许没有代码签名证书；草稿汇总必须选择全部平台。
-- `target=all`、`mode=release`、`publish_draft=true`：三个架构发布包全部通过后，依次上传同一个草稿 Release。必须先配置 Mac 签名与公证 secrets。
+- `target=all`、`mode=release`、`bump=patch`：自动升版、构建、校验、生成更新说明并公开 Release。必须先配置 Mac 签名与公证 secrets。
 
 也可在本机触发云端三平台发布构建：
 
 ```sh
 gh workflow run desktop-release.yml --repo iHeyTang/amiba --ref main \
-  -f target=all -f mode=release -f publish_draft=true
+  -f target=all -f mode=release -f bump=patch
 ```
 
 手动运行时选择 `main` 分支。首次运行不需要本机 Windows 虚拟机。
 
-仅 `main` 分支的 push 自动执行三个架构的 test 构建。其他分支和标签的 push 均不触发；手动选择非 `main` 引用时所有作业跳过。创建 Release 草稿需在 `main` 手动运行并设置 `mode=release`、`publish_draft=true`，Release 版本取自桌面 package.json。
+仅 `main` 分支的 push 自动执行三个架构的 test 构建。其他分支和标签的 push 均不触发；手动选择非 `main` 引用时所有作业跳过。正式发版需在 `main` 手动选择 `mode=release`，流水线按 `bump` 递增桌面版本并同步根 package.json。`publish_draft` 已移除，草稿只作为上传过程的中间状态。
 
-构建后校验更新清单的版本、目标架构和 SHA-512，运行内置 Node 与 Electron 原生 PTY。Mac 额外校验 DMG 和 ZIP；Windows 在临时 CI 机器里静默安装 EXE 后检查安装结果。安装包检查通过后保存为独立 Artifacts；运行检查失败时保留更新文件与报告便于排查；只有全部平台检查通过才允许上传 Release。上传 Release 时先验证所有目标文件，再顺序上传，草稿绑定实际构建提交。CI 上传后再次下载草稿资产，并按原构建记录检查 SHA-512。
+构建后校验更新清单的版本、目标架构和 SHA-512，运行内置 Node 与 Electron 原生 PTY。Mac 额外校验 DMG 和 ZIP；Windows 在临时 CI 机器里静默安装 EXE 后检查安装结果。安装包检查通过后保存为独立 Artifacts；运行检查失败时保留 metadata 与日志便于排查；只有全部平台检查通过才允许上传 Release。上传 Release 时先验证所有目标文件，再顺序上传，草稿绑定实际构建提交。CI 上传后再次下载草稿资产，并按原构建记录检查 SHA-512。全部通过后使用 GitHub 自动生成更新说明，将草稿发布并设为 Latest。
 
 仓库 Variables 的 `AMIBA_UPDATE_URLS` 可指定 CDN 下载目录；GitHub 下载源作为兜底。发布用 Secrets：Mac 的 `CSC_LINK`、`CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`；Windows 可选 `WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD`。
+
+升版前先检查这五项 Mac Secrets 是否齐全和下载源配置是否合法；缺配置时停止，不修改版本。main 必须允许工作流以 `contents: write` 写入版本提交；分支保护禁止此操作时会失败，不强制绕过。构建和发布固定检出自动生成的版本提交，避免 main 后续变化混入产物。版本提交带 `[skip ci]`，不会重复触发测试构建。
+
+失败后优先使用该次运行的 **Re-run failed jobs**。同一次运行完整重试时，若 main 仍是它生成的版本提交，会复用该提交；main 已有其他修改时停止，不覆盖新代码。点击新的 Run workflow 是新的一次发版，会尝试递增版本。发布后的重试只回读验证已有资产，不覆盖公开版本。
 
 ## GitHub 和国内 CDN
 
@@ -124,7 +129,7 @@ pnpm release:cdn darwin-arm64
 
 CDN 更新清单应采用短缓存或不缓存；版本化安装包可长期缓存。服务需支持 HTTPS、GET、HEAD、Range，并保留原始文件字节。
 
-全部平台上传并确认 CDN 可访问后，在 GitHub 发布草稿。发布后运行 `pnpm release:verify-online <target>`，它会逐个下载 CDN 与 GitHub 上的安装包、blockmap 和清单，并对照本地发布记录校验 SHA-512；该命令会产生完整安装包下载流量。首次分发前应在真实安装环境上完成一次版本 N → N+1 更新：检查每个架构命中正确 ZIP/EXE、网络中断重试、CDN 故障回退、校验失败拒绝安装、应用退出与重启后版本变化。
+本地手动发布时，全部平台上传并确认 CDN 可访问后，在 GitHub 发布草稿。GitHub 一键流程当前自动发布到 GitHub；CDN POST 仍是预留的独立适配器，待接口确定后接入。发布后运行 `pnpm release:verify-online <target>`，它会逐个下载 CDN 与 GitHub 上的安装包、blockmap 和清单，并对照本地发布记录校验 SHA-512；该命令会产生完整安装包下载流量。首次分发前应在真实安装环境上完成一次版本 N → N+1 更新：检查每个架构命中正确 ZIP/EXE、网络中断重试、CDN 故障回退、校验失败拒绝安装、应用退出与重启后版本变化。
 
 ## 客户端行为
 
@@ -187,8 +192,8 @@ Mac 更新 ZIP 同样直接上传，和 DMG 同名，仅后缀不同。blockmap�
 gh workflow run desktop-release.yml --ref main -f mode=verify -f target=all -f run_id=<原始构建运行ID>
 ```
 
-Release 草稿自动汇总同一构建的三个平台，要求 `mode=release,target=all,publish_draft=true`。
-流水线会重新合并分开下载的安装文件和更新文件，验证三个平台的版本、源码提交、构建 ID 与文件哈希后，逐个上传为独立 Release assets。
+一键发版自动汇总同一构建的三个平台，要求 `mode=release,target=all`，按 `bump` 递增版本。
+流水线会重新合并分开下载的安装文件和更新文件，验证三个平台的版本、源码提交、构建 ID 与文件哈希后，逐个上传为独立 Release assets，全部回读验证通过后自动生成更新说明并发布。
 测试/复验不会创建正式更新 Release；Mac 正式发布仍需签名与公证配置。
 
 

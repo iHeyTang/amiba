@@ -14,8 +14,8 @@ export function assertReleasePolicy({ version, commit, releases, tagCommit }) {
     }
   }
 }
-export function gh(args) {
-  const result = spawnSync('gh', args, { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+export function gh(args, input) {
+  const result = spawnSync('gh', args, { cwd: root, encoding: 'utf8', input, maxBuffer: 32 * 1024 * 1024 });
   if (result.error || result.status !== 0) throw new Error(`GitHub request failed: ${result.error?.message || result.stderr}`);
   return result.stdout;
 }

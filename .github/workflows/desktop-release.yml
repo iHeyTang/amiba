@@ -6,12 +6,12 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: Build target
+        description: Build target (Release requires all)
         type: choice
         options: [all, win32-x64, darwin-x64, darwin-arm64]
         default: all
       mode:
-        description: Test packages or release packages (macOS release requires signing secrets)
+        description: Test build, verify packages, or automatically publish a Release
         type: choice
         options: [test, release, verify]
         default: test
@@ -19,10 +19,11 @@ on:
         description: Existing artifact run ID for verification (supports all platforms)
         type: string
         required: false
-      publish_draft:
-        description: Upload release packages to a GitHub Release draft
-        type: boolean
-        default: false
+      bump:
+        description: Version increment for Release (default patch)
+        type: choice
+        options: [patch, minor, major]
+        default: patch
   push:
     branches: [main]
 
@@ -31,14 +32,18 @@ permissions:
   actions: read
 
 concurrency:
-  group: desktop-release-${{ github.ref }}-${{ inputs.target || 'all' }}
+  group: ${{ inputs.mode == 'release' && 'amiba-release' || format('desktop-build-{0}-{1}', github.ref, inputs.target || 'all') }}
   cancel-in-progress: false
 
 jobs:
   plan:
+    name: Prepare
+    permissions:
+      contents: write
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
+      commit: ${{ steps.plan.outputs.commit }}
       version: ${{ steps.plan.outputs.version }}
       matrix: ${{ steps.plan.outputs.matrix }}
       mode: ${{ steps.plan.outputs.mode }}
@@ -51,8 +56,15 @@ jobs:
         with:
           node-version: 22.22.0
       - id: plan
+        name: Check configuration and prepare version
         env:
           GH_TOKEN: ${{ github.token }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          AMIBA_UPDATE_URLS: ${{ vars.AMIBA_UPDATE_URLS }}
         run: node scripts/release/ci-plan.mjs
 
   build:
@@ -65,12 +77,14 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     env:
+      AMIBA_RELEASE_COMMIT: ${{ needs.plan.outputs.commit }}
       AMIBA_GITHUB_REPOSITORY: ${{ github.repository }}
       AMIBA_UPDATE_URLS: ${{ vars.AMIBA_UPDATE_URLS }}
       NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.plan.outputs.commit }}
           persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
@@ -178,13 +192,14 @@ jobs:
       contents: write
     env:
       AMIBA_GITHUB_REPOSITORY: ${{ github.repository }}
-      AMIBA_RELEASE_COMMIT: ${{ github.sha }}
+      AMIBA_RELEASE_COMMIT: ${{ needs.plan.outputs.commit }}
       GH_TOKEN: ${{ github.token }}
       AMIBA_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}
       BUILD_MATRIX: ${{ needs.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.plan.outputs.commit }}
           persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
@@ -204,5 +219,5 @@ jobs:
           skip-decompress: true
           merge-multiple: true
           path: release-installers
-      - name: Validate all artifacts and upload sequentially
+      - name: Validate, upload and publish Release
         run: node scripts/release/ci-upload.mjs
