@@ -2,14 +2,14 @@ import { createLauncher, type Launcher } from "./launcher.js";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { ConnectionHandle } from "@deepseek-ai/dsh-api-remotes/client";
 import type {
+  PropsRuntime,
   PropsRenderSlots,
 } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { Button, PageContent, usePluginT } from "@amiba/ui/plugin";
 import { Guide, type GuideProps, type StepSource } from "./Guide.js";
 import { createProgressStore } from "./progress.js";
-import { FirstRun } from "./FirstRun.js";
 import { guideI18n } from "./i18n.js";
 export type { GuideMood, GuideStepOwner } from "./contracts.js";
 export const name = "amiba-onboarding-client";
@@ -19,6 +19,18 @@ const children = {
   "amiba.onboarding.companion": { kind: "single", scope: "root" },
 } as const;
 type Slots = PropsRenderSlots<keyof typeof children>;
+function FirstRun({
+  complete,
+  launcher,
+}: PropsRuntime<"settings.onboarding"> & { launcher: Launcher }) {
+  const done = useRef(complete);
+  done.current = complete;
+  useEffect(
+    () => launcher.open({ revisit: false, done: () => done.current() }),
+    [launcher],
+  );
+  return null;
+}
 function Overlay(
   props: Slots &
     Pick<GuideProps, "store" | "steps" | "openSection"> & {
@@ -52,13 +64,9 @@ function Revisit({ launcher }: { launcher: Launcher }) {
 }
 export function apply(ctx: ClientContext) {
   const launcher = createLauncher();
-  const api = (ctx.get("connection") as ConnectionHandle).api;
-  const store = createProgressStore(api);
-  const hasConfiguredProvider = async () => {
-    const { result } = await api.llm.providers({});
-    if (!result.ok) throw new Error(result.error.message);
-    return result.value.providers.some(provider => provider.active || provider.declared === true);
-  };
+  const store = createProgressStore(
+    (ctx.get("connection") as ConnectionHandle).api,
+  );
   let version = -1;
   let language = "";
   let rows: ReturnType<StepSource["getSnapshot"]> = [];
@@ -122,7 +130,7 @@ export function apply(ctx: ClientContext) {
           name: "settings.onboarding",
           id: "amiba-first-run",
           order: -100,
-          inject: () => ({ launcher, hasConfiguredProvider }),
+          inject: () => ({ launcher }),
         },
         FirstRun,
       ),
