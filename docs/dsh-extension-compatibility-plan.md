@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：仅由嵌套事件引用的图片（2026-09-13）
+
+夹具新增第三张有效 PNG（3×1），在 Host 保存后只写入 tool/code-dispatch 的 content；用户消息和普通 tool/result 分别使用另外两张不同字节的图片。断言三者具有不同的 attachmentId，避免把已被其他记录引用的图片误当作嵌套授权验证。
+
+真实 --compat --message-images --tool-images --nested-tools 终态退出 0（/tmp/amiba-nested-only-image-smoke.log）：实时子图片插槽收到第三张准确引用并实际解码宽度 3；未引用会话调用 readAttachment 明确返回 Image is not referenced by this session；会话切换后该图片的旧 URL 失效，历史重开再次解码且 URL 更新。原共享图片与普通工具单独引用图片仍分别通过，深层分发/reveal/卸载、设置、目录、下载、文件、Markdown、turn-tail 与 HMR 回归通过。此次只修改 Host 夹具和断言，复用已验证构建，未更改产品或样式。
+
+下一适配入口 conversation.trajectory.images 已核对实际版本：rc.2 的 TrajectoryViewInjected 没有 loadImage/renderImages，内部 TrajectoryTable 的 MessageImages/PanelImage 直接使用 sourceBlocks.imageSrc。固定新版则由 trajectory 的 conversation.view 子声明该 single/session 插槽，TrajectoryView 将 session loader 传入 renderImages，owner 采用 MessageImagesOwnerProps。因此不能仅在 Amiba root 增加同名声明就宣称接入；需要将图片引用保留、读取器与渲染回调实际接到轨迹组件，同时保留原轨迹筛选、导航和原 inline 图像回退。
+
+仓库已有固定 rc.2 的 pnpm patchedDependencies 及 runtime prepare 的补丁摘要校验机制，可用于可复现的依赖适配；不应直接修改 resources 下的临时安装产物。轨迹入口仍未完成，尚未改动其依赖。所有原目标继续保留，统计仍为 33/10/21。
+
 ## 最新进展：原工具详情内的嵌套视图分发（2026-09-13）
 
 原生 SemanticToolRow 与通用 ToolChipRow 在既有详情折叠区保留正文、代码、参数和图片，再呈现 block.subCalls 的逐调用树。所有层级继续通过同一个 tool.call.toolview 分发；子 owner 使用自己的 callId/name/block，继承真实 cwd/openFile/loadImage，不继承指向父调用的 inspect。shell 按子 ID 重新绑定可用的轨迹 inspect，并为每个子调用建立独立图片上下文。未知子工具直接读取 canonical block 的文本或结构，不构造假的 ToolProgress 起始时间、turn 或 step。

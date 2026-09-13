@@ -396,6 +396,8 @@ try {
       const ref=await wait(async()=>{try{return JSON.parse(await readFile(path.join(profile,'message-image-ref.json'),'utf8'))}catch{return false}});
       const toolRef=process.argv.includes('--tool-images') ? await wait(async()=>{try{return JSON.parse(await readFile(path.join(profile,'tool-image-ref.json'),'utf8'))}catch{return false}}) : undefined;
       if(toolRef) assert.notEqual(toolRef.attachmentId,ref.attachmentId,'tool-only image must have its own Host identity');
+      const nestedRef=process.argv.includes('--nested-tools') ? await wait(async()=>{try{return JSON.parse(await readFile(path.join(profile,'nested-image-ref.json'),'utf8'))}catch{return false}}) : undefined;
+      if(nestedRef) assert.equal(new Set([ref.attachmentId,toolRef.attachmentId,nestedRef.attachmentId]).size,3,'nested image must not borrow a user or root-tool reference');
       const verifyNestedTools = async (phase) => {
         if (!process.argv.includes("--nested-tools")) return;
         await evaluate("window.__nestedProbeClicked=undefined;window.__nestedProbeOff=window.__probeCtx.slots.register({name:'tool.call.toolview',key:'compat_nested_probe',id:'nested-probe',priority:-100},owner=>{window.__nestedProbeOwner=owner;return window.__probeCreateElement('button',{'data-nested-probe':owner.callId,onClick:()=>window.__nestedProbeClicked=owner.callId},'Nested plugin')});void 0");
@@ -411,10 +413,12 @@ try {
         assert.equal(await evaluate("window.__nestedProbeClicked"),'compat-nested-probe');
         await evaluate("window.__toolImageOff=window.__probeCtx.slots.register({name:'tool.call.images',id:'compat-tool-images',priority:-100},window.__toolImageComponent);void 0");
         await wait(()=>evaluate("(()=>{const original=Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-tool-image.png'));if(original?.getAttribute('aria-expanded')==='true')original.click();const nested=Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-nested-image.png'));if(nested?.getAttribute('aria-expanded')==='false')nested.click();return window.__toolImageOwner?.images.length===1&&!!document.querySelector('[data-compat-tool-images]')})()"));
-        assert.deepEqual(await evaluate("window.__toolImageOwner.images"),[{attachment:toolRef}]);
+        assert.deepEqual(await evaluate("window.__toolImageOwner.images"),[{attachment:nestedRef}]);
         assert.equal(await evaluate("document.querySelectorAll('[data-compat-tool-images]').length"),1,'only the child image gallery is open');
         await evaluate("document.querySelector('[data-compat-tool-images] button').click();void 0");
-        await wait(()=>evaluate("document.querySelector('[data-compat-tool-image]')?.naturalWidth===2"));
+        await wait(()=>evaluate("document.querySelector('[data-compat-tool-image]')?.naturalWidth===3"));
+        if(phase==='live') await evaluate("window.__nestedOnlyRef=window.__toolImageOwner.images[0].attachment;window.__oldNestedOnlyUrl=document.querySelector('[data-compat-tool-image]').src;void 0");
+        else assert.notEqual(await evaluate("document.querySelector('[data-compat-tool-image]').src"),await evaluate("window.__oldNestedOnlyUrl"));
         await evaluate("Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('COMPAT_PARENT_CODE')).click();document.querySelectorAll('[data-execution-summary] > button[aria-expanded=true]').forEach(n=>n.click());window.__nestedProbeOwner.revealToolCall('compat-nested-image');void 0");
         await wait(()=>evaluate("Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('COMPAT_PARENT_CODE'))?.getAttribute('aria-expanded')==='true'&&!!Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-nested-image.png'))"));
         await evaluate("window.__nestedProbeOff();window.__toolImageOff();void 0");
@@ -474,6 +478,12 @@ try {
         await wait(()=>evaluate("fetch(window.__oldToolOnlyUrl).then(()=>false,()=>true)"));
       }
 
+      if(nestedRef) {
+        const nestedDenied=await evaluate("window.__probeCtx.sessions.binding(window.__foreignImageSession).session.readAttachment(window.__nestedOnlyRef.attachmentId)");
+        assert.equal(nestedDenied.ok,false);
+        assert.equal(nestedDenied.error.message,'Image is not referenced by this session.');
+        await wait(()=>evaluate("fetch(window.__oldNestedOnlyUrl).then(()=>false,()=>true)"));
+      }
       await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
       await wait(()=>evaluate("!!document.querySelector('[data-compat-images]')"));
       assert.deepEqual(await evaluate("window.__imageOwner.images"),[{attachment:ref}]);

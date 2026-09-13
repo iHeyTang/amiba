@@ -54,7 +54,7 @@
 | --- | --- | --- |
 | 10 | `conversation.details.tool` | 旧版工具详情入口需真实调用定位及详情生命周期；新版已移除此键。 |
 | 27 | `conversation.session.header.lineage` | 需要真实会话派生关系数据和导航回调。 |
-| 29 | `conversation.trajectory.images` | 现已接入 rc.2 轨迹视图；仍需核对新版图片数据接口及该入口契约。 |
+| 29 | `conversation.trajectory.images` | 可以适配，但 rc.2 轨迹内部直接渲染图片，没有新版插槽回调；需补图片引用、授权读取和组件接入，保留原轨迹界面。 |
 | 41 | `settings.models.footer` | 可考虑附加到模型设置；需先核对新版模型服务和 owner。 |
 | 53 | `sidebar.panellist` | 需匹配新版面板定义和导航生命周期，避免取代现有会话分组。 |
 | 54 | `sidebar.right.pane.tab` | 需要新版右侧栏的选中、关闭、会话归属等语义。 |
