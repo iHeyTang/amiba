@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：真实 Host 分步工具详情与嵌套图片回归（2026-09-13）
+
+新增 --legacy-tool-live（要求 --legacy-tool-details），仅在隔离 smoke profile 中按 marker 驱动真实 Host Session.append：父工具开始、子调用开始、子调用结束、父工具结束分为三个独立阶段。选择父/子调用时均先确认 running；子完成后所选正文自动变为 settled 并收到准确结果，此时父仍在 runningCalls；父完成后再次选择子调用，确认 owner.block 与官方父节点中子对象引用相同。没有在浏览器内伪造 ConversationSnapshot，也没有声称实际执行了这些工具程序。
+
+首次 /tmp/amiba-legacy-live-smoke.log 失败：fixture 缺少 code-dispatch 事件的 rootCallId，运行子调用未进入官方工具定义。固定版本 toolDefinition.match 使用 rootCallId 路由这些更新。补齐真实协议字段后 /tmp/amiba-legacy-live-smoke-2.log 退出 0。相同修正也用于已有 message-image-fixture 的六个嵌套开始/结束事件，保持其原内容与调用关系。
+
+最终组合 --compat --legacy-tool-details --legacy-tool-live --message-images --tool-images --nested-tools 退出 0（/tmp/amiba-legacy-nested-live-smoke.log）。父子详情实时转换、跨会话选择、公共面板开关、页签可见性及卸载恢复原文件通过；多层工具图片的 live/history、准确子 owner/loader、单独引用授权、跨会话拒绝、URL 释放、深层定位及卸载回退同时通过。使用上轮 43d2fed 的完整桌面构建，本轮无产品源码变更，不新增构建通过的说法。
+
+统计保持 38/6/20。完整官方 ui-tool 包及其卡片覆盖、后续版本、多尺寸键盘导航和独立 Web 尚未完成；新版右侧栏六项与全部队列/附件等服务未完成项继续保留。
+
 ## 最新进展：详情页签可见性、跨会话验证与公共面板开关（2026-09-13）
 
 修复选中的旧版详情页签留在标签条左边界外的问题：只调整其所属横向标签条的 scrollLeft，并增加该附加页签的选中样式，不滚动聊天正文/页面。回归在修复前失败（/tmp/amiba-legacy-tab-red.log，1 失败/6 通过）；修复后详情及轨迹 10 项通过（/tmp/amiba-legacy-tab-tests.log）。只有插件存在且详情正文处于活动面板时才订阅工具快照，页签、停用及其他面板不额外订阅。

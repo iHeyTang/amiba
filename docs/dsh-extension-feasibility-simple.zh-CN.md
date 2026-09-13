@@ -17,7 +17,7 @@
 | 4 | `conversation.chat.commandview` | 入口已接入，桌面验证通过；具体未完成项见详细表。 |
 | 6 | `conversation.chat.turnTail` | 桌面接入已验证，Web 待验证；具体未完成项见详细表。 |
 | 9 | `conversation.composer.dock` | 入口已接入，桌面验证通过；具体未完成项见详细表。 |
-| 10 | `conversation.details.tool` | 已作为可选工具详情面板接入，真实工具对象分发及卸载恢复原文件预览通过桌面验证；运行中/完成和嵌套选择有组件测试。跨会话选择隔离和返回恢复、选中页签可见性也已实测；完整官方详情插件和独立 Web 仍待验证。 |
+| 10 | `conversation.details.tool` | 已作为可选工具详情面板接入，真实工具对象分发及卸载恢复原文件预览通过桌面验证；运行中/完成和嵌套选择已通过真实 Host 分步事件桌面验证。跨会话选择隔离和返回恢复、选中页签可见性也已实测；完整官方详情插件和独立 Web 仍待验证。 |
 | 14 | `conversation.hero.workspace.directoryFlow` | 已接入，首页插件实测通过；具体未完成项见详细表。 |
 | 15 | `conversation.input.attachments` | 入口已接入，桌面验证通过；具体未完成项见详细表。 |
 | 16 | `conversation.input.dock` | 入口已接入，桌面验证通过；具体未完成项见详细表。 |
