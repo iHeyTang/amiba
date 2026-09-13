@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { gh } from './release-policy.mjs';
+import { productVersion } from './version.mjs';
+const { GITHUB_REPOSITORY: repo, ARTIFACT_RUN_ID: runId } = process.env;
+if (!/^\d+$/.test(runId || '')) throw new Error('Invalid artifact run ID');
+const version = productVersion();
+const pages = JSON.parse(gh(['api', '--paginate', '--slurp', `repos/${repo}/actions/runs/${runId}/artifacts?per_page=100`]));
+const candidates = pages.flatMap(page => page.artifacts).filter(a => !a.expired && (a.name.startsWith(`amiba-${version}-win32-x64-`) || a.name === 'amiba-win32-x64'));
+if (candidates.length !== 1) throw new Error('Expected exactly one matching Windows artifact; choose an unambiguous run');
+const dir = path.resolve('apps/desktop/dist/win32-x64');
+fs.mkdirSync(dir, { recursive: true });
+gh(['run', 'download', runId, '--repo', repo, '--name', candidates[0].name, '--dir', dir]);
+const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'release-manifest.json')));
+if (manifest.version !== version || manifest.target !== 'win32-x64') throw new Error('Downloaded installer version/target mismatch');

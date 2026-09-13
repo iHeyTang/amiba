@@ -31,7 +31,9 @@
     "release:build": "node scripts/release/build.mjs",
     "release:upload": "node scripts/release/upload.mjs",
     "release:cdn": "node scripts/release/sync-cdn.mjs",
-    "release:verify-online": "node scripts/release/verify-online.mjs"
+    "release:verify-online": "node scripts/release/verify-online.mjs",
+    "release:version": "node scripts/release/version.mjs",
+    "release:version:check": "node scripts/release/version.mjs --check"
   },
   "devDependencies": {
     "prettier": "3.3.3",

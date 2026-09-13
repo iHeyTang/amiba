@@ -37,6 +37,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
+      version: ${{ steps.plan.outputs.version }}
       matrix: ${{ steps.plan.outputs.matrix }}
       mode: ${{ steps.plan.outputs.mode }}
       publish: ${{ steps.plan.outputs.publish }}
@@ -48,6 +49,8 @@ jobs:
         with:
           node-version: 22.22.0
       - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: node scripts/release/ci-plan.mjs
 
   build:
@@ -81,18 +84,22 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Verify release tooling
         run: node --experimental-strip-types --test scripts/release/*.test.mjs apps/desktop/src/main/__tests__/app-updates.test.mjs packages/app-runtime/scripts/dsh-runtime/process-tools.test.mjs
+      - name: Verify UI product version and update menu
+        run: pnpm --dir packages/ui exec vitest run src/profile/ProfileMenu.test.tsx
       - name: Build test installers
         if: needs.plan.outputs.mode == 'test'
         run: pnpm release:build ${{ matrix.target }} --local-only
       - name: Build Windows release
         if: needs.plan.outputs.mode == 'release' && matrix.target == 'win32-x64'
         env:
+          GH_TOKEN: ${{ github.token }}
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: pnpm release:build win32-x64 --allow-unsigned
       - name: Build signed macOS release
         if: needs.plan.outputs.mode == 'release' && startsWith(matrix.target, 'darwin-')
         env:
+          GH_TOKEN: ${{ github.token }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -104,14 +111,14 @@ jobs:
         env:
           ARTIFACT_RUN_ID: ${{ inputs.run_id }}
           GH_TOKEN: ${{ github.token }}
-        run: gh run download $env:ARTIFACT_RUN_ID --repo $env:GITHUB_REPOSITORY --name amiba-win32-x64 --dir apps/desktop/dist/win32-x64
+        run: node scripts/release/download-verification.mjs
       - name: Smoke test packaged runtime and installer
         run: node scripts/release/smoke-package.mjs ${{ matrix.target }}
       - name: Save installers and update metadata
         if: always() && hashFiles('apps/desktop/dist/**/release-manifest.json') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: amiba-${{ matrix.target }}
+          name: amiba-${{ needs.plan.outputs.version }}-${{ matrix.target }}-${{ needs.plan.outputs.mode }}-${{ github.run_id }}-${{ github.run_attempt }}
           compression-level: 0
           retention-days: 7
           if-no-files-found: error
@@ -133,6 +140,7 @@ jobs:
       AMIBA_GITHUB_REPOSITORY: ${{ github.repository }}
       AMIBA_RELEASE_COMMIT: ${{ github.sha }}
       GH_TOKEN: ${{ github.token }}
+      AMIBA_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}
       BUILD_MATRIX: ${{ needs.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4

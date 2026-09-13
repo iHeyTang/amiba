@@ -2,6 +2,27 @@
 
 发布仓库默认从 Git origin 读取（当前为 `iHeyTang/amiba`），CDN 和签名由发布者配置；没有内置第三方 GitHub 代理。
 
+## 版本管理
+
+产品版本唯一来源是 `apps/desktop/package.json`。UI 设置页和菜单在构建时直接读取该版本，桌面更新桥读取 Electron `app.getVersion()`，安装包、更新清单与 Release 标签使用相同版本。根 package.json 由升版命令同步；内部 workspace 包有自己的版本，不作为产品版本。
+
+```sh
+pnpm release:version patch # 0.1.0 -> 0.1.1
+pnpm release:version minor # 次版本加一，patch 归零
+pnpm release:version major # 主版本加一，其余归零
+pnpm release:version:check
+```
+
+一次发布只运行一种升版命令，然后提交并合并到 main，再从 main 手动运行 release 模式。普通 main 构建不自动升版。当前仅支持稳定版 `major.minor.patch`；预发布渠道尚未开放。
+
+Actions Artifacts 名称为 `amiba-<版本>-<平台架构>-<test|release|verify>-<run_id>-<attempt>`，例如 `amiba-0.1.1-win32-x64-test-123456-1`。内部安装包保留 `Amiba-0.1.1-win-x64.exe` 等标准名称；latest 更新清单保持固定名称，供客户端查询。历史 Artifacts 不会自动改名。
+
+产物清单记录版本、源码 SHA、构建编号、模式和工作区是否有未提交内容。正式本地构建要求工作区干净。发布前验证产物来自预期提交；同一 CI 发布的所有平台还必须属于同一运行和重试编号。
+
+正式构建在准备运行时之前查询 GitHub 的全部 Release：版本必须高于所有已发布稳定版本，公开同版本禁止覆盖；同版本草稿和已有标签必须指向本次源码提交。上传时再次检查，避免构建期间发布状态发生变化。旧草稿来自其他提交时必须升版，或显式清理旧草稿后重新发布，脚本不会自动覆盖它。正式构建需要已登录 gh，CI 使用 github.token。
+
+旧构建缺少来源记录，不能通过新的发布校验，需要重新构建；Windows verify 模式仍兼容旧 Artifact 名称用于安装验证。当前 `v0.1.0` 历史草稿属于早期提交，新代码正式发布应先升版。
+
 ## 本地构建
 
 使用 Git、Node 22.19+ 和 pnpm 9.12；首次运行 `pnpm install`。运行时包含独立 Node 和原生模块，必须在目标操作系统和 Node 架构下准备依赖与构建。

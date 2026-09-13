@@ -4,13 +4,16 @@ import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { recordArtifacts, verifiedArtifacts } from './artifacts.mjs';
+import { recordArtifacts as record, verifiedArtifacts } from './artifacts.mjs';
+const identity = { sourceCommit: 'a'.repeat(40), buildId: '123-1', mode: 'release', dirty: false };
+const recordArtifacts = (dir, target, version, distributable = true) => record(dir, target, version, distributable, identity);
 test('upload validation rejects changed, missing and stale artifacts', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'amiba-release-test-'));
   try {
     fs.writeFileSync(path.join(dir, 'Amiba-1.0.0-win-x64.exe'), 'installer');
     fs.writeFileSync(path.join(dir, 'latest-x64.yml'), JSON.stringify({ version: '1.0.0', files: [{ url: 'Amiba-1.0.0-win-x64.exe', sha512: createHash('sha512').update('installer').digest('base64'), size: 9 }] }));
     recordArtifacts(dir, 'win32-x64', '1.0.0');
+    assert.throws(() => verifiedArtifacts(dir, 'win32-x64', '1.0.0', 'b'.repeat(40)), /source commit/);
     assert.equal(verifiedArtifacts(dir, 'win32-x64', '1.0.0').length, 2);
     const metadataFile = path.join(dir, 'latest-x64.yml');
     const validMetadata = fs.readFileSync(metadataFile, 'utf8');

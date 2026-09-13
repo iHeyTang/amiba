@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProfileMenu } from "./ProfileMenu";
 import { APP_VERSION } from "../app-version";
+import desktopPackage from "../../../../apps/desktop/package.json";
 
 const updateHost = vi.hoisted(() => ({ bridge: undefined as undefined | {
   getState: ReturnType<typeof vi.fn>;
@@ -57,6 +58,12 @@ describe("Profile menu", () => {
     expect(openExternal).toHaveBeenCalledWith(
       "https://github.com/iHeyTang/amiba",
     );
+  });
+
+  it("uses the desktop package version before the update bridge is available", async () => {
+    await openMenu();
+    expect(APP_VERSION).toBe(desktopPackage.version);
+    expect(screen.getByRole("menuitem", { name: `Current version v${desktopPackage.version}` })).toBeInTheDocument();
   });
 
   it("explains when this build does not support updates", async () => {

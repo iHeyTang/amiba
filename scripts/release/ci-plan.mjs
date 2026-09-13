@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import { productVersion, parseVersion } from './version.mjs';
+import { preflightRelease } from './release-policy.mjs';
 import { pathToFileURL } from 'node:url';
 export const runnerTargets = [
   { target: 'win32-x64', runner: 'windows-2022', arch: 'x64' },
@@ -7,6 +9,7 @@ export const runnerTargets = [
 ];
 export function ciPlan({ ref = '', inputs = {}, version }) {
   if (ref !== 'refs/heads/main') throw new Error('Desktop CI only runs on main');
+  parseVersion(version);
   const mode = inputs.mode || 'test';
   if (!['test', 'release', 'verify'].includes(mode)) throw new Error('Invalid build mode');
   const target = inputs.target || 'all';
@@ -19,7 +22,8 @@ export function ciPlan({ ref = '', inputs = {}, version }) {
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH));
-  const version = JSON.parse(fs.readFileSync('apps/desktop/package.json')).version;
+  const version = productVersion();
   const plan = ciPlan({ ref: process.env.GITHUB_REF, inputs: event.inputs, version });
-  fs.appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify(plan.matrix)}\nmode=${plan.mode}\npublish=${plan.publish}\n`);
+  if (plan.mode === 'release') preflightRelease(process.env.GITHUB_REPOSITORY, version, process.env.GITHUB_SHA);
+  fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\nmatrix=${JSON.stringify(plan.matrix)}\nmode=${plan.mode}\npublish=${plan.publish}\n`);
 }
