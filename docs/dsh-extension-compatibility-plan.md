@@ -5,6 +5,12 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：嵌套图片释放的真实解码验证（2026-09-13）
+
+复用已验证构建，运行加强后的 --compat --message-images --tool-images --nested-tools，终态退出 0，日志 /tmp/amiba-nested-image-decode-revocation-smoke.log。仅由 code-dispatch 引用的第三张图片在切换前解码成功，切换到未引用会话后新建 Image 读取旧 URL 失败；Host 跨会话明确拒绝；历史重开用新的授权 URL 解码宽度 3。消息、根工具与嵌套工具均已用图片解码验证释放，不再依赖被 CSP 阻止的 fetch。多层实时/历史分发、父内容保留、深层定位和卸载回退继续通过。此轮只有验证和记录，无新产品变更。
+
+下一项 lineage 初步核对：新版 owner 是 lineageSessionId/displayTitle/openTitle，官方 ui-subagent 还依赖 sessions.openSubagent、refreshSubagents、setSubagentCatalogOpen 与标准 useSessions 的 subagentsByParent。实际 rc.2 runtime 已有这些目录刷新/打开状态方法及快照，不能归为“版本完全缺少服务而无法接入”。仍需核对 shell 的真实祖先链、标题和导航语义，保留现有标题/控制区，再做端到端验证；当前未声明或接入 lineage，不调整 34/9/21 统计。
+
 ## 最新进展：官方轨迹图片渲染接入（2026-09-13）
 
 固定 rc.2 trajectory 补丁已登记到 patchedDependencies、catalog、SDK peer/dev 和 pnpm lock，完整桌面构建成功应用到 managed runtime。补丁由 trajectory 的 conversation.view 入口声明 conversation.trajectory.images 子槽，按官方注册表订阅可用图片插件。shell 提供同一会话授权 loader；原 stateful TrajectoryView 保留为稳定子组件，通过上下文将图片回调送到预览、详情及工具输出。无 occupant 或无 loader 时保留原 rc.2 展示。连续持久图片成组，inline 图片顺序与原 DOM/classes 保留；compact 按原 preview 语义传入。
