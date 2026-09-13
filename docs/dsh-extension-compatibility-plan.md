@@ -5,6 +5,14 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：main 的 conversation 保留入口（2026-09-14）
+
+将 layout.selectPanel('conversation') 映射到原生会话入口，与 null 使用同一 canonical panelInfo 状态；此保留名称不再按普通插件全局页面派发，即使插件注册同名 main 贡献，也不会接管原聊天。其他 main key 仍严格检查注册并保持原有卸载回退。sidebar.panellist 的 conversation 入口无需替换组件即可使用，active 结合实际原生 sidebarView，避免其他工作区显示时误亮；其渲染移至已有 workspaceNavigation 回调末尾，DOM 顺序保持不变，没有改 NavigationRow 或 CSS。完整替换会话界面仍属于有条件适配，不因这个别名就宣称支持原样接管。
+
+12 项导航/列表测试、插件类型检查和完整桌面构建通过（/tmp/amiba-main-reserved-tests.log、/tmp/amiba-main-reserved-types-2.log、/tmp/amiba-main-reserved-build.log）。实际 --compat --main-panels --panel-list --sidebar-right 退出 0（/tmp/amiba-main-reserved-smoke.log）：无同名注册与存在同名贡献两种情况下都返回原会话，原输入 DOM、未发送草稿、Session 身份保留，同名替换组件未执行；保留侧栏入口可用且选中图标正确。右侧栏、guide、文档及其余桌面回归通过。
+
+另外运行 verify-dsh-architecture 发现已有静态规则仍要求 tool.call.toolview 直接接收 request.owner，而当前实现已构造含图片/inspect 的 owner；同一规则在 HEAD 与工作区均匹配失败（/tmp/amiba-main-reserved-architecture.log）。未绕过检查，需在后续全量审计中核对和修正这条过期检查。44/0/20 统计不变，Web、完整服务和剩余清单继续处理。
+
 ## 进行中：guide 默认视图、多入口和主题（2026-09-14）
 
 新增真实插件 guide 回归：全部 chain 贡献 decline 时显示 shipped fallback；优先贡献接管并获得真实 useTabInfo，卸载恢复默认内容；同一 kind 的多个入口按 order 与其他类型一起排序，动态注册/卸载即时更新；超过四个入口隐藏描述，恢复三个时描述回来。点击或原生 Enter 激活入口替换当前 guide，保持标签数量，多个同 kind 的入口均可用。

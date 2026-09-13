@@ -915,8 +915,8 @@ function ProductShellInner({
                 },
                 onNativeNavigation: leaveMainPanel,
                 navigationBefore: renderSlot("amiba.navigation.before", {}),
-                workspaceNavigation: (activeView) =>
-                  renderSlot("amiba.workspace.navigation", {
+                workspaceNavigation: (activeView) => <>
+                  {renderSlot("amiba.workspace.navigation", {
                     activeView: activePanelId === null ? activeView : "",
                     sessionActivity: {
                       sessions: sessions.sessions,
@@ -925,12 +925,11 @@ function ProductShellInner({
                       markUnread: sessions.markUnread,
                       markRead: sessions.markRead,
                     },
-                  }),
-                navigationAfter: <>
-                  <MainPanelList source={mainPanelList} navigation={mainPanels}
+                  })}
+                  <MainPanelList source={mainPanelList} navigation={mainPanels} conversationActive={activeView === "chats"}
                     renderIcon={(id, owner) => renderSlot("sidebar.panellist", owner, { only: id })} />
-                  {renderSlot("amiba.navigation.after", {})}
                 </>,
+                navigationAfter: renderSlot("amiba.navigation.after", {}),
                 workspaceView: (viewId, owner) =>
                   renderSlot(
                     "amiba.workspace.view",

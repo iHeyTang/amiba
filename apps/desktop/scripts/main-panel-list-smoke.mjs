@@ -29,6 +29,14 @@ export async function smokeMainPanelList({ evaluate, wait, call, screenshot }) {
   assert.ok(await evaluate("document.querySelector('[data-panel-icon=panel-beta]').getAttribute('data-active')==='false' && document.querySelector('[data-panel-icon=panel-alpha]').getAttribute('data-active')==='true'"));
   await evaluate("window.__panelAlphaOff()");
   await wait(() => evaluate("!document.querySelector('[data-panel-list-content]') && document.querySelector('[data-main-panel-navigation=panel-alpha]').disabled && document.querySelector('[data-testid=chats-view]').getAttribute('aria-hidden')==='false'"));
+  await evaluate("window.__panelListOff.push(window.__probeCtx.slots.register({name:'sidebar.panellist',id:'conversation',label:'Original conversation'},owner=>window.__probeCreateElement('span',{'data-conversation-icon-active':String(owner.active)},'Chat')))");
+  await wait(() => evaluate("!!document.querySelector('[data-main-panel-navigation=conversation]')"));
+  assert.ok(await evaluate("!document.querySelector('[data-main-panel-navigation=conversation]').disabled"),'Reserved conversation destination needs no replacement main registration');
+  await evaluate("document.querySelector('[data-main-panel-navigation=panel-beta]').click()");
+  await wait(() => evaluate("!!document.querySelector('[data-panel-list-content=beta]')"));
+  assert.equal(await evaluate("document.querySelector('[data-conversation-icon-active]').getAttribute('data-conversation-icon-active')"),'false');
+  await evaluate("document.querySelector('[data-main-panel-navigation=conversation]').click()");
+  await wait(() => evaluate("!document.querySelector('[data-panel-list-content]') && document.querySelector('[data-testid=chats-view]').getAttribute('aria-hidden')==='false' && document.querySelector('[data-conversation-icon-active]').getAttribute('data-conversation-icon-active')==='true'"));
   await evaluate("window.__panelListOff.forEach(off=>off())");
   await wait(() => evaluate("!document.querySelector('[data-main-panel-navigation]')"));
   assert.ok(await evaluate("window.__panelListNative.every(n=>n.isConnected) && window.__probeCtx.sessions.list.getSnapshot().current===window.__panelListSession"));

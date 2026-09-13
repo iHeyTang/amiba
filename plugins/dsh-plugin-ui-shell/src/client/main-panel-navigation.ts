@@ -1,5 +1,8 @@
 import { LayoutNavigation } from './layout-navigation.js';
 
+/** The official reserved main key maps to Amiba's existing conversation owner. */
+export const CONVERSATION_PANEL = 'conversation';
+
 export interface MainPanelInfo {
   /** null denotes the existing conversation surface. */
   readonly activePanelId: string | null;
@@ -35,6 +38,7 @@ export class MainPanelNavigation {
 
   selectPanel(id: string | null): void {
     if (this.disposed) throw new Error('layout.selectPanel: layout is disposed');
+    if (id === CONVERSATION_PANEL) id = null;
     if (id !== null && !this.registry.hasPanel(id)) {
       throw new Error(`layout.selectPanel: main panel "${id}" is not registered`);
     }

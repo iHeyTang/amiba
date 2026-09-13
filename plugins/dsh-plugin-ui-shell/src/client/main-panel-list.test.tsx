@@ -71,3 +71,19 @@ it('uses native button navigation and real selected icon owners; unloaded destin
   expect(f.showConversation).toHaveBeenCalledOnce();
   view.unmount(); f.dispose();
 });
+
+it('keeps the reserved conversation entry available and marks only the actual native conversation active', () => {
+  const f = fixture();
+  f.core.register({ name: 'sidebar.panellist', id: 'conversation', label: 'Conversation' }, () => null);
+  const icon = (id: string, owner: { active: boolean }) => <span>{id}:{String(owner.active)}</span>;
+  const view = render(<MainPanelList source={f.source} navigation={f.navigation} conversationActive={false} renderIcon={icon} />);
+  const button = screen.getByRole('button', { name: 'Conversation' }) as HTMLButtonElement;
+  expect(button.disabled).toBe(false);
+  expect(button.hasAttribute('aria-current')).toBe(false);
+  fireEvent.click(button);
+  expect(f.showConversation).toHaveBeenCalledOnce();
+  expect(f.navigation.getSnapshot().activePanelId).toBeNull();
+  view.rerender(<MainPanelList source={f.source} navigation={f.navigation} conversationActive renderIcon={icon} />);
+  expect(button.getAttribute('aria-current')).toBe('page');
+  view.unmount(); f.dispose();
+});

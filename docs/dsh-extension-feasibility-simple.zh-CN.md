@@ -46,7 +46,7 @@
 | 47 | `settings.trigger` | 已接入，依赖另核对；具体未完成项见详细表。 |
 | 48 | `shell.overlay` | 已接入，依赖另核对；具体未完成项见详细表。 |
 | 52 | `sidebar.footer.action` | 可以适配，已验证；具体未完成项见详细表。 |
-| 53 | `sidebar.panellist` | 已接到原侧栏导航行，按 order/label 显示，传递真实 size/active，并关联 main/selectPanel/panelInfo；键盘与鼠标切换、延迟注册、卸载返回和原侧栏/会话保留通过桌面验证。main 保留键、完整第三方组件与独立 Web 另核对。 |
+| 53 | `sidebar.panellist` | 已接到原侧栏导航行，按 order/label 显示，传递真实 size/active，并关联 main/selectPanel/panelInfo；键盘与鼠标切换、延迟注册、卸载返回和原侧栏/会话保留通过桌面验证。保留键 conversation 已映射到原会话入口并通过同名注册隔离验证；完整第三方组件与独立 Web 另核对。 |
 | 54 | `sidebar.right.pane.tab` | 已接入可选工作区面板，真实会话 store、tabInfo、重复导航、收起及类型卸载回退已通过桌面验证；官方 main 隔离、浮动/全屏恢复和实际会话往返已实测；会话身份对齐后绑定，旧标签回调仍操作原会话。收起保留正文局部草稿、767/768px 自动全屏及退出恢复已实测；原生工作区其他隐藏路径、完整第三方插件与 Web 仍待验证。 |
 | 55 | `sidebar.right.pane.tab.title` | 标题插槽已按真实标签类型分发，tabInfo 与动态标题通过桌面验证；复用原工作区标签样式，完整第三方插件及 Web 仍待验证。 |
 | 56 | `sidebar.right.tab.document` | 已接入文档 keyed/session 正文与 useTabInfo，纯文本分页、行定位、文件变更重载和第三方完整字节 renderer 接管/卸载回退通过真实桌面验证；Markdown 标题、表格、链接、代码块及局部主题已通过实际桌面验证；新版 labels 可选参数、脚注中英文切换及恢复亦已实测，保留旧 codeLabels 默认行为；图片视图全部 8 个官方后缀均有实际桌面解码证据；新增普通/渐进 JPEG、GIF、无损/有损 WebP、24 位 BMP、PNG/DIB ICO 的像素、原始尺寸、损坏重载恢复及 URL 释放验证；GIF/WebP 动画亦通过两帧屏幕像素验证；HTML 与直接相对 JS/CSS 打包、执行、父页面隔离和失败重载已通过桌面验证；模块、CSS 内部依赖、本地图片和运行时请求沿用官方不遍历的限制。代码视图高亮、行号、6002 行分页跳转、末页 DOM 保留及换行已通过桌面验证。PDF 独立 Worker、两页矢量渲染、损坏重试/恢复及关闭清理通过桌面验证，许可证与资源已核对发布包，标准字体和 CMap 的实际读取/绘制亦通过；嵌入 JPEG、JPEG 2000 的 openjpeg.wasm 解码及透明蒙版混合像素已通过真实桌面验证。24 页按需渲染、向前/向后滚动后的标签页码恢复、缩短文件的末页定位已通过桌面验证；独立 Web 仍需补齐；图片证据覆盖上述样本，不代表全部编码变体。 |

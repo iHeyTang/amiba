@@ -2,7 +2,7 @@ import { useSyncExternalStore, type ReactNode } from 'react';
 import { NavigationRow } from '@amiba/ui/plugin';
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots';
 import type { SlotContributionsCtx, ContributionsSource } from './session-list-sources.js';
-import type { MainPanelNavigation } from './main-panel-navigation.js';
+import { CONVERSATION_PANEL, type MainPanelNavigation } from './main-panel-navigation.js';
 
 export interface MainPanelRow { id: string; label: string; available: boolean }
 
@@ -24,7 +24,7 @@ export function createMainPanelListSource(
           .flatMap(({ options }) => options.id === undefined ? [] : [{
             id: options.id,
             label: resolveSlotLabel(options.label) ?? options.id,
-            available: hasPanel(options.id),
+            available: options.id === CONVERSATION_PANEL || hasPanel(options.id),
           }]);
       }
       return snapshot;
@@ -38,22 +38,24 @@ export function createMainPanelListSource(
   };
 }
 
-export function MainPanelList({ source, navigation, renderIcon }: {
+export function MainPanelList({ source, navigation, renderIcon, conversationActive = true }: {
   source: ContributionsSource<MainPanelRow>;
   navigation: MainPanelNavigation;
+  conversationActive?: boolean;
   renderIcon: (id: string, owner: { size: number; active: boolean }) => ReactNode;
 }) {
   const rows = useSyncExternalStore(source.subscribe, source.getSnapshot, source.getSnapshot);
   const { activePanelId } = useSyncExternalStore(navigation.subscribe, navigation.getSnapshot, navigation.getSnapshot);
+  const isActive = (id: string) => id === CONVERSATION_PANEL ? activePanelId === null && conversationActive : activePanelId === id;
   return <>{rows.map(row => <NavigationRow
     key={row.id}
     data-main-panel-navigation={row.id}
     aria-label={row.label}
     title={row.label}
     label={row.label}
-    active={activePanelId === row.id}
+    active={isActive(row.id)}
     disabled={!row.available}
-    icon={renderIcon(row.id, { size: 16, active: activePanelId === row.id })}
+    icon={renderIcon(row.id, { size: 16, active: isActive(row.id) })}
     onClick={() => navigation.selectPanel(row.id)}
   />)}</>;
 }

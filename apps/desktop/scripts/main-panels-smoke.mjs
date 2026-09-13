@@ -25,6 +25,16 @@ export async function smokeMainPanels({ evaluate, wait }) {
   assert.ok(await evaluate("window.__mainOriginalInput.isConnected && window.__mainOriginalInput.textContent==='MAIN_PANEL_UNSENT_DRAFT' && window.__probeCtx.sessions.list.getSnapshot().current===window.__mainOriginalSession"));
   await evaluate("window.__probeCtx.layout.selectPanel('compat-panel')");
   await wait(() => evaluate("!!document.querySelector('[data-main-panel-probe]')"));
+  await evaluate("window.__probeCtx.layout.selectPanel('conversation')");
+  await wait(() => evaluate("!document.querySelector('[data-main-panel-probe]') && document.querySelector('[data-testid=chats-view]').getAttribute('aria-hidden')==='false'"));
+  assert.ok(await evaluate("window.__mainOriginalInput.isConnected && window.__mainOriginalInput.textContent==='MAIN_PANEL_UNSENT_DRAFT' && window.__probeCtx.sessions.list.getSnapshot().current===window.__mainOriginalSession"));
+  await evaluate("window.__reservedMainRenders=0;window.__reservedMainOff=window.__probeCtx.slots.register({name:'main',key:'conversation'},()=>{window.__reservedMainRenders++;return window.__probeCreateElement('article',{'data-reserved-main-override':''},'Unexpected replacement')});window.__probeCtx.layout.selectPanel('compat-panel')");
+  await wait(() => evaluate("!!document.querySelector('[data-main-panel-probe]')"));
+  await evaluate("window.__probeCtx.layout.selectPanel('conversation')");
+  await wait(() => evaluate("document.querySelector('[data-testid=chats-view]').getAttribute('aria-hidden')==='false'"));
+  assert.ok(await evaluate("window.__reservedMainRenders===0 && !document.querySelector('[data-reserved-main-override]') && window.__mainOriginalInput.isConnected && window.__mainOriginalInput.textContent==='MAIN_PANEL_UNSENT_DRAFT'"),'Reserved main key must preserve the native conversation even with a same-key contribution');
+  await evaluate("window.__reservedMainOff();window.__probeCtx.layout.selectPanel('compat-panel')");
+  await wait(() => evaluate("!!document.querySelector('[data-main-panel-probe]')"));
   await evaluate("window.__mainPanelOff()");
   await wait(() => evaluate("!document.querySelector('[data-main-panel-probe]') && document.querySelector('[data-testid=chats-view]').getAttribute('aria-hidden')==='false'"));
   assert.ok(await evaluate("window.__mainOriginalInput.isConnected && window.__mainOriginalInput.textContent==='MAIN_PANEL_UNSENT_DRAFT' && window.__probeCtx.sessions.list.getSnapshot().current===window.__mainOriginalSession"));

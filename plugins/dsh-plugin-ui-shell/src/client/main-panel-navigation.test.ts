@@ -30,6 +30,16 @@ describe('global panel navigation contract', () => {
     expect(changed).not.toHaveBeenCalled();
     panels.dispose();
   });
+  it('routes the reserved conversation key to the native surface without a plugin registration', () => {
+    const { panels, navigation, conversation } = fixture();
+    panels.selectPanel('tools');
+    const signal = navigation.beginNavigation();
+    panels.selectPanel('conversation');
+    expect(panels.getSnapshot().activePanelId).toBeNull();
+    expect(signal.aborted).toBe(true);
+    expect(conversation).toHaveBeenCalledOnce();
+    panels.dispose();
+  });
   it('returns to conversation only when the selected panel unloads', () => {
     const { panels, navigation, conversation, remove } = fixture();
     panels.selectPanel('tools'); remove('search');
