@@ -1,3 +1,4 @@
+export { sessionFileAddress, absoluteFileAddress, parseFileAddress, type FileAddress } from "./resources/file-address.js";
 import { ResourceRegistry } from "./resources/resources.js";
 export type { Resources, ResourceProtocol, ResourceProvider, ResourceSnapshot, ResourceStatus, ResourceOpenContext, UseResource } from "./resources/contract.js";
 import { SidebarRightTabRegistry } from "./sidebar-right/tab-registry.js";

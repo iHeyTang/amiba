@@ -5,6 +5,14 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：文件资源地址协议（2026-09-13）
+
+按固定 c291e796 迁移 file-address 的构造、解析及 48 项上游测试，通过 shell 客户端入口导出 sessionFileAddress、absoluteFileAddress、parseFileAddress 和 FileAddress。保留 Session 身份、POSIX/Windows/UNC 路径、单次解码和未归一化的点路径；授权仍由后端处理，地址解析成功不代表有读取权限。源文件保留 MIT 归属，由现有客户端许可 banner 覆盖。
+
+48 项测试通过（/tmp/amiba-file-address-tests.log），shell 类型检查（/tmp/amiba-file-address-types.log）与包构建（/tmp/amiba-file-address-build.log）退出 0。本次未改动界面或现有文件预览，也未将纯协议测试记为文件 provider 或五项右侧栏完成。
+
+继续接入前已核实：官方 file 资源只返回 absolutePath/version/bytes 元数据，正文另读；原生 readPreviewFile 会读取并限制正文大小，不能代替 stat。现有 files:watch 在注册时 realpath 失败会跳过该路径，且前端 watch 不暴露注册就绪状态，因此不能直接满足先监听后 stat、初次不存在后创建恢复的官方语义。后续需要补齐真实元数据接口和监听契约，保留原预览权限验证及读取行为。39/5/20 统计不变。
+
 ## 进行中：资源来源、引用保留及根级 useResource（2026-09-13）
 
 迁移固定 c291e796 的 ResourceRegistry 与公开契约：ctx.resources 按协议注册 provider，source(address) 返回稳定引用，订阅者与 pin 共用同一流，最后一个持有者释放时 abort 并清空状态；provider 停用变为 none，重新注册可重新读取，失败帧保留上次成功值，取消后的迟到帧丢弃。通过 provideRoot keyedHooks.resource 绑定真实全局 useResource。此阶段没有内建 file/document provider，不能把自定义测试流当作已接通官方文件资源或右侧栏。
