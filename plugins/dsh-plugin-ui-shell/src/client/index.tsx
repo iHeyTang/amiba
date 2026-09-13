@@ -1,3 +1,5 @@
+import { ResourceRegistry } from "./resources/resources.js";
+export type { Resources, ResourceProtocol, ResourceProvider, ResourceSnapshot, ResourceStatus, ResourceOpenContext, UseResource } from "./resources/contract.js";
 import { SidebarRightTabRegistry } from "./sidebar-right/tab-registry.js";
 export type { SidebarRightTabDefinition, SidebarRightTabPriority, SidebarRightTabClaim } from "./sidebar-right/tab-registry.js";
 import { createMainPanelListSource, type MainPanelRow } from "./main-panel-list.js";
@@ -570,6 +572,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
     };
     const disposeLayout = ctx.reflect.provide("layout", layout);
     const disposeRightTabRegistry = ctx.reflect.provide("sidebarRightTabs", new SidebarRightTabRegistry(ctx));
+    const resources = new ResourceRegistry(ctx);
+    const disposeResources = ctx.reflect.provide("resources", resources);
+    const disposeResourceHook = ctx.slots.provideRoot({ keyedHooks: { resource: address => resources.source(address) } });
     const visibility = createSessionVisibility();
     const disposeVisibility = ctx.reflect.provide(
       "amibaSessionVisibility",
@@ -1064,6 +1069,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
       if (mainPanels === panelNavigation) mainPanels = undefined;
       disposeRoot();
       sessionsBridge.dispose();
+      disposeResourceHook();
+      void disposeResources();
       void disposeRightTabRegistry();
       void disposeLayout();
       void disposeVisibility();

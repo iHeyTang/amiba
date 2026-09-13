@@ -5,6 +5,18 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：资源来源、引用保留及根级 useResource（2026-09-13）
+
+迁移固定 c291e796 的 ResourceRegistry 与公开契约：ctx.resources 按协议注册 provider，source(address) 返回稳定引用，订阅者与 pin 共用同一流，最后一个持有者释放时 abort 并清空状态；provider 停用变为 none，重新注册可重新读取，失败帧保留上次成功值，取消后的迟到帧丢弃。通过 provideRoot keyedHooks.resource 绑定真实全局 useResource。此阶段没有内建 file/document provider，不能把自定义测试流当作已接通官方文件资源或右侧栏。
+
+资源模型私有存储只需要完整快照替换：以本地同步、Object.is 去重、订阅异常隔离的 ObservableSnapshot 实现替换新版 client-store 依赖，未引入其 draft/persist/raf 功能；生产快照语义保持，未迁移开发态 Immer 深冻结。MIT 许可已由 shell 客户端 banner 覆盖。
+
+类型核对发现 module augmentation 无法代替新版插槽包的实际导出入口。新增 ui-slots rc.2 类型补丁，把 ResourceProtocolMap 和 RootStandardSourceContribution/Binding 放回词法定义处，并在原 SlotRendererHost 定义上增加 root；删去 runtime 补丁中那段补充类型声明。实际类型测试验证协议值映射、根槽 useResource 泛型以及原 host.sessions 仍有有效类型，而非退化为 any。
+
+24 项迁移生命周期测试原先通过；另加“provider.open 同步取消 pin”用例，旧实现失败（/tmp/amiba-resources-pin-red.log）：hold 启动读取之后才监听 abort，会错过同步取消并泄漏持有。现在先绑定监听再 hold，原有及新增测试全部通过；加 1 项类型契约测试共 26 项（/tmp/amiba-resources-tests.log），shell 类型检查通过（/tmp/amiba-resources-types.log），根状态补丁的 4 项回归通过（/tmp/amiba-resources-root-regression.log）。
+
+首次完整构建因托管树没有独立 ui-slots 包而失败（/tmp/amiba-resources-build.log）。已把相同 0.1.1-rc.2 的契约包加入 shell 直接依赖并运行 runtime:lock；分发锁只新增该包，不能跳过补丁验证。重新构建退出 0（/tmp/amiba-resources-build-2.log），实际托管 ui-slots 类型入口已确认导出资源协议表，runtime 中旧补充声明也已移除。--compat --resources --root-providers 退出 0（/tmp/amiba-resources-smoke.log）：真实全局 hook、两个组件共用流、pin 跨组件卸载保留、最后引用释放中止、稳定 source 重新打开、调用方 fiber 卸载协议后返回 none 均通过；根级来源及既有配置/会话/文件/Markdown/HMR 回归也通过。完整目标及 39/5/20 统计不变，Tab occurrence、真实 file/document provider、右侧栏 body/title 和面板布局继续处理。
+
 ## 进行中：右侧栏标签类型注册与资源路由规则（2026-09-13）
 
 迁移固定 c291e796 的 SidebarRightTabRegistry，并通过真实 ctx.reflect.provide 暴露 sidebarRightTabs。此服务只负责类型注册与选择：按地址 glob/canOpen、extension/builtin/fallback 优先级、匹配长度和注册次序选取查看器；允许一个 extension 临时接管 builtin，同 band、重复 id 与 fallback 同 kind 冲突均拒绝；卸载恢复原定义和 guide 元数据。阶段二的标签 body/title 分发、资源读取和生命周期还未接入，不能把这个注册服务算作五项右侧栏完成。

@@ -91,6 +91,7 @@
 | 项目 | 判断 | 确切限制 |
 | --- | --- | --- |
 | 官方 layout.beginNavigation | 已接入并实测 | 返回 AbortSignal；下一次请求、提交已有页面导航或根卸载会取消旧请求。直接宿主布局事件与服务调用共用取消边界，无关事件不影响。3 项测试及真实桌面通过；新版 selectPanel 和 usePanelInfo 仍需另行适配。 |
+| 官方 resources / useResource | 资源模型已适配并实测 | 按协议注册 provider，稳定 source、共享流、pin 保留、最后持有者释放、失败保留旧值及取消后丢弃迟到帧已迁移；26 项资源/类型测试和真实桌面 hook、共享读取、引用释放、协议卸载验证通过。修复 provider 打开时同步取消 pin 的泄漏。尚未接入官方 file/document provider 或右侧栏标签，不能把自定义协议流验证当作文件功能完成。 |
 | 官方 sidebarRightTabs | 类型注册服务已适配并实测 | 迁移固定版本地址匹配/优先级/接管与卸载恢复规则，26 项测试和真实桌面服务注入、调用方 effect 卸载验证通过。只完成类型注册阶段；sidebarRight 的标签实例、资源 pin、body/title、分栏浮动等尚未接入，不能据此声称右侧栏已兼容。 |
 | 官方 slots.provideRoot | 基础服务已适配并实测 | 真实 Cordis 调用方生命周期管理普通/按 key 状态来源与静态属性，重复输出名称拒绝且不改变已有状态；三种渲染作用域跟随贡献变化。React DOM 和真实桌面验证来源更新、卸载、重新注册、订阅释放与原输入保留。rc.2 原生 useSessions/useWorkspaces 名称保留；新旧完整域插件替换及 main/panelInfo 实际布局绑定仍待完成。 |
 | 官方 layout.openDetails / closeDetails | 已适配并实测 | 补齐原先仅发事件但没有消费的公共开关，接入当前会话 WorkspacePaneProvider。只改变 open 状态，不改资源或模式；无有效会话不创建面板。重复打开、跨会话隔离有测试；真实桌面关闭/重开保留同一文件预览 DOM，另一会话的开关也已验证。新版 sidebarRight 资源/标签服务仍另行适配。 |

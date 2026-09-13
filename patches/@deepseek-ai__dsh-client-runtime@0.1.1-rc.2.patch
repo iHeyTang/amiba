@@ -113,15 +113,6 @@
  						if (disposed) return;
 --- a/lib/types/client/slots.d.ts
 +++ b/lib/types/client/slots.d.ts
-@@ -12,7 +12,7 @@
- import { Service } from '@deepseek-ai/cordis';
- import type { Context } from '@deepseek-ai/cordis';
- import { SlotCore } from '@deepseek-ai/dsh-client-ui-slots';
--import type { LiveSlotNode, LocaleFace, OwnerOf, SlotMap, SlotRenderer, SlotSpec, StoredEntry } from '@deepseek-ai/dsh-client-ui-slots';
-+import type { HostObservable, LiveSlotNode, LocaleFace, OwnerOf, SlotMap, SlotRenderer, SlotSpec, StoredEntry } from '@deepseek-ai/dsh-client-ui-slots';
- declare module '@deepseek-ai/dsh-client-ui-slots' {
-     interface SlotMap {
-         /**
 @@ -44,6 +44,8 @@
  type SlotInjectionEffect = (() => void) | Iterable<() => void, void, void>;
  /** cordis Service layer of the slot system; see the module doc for the split with SlotCore. */
@@ -131,26 +122,3 @@
      private readonly _core;
      /** Store-instance axis: handle -> mounted scope, refcount, resolved instances. */
      private readonly _stores;
-@@ -188,4 +190,20 @@
-     private _release;
- }
- export {};
--//# sourceMappingURL=slots.d.ts.map
-\ No newline at end of file
-+//# sourceMappingURL=slots.d.ts.map
-+declare module '@deepseek-ai/dsh-client-ui-slots' {
-+    interface RootStandardSourceContribution {
-+        readonly hooks?: Readonly<Record<string, HostObservable<unknown>>>;
-+        readonly keyedHooks?: Readonly<Record<string, (key: string) => HostObservable<unknown> | undefined>>;
-+        readonly props?: Readonly<Record<string, unknown>>;
-+    }
-+    interface RootStandardSourceBinding {
-+        readonly key: undefined;
-+        readonly hooks: Readonly<Record<string, HostObservable<unknown>>>;
-+        readonly keyedHooks: Readonly<Record<string, (key: string) => HostObservable<unknown> | undefined>>;
-+        readonly props: Readonly<Record<string, unknown>>;
-+    }
-+    interface SlotRendererHost {
-+        readonly root?: HostObservable<RootStandardSourceBinding>;
-+    }
-+}

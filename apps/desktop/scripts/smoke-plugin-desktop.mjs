@@ -1,3 +1,4 @@
+import { smokeResources } from "./resources-smoke.mjs";
 import { smokeRightTabRegistry } from "./right-tab-registry-smoke.mjs";
 import { smokeMainPanelList } from "./main-panel-list-smoke.mjs";
 import { smokeMainPanels } from "./main-panels-smoke.mjs";
@@ -53,6 +54,7 @@ if (process.argv.includes("--trajectory-images") && !["--message-images", "--too
 if (process.argv.includes("--model-settings-slots") && !process.argv.includes("--compat")) throw new Error("--model-settings-slots requires --compat");
 if (process.argv.includes("--legacy-tool-details") && !process.argv.includes("--compat")) throw new Error("--legacy-tool-details requires --compat");
 if (process.argv.includes("--legacy-tool-live") && !process.argv.includes("--legacy-tool-details")) throw new Error("--legacy-tool-live requires --legacy-tool-details");
+if (process.argv.includes("--resources") && !process.argv.includes("--compat")) throw new Error("--resources requires --compat");
 if (process.argv.includes("--right-tab-registry") && !process.argv.includes("--compat")) throw new Error("--right-tab-registry requires --compat");
 if (process.argv.includes("--panel-list") && !process.argv.includes("--main-panels")) throw new Error("--panel-list requires --main-panels");
 if (process.argv.includes("--main-panels") && !process.argv.includes("--compat")) throw new Error("--main-panels requires --compat");
@@ -308,6 +310,7 @@ try {
 
     }
     assert.ok(await evaluate("window.__probeCtx.get('conversationEvents').entries().some(d=>d.kind==='turn-tail') && window.__probeCtx.get('conversationEvents').entries().some(d=>d.kind==='assistant-step') && window.__probeCtx.get('conversationViews').entries().some(d=>d.target==='chat')"), "headless official data definitions and chat target must be mounted");
+    if (process.argv.includes("--resources")) await smokeResources({ evaluate, wait });
     if (process.argv.includes("--right-tab-registry")) await smokeRightTabRegistry(evaluate);
     if (process.argv.includes("--root-providers")) await smokeRootProviders({ evaluate, wait });
     if (process.argv.includes("--layout-navigation")) await smokeLayoutNavigation(evaluate);
