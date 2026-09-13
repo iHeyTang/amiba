@@ -1,0 +1,34 @@
+/* The owner supplies scrolling; Markdown uses prose whitespace inside its source-oriented container. */
+.document {
+  /* Scope the official primitive's theme to this optional document view. */
+  --document-prose-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ds-font-family-code: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --dsw-font-markdown-base: 400 14px/1.7 var(--document-prose-font);
+  --dsw-font-markdown-base-strong: 600 14px/1.7 var(--document-prose-font);
+  --dsw-font-markdown-h1: 600 26px/1.3 var(--document-prose-font);
+  --dsw-font-markdown-h2: 600 22px/1.35 var(--document-prose-font);
+  --dsw-font-markdown-h3: 600 18px/1.4 var(--document-prose-font);
+  --dsw-font-markdown-h4: 600 16px/1.5 var(--document-prose-font);
+  --dsw-font-markdown-code: 400 13px/1.6 var(--ds-font-family-code);
+  --dsw-font-markdown-code-block: 400 13px/1.6 var(--ds-font-family-code);
+  --dsw-font-markdown-table: 400 14px/1.6 var(--document-prose-font);
+  --dsw-font-markdown-table-head: 600 14px/1.6 var(--document-prose-font);
+  --dsw-font-xs-13: 400 13px/1.5 var(--document-prose-font);
+  --dsw-alias-label-primary: hsl(var(--foreground));
+  --dsw-alias-label-secondary: hsl(var(--muted-foreground));
+  --dsw-alias-label-tertiary: hsl(var(--muted-foreground));
+  --dsw-alias-label-caption: hsl(var(--muted-foreground));
+  --dsw-alias-state-business-primary: hsl(var(--primary));
+  --dsw-alias-border-l2: hsl(var(--border));
+  --dsw-alias-border-l3: hsl(var(--muted-foreground));
+  --dsw-alias-bg-base: hsl(var(--background));
+  --dsw-alias-markdown-inline-code: hsl(var(--muted));
+  --dsw-alias-markdown-code-block: hsl(var(--muted));
+  --dsw-alias-markdown-code-block-banner: hsl(var(--accent));
+  --ds-transition-duration: 150ms;
+  --ds-ease-in-out: ease-in-out;
+  min-width: 0;
+  padding: 10px 12px;
+  font-family: var(--document-prose-font);
+  white-space: normal;
+}

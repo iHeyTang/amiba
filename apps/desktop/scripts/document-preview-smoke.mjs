@@ -4,6 +4,7 @@ import path from 'node:path';
 export async function smokeDocumentPreview({ evaluate, wait, fileWorkspace, screenshot }) {
   const relative = '.cache/compat-document-preview.txt';
   const file = path.join(fileWorkspace, relative);
+  const markdownFile = path.join(fileWorkspace, '.cache/compat-document-preview.md');
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, Array.from({ length: 6002 }, (_, i) => `DOCUMENT_LINE_${i + 1}`).join('\n'));
   try {
@@ -37,7 +38,26 @@ export async function smokeDocumentPreview({ evaluate, wait, fileWorkspace, scre
     await wait(() => evaluate("!document.querySelector('[data-document-custom]') && document.querySelector('[data-textpreview-line=\"1\"]')?.textContent.includes('DOCUMENT_UPDATED')"));
     await evaluate("window.__sidebarService.close(window.__documentSavedId)");
     await wait(() => evaluate("window.__documentSavedSignal.aborted && !document.querySelector('[data-textpreview-body]')"));
+    await writeFile(markdownFile, '# DOCUMENT_MARKDOWN\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n[Document link](https://example.com/)\n\n```js\nconst answer = 42;\n```');
+    await evaluate("window.__sidebarService.openResource(window.__documentAddress.replace(/\\.txt$/,'.md'))");
+    await wait(() => evaluate("document.querySelector('[data-document-markdown] h1')?.textContent==='DOCUMENT_MARKDOWN' && !!document.querySelector('[data-document-markdown] table')"));
+    assert.equal(await evaluate("document.querySelector('[data-document-markdown] a')?.getAttribute('href')"), 'https://example.com/');
+    assert.ok(await evaluate("document.querySelector('[data-document-markdown] code')?.textContent.includes('const answer = 42;')"));
+    assert.ok(await evaluate(`(()=>{
+      const root=document.querySelector('[data-document-markdown]');
+      const heading=getComputedStyle(root.querySelector('h1'));
+      const link=getComputedStyle(root.querySelector('a'));
+      const cell=getComputedStyle(root.querySelector('th'));
+      return parseFloat(heading.fontSize)>parseFloat(link.fontSize)
+        && !link.fontFamily.includes('monospace')
+        && link.color!==getComputedStyle(root).color
+        && parseFloat(cell.borderBottomWidth)>0 && cell.borderBottomStyle==='solid'
+        && cell.borderBottomColor!=='rgba(0, 0, 0, 0)';
+    })()`), 'Markdown document must have prose typography, distinct links and visible table borders');
+    await screenshot?.();
+    await evaluate("window.__sidebarService.close(window.__sidebarService.active().id)");
+    await wait(() => evaluate("!document.querySelector('[data-document-markdown]')"));
     await evaluate("if(window.__sidebarService.isExpanded())window.__sidebarService.toggleExpanded()");
-    console.log('Document preview passed actual resource opening, 5000-line paging/navigation, metadata change/reload, measured body, third-party byte renderer owner/hooks, unload-to-plain fallback and tab cancellation.');
-  } finally { await rm(file, { force: true }); }
+    console.log('Document preview passed actual resource opening, 5000-line paging/navigation, metadata change/reload, measured body, third-party byte renderer owner/hooks, unload-to-plain fallback, tab cancellation and actual Markdown heading/table/link/code rendering.');
+  } finally { await rm(file, { force: true }); await rm(markdownFile, { force: true }); }
 }

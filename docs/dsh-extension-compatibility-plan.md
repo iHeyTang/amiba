@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：Markdown 文档视图（2026-09-13）
+
+新增 Markdown 内置实现，沿用固定源扩展/注册优先级、text-pages 累积内容和独立 whitespace/CSS 范围；.md/.markdown 自动选择，外部 renderer 优先级与纯文本备选保持。使用当前 rc.2 MarkdownText，将新版 labels.code 映射到实际 codeLabels，保留 localized copy/copied 标签；不替换当前聊天 Markdown 或代码组件。
+
+代码组件核对发现 rc.2 CodeBlock 尚无新版 streaming、lineNumbers、contentRef；未用忽略参数伪装代码视图兼容。MarkdownText 缺少新版统一 labels/footnotes 接口，本轮先接通已有 Markdown 渲染与代码复制标签，脚注标题本地化仍待补齐。
+
+62 项文档测试退出 0（/tmp/amiba-document-markdown-theme-tests.log），类型检查退出 0（/tmp/amiba-document-markdown-types-2.log）：新增真实 primitives 渲染测试涵盖 heading、GFM table、代码与本地化按钮、脚本/危险链接不注入、分页累积后引用链接完成解析、非文本内容不绘制、后缀与外部实现优先级。
+
+首次桌面功能回归通过，但截图发现官方 Markdown 字体/颜色变量缺失，标题、链接及表格退化为普通文本。已仅在新 Markdown 容器内映射 Amiba 主题颜色及系统字体；完整桌面构建退出 0（/tmp/amiba-document-markdown-theme-build.log），--compat --sidebar-right 退出 0（/tmp/amiba-document-markdown-theme-smoke.log），新增实际计算样式检查覆盖标题字号、正文字体、链接颜色和表格边框。已查看更新的 amiba-native-document.png，标题层级、链接、表格与代码块背景正常，原聊天、输入器与工作区标签保留。原文件/目录、侧栏、配置与 HMR 回归通过。44/0/20 入口统计不变；脚注标题本地化、HTML、图片、PDF、代码文档视图以及独立 Web 仍未完成。
+
 ## 进行中：文档正文、标题及 keyed renderer 接入（2026-09-13）
 
 迁移固定源 TextPreview、TextTitle、加载提示、文本行工具、纯文本正文、文档 owner/Hook 契约与局部 CSS。新增可选 documentPreviews 服务及 text fallback 标签类型，使用真实 runtime store、nativeDocumentReads 与 textFace；声明 sidebar.right.tab.document keyed/session 子槽并转发 enclosing useTabInfo。保留原工作区文件预览，新增文档通过 sidebarRight.openResource 打开。
