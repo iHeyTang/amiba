@@ -28,7 +28,10 @@ export function createPendingQueueSource(storage: StorageAdapter, sessionId: str
   const publish = (next: PendingChatTurn[]) => {
     if (JSON.stringify(next) === JSON.stringify(snapshot)) return;
     snapshot = next;
-    for (const listener of listeners) listener();
+    for (const listener of listeners) {
+      try { listener(); }
+      catch (error) { console.warn("[pending-queue] observer failed", error); }
+    }
   };
   const persist = () => {
     const value = snapshot;

@@ -4,10 +4,12 @@ import { createInputActionsProvider } from "./input-actions-provider.js";
 import { createComposerDraftSource } from "../../../../packages/ui/src/chat/composer-draft-store";
 import { composerDraftDisplayText } from "../../../../packages/ui/src/chat/composer-draft-document";
 import { createInputTriggerBridge, type InputTriggerBridgeDeps } from "./input-trigger-bridge.js";
+import { sessionPendingQueue } from "@amiba/ui/composer-runtime";
 
-function fixture(residentDraft?: InputTriggerBridgeDeps["residentDraft"]) {
+function fixture(residentDraft?: InputTriggerBridgeDeps["residentDraft"], pendingQueue?: InputTriggerBridgeDeps["pendingQueue"]) {
   const bridge = createInputTriggerBridge({
     residentDraft,
+    pendingQueue,
     scopeOf: () => ({ on: () => () => {} }) as never,
     subscribeSessions: () => () => {}, inputTriggers: () => undefined, commandUi: () => undefined,
   });
@@ -35,6 +37,29 @@ function fixture(residentDraft?: InputTriggerBridgeDeps["residentDraft"]) {
 }
 
 describe("official input action provider", () => {
+  it("uses the existing native queue after hydration when local turn preparation is busy", async () => {
+    let finish!: (values: Record<string, unknown>) => void;
+    const storage = {
+      get: vi.fn(() => new Promise<Record<string, unknown>>(resolve => { finish = resolve; })),
+      set: vi.fn(async (_values: Record<string, unknown>) => {}), remove: vi.fn(async (_keys: string | string[]) => {}), watch: () => () => {},
+    };
+    const source = createComposerDraftSource();
+    const queue = sessionPendingQueue(storage, "a");
+    const { bridge, actions } = fixture(() => source, () => queue);
+    const action = actions("a");
+    const send = vi.fn(async () => ({ kind: "accepted" as const }));
+    bridge.bindResidentTurnSender!(send, () => true);
+    action.setDraft("new queued input"); action.submit(); action.submit();
+    await vi.waitFor(() => expect(storage.get).toHaveBeenCalled());
+    expect(source.getSnapshot()).toBe("new queued input");
+    finish({ "pendingQueue:a": [{ queueId: "older", text: "older input", attachments: [] }] });
+    await vi.waitFor(() => expect(bridge.inputSubmissionSource!("a").getSnapshot().pending).toBe(false));
+    await queue.flush();
+    expect(queue.getSnapshot()).toHaveLength(2);
+    expect(queue.getSnapshot()[1]).toMatchObject({ text: "new queued input", draft: { text: "new queued input" }, attachments: [] });
+    expect(source.getSnapshot()).toBe("");
+    expect(send).not.toHaveBeenCalled();
+  });
   it("submits a resident draft through standard actions and retains edits made after dispatch", async () => {
     const source = createComposerDraftSource();
     const { bridge, actions } = fixture(() => source);

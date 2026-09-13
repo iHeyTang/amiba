@@ -87,3 +87,21 @@ it("does not overwrite a newer storage notification with a delayed initial read"
   expect(storage.set).not.toHaveBeenCalled();
   off();
 });
+
+it("persists an admitted item and notifies other views even when one observer throws", async () => {
+  const { storage, values } = storageFixture();
+  const source = createPendingQueueSource(storage, "a");
+  await source.ready();
+  const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const offBroken = source.subscribe(() => { throw new Error("broken view"); });
+  const observed = vi.fn();
+  const offHealthy = source.subscribe(observed);
+  try {
+    await source.ready();
+    expect(() => source.update([row("admitted")])).not.toThrow();
+    await source.flush();
+    expect(values["pendingQueue:a"]).toEqual([row("admitted")]);
+    expect(observed).toHaveBeenCalledTimes(1);
+    expect(warning).toHaveBeenCalledWith("[pending-queue] observer failed", expect.any(Error));
+  } finally { offBroken(); offHealthy(); warning.mockRestore(); }
+});

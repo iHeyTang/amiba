@@ -1,6 +1,7 @@
 import { bindInputDraft, type InputDraftCursor } from "./input-draft-binding.js";
 import { createResidentImageStaging, type PreparedInputImages } from "./resident-image-staging.js";
 import { CommandClaimStore, createResidentInputTransaction } from "@amiba/ui/composer-runtime";
+import { shortId } from "@amiba/app-runtime/utils";
 /**
  * Bridge between Amiba's composer (plain React, `@amiba/ui`) and the OFFICIAL
  * input-trigger pipeline (`ctx.inputTriggers`, `ctx.commandUi`) — the piece
@@ -67,6 +68,7 @@ export interface InputTriggerBridgeDeps {
     readInputDraft(): ReturnType<NonNullable<TriggerEditorOps["readInputDraft"]>>;
   };
   mentionProviders?(sessionId: string): import("@amiba/ui").TriggerProvider[];
+  pendingQueue?(sessionId: string): ReturnType<typeof import("@amiba/ui/composer-runtime").sessionPendingQueue>;
   /** Actual Host inbox state, distinct from the native local pending queue. */
   sessionFor?(sessionId: string): InputQueueSession | undefined;
   /** Browser image registry implementing the pinned image operations. */
@@ -203,7 +205,7 @@ export function createInputTriggerBridge(
     } };
   };
   const submitters = new Map<string, { submit: () => boolean }>();
-  let residentSender: { send: Parameters<NonNullable<ComposerTriggerRuntime["bindResidentTurnSender"]>>[0] } | undefined;
+  let residentSender: { send: Parameters<NonNullable<ComposerTriggerRuntime["bindResidentTurnSender"]>>[0]; isBusy?: (sessionId: string) => boolean } | undefined;
   const editors = new Map<string, { ops: TriggerEditorOps; draft: ReturnType<typeof bindInputDraft> }>();
   const draftCursors = new Map<string, InputDraftCursor>();
   const residentInputs = new Map<string, {
@@ -296,7 +298,22 @@ export function createInputTriggerBridge(
       transaction = createResidentInputTransaction({
         sessionId: id, source: { ...source, getDocument: source.getDocument }, claims: claimsFor(id),
         available: () => !editors.has(id) && residentInputs.get(id)?.source === source && !!inputSessions.get(id) &&
-          inputSessions.get(id)!.session.getSnapshot().subagent?.address.mode !== "one-shot" && !bridge.isSessionRunning!(id),
+          inputSessions.get(id)!.session.getSnapshot().subagent?.address.mode !== "one-shot" && (!bridge.isSessionRunning!(id) || !!deps.pendingQueue),
+        busy: () => bridge.isSessionRunning!(id) || residentSender?.isBusy?.(id) === true,
+        enqueue: async (request, images) => {
+          const queue = deps.pendingQueue?.(id);
+          if (!queue) throw new Error("The native conversation queue is unavailable.");
+          await queue.ready();
+          request.signal?.throwIfAborted();
+          request.onDispatch?.();
+          const queueId = shortId("q");
+          queue.update(previous => [...previous, { queueId, text: request.text, draft: request.draft,
+            attachments: request.attachments.map(attachment => ({ ...attachment })) }]);
+          // The existing native queue now owns these files. Browser registry
+          // consumption must not delete bytes needed for queue edit or send.
+          for (const image of images) imageStaging.transfer(image);
+          return { queueId };
+        },
         controller: () => bridge.controllerFor(id), providers: () => deps.mentionProviders?.(id) ?? [],
         images: () => residentImages.get(id) ?? [], prepare: (images, signal) => imageStaging.acquire(images, signal),
         consume: images => { const consumed = new Set(images); filterResidentImages(id, (_image, registration) => !consumed.has(registration)); },
@@ -458,8 +475,8 @@ export function createInputTriggerBridge(
       if (native) return native.submit();
       return transactionFor(sessionId)?.submit() ?? false;
     },
-    bindResidentTurnSender(send) {
-      const binding = { send };
+    bindResidentTurnSender(send, isBusy) {
+      const binding = { send, isBusy };
       residentSender = binding;
       return () => { if (residentSender === binding) residentSender = undefined; };
     },

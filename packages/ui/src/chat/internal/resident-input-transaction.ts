@@ -1,6 +1,7 @@
 import type { Attachment } from "@amiba/app-runtime/core";
 import type { SubmitReceipt } from "@amiba/app-runtime/protocol";
 import type { ComposerDraftSource } from "../composer-draft-store";
+import type { ComposerDraftDocument } from "../composer-draft-document";
 import type { ComposerDraftImageRegistration, ComposerTriggerController, ResidentInputSubmissionState, ResidentTurnRequest, SubmitOutcome, CommandClaim } from "../composer/triggers/contracts";
 import { CommandClaimStore, argsAfter } from "../composer/triggers/claim";
 import { commandImages } from "../composer/command-attachments";
@@ -12,6 +13,8 @@ export interface ResidentInputTransactionDeps {
   source: Pick<ComposerDraftSource, "getDocument" | "setDisplayText" | "readInputDraft">;
   claims: CommandClaimStore;
   available(): boolean;
+  busy?(): boolean;
+  enqueue?(request: ResidentTurnRequest & { draft: ComposerDraftDocument }, images: readonly ComposerDraftImageRegistration[]): Promise<{ queueId: string }>;
   controller(): ComposerTriggerController | undefined;
   providers(): TriggerProvider[];
   images(): readonly ComposerDraftImageRegistration[];
@@ -88,6 +91,14 @@ export function createResidentInputTransaction(deps: ResidentInputTransactionDep
           prepared = await deps.prepare(images, signal);
           check();
           deps.claims.setAttemptPhase("submitting");
+          if (deps.busy?.()) {
+            if (!deps.enqueue) throw new Error("The background conversation queue is unavailable.");
+            if (!text.trim() && !prepared.attachments.length) throw new Error("The input resolved to empty content.");
+            await deps.enqueue({ sessionId: deps.sessionId, text: text.trim(), draft: document, attachments: prepared.attachments, signal,
+              onDispatch: () => { check(); current.dispatched = true; } }, images);
+            consume();
+            return;
+          }
           const result = await deps.send({ sessionId: deps.sessionId, text, attachments: prepared.attachments, signal, onDispatch: () => { current.dispatched = true; } });
           if (result.kind === "accepted") {
             if (result.command?.kind !== "error") consume();

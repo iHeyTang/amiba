@@ -1614,7 +1614,7 @@ export default function ChatSurface({
       return receipt;
     },
   };
-  useEffect(() => triggerRuntime?.bindResidentTurnSender?.(residentTurnSender), [triggerRuntime, residentTurnSender]);
+  useEffect(() => triggerRuntime?.bindResidentTurnSender?.(residentTurnSender, id => inFlightTurnByIdRef.current.has(id)), [triggerRuntime, residentTurnSender]);
   const handoffConversationSubmit = useConversationSubmitHandoff({
     activeId: sessions.activeId,
     prepare: prepareConversationSubmit,

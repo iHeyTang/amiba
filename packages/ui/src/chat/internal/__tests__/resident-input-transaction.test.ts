@@ -119,3 +119,29 @@ it("keeps a failed command claim and its draft for an explicit retry", async () 
   expect(f.source.getSnapshot()).toBe("");
   expect(f.deps.submitClaim).toHaveBeenCalledTimes(2);
 });
+
+it("queues an already-resolved busy-session input with its original document instead of dispatching a model turn", async () => {
+  const f = fixture();
+  const document = f.source.getDocument();
+  f.deps.busy = () => true;
+  f.deps.enqueue = vi.fn(async request => { request.onDispatch?.(); return { queueId: "queued" }; });
+  f.transaction.submit(); await f.settled();
+  expect(f.deps.enqueue).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "target", text: "original", draft: document }), []);
+  expect(f.deps.send).not.toHaveBeenCalled();
+  expect(f.source.getSnapshot()).toBe("");
+});
+
+it("keeps the input when queue preparation fails and runs claims directly while the model is busy", async () => {
+  const f = fixture();
+  f.deps.busy = () => true;
+  f.deps.enqueue = vi.fn(async () => { throw new Error("Queue storage unavailable"); });
+  f.transaction.submit(); await f.settled();
+  expect(f.source.getSnapshot()).toBe("original");
+  expect(f.deps.consume).not.toHaveBeenCalled();
+  const claim = { token: "/fixture ", submit: async () => ({ kind: "success" }) } as CommandClaim;
+  f.source.setDisplayText("/fixture direct"); f.claims.begin(claim);
+  f.transaction.submit(); await f.settled();
+  expect(f.deps.enqueue).toHaveBeenCalledTimes(1);
+  expect(f.deps.submitClaim).toHaveBeenCalledWith(claim, "direct", []);
+  expect(f.source.getSnapshot()).toBe("");
+});

@@ -18,6 +18,9 @@ if (process.argv.includes("--child-cold-restart") && !["--compat", "--child-navi
 if (process.argv.includes("--child-nested-restart") && !process.argv.includes("--child-cold-restart")) {
   throw new Error("--child-nested-restart requires --child-cold-restart");
 }
+if (process.argv.includes("--resident-queue") && !["--compat", "--child-continuation"].every(flag => process.argv.includes(flag))) {
+  throw new Error("--resident-queue requires --compat --child-continuation");
+}
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const profile = await mkdtemp(path.join(tmpdir(), "amiba-plugin-app-"));
 async function port() {
@@ -848,6 +851,62 @@ try {
           await evaluate("window.__residentRefOff();window.__residentCommandOff();void 0");
           console.log("Standard offscreen submit resolved the actual reference once, preserved literal tokens and foreground input, delivered exact command image bytes, and transferred a retained command claim to the original composer");
         }
+      }
+      if (process.argv.includes("--resident-queue")) {
+        await evaluate("window.__residentQueuedActions=window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions;window.__residentQueuedActions.setDraft('COMPAT_WAIT_FOR_STOP');window.__residentQueuedActions.submit();void 0");
+        await wait(() => evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child') && !!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        await evaluate("window.__residentQueueCodecCalls=0;window.__residentQueueRefOff=window.__probeCtx.inputTriggers.registerSource({name:'resident-queue-ref',trigger:'@',candidates:async()=>[],onPick:()=>({}),matchSpace:(_s,token)=>token==='@residentqueue'?{insert:{source:'resident-queue-ref',ref:'id',label:'Resident队列引用',clipboardText:'queue clip'}}:undefined,codec:{serialize:async ref=>{window.__residentQueueCodecCalls++;return '<resident-queue:'+ref+'>'}}});window.__residentQueuedActions.setDraft('@residentqueue');void 0");
+        await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor('compat-continuable-child').onSpace()"), true);
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.occurrences.length===1"));
+        await evaluate("window.__residentQueuedActions.setDraft(window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft+' literal @[dsh.reference:unknown|id|label|clip]');void 0");
+        await evaluate("window.__residentQueuedActions.setDraft('COMPAT_LITERAL_RESIDENT_QUEUE '+window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft);void 0");
+        const queuedInput = await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')");
+        assert.equal(queuedInput.occurrences.length, 1);
+        const occurrence = queuedInput.occurrences[0];
+        const expected = (queuedInput.draft.slice(0, occurrence.offset) + '<resident-queue:id>' + queuedInput.draft.slice(occurrence.offset + occurrence.length)).trim();
+        await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+        await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId) && !window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')"));
+        await evaluate("window.__residentQueueForegroundEditor=Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).find(n=>n.getClientRects().length);window.__residentQueueForegroundDraft=window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft;window.__residentQueuedActions.submit();window.__residentQueuedActions.submit();void 0");
+        const readQueue = () => evaluate("(async()=>{const values=await window.amiba.storage.get('pendingQueue:compat-continuable-child');return values['pendingQueue:compat-continuable-child']??[]})()");
+        await wait(async () => (await readQueue()).length === 1);
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot()?.draft==='' && !window.__probeCtx.composerInputs.inputSubmissionSource('compat-continuable-child').getSnapshot().pending"));
+        const [textRow] = await readQueue();
+        assert.equal(textRow.text, expected);
+        assert.equal(textRow.draft.parts.filter(part => part.kind === 'mention').length, 1);
+        assert.ok(textRow.draft.parts.some(part => part.kind === 'text' && part.text.includes('literal @[dsh.reference:unknown')));
+        assert.equal(await evaluate("window.__residentQueueCodecCalls"), 1);
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"), true);
+        assert.equal((await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(expected))), false);
+        const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJ1sAAAAASUVORK5CYII=";
+        await evaluate(`window.__residentQueueImages=window.__probeCtx.get('composerImages').createDraftImages([new File([Uint8Array.from(atob(${JSON.stringify(png)}),c=>c.charCodeAt(0))],'resident-queue.png',{type:'image/png'})]);window.__residentQueuedActions.addImages(window.__residentQueueImages.map(image=>image.id));window.__residentQueuedActions.setDraft('RESIDENT_IMAGE_QUEUE');window.__residentQueuedActions.submit();void 0`);
+        await wait(async () => (await readQueue()).length === 2);
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot()?.draft==='' && window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot().imageIds.length===0 && !window.__probeCtx.composerInputs.inputSubmissionSource('compat-continuable-child').getSnapshot().pending"));
+        assert.equal(await evaluate("window.__probeCtx.get('composerImages').draftImages(window.__residentQueueImages.map(image=>image.id)).length"), 0);
+        const imageRow = (await readQueue())[1];
+        assert.equal(imageRow.attachments.length, 1);
+        const imageFiles = (await readdir(profile, { recursive: true })).filter(file => file.endsWith('/' + imageRow.attachments[0].attachmentId + '.bin'));
+        assert.equal(imageFiles.length, 1);
+        const imagePath = path.join(profile, imageFiles[0]);
+        assert.equal((await readFile(imagePath)).toString('base64'), png);
+        assert.equal(await evaluate("window.__residentQueueForegroundEditor.isConnected && window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft===window.__residentQueueForegroundDraft"), true);
+        await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-parent',childSessionId:'compat-continuable-child',mode:'continuable'});void 0");
+        await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child') && document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length===2 && !!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]').click();void 0");
+        await wait(() => evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        assert.equal((await readQueue()).length, 2);
+        // rc.2 child model input does not support images. Exercise original
+        // queue deletion for that row, then send the supported text row.
+        await evaluate("document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Delete]')[1].click();void 0");
+        await wait(async () => (await readQueue()).length === 1 && await readFile(imagePath).then(() => false, error => error.code === 'ENOENT'));
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]').click();void 0");
+        await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.draft===${JSON.stringify(queuedInput.draft)}`));
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').occurrences.length"), 1);
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=\"Send now\"]').click();void 0");
+        await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(expected))));
+        await wait(() => evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]') && !document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]')"));
+        await evaluate("window.__residentQueueRefOff();void 0");
+        console.log("Standard busy offscreen submissions entered the native queue once, retained real reference and image ownership, preserved foreground input, and restored original Stop/Edit/Delete/Send now behavior");
       }
       if (process.argv.includes("--queue-draft")) {
         await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_WAIT_FOR_STOP');window.__probeCtx.composerInputs.submitInput('compat-continuable-child');void 0");

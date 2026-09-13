@@ -5,6 +5,18 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：标准离屏排队（2026-09-13）
+
+标准 inputActions.submit 对忙碌目标复用同一原生 pendingQueue 数据源。先完成真实引用解析和图片准备，再保存原结构化草稿、已解析模型文本及附件；等待初始队列读取，不覆盖既有记录。重复提交由同一驻留输入事务阻止，队列初始读取失败保留输入。队列观察者抛错不会阻断其他订阅者和持久化。
+
+入队后图片文件所有权交给原队列，消费浏览器草稿注册不会删除队列所需文件。沿用原生内存接纳和异步持久化语义；此处返回 queueId，不伪装成 Host 的 accepted 回执。没有修改原界面、队列形状和存储键。
+
+验证：驻留事务 9 项、共享队列 6 项、原队列行为 27 项、桥接与图片 18 项，共 60 项测试通过；UI 与外壳插件类型检查通过；完整桌面构建和完整兼容回归通过。新增 --resident-queue 在真实忙碌子会话上验证标准离屏提交两次只入队一次、原引用节点和普通 token 文字保留、PNG 文件字节在草稿消费后仍存在、前台编辑器及草稿不变。切回后原 Stop 保留两项队列，删除图片行才清理文件；原 Edit 恢复引用，Send now 把准确文本交给真实模型。原队列刷新、自动出队、附件保留、子会话及冷重启回归均通过。
+
+日志：/tmp/amiba-resident-queue-tests.log、/tmp/amiba-resident-queue-native-tests.log、/tmp/amiba-resident-queue-bridge-tests.log、/tmp/amiba-resident-queue-ui-types.log、/tmp/amiba-resident-queue-plugin-types.log、/tmp/amiba-resident-queue-build.log、/tmp/amiba-resident-queue-smoke.log。
+
+仍未完成：后台自动出队及其停止/暂停协调、完整 Host inbox 对齐、跨窗口原子操作。下文为各阶段历史记录；当前能力以本节和逐项评估表为准。
+
 ## Required invariants
 
 ### Addressed asynchronous message updates

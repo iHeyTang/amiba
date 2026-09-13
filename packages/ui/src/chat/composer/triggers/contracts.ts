@@ -170,7 +170,7 @@ export interface ResidentTurnRequest {
   text: string;
   attachments: readonly import("@amiba/app-runtime/core").Attachment[];
   signal?: AbortSignal;
-  /** Internal transaction boundary, immediately before engine dispatch. */
+  /** Internal transaction boundary, immediately before engine dispatch or local queue admission. */
   onDispatch?(): void;
 }
 
@@ -184,7 +184,7 @@ export interface ComposerTriggerRuntime {
   inputSubmissionSource?(sessionId: string): ObservableSnapshot<ResidentInputSubmissionState>;
   clearInputSubmissionNotice?(sessionId: string): void;
   isSessionRunning?(sessionId: string): boolean;
-  bindResidentTurnSender?(send: (request: ResidentTurnRequest) => Promise<import("@amiba/app-runtime/protocol").SubmitReceipt>): () => void;
+  bindResidentTurnSender?(send: (request: ResidentTurnRequest) => Promise<import("@amiba/app-runtime/protocol").SubmitReceipt>, isBusy?: (sessionId: string) => boolean): () => void;
   inputStateSource?(sessionId: string): ObservableSnapshot<ConversationInputState | undefined>;
   bindImages?(sessionId: string, ops: ComposerImageOps): () => void;
   /** Register an original browser image in the official runtime registry. */
