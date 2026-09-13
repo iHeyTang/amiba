@@ -895,6 +895,12 @@ try {
         await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]').click();void 0");
         await wait(() => evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
         assert.equal((await readQueue()).length, 2);
+        await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+        await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId) && !window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')"));
+        await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-parent',childSessionId:'compat-continuable-child',mode:'continuable'});void 0");
+        await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child') && document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length===2"));
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"), false);
+        assert.equal((await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(expected))), false);
         // rc.2 child model input does not support images. Exercise original
         // queue deletion for that row, then send the supported text row.
         await evaluate("document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Delete]')[1].click();void 0");

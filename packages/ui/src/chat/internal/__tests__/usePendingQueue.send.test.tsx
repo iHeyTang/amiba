@@ -67,6 +67,58 @@ function makeArgs(
 describe("usePendingQueue.send — dispatches the mention-expanded text", () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it("publishes Stop before abort can synchronously settle the turn", async () => {
+    const args = makeArgs();
+    const { result } = renderHook(() => usePendingQueue(args));
+    const source = sessionPendingQueue(queueStorage, "s1");
+    vi.mocked(args.client.abort).mockImplementation(() => {
+      expect(source.isPaused()).toBe(true);
+      expect(result.current.queuePausedRef.current).toBe(true);
+    });
+    act(() => result.current.stop());
+    expect(args.client.abort).toHaveBeenCalledWith("s1");
+  });
+
+  it("keeps pauses addressed to their session across navigation and resumes only the explicitly sent session", async () => {
+    const args = makeArgs();
+    const { result, rerender } = renderHook((props: UsePendingQueueArgs) => usePendingQueue(props), { initialProps: args });
+    const a = sessionPendingQueue(queueStorage, "s1"), b = sessionPendingQueue(queueStorage, "s2");
+    const stopA = result.current.stop;
+    act(() => stopA());
+    rerender({ ...args, sessions: { ...args.sessions, activeId: "s2" } });
+    expect(result.current.paused).toBe(false);
+    act(() => result.current.stop());
+    expect(a.isPaused()).toBe(true);
+    expect(b.isPaused()).toBe(true);
+    await act(async () => { await result.current.send("resume second"); });
+    expect(b.isPaused()).toBe(false);
+    // An outgoing callback can only change its captured session.
+    act(() => stopA());
+    expect(result.current.queuePausedRef.current).toBe(false);
+    rerender(args);
+    expect(result.current.paused).toBe(true);
+    expect(result.current.queuePausedRef.current).toBe(true);
+    await act(async () => { await result.current.send("resume first"); });
+    expect(a.isPaused()).toBe(false);
+  });
+
+  it("a remounted native view reads the retained Stop pause without modifying stored queue rows", async () => {
+    const args = makeArgs();
+    const first = renderHook(() => usePendingQueue(args));
+    const source = sessionPendingQueue(queueStorage, "s1");
+    const row = { queueId: "paused", text: "Keep for later", attachments: [] };
+    await act(async () => { first.result.current.setQueue([row]); await source.flush(); });
+    const storedBefore = vi.mocked(storage.set).mock.calls.length;
+    act(() => first.result.current.stop());
+    first.unmount();
+    storage.get.mockResolvedValueOnce({ "pendingQueue:s1": [row] });
+    const second = renderHook(() => usePendingQueue(args));
+    await act(async () => { await source.ready(); });
+    expect(second.result.current.paused).toBe(true);
+    expect(second.result.current.queue).toEqual([row]);
+    expect(storage.set).toHaveBeenCalledTimes(storedBefore);
+  });
+
   it("clears the outgoing panel projection without deleting its shared session queue", async () => {
     const { result } = renderHook(() => usePendingQueue(makeArgs()));
     const row = { queueId: "retained", text: "Later", attachments: [] };

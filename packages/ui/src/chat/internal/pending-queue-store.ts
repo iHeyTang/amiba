@@ -17,6 +17,9 @@ type Change = { replace: PendingChatTurn[] } | { removed: Set<string>; changed: 
 export function createPendingQueueSource(storage: StorageAdapter, sessionId: string) {
   const key = pendingQueueStorageKey(sessionId);
   let snapshot: PendingChatTurn[] = [];
+  // Runtime control belongs to the session too. It is deliberately separate
+  // from the persisted row format and does not arm a queue after a restart.
+  let paused = false;
   let loaded = false, revision = 0, generation = 0, pendingWrites = 0;
   let loading: Promise<void> | undefined;
   let writes = Promise.resolve();
@@ -25,13 +28,16 @@ export function createPendingQueueSource(storage: StorageAdapter, sessionId: str
   let offStorage: (() => void) | undefined;
   const decode = (raw: unknown): PendingChatTurn[] => Array.isArray(raw) ? raw.filter(row => row &&
     typeof row.queueId === "string" && typeof row.text === "string" && Array.isArray(row.attachments)) : [];
-  const publish = (next: PendingChatTurn[]) => {
-    if (JSON.stringify(next) === JSON.stringify(snapshot)) return;
-    snapshot = next;
+  const notify = () => {
     for (const listener of listeners) {
       try { listener(); }
       catch (error) { console.warn("[pending-queue] observer failed", error); }
     }
+  };
+  const publish = (next: PendingChatTurn[]) => {
+    if (JSON.stringify(next) === JSON.stringify(snapshot)) return;
+    snapshot = next;
+    notify();
   };
   const persist = () => {
     const value = snapshot;
@@ -67,6 +73,12 @@ export function createPendingQueueSource(storage: StorageAdapter, sessionId: str
   };
   return {
     getSnapshot: () => snapshot,
+    isPaused: () => paused,
+    setPaused(value: boolean) {
+      if (paused === value) return;
+      paused = value;
+      notify();
+    },
     ready: () => load(),
     flush: async () => { await load(); await writes; },
     update(action: Update) {

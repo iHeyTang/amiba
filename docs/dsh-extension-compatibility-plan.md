@@ -5,7 +5,21 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
-## 最新进展：标准离屏排队（2026-09-13）
+## 最新进展：按会话保留队列暂停状态（2026-09-13）
+
+暂停标记从当前面板移到已有 sessionPendingQueue 数据源，仍保留原队列数组与存储格式。Stop 在调用引擎 abort 前同步发布暂停状态及原 queuePausedRef；Edit、解析失败和显式恢复发送也使用同一状态。会话切换不再把旧暂停清空，面板重新挂载读取目标会话的暂停值；旧会话回调不会修改新会话的标记。New chat 中断旧会话时将旧队列停住，再清空面板投影。
+
+标准离屏 submit 对忙碌目标成功入队后恢复该会话队列；空闲目标只有进入实际派发回调才恢复暂停，准备拒绝保留 Stop。命令流程仍不隐式恢复模型队列，其他会话的暂停不受影响。无界面结构或样式改动。
+
+验证：队列及原生行为 36 项、标准输入提供者 11 项，共 47 项测试通过；UI 与外壳插件类型检查、完整构建和完整桌面兼容回归通过。状态测试覆盖 abort 同步回调前已暂停、会话切换和重新挂载、旧回调隔离、准备失败保留及显式恢复；桌面增加 Stop 后离开并返回子会话，保留两条队列且未发送，再用原 Delete/Edit/Send now 完成操作。其余图片、刷新、自动出队、子会话及冷重启回归通过。
+
+日志：/tmp/amiba-session-pause-tests.log、/tmp/amiba-session-pause-bridge-tests.log、/tmp/amiba-session-pause-ui-types.log、/tmp/amiba-session-pause-plugin-types.log、/tmp/amiba-session-pause-build.log、/tmp/amiba-session-pause-smoke.log。
+
+明确边界：暂停标记目前是同一渲染器内的会话运行状态，不是跨窗口或跨重启持久化协议。后台出队工作器、发送中记录的原子认领与恢复、Host inbox 对齐尚未接入。未来工作器不能把加载旧记录或 paused=false 当成授权自动出队；须使用实际成功结束事件、暂停门禁和发送接收回执，避免旧快照、Stop 或发送后未知结果触发重发。
+
+进一步核对实际安装的 rc.2：dsh-host-apiproxy/lib/types/api-proxy.js 的 updateQueue（约 2188 行）只允许 text 编辑，且约 2198 行拒绝已有子会话 Agent；cancel（约 2252 行）使用 keepInbox:true。dsh-agent-loop/lib/index.js 的 cancel/kick（约 405/478 行）以及 dsh-subagent/lib/types/continuation.js 的 interrupt（约 263 行）表明队列保留和再次唤醒必须结合真实运行状态，不能只按客户端类型注释推断。完整对齐需要保留原生图片编辑及子会话操作，不可直接将原队列替换为 Host 列表。
+
+## 标准离屏排队（2026-09-13）
 
 标准 inputActions.submit 对忙碌目标复用同一原生 pendingQueue 数据源。先完成真实引用解析和图片准备，再保存原结构化草稿、已解析模型文本及附件；等待初始队列读取，不覆盖既有记录。重复提交由同一驻留输入事务阻止，队列初始读取失败保留输入。队列观察者抛错不会阻断其他订阅者和持久化。
 

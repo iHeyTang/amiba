@@ -1523,9 +1523,8 @@ export default function ChatSurface({
         // The queue hook switches its projection to the new session;
         // switching views does not mutate either session's queue.
         setEditingQueueId(null);
-        // Queue is scoped to a session; switching tabs drops it, so
-        // any paused flag for the prior session must drop too.
-        setQueuePaused(false);
+        // The queue's Stop/Edit pause belongs to its session and survives
+        // navigation; the queue hook projects the incoming session's value.
         // Pending approvals are also session-scoped — clear them on
         // switch; the new session's snapshot will repopulate if it has
         // its own pending approvals.
@@ -1961,9 +1960,11 @@ export default function ChatSurface({
     // The persisted queue still belongs to the outgoing session; only its
     // in-memory projection is cleared so it cannot flash inside the empty
     // persistent Composer while the session transition finishes.
+    // New chat interrupts the outgoing turn; its retained queue must remain
+    // parked until an explicit send resumes that conversation.
+    setQueuePaused(true);
     resetPendingQueueView();
     setEditingQueueId(null);
-    setQueuePaused(false);
     resetApprovals();
     resetQuestions();
     // Drop any composer-time attachments and unlink their on-disk files —

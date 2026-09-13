@@ -160,10 +160,11 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   const resetView = useCallback(() => setViewQueue([]), []);
   const [paused, setPausedState] = useState(false);
   const queuePausedRef = useRef(false);
-  useEffect(() => {
-    queuePausedRef.current = paused;
-  }, [paused]);
-  const setPaused = useCallback((v: boolean): void => setPausedState(v), []);
+  queuePausedRef.current = queueSource?.isPaused() ?? paused;
+  const setPaused = useCallback((value: boolean): void => {
+    if (queueSource) queueSource.setPaused(value);
+    else { queuePausedRef.current = value; setPausedState(value); }
+  }, [queueSource]);
 
   /**
    * Send-now preemption flags. When `sendNow` decides to seal the
@@ -191,9 +192,18 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   // ---------------------------------------------------------------------
   useEffect(() => {
     setViewQueue([]);
-    if (!queueSource || !sessions.ready) return;
+    if (!queueSource || !sessions.ready) {
+      queuePausedRef.current = false;
+      setPausedState(false);
+      return;
+    }
     let active = true;
-    const update = () => { if (active) setViewQueue(queueSource.getSnapshot()); };
+    const update = () => {
+      if (!active) return;
+      queuePausedRef.current = queueSource.isPaused();
+      setPausedState(queuePausedRef.current);
+      setViewQueue(queueSource.getSnapshot());
+    };
     const off = queueSource.subscribe(update);
     update();
     return () => { active = false; off(); };
@@ -237,13 +247,13 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
         ready({ ...item, text: text.trim(), needsResolution: false });
       } catch (error) {
         if (!current()) return;
-        setPausedState(true);
+        setPaused(true);
         setAttachmentError(error instanceof Error ? error.message : String(error));
       } finally {
         if (resolutionRef.current === attempt) resolutionRef.current = null;
       }
     })();
-  }, [sessions.activeId, resolveQueuedDraft, setAttachmentError]);
+  }, [sessions.activeId, resolveQueuedDraft, setAttachmentError, setPaused]);
 
   const drainHead = useCallback((): void => {
     if (readOnlyRef.current) return;
@@ -295,7 +305,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
         // The item is about to fire — remove it from the visible queue
         // now so the chip doesn't linger during the handoff.
         setQueue((prev) => prev.filter((q) => q.queueId !== queueId));
-        setPausedState(false);
+        setPaused(false);
 
         const sid = sessions.activeId;
         if (busy && sid) {
@@ -337,6 +347,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       editingQueueId,
       prepareItem,
       setQueue,
+      setPaused,
       queue,
       input,
       draftSource,
@@ -403,7 +414,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       // Sending a new message implicitly un-pauses: the user is
       // clearly ready for the queue to move again. The current stream
       // will finish and the finally-drain will kick in normally.
-      if (queuePausedRef.current) setPausedState(false);
+      if (queuePausedRef.current) setPaused(false);
       return;
     }
 
@@ -417,7 +428,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     // Not busy. If the queue was paused (i.e., user hit Stop and left
     // items queued), unpause first so the runChatTurn's finally-drain
     // fires the remaining items after this fresh turn completes.
-    if (queuePausedRef.current) setPausedState(false);
+    if (queuePausedRef.current) setPaused(false);
 
     await runChatTurn({
       text,
@@ -439,6 +450,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     setPendingSourceApp,
     sendNow,
     setQueue,
+    setPaused,
   ]);
 
   const stop = useCallback((): void => {
@@ -450,7 +462,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     // auto-drain with `queuePaused` so the next finished stream
     // doesn't immediately fire the next queued item behind the user's
     // back.
-    setPausedState(true);
+    setPaused(true);
     const sid = sessions.activeId;
     if (sid) {
       try {
@@ -459,7 +471,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
         console.warn("[sidepanel] abort failed:", e);
       }
     }
-  }, [sessions.activeId, client, cancelResolution]);
+  }, [sessions.activeId, client, cancelResolution, setPaused]);
 
   const remove = useCallback(
     (queueId: string): void => {
@@ -522,11 +534,12 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       if (item.draft && draftSource) draftSource.setParts(item.draft.parts);
       else setInput(item.text);
       setAttachments(item.attachments.map((a) => ({ ...a })));
-      setPausedState(true);
+      setPaused(true);
     },
     [
       queue,
       setQueue,
+      setPaused,
       input,
       draftSource,
       cancelResolution,

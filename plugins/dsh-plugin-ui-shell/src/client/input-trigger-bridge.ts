@@ -312,12 +312,16 @@ export function createInputTriggerBridge(
           // The existing native queue now owns these files. Browser registry
           // consumption must not delete bytes needed for queue edit or send.
           for (const image of images) imageStaging.transfer(image);
+          queue.setPaused(false);
           return { queueId };
         },
         controller: () => bridge.controllerFor(id), providers: () => deps.mentionProviders?.(id) ?? [],
         images: () => residentImages.get(id) ?? [], prepare: (images, signal) => imageStaging.acquire(images, signal),
         consume: images => { const consumed = new Set(images); filterResidentImages(id, (_image, registration) => !consumed.has(registration)); },
-        send: request => residentSender ? residentSender.send(request) : Promise.resolve({ kind: "rejected", error: "The resident conversation sender is unavailable." }),
+        send: request => residentSender ? residentSender.send({ ...request, onDispatch: () => {
+          request.onDispatch?.();
+          deps.pendingQueue?.(id).setPaused(false);
+        } }) : Promise.resolve({ kind: "rejected", error: "The resident conversation sender is unavailable." }),
         submitClaim: (claim, args, images) => bridge.submitClaim!(id, claim, args, images),
         changed: () => { notifyDraft(id); imageBindings.get(id)?.transfer?.(); },
       });

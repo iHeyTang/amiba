@@ -45,6 +45,7 @@ describe("official input action provider", () => {
     };
     const source = createComposerDraftSource();
     const queue = sessionPendingQueue(storage, "a");
+    queue.setPaused(true);
     const { bridge, actions } = fixture(() => source, () => queue);
     const action = actions("a");
     const send = vi.fn(async () => ({ kind: "accepted" as const }));
@@ -52,6 +53,7 @@ describe("official input action provider", () => {
     action.setDraft("new queued input"); action.submit(); action.submit();
     await vi.waitFor(() => expect(storage.get).toHaveBeenCalled());
     expect(source.getSnapshot()).toBe("new queued input");
+    expect(queue.isPaused()).toBe(true);
     finish({ "pendingQueue:a": [{ queueId: "older", text: "older input", attachments: [] }] });
     await vi.waitFor(() => expect(bridge.inputSubmissionSource!("a").getSnapshot().pending).toBe(false));
     await queue.flush();
@@ -59,6 +61,26 @@ describe("official input action provider", () => {
     expect(queue.getSnapshot()[1]).toMatchObject({ text: "new queued input", draft: { text: "new queued input" }, attachments: [] });
     expect(source.getSnapshot()).toBe("");
     expect(send).not.toHaveBeenCalled();
+    expect(queue.isPaused()).toBe(false);
+  });
+  it("a rejected resident preparation keeps Stop, and only an actual explicit dispatch resumes that session", async () => {
+    const storage = { get: async () => ({}), set: async () => {}, remove: async () => {}, watch: () => () => {} };
+    const source = createComposerDraftSource();
+    const a = sessionPendingQueue(storage, "a"), b = sessionPendingQueue(storage, "b");
+    a.setPaused(true); b.setPaused(true);
+    const { bridge, actions } = fixture(() => source, id => sessionPendingQueue(storage, id));
+    const action = actions("a");
+    const send = vi.fn<Parameters<NonNullable<typeof bridge.bindResidentTurnSender>>[0]>(async () => ({ kind: "rejected", error: "Workspace missing" }));
+    bridge.bindResidentTurnSender!(send);
+    action.setDraft("explicit retry"); action.submit();
+    await vi.waitFor(() => expect(bridge.inputSubmissionSource!("a").getSnapshot().pending).toBe(false));
+    expect(a.isPaused()).toBe(true);
+    expect(source.getSnapshot()).toBe("explicit retry");
+    send.mockImplementation(async request => { request.onDispatch?.(); return { kind: "accepted" }; });
+    action.submit();
+    await vi.waitFor(() => expect(bridge.inputSubmissionSource!("a").getSnapshot().pending).toBe(false));
+    expect(a.isPaused()).toBe(false);
+    expect(b.isPaused()).toBe(true);
   });
   it("submits a resident draft through standard actions and retains edits made after dispatch", async () => {
     const source = createComposerDraftSource();
