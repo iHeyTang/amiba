@@ -5,6 +5,18 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：文档预览状态、读取生命周期与实现注册表（2026-09-13）
+
+迁移固定源 ui-sidebar-documentpreview 的 store、face、rpc 和 document/registry。真实 rc.2 runtime.defineStore 持有按标签分桶的页、完整字节、版本、滚动、换行及导航 revision；face 按 generation 丢弃重载前的结果，后续页出现新版本时重新从第一页读取，tab signal 结束忘记状态；实现注册表保持扩展优先、最长后缀优先和稳定快照。
+
+调整限于当前基线：client-store 的 store handle 改用已安装 runtime，BoundActions 用 ui-slots，RemoteResult/Failure 用实际 typert-protocol；文件地址复用已验证 grammar，文档 wire 类型从新平台读结果派生；旧 TypeScript 的 Uint8Array 不带泛型参数。registry 的安全通知采用固定源同等逐个 try/catch，不引入另一套 store。
+
+新增 nativeDocumentReads，将上一轮桌面 result/dispose 操作转换为 face 所需的永不 reject 的结果：保留错误码/详情，拒绝不匹配的成功响应形状，tab signal 取消原生操作，结束后移除监听并 dispose；未提供能力的宿主返回明确 unsupported，不伪装空文档。
+
+58 项测试通过（/tmp/amiba-document-state-tests-4.log）：迁移 55 项 store/face/rpc/registry 测试，加 3 项原生读取转换测试；使用实际 rc.2 ModuleLoader store factory 测试加载器。最初 mock 使用别名导致未被 Vitest 提升，修为标准 vi.mock 后真实 factory 测试通过；Vitest 2 的单次调用断言拆为次数和参数，保留语义；新版 RemoteFailure 测试对象的 name/isDSHRemoteError 改为实际 wire 字段。类型检查退出 0（/tmp/amiba-document-state-types-2.log）。
+
+这些模块尚未在产品注册，不能算 #56 完成；下一步接入 TextPreview、document keyed owner/Hook、标题及各正文实现，并跑真实桌面资源打开、分页、变更、重载和关闭回归。43/1/20 统计不变，完整目标未完成。
+
 ## 进行中：文档读取会话授权与桌面 IPC（2026-09-13）
 
 新增 files:read-document/files:cancel-document，通过原 workspaceManager.resolveFileForSession 校验并规范化会话路径后调用读取核心。显式 ok/value 或 ok/error 对象跨 Electron 传递 code/details，避免 throw Error 的自定义字段丢失；原文件预览 read/readBytes/stat 不替换。平台新增可选 readDocument，preload 返回 result/dispose 操作，Electron adapter 与桥接声明已接通。
