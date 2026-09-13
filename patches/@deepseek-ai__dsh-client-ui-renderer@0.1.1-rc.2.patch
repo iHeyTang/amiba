@@ -1,0 +1,65 @@
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -530,12 +530,27 @@
+ 				return this.props.children;
+ 			}
+ 		};
++        const rootKeyedHookCache = new WeakMap();
++        function rootKeyedObservableHook(source) {
++            let hook = rootKeyedHookCache.get(source);
++            if (hook === void 0) {
++                hook = (key, selector, equal) => observableHook(source(key) ?? absentSource)(selector ?? (value => value), equal);
++                rootKeyedHookCache.set(source, hook);
++            }
++            return hook;
++        }
++        const absentRootBinding = () => void 0;
++        function useRootBinding(host) {
++            return (0, react.useSyncExternalStore)(host.root?.subscribe ?? noopSubscribe, host.root?.getSnapshot ?? absentRootBinding);
++        }
+ 		const standardPropsCache = /* @__PURE__ */ new WeakMap();
+ 		/** Stable official-props object used by contextual Hook factories. */
+ 		function standardProps(host, scope, info) {
+-			let cache = standardPropsCache.get(host);
+-			if (cache === void 0) {
++			const binding = host.root?.getSnapshot();
++            let cache = standardPropsCache.get(host);
++			if (cache === void 0 || cache.binding !== binding) {
+ 				cache = {
++                    binding,
+ 					root: {
+ 						useSessions: observableHook(host.sessions.list),
+ 						useWorkspaces: observableHook(host.workspaces.list)
+@@ -543,6 +558,9 @@
+ 					session: /* @__PURE__ */ new WeakMap(),
+ 					sessionMaybe: /* @__PURE__ */ new WeakMap()
+ 				};
++                cache.root = { ...cache.root, ...binding?.props };
++                for (const [name, source] of Object.entries(binding?.hooks ?? {})) cache.root[`use${name[0]?.toUpperCase() ?? ""}${name.slice(1)}`] = observableHook(source);
++                for (const [name, source] of Object.entries(binding?.keyedHooks ?? {})) cache.root[`use${name[0]?.toUpperCase() ?? ""}${name.slice(1)}`] = rootKeyedObservableHook(source);
+ 				standardPropsCache.set(host, cache);
+ 			}
+ 			if (scope === "root") return cache.root;
+@@ -646,12 +664,14 @@
+ 		}
+ 		function SessionEntry({ entry, ownerProps, info, slotKey, slotInjected, hookContext, hasHookContext }) {
+ 			const host = useHost();
++            useRootBinding(host);
+ 			const Comp = entry.component;
+ 			const { kit, standard, actions } = standardKit(host, entry, "session", info);
+ 			return renderEntry(slotKey, Comp, kit, standard, cachedSessionInject(entry, info, actions), slotInjected, ownerProps, hookContext, hasHookContext);
+ 		}
+ 		function SessionMaybeEntryBody({ entry, ownerProps, info, slotKey, slotInjected, hookContext, hasHookContext }) {
+ 			const host = useHost();
++            useRootBinding(host);
+ 			const Comp = entry.component;
+ 			const { kit, standard, actions } = standardKit(host, entry, "session-maybe", info);
+ 			return renderEntry(slotKey, Comp, kit, standard, cachedSessionMaybeInject(entry, info, actions), slotInjected, ownerProps, hookContext, hasHookContext);
+@@ -710,6 +730,7 @@
+ 		};
+ 		function RootEntry({ entry, ownerProps, slotKey, slotInjected, hookContext, hasHookContext }) {
+ 			const host = useHost();
++            useRootBinding(host);
+ 			const Comp = entry.component;
+ 			const { kit, standard, actions } = standardKit(host, entry, "root", void 0);
+ 			return renderEntry(slotKey, Comp, kit, standard, cachedRootInject(entry, actions), slotInjected, ownerProps, hookContext, hasHookContext);

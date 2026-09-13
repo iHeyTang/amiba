@@ -1,8 +1,65 @@
-diff --git a/lib/client.js b/lib/client.js
-index ba3cb21f72709cc91a733d4080266e452d6435d5..a6dd8b94978e5ea4f859375cd377f47dc8180968 100644
 --- a/lib/client.js
 +++ b/lib/client.js
-@@ -8964,15 +8964,31 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
+@@ -28,6 +28,50 @@
+ 			_renderer;
+ 			_locale;
+ 			_host;
++            _rootContributions = [];
++            _rootListeners = new Set();
++            _rootBinding = { key: void 0, hooks: {}, keyedHooks: {}, props: {} };
++            _rootSource = {
++                getSnapshot: () => this._rootBinding,
++                subscribe: listener => { this._rootListeners.add(listener); return () => this._rootListeners.delete(listener); }
++            };
++            provideRoot(contribution) {
++                const dispose = this.ctx.effect(() => {
++                    this._rootContributions.push(contribution);
++                    try { this.rebuildRootBinding(); }
++                    catch (error) { this._rootContributions.pop(); throw error; }
++                    return () => {
++                        const index = this._rootContributions.indexOf(contribution);
++                        if (index < 0) return;
++                        this._rootContributions.splice(index, 1);
++                        this.rebuildRootBinding();
++                    };
++                }, "slots.provideRoot()");
++                return () => { void dispose(); };
++            }
++            rebuildRootBinding() {
++                const hooks = Object.create(null), keyedHooks = Object.create(null), props = Object.create(null);
++                // rc.2 already owns these two root sources; contributions cannot replace them.
++                const names = new Set(["useSessions", "useWorkspaces"]);
++                const copy = (target, source, hook) => {
++                    for (const [name, value] of Object.entries(source ?? {})) {
++                        const output = hook ? `use${name[0]?.toUpperCase() ?? ""}${name.slice(1)}` : name;
++                        if (names.has(output)) throw new Error(`duplicate root standard prop: ${output}`);
++                        names.add(output);
++                        target[name] = value;
++                    }
++                };
++                for (const contribution of this._rootContributions) {
++                    copy(hooks, contribution.hooks, true);
++                    copy(keyedHooks, contribution.keyedHooks, true);
++                    copy(props, contribution.props, false);
++                }
++                this._rootBinding = { key: void 0, hooks, keyedHooks, props };
++                for (const listener of [...this._rootListeners]) {
++                    try { listener(); } catch (error) { console.error("root standard-source subscriber failed:", error); }
++                }
++            }
++
+ 			/**
+ 			* @param ctx - owning root context.
+ 			*/
+@@ -285,6 +329,7 @@
+ 						provideInfo: sessions.currentProvideInfo
+ 					},
+ 					workspaces: { list: workspaces.list },
++                    root: this._rootSource,
+ 					get locale() {
+ 						return service._locale;
+ 					}
+@@ -8964,15 +9009,31 @@
  			* Select a listed or retained catalog-addressed session as current.
  			* @param id - listed or addressed session id.
  			*/
@@ -37,7 +94,7 @@ index ba3cb21f72709cc91a733d4080266e452d6435d5..a6dd8b94978e5ea4f859375cd377f47d
  			}
  			/**
  			* Resolve an already discovered direct-parent address without opening it.
-@@ -9009,6 +9025,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
+@@ -9009,6 +9070,7 @@
  			* per the masked-gap contract until the next open() moves the stage.
  			*/
  			clear() {
@@ -45,7 +102,7 @@ index ba3cb21f72709cc91a733d4080266e452d6435d5..a6dd8b94978e5ea4f859375cd377f47d
  				this.manager.clearSelection();
  			}
  			/**
-@@ -9897,7 +9914,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
+@@ -9897,7 +9959,7 @@
  					state = "connecting";
  					this.connectWorkspace(target).then((sessionId) => {
  						if (disposed) return;
@@ -54,3 +111,46 @@ index ba3cb21f72709cc91a733d4080266e452d6435d5..a6dd8b94978e5ea4f859375cd377f47d
  						state = "done";
  					}, (reason) => {
  						if (disposed) return;
+--- a/lib/types/client/slots.d.ts
++++ b/lib/types/client/slots.d.ts
+@@ -12,7 +12,7 @@
+ import { Service } from '@deepseek-ai/cordis';
+ import type { Context } from '@deepseek-ai/cordis';
+ import { SlotCore } from '@deepseek-ai/dsh-client-ui-slots';
+-import type { LiveSlotNode, LocaleFace, OwnerOf, SlotMap, SlotRenderer, SlotSpec, StoredEntry } from '@deepseek-ai/dsh-client-ui-slots';
++import type { HostObservable, LiveSlotNode, LocaleFace, OwnerOf, SlotMap, SlotRenderer, SlotSpec, StoredEntry } from '@deepseek-ai/dsh-client-ui-slots';
+ declare module '@deepseek-ai/dsh-client-ui-slots' {
+     interface SlotMap {
+         /**
+@@ -44,6 +44,8 @@
+ type SlotInjectionEffect = (() => void) | Iterable<() => void, void, void>;
+ /** cordis Service layer of the slot system; see the module doc for the split with SlotCore. */
+ export declare class SlotRegistry extends Service {
++    /** Publish domain-owned root props and hooks, scoped to the caller fiber. */
++    provideRoot(contribution: import('@deepseek-ai/dsh-client-ui-slots').RootStandardSourceContribution): () => void;
+     private readonly _core;
+     /** Store-instance axis: handle -> mounted scope, refcount, resolved instances. */
+     private readonly _stores;
+@@ -188,4 +190,20 @@
+     private _release;
+ }
+ export {};
+-//# sourceMappingURL=slots.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=slots.d.ts.map
++declare module '@deepseek-ai/dsh-client-ui-slots' {
++    interface RootStandardSourceContribution {
++        readonly hooks?: Readonly<Record<string, HostObservable<unknown>>>;
++        readonly keyedHooks?: Readonly<Record<string, (key: string) => HostObservable<unknown> | undefined>>;
++        readonly props?: Readonly<Record<string, unknown>>;
++    }
++    interface RootStandardSourceBinding {
++        readonly key: undefined;
++        readonly hooks: Readonly<Record<string, HostObservable<unknown>>>;
++        readonly keyedHooks: Readonly<Record<string, (key: string) => HostObservable<unknown> | undefined>>;
++        readonly props: Readonly<Record<string, unknown>>;
++    }
++    interface SlotRendererHost {
++        readonly root?: HostObservable<RootStandardSourceBinding>;
++    }
++}

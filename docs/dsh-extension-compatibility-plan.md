@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：根级公共状态贡献与渲染订阅（2026-09-13）
+
+在当前 rc.2 的真实 SlotRegistry（client-runtime）补齐 slots.provideRoot；通过已纳入 pnpm 和 managed runtime prepare 的可复现补丁接入，保留原 sessions.open 等旧补丁。普通 hooks、按 key 解析的 keyedHooks 和静态 props 统一检查输出名称；失败注册不发布快照、不通知订阅者；成功注册及调用方 fiber 卸载均原子更新，单个订阅者抛错不阻断其他订阅者。rc.2 原生 useSessions/useWorkspaces 保留为受保护名称：这不意味着新版会重新注册同名来源的整套域插件可以直接替换旧域插件。
+
+ui-renderer 从 host.root 获取贡献并合成标准属性；root/session/session-maybe 三类入口订阅贡献名单变化，状态源自身变化由原 selector hook 处理。保留既有 useSessions/useWorkspaces 的函数身份；按 key 切换释放旧来源订阅。没有修改页面布局或样式。类型随实际 runtime 补丁发布，UI 包的开发依赖固定 renderer 版本用于执行真实补丁测试。
+
+4 项实际补丁测试通过（/tmp/amiba-root-provider-tests.log）：真实 Cordis/SlotCore 的冲突回滚、fiber 卸载与重注册、订阅者错误隔离；真实 React DOM 三作用域的名单更新、状态更新、按 key 切换、卸载与重新注册，同时保留输入框对象及草稿。shell 类型检查通过（/tmp/amiba-root-provider-types.log）。首次 DOM 测试暴露测试依赖从根目录解析到另一份 React，已将 renderer 测试依赖放回 UI 包，与现有 React 18 对齐；没有替换产品 React 版本。
+
+完整桌面构建退出 0（/tmp/amiba-root-provider-build.log）。实际 --compat --root-providers 退出 0（/tmp/amiba-root-provider-smoke.log）：真实 SlotCore/renderer 的状态更新、名称冲突拒绝、调用方 fiber 卸载、同名重新注册、订阅释放以及原输入区域和扩展草稿对象保留均通过；既有配置、会话、文件、Markdown、目录与 HMR 回归通过。此项只补基础服务；main/selectPanel/usePanelInfo 的实际布局绑定、左侧全局面板入口与五项右侧栏仍未完成。统计保持 38/6/20，完整兼容目标不变。
+
 ## 最新进展：导航取消服务及全局面板依赖核对（2026-09-13）
 
 补齐 ctx.layout.beginNavigation：根拥有 LayoutNavigation，每个新请求取消前一个 AbortSignal；open-chat/open-new-chat/open-workspace/open-settings 经既有布局事件边界提交时取消待处理导航，来自桌面宿主的同名事件也走此边界。开关侧栏/详情或其他无关事件不取消。根卸载取消当前信号，卸载后的旧引用也不能重新创建有效请求。没有改变现有导航动作、资源或样式。

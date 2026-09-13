@@ -1,3 +1,4 @@
+import { smokeRootProviders } from "./root-providers-smoke.mjs";
 import { smokeLayoutNavigation } from "./layout-navigation-smoke.mjs";
 import { legacyToolLiveFixture } from "./legacy-tool-live-fixture.mjs";
 import { smokeLegacyToolDetails } from "./legacy-tool-details-smoke.mjs";
@@ -49,6 +50,7 @@ if (process.argv.includes("--trajectory-images") && !["--message-images", "--too
 if (process.argv.includes("--model-settings-slots") && !process.argv.includes("--compat")) throw new Error("--model-settings-slots requires --compat");
 if (process.argv.includes("--legacy-tool-details") && !process.argv.includes("--compat")) throw new Error("--legacy-tool-details requires --compat");
 if (process.argv.includes("--legacy-tool-live") && !process.argv.includes("--legacy-tool-details")) throw new Error("--legacy-tool-live requires --legacy-tool-details");
+if (process.argv.includes("--root-providers") && !process.argv.includes("--compat")) throw new Error("--root-providers requires --compat");
 if (process.argv.includes("--layout-navigation") && !process.argv.includes("--compat")) throw new Error("--layout-navigation requires --compat");
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const profile = await mkdtemp(path.join(tmpdir(), "amiba-plugin-app-"));
@@ -300,6 +302,7 @@ try {
 
     }
     assert.ok(await evaluate("window.__probeCtx.get('conversationEvents').entries().some(d=>d.kind==='turn-tail') && window.__probeCtx.get('conversationEvents').entries().some(d=>d.kind==='assistant-step') && window.__probeCtx.get('conversationViews').entries().some(d=>d.target==='chat')"), "headless official data definitions and chat target must be mounted");
+    if (process.argv.includes("--root-providers")) await smokeRootProviders({ evaluate, wait });
     if (process.argv.includes("--layout-navigation")) await smokeLayoutNavigation(evaluate);
     // Real SlotCore + module-loader + renderer integration on the file: surface.
     const namespace = await evaluate(`(async () => {
