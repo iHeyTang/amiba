@@ -5,6 +5,12 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：图片文档视图（2026-09-13）
+
+迁移固定源 ImageBody、图片 metadata、locale 与独立 CSS，注册 png/jpg/jpeg/gif/webp/bmp/ico/svg 的 bytes-complete 内置实现。通过已有文档 face/会话授权读取完整字节，按文件类型创建 Blob URL；按原始 CSS 像素显示，容器负责滚动。SVG 仅交给 img 静态图片模式。文件内容替换/卸载释放 URL；分配失败、解码失败和不支持的输入显示本地化状态，不替换现有原生图片入口。
+
+65 项文档测试通过（/tmp/amiba-document-image-tests-3.log），类型检查退出 0（/tmp/amiba-document-image-types.log）。新增测试覆盖全部后缀与第三方优先级、替换时重置解码状态、旧 URL 和卸载 URL 释放、分配失败及不支持的文件。首次新增测试的分配失败 mock 被一次性成功返回值覆盖，清空 mock 后重跑通过。完整桌面构建退出 0（/tmp/amiba-document-image-build.log）；--compat --sidebar-right 退出 0（/tmp/amiba-document-image-smoke.log），SVG/PNG 实际解码、400×240 CSS 像素原始尺寸、损坏重载提示，以及替换和关闭后旧 Blob URL 无法读取均通过。已查看 amiba-native-document.png，图片居中显示，原聊天、输入器、侧栏和工作区标签保留；文件/目录、Markdown、配置和 HMR 回归通过。其余格式已注册但尚未逐格式做桌面解码验收，独立 Web 仍待验证。44/0/20 统计不变，完整适配目标未完成。
+
 ## 进行中：Markdown 文档视图（2026-09-13）
 
 新增 Markdown 内置实现，沿用固定源扩展/注册优先级、text-pages 累积内容和独立 whitespace/CSS 范围；.md/.markdown 自动选择，外部 renderer 优先级与纯文本备选保持。使用当前 rc.2 MarkdownText，将新版 labels.code 映射到实际 codeLabels，保留 localized copy/copied 标签；不替换当前聊天 Markdown 或代码组件。

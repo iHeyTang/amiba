@@ -5,6 +5,8 @@ export async function smokeDocumentPreview({ evaluate, wait, fileWorkspace, scre
   const relative = '.cache/compat-document-preview.txt';
   const file = path.join(fileWorkspace, relative);
   const markdownFile = path.join(fileWorkspace, '.cache/compat-document-preview.md');
+  const imageFile = path.join(fileWorkspace, '.cache/compat-document-preview.svg');
+  const rasterFile = path.join(fileWorkspace, '.cache/compat-document-preview.png');
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, Array.from({ length: 6002 }, (_, i) => `DOCUMENT_LINE_${i + 1}`).join('\n'));
   try {
@@ -57,7 +59,26 @@ export async function smokeDocumentPreview({ evaluate, wait, fileWorkspace, scre
     await screenshot?.();
     await evaluate("window.__sidebarService.close(window.__sidebarService.active().id)");
     await wait(() => evaluate("!document.querySelector('[data-document-markdown]')"));
+    await writeFile(imageFile, '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="240"><rect width="400" height="240" fill="#7c3aed"/><circle cx="200" cy="120" r="65" fill="#ffffff"/></svg>');
+    await evaluate("window.__sidebarService.openResource(window.__documentAddress.replace(/\\.txt$/,'.svg'))");
+    await wait(() => evaluate("(()=>{const img=document.querySelector('[data-image-preview] img');return img && !img.hidden && img.complete && img.naturalWidth===400})()"));
+    assert.ok(await evaluate("(()=>{const img=document.querySelector('[data-image-preview] img');window.__documentImageUrl=img.src;return img.naturalHeight===240 && img.getBoundingClientRect().width===400 && img.getBoundingClientRect().height===240 && img.src.startsWith('blob:')})()"));
+    await screenshot?.();
+    await writeFile(imageFile, 'invalid image');
+    await wait(() => evaluate("!!document.querySelector('[data-textpreview-changed]')"));
+    await evaluate("document.querySelector('[data-textpreview-reload-now]').click()");
+    await wait(() => evaluate("!!document.querySelector('[data-image-preview] [role=alert]')"));
+    assert.ok(await evaluate("fetch(window.__documentImageUrl).then(()=>false,()=>true)"), 'Old image Blob URL must be revoked after reload');
+    await evaluate("window.__documentImageUrl=document.querySelector('[data-image-preview] img').src;window.__sidebarService.close(window.__sidebarService.active().id)");
+    await wait(() => evaluate("!document.querySelector('[data-image-preview]')"));
+    assert.ok(await evaluate("fetch(window.__documentImageUrl).then(()=>false,()=>true)"), 'Image Blob URL must be revoked after close');
+    await writeFile(rasterFile, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jP1sAAAAASUVORK5CYII=', 'base64'));
+    await evaluate("window.__sidebarService.openResource(window.__documentAddress.replace(/\\.txt$/,'.png'))");
+    await wait(() => evaluate("(()=>{const img=document.querySelector('[data-image-preview] img');return img && !img.hidden && img.complete && img.naturalWidth===1 && img.naturalHeight===1})()"));
+    await evaluate("window.__sidebarService.close(window.__sidebarService.active().id)");
+    await wait(() => evaluate("!document.querySelector('[data-image-preview]')"));
     await evaluate("if(window.__sidebarService.isExpanded())window.__sidebarService.toggleExpanded()");
+    console.log('Image document passed real SVG and PNG decoding, intrinsic dimensions, changed-file reload failure, and Blob URL release on replacement and close.');
     console.log('Document preview passed actual resource opening, 5000-line paging/navigation, metadata change/reload, measured body, third-party byte renderer owner/hooks, unload-to-plain fallback, tab cancellation and actual Markdown heading/table/link/code rendering.');
-  } finally { await rm(file, { force: true }); await rm(markdownFile, { force: true }); }
+  } finally { await rm(file, { force: true }); await rm(markdownFile, { force: true }); await rm(imageFile, { force: true }); await rm(rasterFile, { force: true }); }
 }
