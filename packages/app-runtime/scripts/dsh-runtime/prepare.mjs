@@ -1,5 +1,4 @@
 import { packageCommand, applyRuntimePatch } from "./process-tools.mjs";
-import { canReuseAddedDependencies } from "./reuse-dependencies.mjs";
 import { validateDependencyLock, validatePluginBuildSources } from "./dependency-lock.mjs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -8,7 +7,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { pluginInstallManifest, checkHostContract, isolatePluginDependencies } from "./plugin-distribution.mjs";
+import { pluginInstallManifest, checkHostContract, isolatePluginDependencies, distributionHashes } from "./plugin-distribution.mjs";
 
 const runtimePackageDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -289,11 +288,7 @@ if (args.has('--validate-only')) {
   console.log(`Validated distributable plugin sources and runtime lock for ${dependencyTarget}`);
   process.exit(0);
 }
-const dependencyLockHash = createHash("sha256").update(dependencyLockContent).update(pluginLockContents.join("\0")).digest("hex");
-const appTreeHash = createHash("sha256")
-  .update(appPackageJsonContent)
-  .update(dependencyLockContent)
-  .digest("hex");
+const { dependencyLockHash, appTreeHash } = distributionHashes(appPackageJsonContent, dependencyLockContent, pluginLockContents);
 
 function fail(message) {
   throw new Error(`[dsh:runtime] ${message}`);
@@ -306,7 +301,7 @@ function expectedMarker() {
     nodeVersion: declaration.nodeVersion,
     amibaPluginRevision: declaration.amibaPluginRevision,
     amibaSourceDigest,
-    dependencyInstallMode: "isolated-plugins-v1",
+    dependencyInstallMode: "isolated-plugins-v2",
     appTreeHash,
     dependencyLockHash,
     platform: process.platform,
@@ -638,6 +633,7 @@ async function installNode(stage) {
  * full install.
  */
 async function reuseAppDependencyTree(appDir) {
+  if (force) return false;
   const installedMarkerPath = path.join(outputDir, "runtime-manifest.json");
   const installedNodeModules = path.join(outputDir, "app", "node_modules");
   if (
@@ -651,15 +647,10 @@ async function reuseAppDependencyTree(appDir) {
       await fsp.readFile(installedMarkerPath, "utf8"),
     );
     // Only reuse trees created by the registry-only installer, never earlier injected trees.
-    if (installedMarker.dependencyInstallMode !== "isolated-plugins-v1") return false;
+    if (installedMarker.dependencyInstallMode !== "isolated-plugins-v2") return false;
     const sameDependencies = installedMarker.appTreeHash === appTreeHash;
-    const existingPromotions = !sameDependencies && installedMarker.dependencyLockHash === dependencyLockHash && Boolean(installedMarker.appTreeHash) && await canReuseAddedDependencies(
-      JSON.parse(await fsp.readFile(path.join(outputDir, "app", "package.json"), "utf8")),
-      JSON.parse(appPackageJsonContent),
-      async name => JSON.parse(await fsp.readFile(path.join(installedNodeModules, name, "package.json"), "utf8")).version,
-    );
     const reusable =
-      (sameDependencies || existingPromotions) &&
+      sameDependencies && installedMarker.dependencyLockHash === dependencyLockHash &&
       installedMarker.nodeVersion === declaration.nodeVersion &&
       installedMarker.platform === process.platform &&
       installedMarker.arch === process.arch;

@@ -604,7 +604,7 @@ export function apply(ctx) {
   await new Promise((resolve) => portProbe.close(resolve));
   const startServer = () => spawn(
     runtimeNode,
-    [entrypoint, "--profile", profileName, "--host", "127.0.0.1", "--port", "0"],
+    [entrypoint, "--profile", profileName, "--host", "127.0.0.1", "--port", "0", "--no-open"],
     {
       cwd: temporaryRoot,
       env: {
@@ -615,6 +615,7 @@ export function apply(ctx) {
         MEMOS_CONFIG_FILE: path.join(dshHome, "amiba-memos", "config.yaml"),
         AMIBA_MEMOS_VIEWER_PORT: String(memoryViewerPort),
         AMIBA_DSH_API_TOKEN: pluginToken,
+        AMIBA_BROWSER_CDP_URL: "",
         AMIBA_RUNTIME_GATEWAY_URL: "http://127.0.0.1:9",
         AMIBA_RUNTIME_GATEWAY_TOKEN: pluginToken,
       },
@@ -1138,11 +1139,12 @@ export function apply(ctx) {
       ].sort();
       for (const packageName of [
         "@amiba/dsh-plugin-attachments",
-        "@amiba/dsh-plugin-browser-core",
         "@amiba/dsh-plugin-memory-memos",
         "@amiba/dsh-plugin-resources",
         "@amiba/dsh-plugin-pets",
       ]) assert.ok(amibaToolPackages.includes(packageName), `tool catalog omitted ${packageName}`);
+      // This standalone Web test has neither a CDP endpoint nor an Electron provider.
+      assert.ok(!amibaToolPackages.includes("@amiba/dsh-plugin-browser-core"), "browser tools require an available provider");
       assert.ok(
         scopedTools.value.tools.every((tool) =>
           ["dsh-core", "dsh-plugin", "mcp-server"].includes(tool.source.kind),

@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { pluginInstallManifest, checkHostContract, isolatePluginDependencies } from './plugin-distribution.mjs';
+import { pluginInstallManifest, checkHostContract, isolatePluginDependencies, distributionHashes } from './plugin-distribution.mjs';
 import { validateDependencyLock } from './dependency-lock.mjs';
 const root = new URL('../../../../', import.meta.url);
 const catalog = YAML.parse(fs.readFileSync(new URL('pnpm-workspace.yaml', root), 'utf8')).catalog;
@@ -67,4 +67,13 @@ test('plugins resolve private versions independently and share only compatible h
     fs.rmSync(path.join(dir, 'node_modules/plugin-1.0.0'), {recursive:true});
     assert.equal(createRequire(path.join(dir,'node_modules/plugin-2.0.0/package.json'))('private-lib').version, '2.0.0');
   } finally { fs.rmSync(dir, {recursive:true,force:true}); }
+});
+
+test('changing or removing a plugin invalidates runtime dependency reuse even when the host is unchanged', () => {
+  const before = distributionHashes('host', 'host-lock', ['pet-v1', 'memory-v1']);
+  for (const locks of [['pet-v2', 'memory-v1'], ['memory-v1']]) {
+    const after = distributionHashes('host', 'host-lock', locks);
+    assert.notEqual(after.appTreeHash, before.appTreeHash);
+    assert.notEqual(after.dependencyLockHash, before.dependencyLockHash);
+  }
 });

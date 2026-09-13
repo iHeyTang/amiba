@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import semver from 'semver';
@@ -60,9 +61,9 @@ export function isolatePluginDependencies(directory, manifest, hostLock) {
     const location = resolve(from, name);
     const installed = packages.get(location);
     const shared = hostLock.packages[`node_modules/${name}`];
-    const hostInterface = name in (manifest.peerDependencies ?? {}) || name.startsWith('@deepseek-ai/');
+    const hostInterface = name in (manifest.peerDependencies ?? {}) || name in (hostLock.packages['']?.dependencies ?? {});
     if (hostInterface && shared && (name.startsWith('@deepseek-ai/') || !installed || installed.version === shared.version) && semver.satisfies(shared.version, range, { includePrerelease: true })) return;
-    if (name.startsWith('@deepseek-ai/')) throw new Error(`${manifest.name}: incompatible host dependency ${name}@${range}`);
+    if (hostInterface && name.startsWith('@deepseek-ai/')) throw new Error(`${manifest.name}: incompatible host dependency ${name}@${range}`);
     if (!installed) {
       if (optional) return;
       throw new Error(`${manifest.name}: missing private dependency ${name} from ${from}`);
@@ -88,4 +89,10 @@ export function isolatePluginDependencies(directory, manifest, hostLock) {
   }
   cleanLinks(path.join(directory, 'node_modules'));
   return [...keep].map(location => path.relative(directory, location));
+}
+
+export function distributionHashes(hostManifest, hostLock, pluginLocks) {
+  const dependencyLockHash = createHash('sha256').update(hostLock).update(pluginLocks.join('\0')).digest('hex');
+  const appTreeHash = createHash('sha256').update(hostManifest).update(dependencyLockHash).digest('hex');
+  return { dependencyLockHash, appTreeHash };
 }
