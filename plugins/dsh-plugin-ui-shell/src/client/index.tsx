@@ -1,3 +1,5 @@
+export type { ISidebarRight, SidebarRightOpenResourceOptions, SidebarRightOpenTabOptions } from './sidebar-right/service.js';
+import { registerSidebarRight } from './sidebar-right/register.js';
 import { createFileResourceProvider } from "./resources/file-provider.js";
 export { sessionFileAddress, absoluteFileAddress, parseFileAddress, type FileAddress } from "./resources/file-address.js";
 import { ResourceRegistry } from "./resources/resources.js";
@@ -442,6 +444,7 @@ function dispatchLayoutAction(
 
 /** Register Amiba as the one DSH root owner and declare its child authority. */
 export async function apply(ctx: ClientContext): Promise<void> {
+  const sidebarRightTabs = new SidebarRightTabRegistry(ctx);
   // Typert owns descriptors by package, so all shell namespaces mount together.
   const disposeShellRemote = await ctx.remote.$mount({
     package: MARKDOWN_REMOTE.package,
@@ -573,7 +576,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
         ctx.slots.subscribe("settings.onboarding", listener),
     };
     const disposeLayout = ctx.reflect.provide("layout", layout);
-    const disposeRightTabRegistry = ctx.reflect.provide("sidebarRightTabs", new SidebarRightTabRegistry(ctx));
+    const disposeRightTabRegistry = ctx.reflect.provide("sidebarRightTabs", sidebarRightTabs);
     const resources = new ResourceRegistry(ctx);
     const disposeResources = ctx.reflect.provide("resources", resources);
     const workspaceFiles = getPlatform().workspaceFiles;
@@ -1036,6 +1039,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // generic ToolRowFrame — the reference pattern for any plugin that wants
     // a bespoke row for its own tool. Registered after the root because the
     // root's children table is what declares the seat.
+    const sidebarRightFiber = ctx.inject(['locale'], scope => {
+      scope.effect(() => registerSidebarRight(scope, sidebarRightTabs, resources), 'amiba-ui-shell: optional sidebar panel');
+    });
     const disposeAskToolview = ctx.slots.inject("tool.call.toolview", () =>
       ctx.slots.register(
         { name: "tool.call.toolview", key: "ask_user_question" },
@@ -1053,6 +1059,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     );
     return () => {
       for (const dispose of disposeOfficialToolviews) dispose();
+      void sidebarRightFiber.dispose();
       disposeAskToolview();
       void languageRowFiber.dispose();
       void sessionExportFiber.dispose();

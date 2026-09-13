@@ -29,6 +29,7 @@ import type { SidebarRightTabActions, SidebarRightTabNavigation } from './naviga
 export type { SidebarRightTabActions, SidebarRightTabNavigation, SidebarRightTabPlacement } from './navigation.js'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap { sidebarRight: import('../locales.js').SidebarRightKey }
   interface SlotMap {
     /**
      * One tab's body, dispatched with the `id` of the type in force for

@@ -5,6 +5,20 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：右侧栏实际面板、四个扩展入口与公开服务（2026-09-13）
+
+将 Dockkit 接到现有 amiba.workbench.panel 会话插槽：复用框架 store handle、adoption、普通/keyed 注入和 hookContext，声明 pane.tab、pane.tab.title、tab.menu.item，注册 guide 类型及其 tab.guide chain 子槽。公开 ctx.sidebarRight 控制器。未替换 Amiba 的 WorkspacePane、文件预览或聊天组件；附加标签使用已有扩展标签类，关闭通过原 closePanel 恢复先前视图。
+
+宿主仅在选中扩展时挂载正文，因此公开服务绑定和浮动层由持续挂载的标签实例持有；正文把测量结果通过会话注入闭包共享给绑定，控制器可按实际分栏空间处理 split。收起时保留 store、occurrence 和资源 pin，浮动层不随正文卸载。guide/标签标题迁移固定源，沿用真实 rc.2 primitives。模块 CSS 通过同一构建得到的 inline 文本注入，已确认 class hash 匹配；插件清理移除其样式。原界面样式未改写。
+
+真实启动首先暴露 locale 缺少注入授权（/tmp/amiba-native-sidebar-smoke.log），改为在 ctx.inject(['locale']) 子作用域注册及清理，保持没有 locale 的宿主仍能加载原界面。初次构建还发现 primitives 缺少模块到达声明，已补 dsh.client.external，未升级运行基线。Smoke 插件的 chain.select 和 list.id 缺项分别修正；这些修改限于测试注册参数。
+
+首次实际截图发现正文高度未撑满、文字控制占据标题栏，改为完整 flex 高度及本地紧凑图标控件；仅给新面板设置字号变量。全屏与普通模式共用稳定的 portal 容器，移动容器位置而不重建正文组件。真实 React/store 测试验证正文未挂载时仍可通过服务打开、收起恢复原预览、浮动保留、完整移除后恢复与资源取消，以及全屏往返正文不重新挂载。
+
+最终 326 项右侧栏测试通过（/tmp/amiba-native-sidebar-regression-2.log），类型检查通过（/tmp/amiba-native-sidebar-types-5.log）。完整桌面构建退出 0（/tmp/amiba-native-sidebar-build-5.log）；--compat --sidebar-right 退出 0（/tmp/amiba-native-sidebar-smoke-5.log），实际插件验证正文/标题 Hook、guide 替换链、菜单 tab/dismiss、重复导航 revision、收起后资源生命周期、类型卸载 fallback、面板恢复、真实正文高度及全屏往返挂载次数。原文件、会话、目录、Markdown 和 HMR 回归通过。实际截图 /var/folders/w1/6rt3z_zs1395fn30txrlysvr0000gn/T/amiba-native-sidebar.png 已查看，原聊天与文件标签保留，新控件不再挤占标题栏。
+
+入口基础统计更新为 43/1/20：54、55、57、58 现在有真实桌面接入证据，56 文档正文仍未接入。不是完整兼容率。下一步必须处理全局主面板切换时暂停右侧栏绑定/浮动、实际会话切换与恢复、窄屏自动全屏、guide fallback/多入口、完整文档读取和独立 Web。正文目前按原工作区生命周期在收起/切回预览时卸载，官方收起时保留组件局部状态的语义仍须核对并适配；仅 store/occurrence 保留已证实。不得据本轮测试宣称全部右侧栏或第三方插件已兼容。
+
 ## 进行中：完整 Dockkit React 交互层（2026-09-13）
 
 迁移固定 c291e796 的 DockSurface、FloatLayer、PaneTree、TabPanel、TabTitle、TabMenu、指针所有权、DOM 测量、渲染类型和 CSS module，共 10 个文件；与固定源逐文件比对，仅 MIT 归属及 .ts/.tsx→.js 导入后缀不同。纯引擎 index 保持不导入 React/CSS，单独 react.ts 提供 UI 入口，避免模型消费者意外加载 DOM 样式。模块样式没有全局 body/root 选择器；尚未导入实际产品面板，因此未改变现有 UI。

@@ -74,11 +74,11 @@
 | 51 | `sidebar.brand.name` | 新版契约，待验证 | 品牌替换须用户主动选择，不能随插件安装改变当前名称。 |
 | 52 | `sidebar.footer.action` | 可以适配，已验证 | 已传递真实 wide；空槽不占位，折叠及卸载已实测。 |
 | 53 | `sidebar.panellist` | 入口已接入，桌面验证通过 | 在原导航行附加全局面板入口，按 order 排序和 label 显示；用真实 main 注册判断可用性，缺少目标时暂不可点击。原侧栏展开态传 size=16、真实 active，采用原 NavigationRow 样式和键盘语义。实际桌面验证迟到 main 注册后启用、Enter 和鼠标切换、所选面板卸载返回聊天，以及原侧栏节点和当前会话保留。保留键 conversation、完整官方侧栏组件和独立 Web 仍另核对。 |
-| 54 | `sidebar.right.pane.tab` | 新版契约，待验证 | 需要新版右侧栏的选中、关闭、会话归属等语义。 |
-| 55 | `sidebar.right.pane.tab.title` | 新版契约，待验证 | 依赖真实右侧栏标签实例和标题更新生命周期。 |
+| 54 | `sidebar.right.pane.tab` | 入口已接入，桌面验证通过 | 已接入可选工作区面板，真实会话 store、tabInfo、重复导航、收起及类型卸载回退已通过桌面验证；跨会话和全局面板切换、窄屏、完整第三方插件与 Web 仍待验证。 |
+| 55 | `sidebar.right.pane.tab.title` | 入口已接入，桌面验证通过 | 标题插槽已按真实标签类型分发，tabInfo 与动态标题通过桌面验证；复用原工作区标签样式，完整第三方插件及 Web 仍待验证。 |
 | 56 | `sidebar.right.tab.document` | 新版契约，待验证 | 需要文档资源身份、读取及预览生命周期。 |
-| 57 | `sidebar.right.tab.guide` | 新版契约，待验证 | 需要真实右侧栏上下文和 chain 的后续渲染语义。 |
-| 58 | `sidebar.right.tab.menu.item` | 新版契约，待验证 | 需要真实右侧栏目标和菜单操作回调。 |
+| 57 | `sidebar.right.tab.guide` | 入口已接入，桌面验证通过 | guide 类型、正文及替换链已接入；真实插件 select/useTabInfo 替换通过桌面验证，完整 fallback/多入口交互与 Web 仍待验证。 |
+| 58 | `sidebar.right.tab.menu.item` | 入口已接入，桌面验证通过 | 已接到真实标签菜单，插件获得对应 tab 和 dismiss；点击及关闭菜单通过桌面验证，跨会话与 Web 仍待验证。 |
 | 59 | `sidebar.settings` | 只能按组件分别适配 | 这是已有界面的替换入口。可复用服务或增加可选展示，但默认能力和样式必须保留。 |
 | 60 | `sidebar.workspaces` | 不能同时原样接管 | 完整接管该区域可能替换现有界面或创建第二套控制器。需拆出附加能力；不能宣称完整兼容。 |
 | 61 | `sidebar.workspaces.directoryFlow` | 已接入，项目操作实测通过 | 真实插件创建项目、取消添加、添加目录及会话路径绑定均通过；保留项目 ID 和原有路径规范化。默认原生链路已验证（系统返回值用测试替身）；浏览器选择器读取、创建、选择及局部样式已在桌面 Web 渲染器实测；独立 Web 部署另核对。 |
