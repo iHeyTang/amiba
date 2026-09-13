@@ -101,7 +101,7 @@ gh workflow run desktop-release.yml --repo iHeyTang/amiba --ref main \
 
 升版前先检查这五项 Mac Secrets 是否齐全和下载源配置是否合法；缺配置时停止，不修改版本。main 必须允许工作流以 `contents: write` 写入版本提交；分支保护禁止此操作时会失败，不强制绕过。构建和发布固定检出自动生成的版本提交，避免 main 后续变化混入产物。版本提交带 `[skip ci]`，不会重复触发测试构建。
 
-失败后优先使用该次运行的 **Re-run failed jobs**。同一次运行完整重试时，若 main 仍是它生成的版本提交，会复用该提交；main 已有其他修改时停止，不覆盖新代码。点击新的 Run workflow 是新的一次发版，会尝试递增版本。发布后的重试只回读验证已有资产，不覆盖公开版本。
+失败后优先使用该次运行的 **Re-run failed jobs**。同一次尚未发布的运行完整重试时，若 main 仍是它生成的版本提交，会复用该提交；main 已有其他修改时停止，不覆盖新代码。点击新的 Run workflow 是新的一次发版，会尝试递增版本。发布作业在发布成功后因网络等原因重试时，只回读验证已有资产，不覆盖公开版本。
 
 ## GitHub 和国内 CDN
 
@@ -204,3 +204,10 @@ gh workflow run desktop-release.yml --ref main -f mode=verify -f target=all -f r
 - 独立安装文件大小：ARM DMG 379,388,623 字节；Intel DMG 382,063,658 字节；Windows EXE 327,434,217 字节。下载响应为原始文件名，没有 ZIP 外壳。
 - 这两轮复用了原始构建 `34736708616` 的 0.1.0 测试包；manifest 保留原始源码提交及构建 ID，不将复验提交冒充安装包来源。
 - 本地发布工具 15 项测试通过；另验证三平台拆分文件合并，以及最后一个平台文件被篡改时整批上传前拒绝（上传命令使用替身，未修改 GitHub Release）。
+
+
+## 一键发版验证（2026-09-13）
+
+发布工具 21 项测试通过；使用模拟 GitHub CLI/API 和小型三平台文件执行实际 ci-upload/upload 脚本，验证上传、回读哈希、自动更新说明、公开发布、发布作业幂等重试，以及损坏文件在远端修改前被拒绝。
+
+[真实 Release 配置预检](https://github.com/iHeyTang/amiba/actions/runs/34743078625) 在 Prepare 阶段按预期报告缺少五项 Mac Secrets，main 未发生自动版本提交，版本保持 0.1.0，也没有创建或发布新 Release。真实签名、公证和最终公开发布尚未执行，需要先补齐凭据。
