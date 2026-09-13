@@ -1,6 +1,7 @@
 import { deleteUnretainedAttachments, withSendingAttachments } from "./internal/attachment-ownership";
 import { useSessionComposerDraft } from "./use-session-composer-draft";
 import { useConversationSubmitHandoff } from "./useConversationSubmitHandoff";
+import { createResidentTurnSender, type ResidentTurnSenderDeps } from "./internal/resident-turn-sender";
 import { usePrepareConversationSubmit } from "./conversation-submit";
 import { createSurfaceActivity } from "../primitives/surface-activity";
 import { InteractionRegion } from "../primitives/interaction-region";
@@ -50,6 +51,8 @@ import {
   getAgentPresets,
   isAttachmentReadOk,
   normalizeAgentContext,
+  loadSessionMeta,
+  loadMessages,
   readBlobAsAttachment,
   useSessions,
   type AgentExecutionContext,
@@ -1562,6 +1565,56 @@ export default function ChatSurface({
 
   const prepareMarkdownTurn = usePrepareMarkdownTurn();
   const prepareConversationSubmit = usePrepareConversationSubmit();
+  const residentTurnDeps = useRef<ResidentTurnSenderDeps>(null!);
+  const residentTurnSender = useMemo(() => createResidentTurnSender({
+    unavailable: id => residentTurnDeps.current.unavailable(id),
+    prepare: id => residentTurnDeps.current.prepare(id),
+    read: id => residentTurnDeps.current.read(id),
+    workspace: id => residentTurnDeps.current.workspace(id),
+    checkpoint: (id, index) => residentTurnDeps.current.checkpoint(id, index),
+    markdown: id => residentTurnDeps.current.markdown(id),
+    dispatch: plan => residentTurnDeps.current.dispatch(plan),
+  }), []);
+  const residentTurnMounted = useRef(true);
+  useEffect(() => {
+    residentTurnMounted.current = true;
+    return () => { residentTurnMounted.current = false; };
+  }, []);
+  residentTurnDeps.current = {
+    unavailable: id => !residentTurnMounted.current || sessions.getSnapshot().activeId === id || inFlightTurnByIdRef.current.has(id) || triggerRuntime?.isSessionRunning?.(id) === true,
+    prepare: prepareConversationSubmit,
+    read: async id => {
+      const known = sessions.getSnapshot().sessions.find(item => item.id === id);
+      const session = await loadSessionMeta(id, known?.subagentAddress);
+      if (!session) throw new Error("The target conversation does not exist.");
+      return { session, messages: await loadMessages(id, session.subagentAddress) };
+    },
+    workspace: async id => {
+      const workspaces = getPlatform().workspaces;
+      const path = await workspaces?.getCurrent(id);
+      if (workspaces && !path) throw new Error("The target workspace root is unavailable.");
+      return path ?? undefined;
+    },
+    checkpoint: (id, index) => workspacePane.beginTurnFor(id, index),
+    markdown: prepareMarkdownTurn,
+    dispatch: async ({ payload, messages, workspacePath }) => {
+      if (!client.submitWithReceipt) return { kind: "rejected", error: "The chat transport does not provide submission receipts." };
+      const user: UiMessage = { uiId: shortId("u"), role: "user", content: payload.history[payload.history.length - 1].content,
+        sentAt: Date.now(), ...(workspacePath ? { workspacePath } : {}) };
+      const cached = { user, assistantUiId: payload.assistantUiId };
+      inFlightTurnByIdRef.current.set(payload.sessionId, cached);
+      agentBySessionRef.current.set(payload.sessionId, payload.agent!);
+      const receipt = await client.submitWithReceipt(payload);
+      if (receipt.kind === "rejected") {
+        if (inFlightTurnByIdRef.current.get(payload.sessionId) === cached) inFlightTurnByIdRef.current.delete(payload.sessionId);
+      } else if (receipt.kind === "accepted") {
+        // Host admission is final even if a local index write fails afterwards.
+        void sessions.touchSession(payload.sessionId, [...messages, user]).catch(error => console.warn("[resident-submit] session metadata update failed", error));
+      }
+      return receipt;
+    },
+  };
+  useEffect(() => triggerRuntime?.bindResidentTurnSender?.(residentTurnSender), [triggerRuntime, residentTurnSender]);
   const handoffConversationSubmit = useConversationSubmitHandoff({
     activeId: sessions.activeId,
     prepare: prepareConversationSubmit,

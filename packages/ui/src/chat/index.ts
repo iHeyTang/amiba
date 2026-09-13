@@ -180,6 +180,7 @@ export type {
   ComposerDraftImageRegistration,
   ComposerTriggerController,
   ComposerTriggerRuntime,
+  ResidentTurnRequest,
   TriggerEditorOps,
 } from "./composer/triggers/contracts";
 

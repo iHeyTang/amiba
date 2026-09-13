@@ -39,6 +39,8 @@ export interface SessionsState {
  * issues them once at construction time.
  */
 export interface SessionsController {
+  /** Current authoritative state for asynchronous target-addressed operations. */
+  getSnapshot: () => SessionsState;
   /** True once the DSH session projection is loaded. */
   ready: boolean;
   /** Every session in storage (the History view). */

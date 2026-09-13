@@ -803,6 +803,18 @@ try {
       await wait(() => evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
       assert.equal(await evaluate("window.__probeCtx.sessions.subagentAddress('compat-continuable-child')?.parentSessionId"), "compat-continuable-parent");
       console.log("Real continuable child interrupt reached the running model and cleared native busy state");
+      if (process.argv.includes("--resident-sender")) {
+        await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+        await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)"));
+        await evaluate("window.__residentForegroundDraft=window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft;window.__residentForegroundEditor=Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).find(n=>n.getClientRects().length);void 0");
+        const receipt = await evaluate("window.__probeCtx.composerInputs.sendResidentTurn({sessionId:'compat-continuable-child',text:'COMPAT_RESIDENT_BACKEND',attachments:[]})");
+        assert.equal(receipt.kind, 'accepted', JSON.stringify(receipt));
+        await wait(() => evaluate("(async()=>{const log=await window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_MODEL compat-continuable-child COMPAT_RESIDENT_BACKEND'});return log.entries.length>0})()"));
+        assert.equal(await evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId) && window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft===window.__residentForegroundDraft && window.__residentForegroundEditor.isConnected"), true);
+        await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-parent',childSessionId:'compat-continuable-child',mode:'continuable'});void 0");
+        await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child') && document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_RESIDENT_BACKEND') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        console.log("Resident backend received actual Host admission, sent to the addressed child without foreground navigation or draft mutation, and restored the real reply on return");
+      }
       if (process.argv.includes("--queue-draft")) {
         await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_WAIT_FOR_STOP');window.__probeCtx.composerInputs.submitInput('compat-continuable-child');void 0");
         await wait(() => evaluate("Boolean(document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]'))"));

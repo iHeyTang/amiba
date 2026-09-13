@@ -119,6 +119,7 @@ export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
   pruneInputImages(sessionId: string, ids: readonly ComposerAttachment["id"][]): void;
   addInputImages(sessionId: string, ids: readonly ComposerAttachment["id"][]): boolean;
   prepareInputImages(sessionId: string, signal?: AbortSignal): Promise<PreparedInputImages>;
+  sendResidentTurn(request: import("@amiba/ui").ResidentTurnRequest): Promise<import("@amiba/app-runtime/protocol").SubmitReceipt>;
   removeInputImage(sessionId: string, id: ComposerAttachment["id"]): void;
   submitInput(sessionId: string): boolean;
   /** Live editor projection; absent until that session has an attached editor. */
@@ -199,6 +200,7 @@ export function createInputTriggerBridge(
     } };
   };
   const submitters = new Map<string, { submit: () => boolean }>();
+  let residentSender: { send: Parameters<NonNullable<ComposerTriggerRuntime["bindResidentTurnSender"]>>[0] } | undefined;
   const editors = new Map<string, { ops: TriggerEditorOps; draft: ReturnType<typeof bindInputDraft> }>();
   const draftCursors = new Map<string, InputDraftCursor>();
   const residentInputs = new Map<string, {
@@ -263,6 +265,7 @@ export function createInputTriggerBridge(
   const listeners = new Set<() => void>();
   const notify = () => { for (const listener of listeners) listener(); };
   return {
+    isSessionRunning: id => (inputSessions.get(id)?.session ?? deps.sessionFor?.(id))?.getSnapshot().running === true,
     bindInputSession(sessionId, session) {
       const binding = { session };
       const source = deps.residentDraft?.(sessionId);
@@ -392,6 +395,17 @@ export function createInputTriggerBridge(
       return () => { if (submitters.get(sessionId) === binding) submitters.delete(sessionId); };
     },
     submitInput: (sessionId) => submitters.get(sessionId)?.submit() ?? false,
+    bindResidentTurnSender(send) {
+      const binding = { send };
+      residentSender = binding;
+      return () => { if (residentSender === binding) residentSender = undefined; };
+    },
+    sendResidentTurn(request) {
+      if (!residentSender || editors.has(request.sessionId) || !canEditResidentImages(request.sessionId)) {
+        return Promise.resolve({ kind: "rejected", error: "The resident conversation sender is unavailable." });
+      }
+      return residentSender.send(request);
+    },
     inputDraftSource,
     editInputDraft(sessionId, text) {
       const editor = editors.get(sessionId);

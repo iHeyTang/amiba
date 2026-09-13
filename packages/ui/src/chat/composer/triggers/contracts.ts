@@ -164,7 +164,17 @@ export interface ComposerImageOps {
   removeImage(id: ComposerAttachment["id"]): void;
 }
 
+export interface ResidentTurnRequest {
+  sessionId: string;
+  /** Already adjudicated and reference-expanded text, not a raw composer draft. */
+  text: string;
+  attachments: readonly import("@amiba/app-runtime/core").Attachment[];
+  signal?: AbortSignal;
+}
+
 export interface ComposerTriggerRuntime {
+  isSessionRunning?(sessionId: string): boolean;
+  bindResidentTurnSender?(send: (request: ResidentTurnRequest) => Promise<import("@amiba/app-runtime/protocol").SubmitReceipt>): () => void;
   inputStateSource?(sessionId: string): ObservableSnapshot<ConversationInputState | undefined>;
   bindImages?(sessionId: string, ops: ComposerImageOps): () => void;
   /** Register an original browser image in the official runtime registry. */

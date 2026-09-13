@@ -92,3 +92,28 @@ it("ignores stale transfer tasks and final session disposal releases undelivered
   expect(release).toHaveBeenCalledTimes(1);
   expect(bridge.inputImagesFor("a")).toBeUndefined();
 });
+
+it("binds the real resident sender with owner guards and observes actual Host running state", async () => {
+  const { bridge, bind } = fixture();
+  bind("a"); bind("readonly", "one-shot");
+  const request = { sessionId: "a", text: "expanded text", attachments: [] };
+  expect((await bridge.sendResidentTurn(request)).kind).toBe("rejected");
+  const first = vi.fn(async () => ({ kind: "accepted" as const }));
+  const second = vi.fn(async () => ({ kind: "rejected" as const, error: "Host refused" }));
+  const old = bridge.bindResidentTurnSender!(first);
+  const current = bridge.bindResidentTurnSender!(second);
+  old();
+  expect(await bridge.sendResidentTurn(request)).toEqual({ kind: "rejected", error: "Host refused" });
+  expect(first).not.toHaveBeenCalled();
+  expect(second).toHaveBeenCalledTimes(1);
+  await bridge.sendResidentTurn({ ...request, sessionId: "readonly" });
+  await bridge.sendResidentTurn({ ...request, sessionId: "missing" });
+  expect(second).toHaveBeenCalledTimes(1);
+  let running = true;
+  const off = bridge.bindInputSession!("running", { getSnapshot: () => ({ queue: [], running }), subscribe: () => () => {} });
+  expect(bridge.isSessionRunning!("running")).toBe(true);
+  running = false;
+  expect(bridge.isSessionRunning!("running")).toBe(false);
+  off(); current();
+  expect((await bridge.sendResidentTurn(request)).kind).toBe("rejected");
+});

@@ -1380,6 +1380,16 @@ pipelines retain mounted component state.
 后续仍须接通按目标会话准备消息/模型/工作目录的原引擎发送，并处理驻留草稿、命令、图片和接收结果的事务。已确认原生文件 serialize 只返回路径，搜索的会话地址现已固定；不得把当前会话的 pendingModelSelection、activeMessages 或工作区 UI 状态用于其他目标。Host 附件 ID 由 randomUUID 生成，不能假定重复上传会按内容去重；离屏图片发送还需要保存和交接已暂存附件，避免失败重试重复上传和遗留文件。
 # 离屏附件准备与原输入器交接：桌面验证通过
 
+## 后续：目标会话后台发送器
+
+内部 `sendResidentTurn` 已绑定原 ChatSurface 的引擎，不新建隐藏输入器或切换页面。发送前调用官方会话准备并处理重定向；从真实 Host 读取目标元数据和历史，按目标地址解析目录、创建检查点、准备 Markdown，再调用 `submitWithReceipt`。准备锁覆盖源和重定向目标，准备期间转到前台、已有本地发送或 Host 实际运行会拒绝；子会话的一次性只读及图片限制继续保留。派发后的未知异常返回 unconfirmed，已接收后的本地索引失败不改变接收事实。SessionsController 暴露原 store.getSnapshot，异步检查读取实时状态，不依赖旧 React 闭包。
+
+验证：后台发送器 5 项测试、桥接/驻留附件 8 项测试，UI、运行时及插件类型检查通过；完整构建和桌面兼容回归通过。新增 `--resident-sender` 对真实可续聊子会话执行后台文本发送，检查 accepted 回执、目标模型日志、前台原编辑器及草稿不变、返回后真实回复。首次测试未把新文本加入假模型的识别列表，误选了之前的等待停止输入；补齐夹具标记后完整重跑通过。证据为 `/tmp/amiba-resident-sender-tests.log`、`/tmp/amiba-resident-sender-bridge-tests.log`、`/tmp/amiba-resident-sender-{ui,plugin,runtime}-types.log`、`/tmp/amiba-resident-sender-build.log`、`/tmp/amiba-resident-sender-smoke2.log`。
+
+边界：该内部接口接收已完成判定和引用展开的文本，不消费草稿。标准 `inputActions.submit` 的离屏命令判定、状态、草稿消费/失败保留、完整队列对齐仍待接通。后台图片发送尚无真实模型端实测，不能由子会话文本用例推断全部支持。
+
+## 附件准备与交接记录
+
 驻留图片增加按原始注册实例缓存的上传准备与引用持有。并发准备和失败重试复用同一 Host 文件；取消调用不会丢弃仍属于草稿的已上传文件。删除草稿图片后，待进行中的上传和发送持有释放再清理文件。发送持有期间暂缓交给原输入器，交接后文件清理由原输入器和队列负责。
 
 原输入器增加已准备图片的接收路径：保留浏览器 File 和草稿 ID，采用原 Host 附件 ID，仅创建新的原生附件行 ID，不再次上传或解析会话。原上传路径和界面布局不变。

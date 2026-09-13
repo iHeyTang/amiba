@@ -2,6 +2,7 @@ import type { ConversationInputState, ObservableSnapshot } from "@amiba/extensio
 import type { InputDraftSource, InputImagesSource } from "./input-trigger-bridge.js";
 
 export type InputQueueSession = ObservableSnapshot<Pick<ConversationInputState, "queue"> & {
+  running?: boolean;
   subagent?: { address: { mode: "one-shot" | "continuable" } } | null;
 }>;
 export interface InputStateSource {
