@@ -5,6 +5,12 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：PDF 标准字体和 CMap 实际验证（2026-09-13）
+
+扩展确定性 PDF fixture，加入未内嵌 Symbol 字体，以及 Type0/CIDFont 的 UniJIS-UCS2-H 文本。桌面 smoke 观察真实 Worker 的 FetchBinaryData 请求与成功回复，记录同一次调用的资源名和字节长度，再检查画布输出；没有替换资源工厂或字体解码。
+
+--compat --sidebar-right 退出 0（/tmp/amiba-document-pdf-cmap-smoke.log）。FoxitSymbol.pfb 实际传输且形成黑色字形像素；UniJIS-UCS2-H.bcmap 实际传输且页面绘制完成。已查看 Symbol 字形截图和 CMap 的“日本”文字截图，原界面保留；新增文档关闭后所有 PDF Worker 均终止，原损坏重试/恢复及其他文档回归通过。此次仅修改测试和证据记录，沿用 af24ca29 的已构建产品。复杂 PDF 图像/WASM 解码、更多页面恢复、其他图片格式、脚注本地化及独立 Web 等仍待完成；不能由一个标准字体及一个 CMap 推断覆盖所有字体或平台。44/0/20 入口统计不变。
+
 ## 进行中：PDF 文档视图（2026-09-13）
 
 迁移固定源 PDF 正文、页状态、Worker runtime、canvas 渲染、资源工厂及 locale。使用 PDF.js 6.1.200，真实 module Worker 经 ready 握手后创建 PDFWorker bridge；解析和页渲染有独立取消/清理，失败不回退主线程解析。输入字节复制后传递，保留文档 owner 原缓冲区。CMap、标准字体、WASM 与 worker 同版本内联，并将相关许可证写入发布 client banner。采用原文档 bytes-complete 读取；tab 状态使用实际 rc.2 runtime store，正文关闭销毁 Worker，tab 结束忘记页状态。
