@@ -1,3 +1,4 @@
+import { smokeDocumentPreview } from './document-preview-smoke.mjs';
 import { smokeDocumentRead } from './document-read-smoke.mjs';
 import { smokeSidebarRight } from './sidebar-right-smoke.mjs';
 import { smokeFileProvider } from "./file-provider-smoke.mjs";
@@ -1672,6 +1673,7 @@ try {
     await smokeDocumentRead({ evaluate, fileWorkspace });
     await smokeFileProvider({ evaluate, wait, fileWorkspace });
     if (process.argv.includes("--sidebar-right")) await smokeSidebarRight({ evaluate, wait, fileWorkspace, setViewport: width => width === undefined ? call("Emulation.clearDeviceMetricsOverride") : call("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: false }), screenshot: async () => writeFile(path.join(tmpdir(), "amiba-native-sidebar.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64")) });
+    if (process.argv.includes("--sidebar-right")) await smokeDocumentPreview({ evaluate, wait, fileWorkspace, screenshot: async () => writeFile(path.join(tmpdir(), "amiba-native-document.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64")) });
     await evaluate(`window.__turnTailOwners[7].openFile(${JSON.stringify(openedFile)});void 0`);
     await wait(() => evaluate("document.querySelector('[data-workspace-file-preview]')?.textContent.includes('COMPAT_FILE_OPENED')"));
     await writeFile(path.join(profile, "turn-tail-open"), "open");

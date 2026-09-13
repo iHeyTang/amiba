@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：文档正文、标题及 keyed renderer 接入（2026-09-13）
+
+迁移固定源 TextPreview、TextTitle、加载提示、文本行工具、纯文本正文、文档 owner/Hook 契约与局部 CSS。新增可选 documentPreviews 服务及 text fallback 标签类型，使用真实 runtime store、nativeDocumentReads 与 textFace；声明 sidebar.right.tab.document keyed/session 子槽并转发 enclosing useTabInfo。保留原工作区文件预览，新增文档通过 sidebarRight.openResource 打开。
+
+rc.2 primitives 缺少新版 FileTypeIcon/classifyFileType，新增正文和标题沿用本机已有 lucide FileText；原文件图标和样式不替换。copy locale 在 ui-slots.LocaleNamespaceMap 正式声明；too-large 详情从实际 wire 对象检查 limit 后显示，避免依赖新版错误类。模块 CSS 以构建生成的 inline 文本注入，清理随注册生命周期执行。
+
+59 项文档测试及 327 项侧栏测试通过（/tmp/amiba-document-ui-regression.log）。新增正文测试用实际 rc.2 store 及绑定器，验证首屏分发、下一页、重新挂载保留内容、metadata 变更重载、关闭标签清理。类型检查退出 0（/tmp/amiba-document-ui-types-4.log）。首次完整构建发现生产 file 行号参数缺少声明，测试的 test 参数扩展掩盖了该缺项；已将 file.line 加到正式文档契约；第二次完整桌面构建退出 0（/tmp/amiba-document-ui-build-2.log）。
+
+--compat --sidebar-right 退出 0（/tmp/amiba-document-ui-smoke.log）：实际资源打开、6002 行文件跨 5000 行分页定位、metadata 更新及重载、正文高度、第三方 bytes renderer 的 owner/useTabInfo、卸载后纯文本回退、关闭 tab signal 取消均通过。原文件、目录、Markdown、配置、侧栏和 HMR 回归通过。已查看 /var/folders/w1/6rt3z_zs1395fn30txrlysvr0000gn/T/amiba-native-document.png，原聊天/工作区标签与文件入口保留。#56 入口基础统计更新为 44/0/20，不等于完整兼容率。Markdown、HTML、图片、PDF、代码正文实现以及独立 Web 仍须继续接入和验证，不能用纯文本入口替代完整适配目标。
+
 ## 进行中：文档预览状态、读取生命周期与实现注册表（2026-09-13）
 
 迁移固定源 ui-sidebar-documentpreview 的 store、face、rpc 和 document/registry。真实 rc.2 runtime.defineStore 持有按标签分桶的页、完整字节、版本、滚动、换行及导航 revision；face 按 generation 丢弃重载前的结果，后续页出现新版本时重新从第一页读取，tab signal 结束忘记状态；实现注册表保持扩展优先、最长后缀优先和稳定快照。

@@ -1,3 +1,4 @@
+import { registerDocumentPreview } from './document-preview/register.js';
 export type { ISidebarRight, SidebarRightOpenResourceOptions, SidebarRightOpenTabOptions } from './sidebar-right/service.js';
 import { registerSidebarRight } from './sidebar-right/register.js';
 import { createFileResourceProvider } from "./resources/file-provider.js";
@@ -1041,6 +1042,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // root's children table is what declares the seat.
     const sidebarRightFiber = ctx.inject(['locale'], scope => {
       scope.effect(() => registerSidebarRight(scope, sidebarRightTabs, resources), 'amiba-ui-shell: optional sidebar panel');
+      const files = getPlatform().workspaceFiles;
+      if (files) scope.effect(() => registerDocumentPreview(scope, sidebarRightTabs, files), 'amiba-ui-shell: document preview');
     });
     const disposeAskToolview = ctx.slots.inject("tool.call.toolview", () =>
       ctx.slots.register(
