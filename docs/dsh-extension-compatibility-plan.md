@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：全局 main 面板与当前会话保留（2026-09-13）
+
+已将 MainPanelNavigation 状态源接到 layout.selectPanel、provideRoot({hooks:{panelInfo}}) 与 keyed/root main 渲染入口。选择不存在的 key 会同步拒绝，保留原选择和待处理导航信号；有效选择取消先前异步导航；所选贡献卸载时返回原聊天区域。原生会话/工作区导航清除全局面板，避免强制改写原生目的地。selectPanel(null) 明确通过已有工作区导航请求 chats。
+
+FullScreenChatView 新增可选主面板内容，复用原 PrimaryWorkspaceView 隐藏聊天但保留挂载的机制。无全局面板时布局与样式不变；面板打开时关闭聊天可见事实及文件工作台可见事实，源消息继续保留。根/面板组件使用真实 panelInfo 来源；main owner 不伪造 sessionId。
+
+导航状态与取消相关 8 项测试通过（/tmp/amiba-main-panel-navigation-tests.log）；现有 FullScreenChatView 25 项回归通过（/tmp/amiba-main-panel-ui-tests.log）。shell 类型检查通过（/tmp/amiba-main-panel-types.log）；完整构建退出 0（/tmp/amiba-main-panel-build.log）。实际 --compat --main-panels 退出 0（/tmp/amiba-main-panel-smoke.log）：keyed 分发、panelInfo、非法选择拒绝、卸载返回以及会话/输入框对象/草稿保留均通过；既有设置、会话、目录、文件、Markdown 和 HMR 回归通过。
+
+尚未完成 sidebar.panellist 图标列表、main conversation 保留 key 的完整契约及全局面板的布局/错误恢复专项验证，不能据此提升兼容统计，保持 38/6/20。
+
 ## 最新进展：根级公共状态贡献与渲染订阅（2026-09-13）
 
 在当前 rc.2 的真实 SlotRegistry（client-runtime）补齐 slots.provideRoot；通过已纳入 pnpm 和 managed runtime prepare 的可复现补丁接入，保留原 sessions.open 等旧补丁。普通 hooks、按 key 解析的 keyedHooks 和静态 props 统一检查输出名称；失败注册不发布快照、不通知订阅者；成功注册及调用方 fiber 卸载均原子更新，单个订阅者抛错不阻断其他订阅者。rc.2 原生 useSessions/useWorkspaces 保留为受保护名称：这不意味着新版会重新注册同名来源的整套域插件可以直接替换旧域插件。

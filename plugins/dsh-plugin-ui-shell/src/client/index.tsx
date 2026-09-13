@@ -1,3 +1,4 @@
+import { MainPanelNavigation } from "./main-panel-navigation.js";
 import { LayoutNavigation } from "./layout-navigation.js";
 import { sessionComposerDraft, makeWorkspaceFilesProvider } from "@amiba/ui";
 import { sessionPendingQueue } from "@amiba/ui/composer-runtime";
@@ -268,6 +269,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     messageSources: ContributionsSource<MessageSourceRow>;
     markdownSource: ContributionsSource<MarkdownExtension>;
     surfaces: SurfaceSelections;
+    mainPanels: MainPanelNavigation;
     workbenchSource: ContributionsSource<WorkbenchViewExtension>;
     directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
     conversationViews: ContributionsSource<ConversationViewEntry>;
@@ -317,6 +319,7 @@ function AmibaRoot({
   conversationSource,
   fileMentions,
   surfaces,
+  mainPanels,
   reportMarkdown,
   prepareConversation,
   renderSlotChain,
@@ -334,6 +337,7 @@ function AmibaRoot({
 
   return (
     <ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench}><MarkdownProvider extensions={markdown} report={reportMarkdown}><AmibaProductShell
+      mainPanels={mainPanels}
       dshClient={dshClient}
       openSettingsSection={openSettingsSection}
       renderSlot={renderSlot}
@@ -366,6 +370,7 @@ function AmibaRoot({
 export interface AmibaLayoutService {
   /** Supersede pending asynchronous navigation; aborted on the next navigation or root disposal. */
   beginNavigation(): AbortSignal;
+  selectPanel(panelId: string | null): void;
   toggleSidebar(): void;
   openDetails(): void;
   closeDetails(): void;
@@ -455,12 +460,14 @@ export async function apply(ctx: ClientContext): Promise<void> {
   const disposeMessageCatalog = installAmibaMessageCatalog();
   document.title = "Amiba";
   const navigation = new LayoutNavigation();
+  let mainPanels: MainPanelNavigation | undefined;
   ctx.effect(() => () => navigation.dispose());
   // Use the same event boundary as native navigation, including actions from
   // the desktop host rather than calls through this particular service object.
   ctx.effect(() => {
     const invalidate = (event: Event) => {
       const action = (event as CustomEvent<{ action?: unknown }>).detail?.action;
+      if (action === "open-chat" || action === "open-new-chat" || action === "open-workspace") mainPanels?.leavePanel();
       if (action === "open-chat" || action === "open-new-chat" || action === "open-workspace" || action === "open-settings") navigation.commit();
     };
     window.addEventListener("amiba:dsh-layout-action", invalidate);
@@ -468,6 +475,10 @@ export async function apply(ctx: ClientContext): Promise<void> {
   });
   const layout: AmibaLayoutService = {
     beginNavigation: () => navigation.beginNavigation(),
+    selectPanel: (id) => {
+      if (!mainPanels) throw new Error("layout.selectPanel: main panels are not ready");
+      mainPanels.selectPanel(id);
+    },
     toggleSidebar: () => dispatchLayoutAction("toggle-sidebar"),
     openDetails: () => dispatchLayoutAction("open-details"),
     closeDetails: () => dispatchLayoutAction("close-details"),
@@ -674,6 +685,14 @@ export async function apply(ctx: ClientContext): Promise<void> {
       workspace: createDirectoryFlow(ctx.slots, "sidebar.workspaces.directoryFlow", adoptDirectory),
     };
     const surfaces = createSurfaceSelections(ctx.slots, getPlatform().storage);
+    mainPanels = new MainPanelNavigation(navigation, {
+      hasPanel: id => ctx.slots.entriesOfSlot("main").some(entry => entry.options.key === id),
+      subscribe: listener => ctx.slots.subscribe("main", listener),
+    }, () => {
+      dispatchLayoutAction("open-workspace", { viewId: "chats" });
+    });
+    const panelNavigation = mainPanels;
+    const disposePanelInfo = ctx.slots.provideRoot({ hooks: { panelInfo: panelNavigation } });
     const disposeRoot = ctx.slots.register(
       {
         name: "root",
@@ -684,6 +703,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
         // nav's openSettings affordance rides this face too.
         inject: () => ({
           dshClient,
+          mainPanels: panelNavigation,
           markdownSource,
           workbenchSource,
           directoryFlows,
@@ -782,6 +802,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           },
           "amiba.session.observer": { kind: "list", scope: "root" },
           "amiba.workspace.view": { kind: "list", scope: "root" },
+          "main": { kind: "keyed", scope: "root" },
           // Official vocabulary: the right-aligned session-header utilities
           // strip, from @deepseek-ai/dsh-client-ui-conversation (replaces
           // the retired amiba.chat.header.after). SESSION scope from a
@@ -1027,6 +1048,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
       for (const dispose of disposeWorkbench) dispose();
       directoryFlows.home.dispose();
       directoryFlows.workspace.dispose();
+      panelNavigation.dispose();
+      disposePanelInfo();
+      if (mainPanels === panelNavigation) mainPanels = undefined;
       disposeRoot();
       sessionsBridge.dispose();
       void disposeLayout();

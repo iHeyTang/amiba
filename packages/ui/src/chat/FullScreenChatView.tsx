@@ -166,6 +166,8 @@ export interface FullScreenChatViewProps {
   capabilities?: ChatSurfaceCapabilities;
   /** Slots forwarded to ChatSurface. */
   slots?: {
+    mainPanel?: { id: string; content: ReactNode };
+    onNativeNavigation?: () => void;
     /**
      * Rendered in the main pane when no session is active. Desktop hands
      * in ``<HomeView panelMode />`` so the home composer doubles as the
@@ -395,6 +397,8 @@ function FullScreenChatViewInner({
   const [messagesWidth, setMessagesWidth] = useState<MessagesMaxWidth>(
     DEFAULT_MESSAGES_WIDTH,
   );
+  const nativeNavigationRef = useRef(slots?.onNativeNavigation);
+  nativeNavigationRef.current = slots?.onNativeNavigation;
   const [sidebarView, setSidebarView] =
     useState<ActivityViewId>(DEFAULT_SIDEBAR_VIEW);
   const [sidebarWidth, setSidebarWidth] = useState(APP_SIDEBAR_DEFAULT_WIDTH);
@@ -461,14 +465,14 @@ function FullScreenChatViewInner({
 
   useEffect(() => {
     const acknowledge = () => {
-      if (sidebarView === "chats" && sessions.activeId && !document.hidden && document.hasFocus())
+      if ((sidebarView === "chats" && !slots?.mainPanel) && sessions.activeId && !document.hidden && document.hasFocus())
         void sessions.markRead(sessions.activeId);
     };
     window.addEventListener("focus", acknowledge);
     document.addEventListener("visibilitychange", acknowledge);
     acknowledge();
     return () => { window.removeEventListener("focus", acknowledge); document.removeEventListener("visibilitychange", acknowledge); };
-  }, [sessions.activeId, sessions.markRead, sidebarView]);
+  }, [sessions.activeId, sessions.markRead, sidebarView, slots?.mainPanel?.id]);
 
   useEffect(() => { void getPlatform().desktopPet?.setLanguage(language); }, [language]);
 
@@ -508,7 +512,7 @@ function FullScreenChatViewInner({
       }
     });
     const unsubscribeEvents = client.onStreamEvent((sessionId, event) => {
-      const visibleSessionId = sidebarView === "chats" ? sessions.activeId : "";
+      const visibleSessionId = (sidebarView === "chats" && !slots?.mainPanel) ? sessions.activeId : "";
       const completedInBackground =
         (sessionId !== visibleSessionId || document.hidden || !document.hasFocus()) &&
         (event.kind === "done" || event.kind === "error");
@@ -541,6 +545,7 @@ function FullScreenChatViewInner({
     sessions.markUnread,
     sessions.markRead,
     sidebarView,
+    slots?.mainPanel?.id,
   ]);
 
 
@@ -672,6 +677,7 @@ function FullScreenChatViewInner({
       (changes: StorageChangeMap) => {
         const ch = changes[SIDEBAR_VIEW_KEY];
         if (ch && isSidebarView(ch.newValue)) {
+          nativeNavigationRef.current?.();
           setSidebarView(ch.newValue === "tasks" ? "chats" : ch.newValue);
         }
       },
@@ -756,6 +762,7 @@ function FullScreenChatViewInner({
 
   const onSidebarViewChange = useCallback((next: ActivityViewId) => {
     if (next === "tasks") next = "chats";
+    nativeNavigationRef.current?.();
     setSidebarView(next);
     void getPlatform().storage.set({ [SIDEBAR_VIEW_KEY]: next });
   }, []);
@@ -797,8 +804,7 @@ function FullScreenChatViewInner({
     [sessions, onSidebarViewChange],
   );
 
-  const primaryWorkspaceActive = sidebarView === "chats";
-  const pluginWorkspaceActive = !primaryWorkspaceActive;
+  const pluginWorkspaceActive = sidebarView !== "chats" && !slots?.mainPanel;
   const showSidebarExpandControl = sidebarCollapsed && sidebarMotion === "idle";
   const showSidebarCollapseControl =
     !sidebarCollapsed && sidebarMotion === "idle";
@@ -810,7 +816,7 @@ function FullScreenChatViewInner({
   // the whole workbench — pane, terminal drawer and edge controls alike —
   // stays off there.
   const workbenchVisible =
-    sidebarView === "chats" && Boolean(sessions.activeId);
+    (sidebarView === "chats" && !slots?.mainPanel) && Boolean(sessions.activeId);
 
   // Measure the edge-control row so the workbench tab strip can reserve its
   // width. The row floats over the pane at `z-50`; without this the tabs
@@ -968,7 +974,7 @@ function FullScreenChatViewInner({
         >
           <div className="amiba-chat-column relative flex min-h-0 min-w-0 flex-1 flex-col">
             <PrimaryWorkspaceView
-              active={sidebarView === "chats"}
+              active={(sidebarView === "chats" && !slots?.mainPanel)}
               testId="chats-view"
             >
               <ContentHeader
@@ -1005,6 +1011,11 @@ function FullScreenChatViewInner({
                 />
               </ConversationViewRegion>
             </PrimaryWorkspaceView>
+            {slots?.mainPanel && (
+              <PrimaryWorkspaceView active testId="official-main-panel">
+                {slots.mainPanel.content}
+              </PrimaryWorkspaceView>
+            )}
             <PrimaryWorkspaceView
               active={pluginWorkspaceActive}
               testId="plugin-workspace-view"

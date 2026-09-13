@@ -702,7 +702,11 @@ export interface AmibaConversationQuestionOwner {
 }
 
 declare module "@deepseek-ai/dsh-client-ui-slots" {
+  interface GlobalStandardProps {
+    usePanelInfo: import("@deepseek-ai/dsh-client-ui-slots").SnapshotSelectorHook<{ readonly activePanelId: string | null }>;
+  }
   interface SlotMap {
+    "main": { kind: "keyed"; scope: "root" };
     "amiba.message.decoration": { kind: "list"; scope: "root"; owner: MessageDecorationOwner };
     "amiba.composer.accessory": { kind: "list"; scope: "root"; owner: ComposerAccessoryOwner };
     "amiba.emptyState.visual": { kind: "list"; scope: "root"; owner: EmptyStateVisualOwner };

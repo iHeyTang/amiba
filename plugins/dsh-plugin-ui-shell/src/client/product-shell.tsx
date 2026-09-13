@@ -1,3 +1,4 @@
+import type { MainPanelNavigation } from "./main-panel-navigation.js";
 import { LegacyToolDetails } from "./legacy-tool-details.js";
 import { sessionLineage, equalSessionLineage } from "./session-lineage.js";
 import { useSessionImageLoader } from "./session-image-loader.js";
@@ -145,6 +146,7 @@ const EMPTY_MESSAGE_SOURCES: readonly MessageSourceRow[] = [];
  * tool name as `entryKey`.
  */
 export type AmibaShellSlot =
+  | "main"
   | Exclude<AmibaRootSlot, "amiba.agentPreset.section">
   | "settings.section"
   | "conversation.hero.workspace.directoryFlow"
@@ -358,6 +360,7 @@ function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string)
 }
 
 interface ProductShellProps {
+  mainPanels: MainPanelNavigation;
   renderSlotChain: PropsRenderSlots<AmibaShellSlot>["renderSlotChain"];
   cordisPackages: CordisPackages;
   legacyToolDetailsAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
@@ -418,6 +421,7 @@ export function AmibaProductShell(props: ProductShellProps): ReactElement {
 }
 
 function ProductShellInner({
+  mainPanels,
   renderSlotChain,
   cordisPackages,
   commandRowKeys,
@@ -445,6 +449,8 @@ function ProductShellInner({
   useOfficialWorkspaces,
 }: ProductShellProps): ReactElement {
   const { t } = useT();
+  const { activePanelId } = useSyncExternalStore(mainPanels.subscribe, mainPanels.getSnapshot, mainPanels.getSnapshot);
+  const leaveMainPanel = useCallback(() => mainPanels.leavePanel(), [mainPanels]);
   const hasLineage = useSyncExternalStore(lineageAvailable.subscribe, lineageAvailable.getSnapshot, lineageAvailable.getSnapshot);
   const hasLegacyDetails = useSyncExternalStore(legacyToolDetailsAvailable.subscribe, legacyToolDetailsAvailable.getSnapshot, legacyToolDetailsAvailable.getSnapshot);
   const [legacySelections, setLegacySelections] = useState<Record<string, string>>({});
@@ -899,6 +905,11 @@ function ProductShellInner({
                 assistantActions: (messageId) => renderSlot("conversation.chat.assistant-actions", { messageId: messageId as import("@amiba/extension-sdk").AssistantActionOwnerProps["messageId"] }),
                 toolView: renderToolViewSeat,
                 questionSeat: renderQuestionSeat,
+                mainPanel: activePanelId === null ? undefined : {
+                  id: activePanelId,
+                  content: renderSlot("main", {}, { entryKey: activePanelId }),
+                },
+                onNativeNavigation: leaveMainPanel,
                 navigationBefore: renderSlot("amiba.navigation.before", {}),
                 workspaceNavigation: (activeView) =>
                   renderSlot("amiba.workspace.navigation", {

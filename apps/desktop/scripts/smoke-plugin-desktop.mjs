@@ -1,3 +1,4 @@
+import { smokeMainPanels } from "./main-panels-smoke.mjs";
 import { smokeRootProviders } from "./root-providers-smoke.mjs";
 import { smokeLayoutNavigation } from "./layout-navigation-smoke.mjs";
 import { legacyToolLiveFixture } from "./legacy-tool-live-fixture.mjs";
@@ -50,6 +51,7 @@ if (process.argv.includes("--trajectory-images") && !["--message-images", "--too
 if (process.argv.includes("--model-settings-slots") && !process.argv.includes("--compat")) throw new Error("--model-settings-slots requires --compat");
 if (process.argv.includes("--legacy-tool-details") && !process.argv.includes("--compat")) throw new Error("--legacy-tool-details requires --compat");
 if (process.argv.includes("--legacy-tool-live") && !process.argv.includes("--legacy-tool-details")) throw new Error("--legacy-tool-live requires --legacy-tool-details");
+if (process.argv.includes("--main-panels") && !process.argv.includes("--compat")) throw new Error("--main-panels requires --compat");
 if (process.argv.includes("--root-providers") && !process.argv.includes("--compat")) throw new Error("--root-providers requires --compat");
 if (process.argv.includes("--layout-navigation") && !process.argv.includes("--compat")) throw new Error("--layout-navigation requires --compat");
 const root = fileURLToPath(new URL("../../..", import.meta.url));
@@ -409,6 +411,7 @@ try {
     await wait(() => evaluate("Boolean(document.querySelector('[role=dialog]'))"));
     await evaluate("Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).find(n=>n.textContent==='Close'||n.textContent==='关闭').click()");
     await wait(() => evaluate("!document.querySelector('[role=dialog]')"));
+    if (process.argv.includes("--main-panels")) await smokeMainPanels({ evaluate, wait });
     if (process.argv.includes("--message-images")) {
       await evaluate("window.__imageOff=window.__probeCtx.slots.register({name:'conversation.message.images',id:'compat-images',priority:-100},owner=>{window.__imageOwner=owner;return window.__probeCreateElement('div',{'data-compat-images':''},window.__probeCreateElement('button',{onClick:async e=>{const target=e.currentTarget.parentElement.querySelector('img');const first=owner.loadImage(owner.images[0].attachment);const second=owner.loadImage(owner.images[0].attachment);window.__imageShared=first===second;target.src=await first;}},'Load real image'),window.__probeCreateElement('img',{'data-compat-image':'',alt:'Compatibility image'}))});void 0");
       await writeFile(path.join(profile,'message-image-create'),'create');
