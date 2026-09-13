@@ -526,7 +526,7 @@ function TopBar({
     : wallpaperController?.mode === "light"
       ? "text-neutral-900/75 hover:text-neutral-900"
       : "text-white/80 hover:text-white";
-  // AmibaLogo is a raster PNG, not a currentColor SVG, so it can't
+  // AmibaLogo uses a themed image asset, not a currentColor SVG, so it can't
   // inherit `wordmarkClass`. Pick the contrasting variant explicitly
   // from the wallpaper mode (when ambient) or fall back to the document
   // theme (when not). Mode "light" = light photograph behind it →
@@ -546,7 +546,7 @@ function TopBar({
     >
       <div
         className={cn(
-          // No `transition-colors` here: the logo PNG swaps its asset
+          // No `transition-colors` here: the logo swaps its asset
           // instantly when wallpaper mode lands, so a fading wordmark
           // beside an already-snapped logo reads as out-of-sync.
           "flex items-center gap-2.5",
