@@ -141,12 +141,13 @@ function titlesFor(panel: PanelProps): TabRenderer {
 
 /** The tab occurrence binds the service; tab and content share the framework store. */
 export function NativeSidebarSeat(props: NativeSidebarSeatProps): ReactNode {
-  const { sessionId, useStore, actions, t, renderSlot, bindService, openTab, useTabTypes, useTabNavigation, occurrence, reportRoom, placement, activePanel, openPanel, closePanel } = props
+  const { sessionId, useStore, usePanelInfo, actions, t, renderSlot, bindService, openTab, useTabTypes, useTabNavigation, occurrence, reportRoom, placement, activePanel, openPanel, closePanel } = props
+  const conversationVisible = usePanelInfo(info => info.activePanelId === null)
   const surfaces = useStore(state => state.bySession)
   const surface = surfaces[sessionId]
   const active = activePanel === SIDEBAR_PANEL
   const expanded = surface?.layout.expanded ?? false
-  const previous = useRef({ expanded, active })
+  const previous = useRef({ expanded, active, visible: false })
   const fullscreen = surface?.layout.mode === 'fullscreen'
   const anchor = useRef<HTMLDivElement>(null)
   const portalHost = useRef<HTMLDivElement | null>(null)
@@ -158,25 +159,26 @@ export function NativeSidebarSeat(props: NativeSidebarSeatProps): ReactNode {
     if (placement !== 'content') return
     const target = fullscreen && active ? document.body : anchor.current
     if (target && portalHost.current) target.append(portalHost.current)
-  }, [placement, fullscreen, active])
+  }, [conversationVisible, placement, fullscreen, active])
   useLayoutEffect(() => () => { portalHost.current?.remove() }, [])
 
   useEffect(() => {
-    if (placement === 'tab' && surface === undefined) actions.open(sessionId)
-  }, [placement, surface, actions, sessionId])
-  useEffect(() => {
-    if (placement !== 'tab') return
+    if (conversationVisible && placement === 'tab' && surface === undefined) actions.open(sessionId)
+  }, [conversationVisible, placement, surface, actions, sessionId])
+  useLayoutEffect(() => {
+    if (!conversationVisible || placement !== 'tab') return
     return bindService({ sessionId, actions, surfaces, canSplitPane: () => true })
-  }, [placement, bindService, sessionId, actions, surfaces])
+  }, [conversationVisible, placement, bindService, sessionId, actions, surfaces])
   useLayoutEffect(() => {
     if (placement !== 'tab') return
     const before = previous.current
-    previous.current = { expanded, active }
-    if (expanded !== before.expanded) {
+    previous.current = { expanded, active, visible: conversationVisible }
+    if (!conversationVisible) return
+    if (!before.visible || expanded !== before.expanded) {
       if (expanded) openPanel(SIDEBAR_PANEL)
       else closePanel?.(SIDEBAR_PANEL)
-    } else if (active !== before.active) actions.setExpanded(sessionId, active)
-  }, [placement, expanded, active, openPanel, closePanel, actions, sessionId])
+    } else if (active !== before.active && active !== expanded) actions.setExpanded(sessionId, active)
+  }, [conversationVisible, placement, expanded, active, openPanel, closePanel, actions, sessionId])
   const closeRef = useRef(closePanel)
   closeRef.current = closePanel
   const lifetime = useRef(0)
@@ -184,6 +186,7 @@ export function NativeSidebarSeat(props: NativeSidebarSeatProps): ReactNode {
     const token = ++lifetime.current
     return () => { queueMicrotask(() => { if (placement === 'tab' && lifetime.current === token) closeRef.current?.(SIDEBAR_PANEL) }) }
   }, [placement, sessionId])
+  if (!conversationVisible) return null
   const tabButton = <button type="button" role="tab" aria-selected={active}
     className="shrink-0 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted/45 hover:text-foreground aria-selected:bg-muted aria-selected:text-foreground"
     onClick={() => { actions.setExpanded(sessionId, true); openPanel(SIDEBAR_PANEL) }}>{t('chrome.expand')}</button>

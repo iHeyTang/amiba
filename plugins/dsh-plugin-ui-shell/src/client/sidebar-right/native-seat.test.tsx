@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import { createResourceSnapshotStore } from '../resources/snapshot-store.js'
 import { Context } from '@deepseek-ai/cordis'
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -27,7 +28,9 @@ it('opens from an unmounted body, retains floats when collapsed, and restores na
   const useTabNavigation = keyedObservableHook(key => controller.tabDomain.occurrence(sessionId, { id: key as TabId }).navigation)
   let mounts = 0
   function Probe() { useEffect(() => { mounts++ }, []); return <output>Retained body</output> }
+  const panelInfo = createResourceSnapshotStore({ activePanelId: null as string | null })
   const common = {
+    usePanelInfo: bindSnapshotSelector(panelInfo),
     sessionId, useStore, actions: instance.actions, useTabTypes, useTabNavigation,
     t: (key: string) => key,
     renderSlot: (_name: string, _owner: unknown, options?: { fallback?: unknown }) => _name === 'sidebar.right.pane.tab' ? <Probe /> : options?.fallback ?? null,
@@ -37,13 +40,16 @@ it('opens from an unmounted body, retains floats when collapsed, and restores na
     reportRoom: vi.fn(),
   }
   let remove: () => void = () => {}
+  let restoreConversation: () => void = () => {}
   function Host() {
     const [activePanel, setActivePanel] = useState<string | null>(null)
     const [enabled, setEnabled] = useState(true)
+    const visible = useSyncExternalStore(panelInfo.subscribe, panelInfo.getSnapshot).activePanelId === null
     remove = () => setEnabled(false)
+    restoreConversation = () => { setActivePanel(null); panelInfo.set({ activePanelId: null }) }
     const props = { ...common, activePanel, openPanel: setActivePanel, closePanel: (id: string) => setActivePanel(current => current === id ? null : current) } as unknown as NativeSidebarSeatProps
-    return <>{enabled && <NativeSidebarSeat {...props} placement="tab" />}
-      {activePanel === SIDEBAR_PANEL ? enabled && <NativeSidebarSeat {...props} placement="content" /> : <article>Original preview</article>}</>
+    return <>{visible && enabled && <NativeSidebarSeat {...props} placement="tab" />}
+      {!visible ? <article>Global page</article> : activePanel === SIDEBAR_PANEL ? enabled && <NativeSidebarSeat {...props} placement="content" /> : <article>Original preview</article>}</>
   }
   render(<Host />)
   expect(screen.getByText('Original preview')).toBeTruthy()
@@ -59,6 +65,19 @@ it('opens from an unmounted body, retains floats when collapsed, and restores na
   const occurrence = controller.tabDomain.occurrence(sessionId, tab)
   act(() => controller.float(tab.id))
   expect(document.querySelector('[data-sidebar-right-float-host]')).toBeTruthy()
+  const saved = instance.getSnapshot()
+  await act(async () => { panelInfo.set({ activePanelId: 'global-tools' }); await Promise.resolve() })
+  expect(document.querySelector('[data-sidebar-right-float-host]')).toBeNull()
+  expect(document.querySelector('[data-sidebar-right-native]')).toBeNull()
+  expect(controller.isExpanded()).toBe(false)
+  expect(() => controller.openTab('guide')).toThrow('no session surface is mounted')
+  expect(instance.getSnapshot()).toBe(saved)
+  expect(occurrence.signal.aborted).toBe(false)
+  act(restoreConversation)
+  expect(document.querySelector('[data-sidebar-right-native]')).toBeTruthy()
+  expect(controller.isExpanded()).toBe(true)
+  expect(document.querySelector('[data-sidebar-right-float-host]')).toBeTruthy()
+  expect(instance.getSnapshot()).toBe(saved)
   act(() => controller.toggleExpanded())
   expect(screen.getByText('Original preview')).toBeTruthy()
   expect(document.querySelector('[data-sidebar-right-float-host]')).toBeTruthy()

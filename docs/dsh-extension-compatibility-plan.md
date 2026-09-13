@@ -5,6 +5,18 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：官方 main 页面隔离及工作区重挂载恢复（2026-09-13）
+
+NativeSidebarSeat 读取公共 usePanelInfo，官方 main 页面选中时不绘制右侧栏正文、标签或浮动层，并在 layout effect 中释放当前会话控制器绑定。公共写操作因此遵循已有 no-session-surface 拒绝语义；adopted store 与 occurrence 不释放。返回时重新绑定并从已保存布局恢复面板，保留标签 id、signal、布局和手动全屏模式。未改动原工作区、文件预览或样式。
+
+真实桌面先暴露了组件测试遗漏的生命周期：WorkspacePane 在 visible=false 时直接返回 null，标签和正文都会卸载；释放时原 closePanel 恢复文件预览，而 store 仍 expanded=true。只跟踪同一实例的可见性变化无法恢复新实例。/tmp/amiba-sidebar-global-smoke-5.log 的挂载轨迹及布局快照确认了这一点。现在首次挂载也从 store 恢复，不将恢复过程当成用户关闭；active 已与 expanded 一致时不执行多余状态写入。Portal 容器的位置同步也依赖会话视图可见性，确保保留实例的嵌入方式可正常恢复。
+
+组件测试改为真实卸载/重挂载，使用已安装运行时 store 与 renderer 绑定：全局页面期间不能执行公开写操作，浮动和正文消失，返回后恢复正文及浮动，store 快照身份保持不变。测试退出 0（/tmp/amiba-sidebar-global-tests-4.log），类型检查退出 0（/tmp/amiba-sidebar-global-types-2.log）。
+
+完整桌面构建退出 0（/tmp/amiba-sidebar-global-build-3.log）。--compat --sidebar-right 退出 0（/tmp/amiba-sidebar-global-smoke-6.log）：实际记录并断言标签席位卸载、重挂载；验证全局页面期间拒绝 openTab、原标签 id/signal 保留、浮动返回并停靠、全屏隐藏及恢复、原文件/会话/目录/Markdown/HMR 回归。测试曾将公开 dock 误写成内部动作名 unfloat，已修正测试；诊断观察器的 effect 返回值也已改为 void，未因此改变产品接口。
+
+此轮验证范围是官方 main 页面；实际会话切换、原生工作区和 pane 隐藏路径、收起时正文局部状态保留、窄屏自动全屏、文档正文与 Web 仍继续核对。43/1/20 统计不变，完整目标仍未完成。
+
 ## 进行中：右侧栏实际面板、四个扩展入口与公开服务（2026-09-13）
 
 将 Dockkit 接到现有 amiba.workbench.panel 会话插槽：复用框架 store handle、adoption、普通/keyed 注入和 hookContext，声明 pane.tab、pane.tab.title、tab.menu.item，注册 guide 类型及其 tab.guide chain 子槽。公开 ctx.sidebarRight 控制器。未替换 Amiba 的 WorkspacePane、文件预览或聊天组件；附加标签使用已有扩展标签类，关闭通过原 closePanel 恢复先前视图。
