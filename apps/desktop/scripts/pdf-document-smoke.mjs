@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { pdfImageFixture } from './pdf-image-fixture.mjs';
-import { pdfFixture } from './pdf-document-fixture.mjs';
+import { pdfFixture, pdfLongFixture } from './pdf-document-fixture.mjs';
 export async function smokePdfDocument({ evaluate, wait, fileWorkspace, screenshot }) {
   const file = path.join(fileWorkspace, '.cache/compat-document.pdf');
   try {
@@ -54,6 +54,39 @@ export async function smokePdfDocument({ evaluate, wait, fileWorkspace, screensh
       await wait(() => evaluate("!document.querySelector('[data-pdf-preview]') && window.__pdfWorkers.every(worker=>worker.__terminated)"));
       console.log(`PDF ${kind} image passed actual decode, composited pixel output and Worker termination.`);
     }
+    await writeFile(file, pdfLongFixture());
+    await evaluate("window.__sidebarService.openResource('dsh-resource://file/session/'+encodeURIComponent(window.__compatSessionId)+'/.cache/compat-document.pdf')");
+    await wait(() => evaluate("document.querySelectorAll('[data-pdf-page]').length===24 && !!document.querySelector('[data-pdf-page=\"1\"] canvas:not([hidden])')"));
+    assert.ok(await evaluate("document.querySelectorAll('[data-pdf-page] canvas:not([hidden])').length<24"), 'Off-screen PDF pages must remain lazy');
+    await evaluate("(()=>{const body=document.querySelector('[data-textpreview-body]'),page=document.querySelector('[data-pdf-page=\"12\"]');body.scrollTop+=page.getBoundingClientRect().top-body.getBoundingClientRect().top;body.dispatchEvent(new Event('scroll'))})()");
+    await wait(() => evaluate("!!document.querySelector('[data-pdf-page=\"12\"] canvas:not([hidden])')"));
+    const visiblePage = () => evaluate("(()=>{const body=document.querySelector('[data-textpreview-body]');if(!body)return 0;const top=body.getBoundingClientRect().top;return Number([...document.querySelectorAll('[data-pdf-page]')].find(page=>page.getBoundingClientRect().bottom>top+30)?.dataset.pdfPage??0)})()");
+    await wait(async () => (await visiblePage())===12);
+    await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+    await evaluate("window.__sidebarService.openResource(window.__documentAddress)");
+    await wait(() => evaluate("!document.querySelector('[data-pdf-preview]') && window.__pdfWorkers.every(worker=>worker.__terminated)"));
+    await evaluate("window.__sidebarService.openResource('dsh-resource://file/session/'+encodeURIComponent(window.__compatSessionId)+'/.cache/compat-document.pdf')");
+    await wait(() => evaluate("document.querySelectorAll('[data-pdf-page]').length===24 && document.querySelectorAll('[data-pdf-page] canvas:not([hidden])').length>0"));
+    console.log('PDF_RESTORED_PAGE', await visiblePage());
+    assert.equal(await visiblePage(),12,'Returning to a PDF tab must restore the viewed page');
+    await evaluate("(()=>{const body=document.querySelector('[data-textpreview-body]'),page=document.querySelector('[data-pdf-page=\"4\"]');body.scrollTop+=page.getBoundingClientRect().top-body.getBoundingClientRect().top;body.dispatchEvent(new Event('scroll'))})()");
+    await wait(async () => (await visiblePage())===4);
+    await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+    await evaluate("window.__sidebarService.openResource(window.__documentAddress)");
+    await wait(() => evaluate("!document.querySelector('[data-pdf-preview]') && window.__pdfWorkers.every(worker=>worker.__terminated)"));
+    await evaluate("window.__sidebarService.openResource('dsh-resource://file/session/'+encodeURIComponent(window.__compatSessionId)+'/.cache/compat-document.pdf')");
+    await wait(() => evaluate("!!document.querySelector('[data-pdf-page=\"4\"] canvas:not([hidden])')"));
+    assert.equal(await visiblePage(),4,'Scrolling backwards must update the saved PDF page');
+    await writeFile(file,pdfLongFixture(2));
+    await wait(() => evaluate("!!document.querySelector('[data-textpreview-changed]')"));
+    await evaluate("document.querySelector('[data-textpreview-reload-now]').click()");
+    await wait(() => evaluate("document.querySelectorAll('[data-pdf-page]').length===2 && !!document.querySelector('[data-pdf-page=\"2\"] canvas:not([hidden])')"));
+    assert.ok(await evaluate("(()=>{const body=document.querySelector('[data-textpreview-body]'),last=document.querySelector('[data-pdf-page=\"2\"]');return body.scrollTop+body.clientHeight>=body.scrollHeight-2 && last.getBoundingClientRect().bottom<=body.getBoundingClientRect().bottom+2})()"),'Shorter replacement PDF must land at its last page within the available scroll range');
+    await screenshot?.();
+    console.log('PDF long-document lazy rendering, forward/backward tab position restoration and shorter-file clamping passed.');
+
+    await evaluate("window.__sidebarService.close(window.__sidebarService.active().id)");
+    await wait(() => evaluate("!document.querySelector('[data-pdf-preview]') && window.__pdfWorkers.every(worker=>worker.__terminated)"));
     console.log('PDF CMap passed actual UniJIS-UCS2-H.bcmap resource delivery and completed page rendering.');
     console.log('PDF standard font passed actual FoxitSymbol.pfb byte transfer and glyph rasterization in the module Worker path.');
     console.log('PDF document passed real module Worker, two-page red/blue raster output, damaged reload/error/retry cleanup, recovery and worker termination on tab close.');

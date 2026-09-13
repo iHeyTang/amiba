@@ -32,3 +32,20 @@ export function pdfFixture(withFont = false, withCMap = false) {
   text += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
   return new TextEncoder().encode(text)
 }
+
+/** A long PDF with full-page alternating colors for lazy rendering and navigation tests. */
+export function pdfLongFixture(count = 24) {
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    `<< /Type /Pages /Kids [${Array.from({length:count},(_,i)=>`${3+i*2} 0 R`).join(' ')}] /Count ${count} >>`,
+  ];
+  for (let i=0;i<count;i++) {
+    const stream = `${i%2?'0.1 0.1 0.9':'0.9 0.1 0.1'} rg 0 0 600 800 re f`;
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Resources << >> /Contents ${4+i*2} 0 R >>`, `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+  }
+  let text='%PDF-1.4\n';const offsets=[0];
+  objects.forEach((object,index)=>{offsets.push(text.length);text+=`${index+1} 0 obj\n${object}\nendobj\n`});
+  const xref=text.length;
+  text+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n${offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')}trailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return new TextEncoder().encode(text);
+}

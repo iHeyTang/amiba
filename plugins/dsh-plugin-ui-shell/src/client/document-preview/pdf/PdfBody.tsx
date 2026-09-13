@@ -1,6 +1,6 @@
 // Adapted from DeepSeek c291e796, MIT. See LICENSE.deepseek.
 /** PDF page presentation; binary content and tab information come from the document owner. */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TabId } from '../../sidebar-right/dockkit/index.js'
@@ -8,6 +8,7 @@ import type { DocumentPreviewProps } from '../document/contract.js'
 import { LoadingIndicator } from '../LoadingIndicator.js'
 import { DEFAULT_PDF_VIEW, type PdfStore } from './store.js'
 import { renderPdfPage, type PdfDocument } from './document.js'
+import { observePdfPosition } from './position.js'
 import { openPdf } from './runtime.js'
 import { PdfWorkerFailure } from './errors.js'
 import type {} from './locales.js'
@@ -39,6 +40,7 @@ export function PdfBody(props: PdfBodyProps): ReactNode {
   const { tab } = props.useTabInfo()
   const view = props.useStore(state => state.byTab[tab.id] ?? DEFAULT_PDF_VIEW)
   const data = props.content.kind === 'bytes' ? props.content.data : undefined
+  const root = useRef<HTMLElement>(null)
   const [load, setLoad] = useState<LoadState>()
   const [attempt, setAttempt] = useState(0)
   const { retainTab, actions, t } = props
@@ -64,6 +66,12 @@ export function PdfBody(props: PdfBodyProps): ReactNode {
       void session.dispose()
     }
   }, [data, tab.signal, attempt])
+  useLayoutEffect(() => {
+    if (load?.kind !== 'loaded' || root.current === null) return
+    return observePdfPosition(root.current, view.page, pageVisible)
+    // Read the current stored page only when a document/body becomes visible.
+    // Recording a new page must never scroll the reader back to its beginning.
+  }, [load, pageVisible, tab.visible])
   if (data === undefined) return <p className={css.status} role="alert">{t('unsupported')}</p>
   if (load?.data !== data) return <LoadingIndicator className={css.status} label={t('loading')} />
   if (load.kind === 'failed') {
@@ -72,19 +80,18 @@ export function PdfBody(props: PdfBodyProps): ReactNode {
       <Button size="sm" onClick={() => { setAttempt(value => value + 1) }}>{t('retry')}</Button>
     </div>
   }
-  return <section className={css.body} data-pdf-preview>
+  return <section ref={root} className={css.body} data-pdf-preview>
     {Array.from({ length: load.document.numPages }, (_, index) => (
       <PdfPage key={index} document={load.document} page={index + 1}
-        requested={index === 0 || view.page === index + 1} onVisible={pageVisible} signal={tab.signal} t={t} />
+        requested={index === 0 || view.page === index + 1} signal={tab.signal} t={t} />
     ))}
   </section>
 }
 
-function PdfPage({ document, page, requested: initiallyRequested, onVisible, signal, t }: {
+function PdfPage({ document, page, requested: initiallyRequested, signal, t }: {
   readonly document: PdfDocument
   readonly page: number
   readonly requested: boolean
-  readonly onVisible: (page: number) => void
   readonly signal: AbortSignal
 } & PropsLocale<'sidebarPdf'>): ReactNode {
   const host = useRef<HTMLDivElement>(null)
@@ -103,7 +110,6 @@ function PdfPage({ document, page, requested: initiallyRequested, onVisible, sig
     const observer = new IntersectionObserver((entries) => {
       if (disposed || !entries.some(entry => entry.isIntersecting)) return
       setRequested(true)
-      onVisible(page)
       observer.disconnect()
     }, { rootMargin: '100% 0px' })
     observer.observe(node)
@@ -111,7 +117,7 @@ function PdfPage({ document, page, requested: initiallyRequested, onVisible, sig
       disposed = true
       observer.disconnect()
     }
-  }, [page, onVisible])
+  }, [page])
   useEffect(() => {
     if (!requested) return
     // The canvas is unconditional; this effect runs after its ref is committed.

@@ -149,7 +149,7 @@ describe('PDF body', () => {
     expect(screen.getByRole('alert').textContent).toContain(en.password)
   })
 
-  it('renders later pages only when they approach the viewport and records the reached page', async () => {
+  it('renders later pages only when they approach the viewport without confusing prefetch with reading position', async () => {
     IntersectionObserverStub.instances = []
     vi.stubGlobal('IntersectionObserver', IntersectionObserverStub)
     const h = harness()
@@ -162,7 +162,7 @@ describe('PDF body', () => {
     expect(engine.render.mock.calls.map(([, page]) => page)).toEqual([1])
     await act(async () => { observer.intersect(second, true) })
     expect(engine.render.mock.calls.map(([, page]) => page)).toEqual([1, 2])
-    expect(h.instance.getSnapshot().byTab[h.tabId]?.page).toBe(2)
+    expect(h.instance.getSnapshot().byTab[h.tabId]).toBeUndefined()
     expect(screen.getByRole('img', { name: 'PDF page 2' })).toBeTruthy()
     view.unmount()
     expect(IntersectionObserverStub.instances.every(instance => instance.disconnected)).toBe(true)

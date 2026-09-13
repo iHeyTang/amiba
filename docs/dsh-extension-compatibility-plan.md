@@ -5,6 +5,14 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：PDF 多页阅读位置恢复（2026-09-14）
+
+24 页真实 PDF 复现了返回标签后落回第 1 页的问题（/tmp/amiba-pdf-pages-smoke.log，期望 12、实际 1）。外层滚动恢复早于异步 PDF 页面生成，且原 IntersectionObserver 将预加载范围内的页码记成阅读页，disconnect 后向上滚动也不再更新。
+
+新增 PDF 局部位置观察器：页面生成后在现有滚动祖先中按 tab 页码恢复；实际 scroll/resize 后按视口记录页码，隐藏时不记录，卸载取消 frame/observer/listener。预加载仍由原观察器驱动，但不再写阅读状态。未改 CSS、未增加滚动容器、未改其他文档或原聊天视图。恢复粒度沿用 PdfView 的页码，并非新增任意像素位置承诺。
+
+172 项文档测试、插件类型检查通过，完整桌面构建退出 0（/tmp/amiba-pdf-position-build.log）。最终 --compat --sidebar-right 退出 0（/tmp/amiba-pdf-position-smoke-3.log）：第 12 页返回、回滚到第 4 页再返回，以及 24 页重载缩短为 2 页的末页定位均通过，页渲染仍按需、Worker 随正文关闭释放。末页测试按浏览器可滚动范围判断底部与末页可见，避免要求不足一屏的末页强行贴顶。最终截图已检查，PDF 图片/WASM、动画、其他文档与侧栏回归通过。44/0/20 统计不变，独立 Web、完整远程服务、队列及其他清单项仍待完成。
+
 ## 进行中：PDF 嵌入图片、WASM 与透明蒙版（2026-09-14）
 
 新增二进制安全的 PDF image XObject fixture，xref 按字节偏移生成。三种样本分别使用 DCTDecode/JPEG、JPXDecode/JPEG 2000、FlateDecode RGB 加灰度 SMask；背景为绿色，左右像素可明确区分图片缺失、色彩错误及未应用透明度。JPEG 2000 色块为自行编码数据，无外部文档。测试经实际文件授权、文档页、PDF Worker 和画布绘制检查像素；JPX 额外要求本次 Worker 的 FetchBinaryData/openjpeg.wasm 成功回复，不以资产存在代替实际使用。

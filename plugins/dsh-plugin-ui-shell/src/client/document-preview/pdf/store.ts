@@ -31,7 +31,7 @@ export function createPdfStore(): EngineStoreHandle<PdfState, PdfActions> {
     actions: {
       /** @param draft - view state. @param tabId - owning tab. @param page - selected 1-based page. */
       page: (draft, tabId: TabId, page: number) => {
-        draft.byTab[tabId] = { page }
+        if (draft.byTab[tabId]?.page !== page) draft.byTab[tabId] = { page }
       },
       /** @param draft - view state. @param tabId - closed tab whose preferences are discarded. */
       forget: (draft, tabId: TabId) => {
