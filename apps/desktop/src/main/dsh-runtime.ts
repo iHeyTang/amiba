@@ -9,6 +9,7 @@ import type { AgentRuntimeLogEntry, AgentRuntimeLogLevel } from "@amiba/app-runt
 import NodeWebSocket from "ws"
 import {
   MANAGED_DSH_RUNTIME,
+  managedDshEnvironment,
   createDevelopmentProfile,
   ensureManagedDshProfile,
   resolveManagedDshRuntimeDir,
@@ -279,9 +280,7 @@ export class DshRuntimeController {
       {
         cwd: app.getPath("userData"),
         env: {
-          ...process.env,
-          DSH_HOME: managed.home,
-          DSH_AGENTS_HOME: managed.agentsHome,
+          ...managedDshEnvironment(managed),
           AMIBA_DSH_API_TOKEN: pluginToken,
           AMIBA_RUNTIME_GATEWAY_URL: runtimeGatewayUrl,
           AMIBA_RUNTIME_GATEWAY_TOKEN: runtimeGatewayToken,

@@ -3,12 +3,12 @@ import { spawn, execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
-import { createDevelopmentProfile, resolveManagedDshRuntimePaths } from "@amiba/app-runtime/dsh-runtime";
+import { createDevelopmentProfile, managedDshEnvironment, resolveManagedDshRuntimeDir, resolveManagedDshRuntimePaths } from "@amiba/app-runtime/dsh-runtime";
 
 const workspace = fileURLToPath(new URL("../../../", import.meta.url));
-const runtimeDir = path.join(workspace, "packages/app-runtime/resources/dsh-runtime");
+const runtimeDir = resolveManagedDshRuntimeDir({ env: process.env });
 const sandbox = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), "amiba-dev-profile-")));
 const base = resolveManagedDshRuntimePaths({ surface: "desktop", home: path.join(sandbox, "home"), runtimeDir });
 const project = path.join(sandbox, "dsh-plugin-probe");
@@ -29,14 +29,19 @@ try {
   profile = await createDevelopmentProfile(base, [project]);
   // The managed gateway and a linked plugin must see the same private Remote
   // registry, even when that plugin has its own workspace dependencies.
-  await fs.symlink(path.join(workspace, "plugins/dsh-plugin-pets/node_modules"), path.join(project, "node_modules"), "dir");
-  await fs.writeFile(path.join(project, "protocol.mjs"), 'export * from "@deepseek-ai/dsh-typert-protocol";');
+  await fs.symlink(path.join(workspace, "plugins/dsh-plugin-pets/node_modules"), path.join(project, "node_modules"), process.platform === "win32" ? "junction" : "dir");
+  await fs.writeFile(path.join(project, "protocol.mjs"), 'export * from "@deepseek-ai/dsh-typert-protocol"; export { Context } from "@deepseek-ai/cordis"; export { ToolRuntime } from "@deepseek-ai/dsh-tools";');
   const identityProbe = `
     import assert from 'node:assert/strict';
     import { createRequire } from 'node:module';
+    import { pathToFileURL } from 'node:url';
     const managed = createRequire(${JSON.stringify(base.entrypoint)});
-    const plugin = await import(${JSON.stringify(path.join(project, 'protocol.mjs'))});
-    const gateway = await import(managed.resolve('@deepseek-ai/dsh-typert-protocol'));
+    const plugin = await import(${JSON.stringify(pathToFileURL(path.join(project, 'protocol.mjs')).href)});
+    const gateway = await import(pathToFileURL(managed.resolve('@deepseek-ai/dsh-typert-protocol')).href);
+    const cordis = await import(pathToFileURL(managed.resolve('@deepseek-ai/cordis')).href);
+    const tools = await import(pathToFileURL(managed.resolve('@deepseek-ai/dsh-tools')).href);
+    assert.equal(plugin.Context, cordis.Context);
+    assert.equal(plugin.ToolRuntime, tools.ToolRuntime);
     const service = { ping() {} };
     plugin.Remote(service.ping, {name:'ping', addInitializer(fn) { fn.call(service); }});
     assert.equal(gateway.remoteMethods(service)[0]?.method, 'ping');
@@ -46,7 +51,7 @@ try {
   assert.equal(await fs.readFile(base.profileManifest, "utf8"), original);
   assert.equal(await fs.realpath(path.join(profile.paths.profileDir, "node_modules/dsh-plugin-probe")), project);
   child = spawn(base.node, ["--import", profile.preload, base.entrypoint, "--profile", profile.paths.profileName, "--patch", profile.overlay], {
-    env: { ...process.env, DSH_HOME: base.home, DSH_TELEMETRY_DISABLED: "1", PROBE_EVENTS: events }, stdio: ["ignore", "pipe", "pipe"],
+    env: { ...managedDshEnvironment(base), DSH_TELEMETRY_DISABLED: "1", PROBE_EVENTS: events }, stdio: ["ignore", "pipe", "pipe"],
   });
   child.stdout.on("data", chunk => logs += chunk);
   child.stderr.on("data", chunk => logs += chunk);

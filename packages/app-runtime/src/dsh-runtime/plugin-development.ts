@@ -5,6 +5,7 @@ import path from "node:path"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import type { ManagedDshPaths } from "./index.js"
+import { resolveInstalledPackageDirectory } from "./package-resolution.js"
 
 export const DESKTOP_DEVELOPMENT_FILE = "amiba-desktop-development.json"
 export interface DesktopDevelopmentEndpoint { version: 1; url: string; token: string; pid: number }
@@ -42,12 +43,13 @@ export async function createDevelopmentProfile(base: ManagedDshPaths, directorie
   try {
     await mkdir(profileDir, { recursive: true, mode: 0o700 })
     const manifest = JSON.parse(await readFile(base.profileManifest, "utf8"))
-    const require = createRequire(base.profileManifest)
-    const runtimeRequire = createRequire(base.entrypoint)
     const links = new Map<string, string>()
     for (const name of Object.keys(manifest.dependencies ?? {})) {
-      try { links.set(name, path.dirname(require.resolve(`${name}/package.json`))) }
-      catch { links.set(name, path.dirname(runtimeRequire.resolve(`${name}/package.json`))) }
+      try { links.set(name, resolveInstalledPackageDirectory(base.profileManifest, name)) }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "MODULE_NOT_FOUND") throw error
+        links.set(name, resolveInstalledPackageDirectory(base.entrypoint, name))
+      }
     }
     manifest.dependencies ??= {}
     for (const project of projects) {
