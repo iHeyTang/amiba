@@ -1,3 +1,4 @@
+import { useToolImageEvidence } from "./tool-image-evidence";
 import type { ToolCallOwnerProps } from "@amiba/extension-sdk";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -41,6 +42,7 @@ export function SemanticToolRow<Key extends string>({
   owner: ToolCallOwnerProps;
 }) {
   const { block } = owner;
+  const images = useToolImageEvidence(owner.callId, block);
   const running = toolCallSettled(block) === null;
   // Live duration ticker, matching the built-in row's cadence.
   const [tick, setTick] = useState(0);
@@ -73,8 +75,8 @@ export function SemanticToolRow<Key extends string>({
   ) : running || spec.quietSuccess ? null : (
     (spec.evidence?.({ args, text, block }) ?? null)
   );
-  const detail = body ? (
-    <EvidenceShell tag={tag}>{body}</EvidenceShell>
+  const detail = body || images ? (
+    <EvidenceShell tag={tag}>{body}{images}</EvidenceShell>
   ) : undefined;
 
   return (

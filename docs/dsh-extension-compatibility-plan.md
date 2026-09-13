@@ -5,6 +5,18 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：工具图片的桌面展示入口（2026-09-13）
+
+主 shell 声明 tool.call.images 的新版 single/session 契约，提供 images/loadImage/align，并向工具 owner 附加当前会话读取器。复用消息图片的按会话授权、pending/URL 缓存与释放流程，不另造图片身份。rc.2 的 ToolCallOwnerProps 仍兼容旧宿主，loadImage 在类型中为可选；主 shell 会话读取器准备好后实际提供。preview 类型与新版契约对齐，但当前结果提取只产出持久引用，不能据此声称 preview 已验证。
+
+原生 SemanticToolRow 和通用 ToolChipRow 在既有 detail 中附加图片，保留原正文、参数、错误、摘要与折叠样式。每个工具请求都有按 callId 匹配的图片上下文，避免父工具图片流入嵌套子行。根据官方注册表和订阅判断是否有图片插件，不把空 renderSlot 元素误当作已启用的图片功能；没有注册、没有当前 loader 或没有图片时，原卡片不增加按钮。实际图片组件仅在原详情展开后挂载，局部错误边界保护原工具证据。
+
+验证：图片折叠与通用回退 6 项、工具图片提取 3 项、原工具插槽 7 项，共 16 项组件测试通过；UI、shell、SDK 含 guard 类型检查及完整桌面构建通过。真实 --compat --message-images --tool-images --header-corner --child-continuation --approval-detail 最终退出 0：Host 保存规范化 PNG 并写入真实 read_image 调用/结果；插槽收到正确会话、引用及 align；折叠时不挂载图片，展开后实际解码；与消息图片共用同一授权 URL，历史重新打开后共用新的 URL；卸载后原工具卡片 isEqualNode 基线通过。消息跨会话拒绝、URL 释放、角标、审批、续聊、停止、设置、目录、文件、下载、turn-tail 和 HMR 回归通过。已查看实际截图 /var/folders/w1/6rt3z_zs1395fn30txrlysvr0000gn/T/amiba-tool-image.png。
+
+夹具修复：首次工具结果被 Host 拒绝，原因是遗漏 surface-eligible tool/result 必需的 surfaceOp 标记，已补齐 step 与 append 标记；图片正常显示后，HTML 字符串比较仅因属性顺序变化失败，改为保留全部节点/属性/子内容语义的 DOM isEqualNode 比较，未修改产品行为或放宽属性值要求。日志：/tmp/amiba-tool-image-seat-tests.log、/tmp/amiba-tool-image-seat-tests-2.log、/tmp/amiba-tool-image-seat-ui-types-final.log、/tmp/amiba-tool-image-seat-shell-types.log、/tmp/amiba-tool-image-seat-sdk-types.log、/tmp/amiba-tool-image-seat-build.log、/tmp/amiba-tool-image-seat-smoke-5.log。
+
+统计更新为 33/10/21（已有基础/待验证/有条件），不是完整兼容率。工具图片仍需补嵌套专用视图、保留外部打开行为的工具图片入口、preview、新版完整插件依赖和独立 Web/Quick Ask 验证；注册但返回空内容的插件与插件内部错误后的空详情也需继续核对。当前真实 Host 图片同时被用户消息引用，工具单独引用的授权需另测。全部 64 项及服务适配目标保持不变。
+
 ## 最新进展：工具图片的共享提取基础（2026-09-13）
 
 工具原始结果已由实时桥和历史投影完整保留。现将用户消息的持久图片校验提取为 durableContentImages，并为工具展示提供 toolCallResultImages：只提取当前结果直属的 image 块，保留原引用对象、顺序和重复出现次数，不借用 subCalls 的图片，不把内联字节、preview 或暂存 ID 伪装成持久引用。用户文字和附件提取逻辑保持不变。

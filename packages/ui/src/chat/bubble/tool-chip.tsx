@@ -1,3 +1,4 @@
+import { useToolImageEvidence } from "./tool-image-evidence";
 import type { ToolProgress } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
 import { cn } from "../../primitives";
@@ -62,6 +63,8 @@ function ToolChipRow({ event, mode }: { event: ToolProgress; mode?: "row" | "sum
 
   const presentation = describeToolCall(event, t);
   const hasDetail = hasToolDetail(event);
+  const imageBlock = useMemo(() => toolCallBlockFromProgress(event), [event]);
+  const images = useToolImageEvidence(event.toolCallId, imageBlock);
   const opensInWorkspace = workspacePane.canOpenToolEvent(event);
 
   let durationMs: number | undefined;
@@ -87,7 +90,7 @@ function ToolChipRow({ event, mode }: { event: ToolProgress; mode?: "row" | "sum
       ariaLabel={[presentation.action, presentation.target]
         .filter(Boolean)
         .join(" ")}
-      detail={hasDetail ? <ToolDetail event={event} t={t} /> : undefined}
+      detail={hasDetail || images ? <>{hasDetail ? <ToolDetail event={event} t={t} /> : null}{images}</> : undefined}
       onOpen={
         opensInWorkspace ? () => workspacePane.openToolEvent(event) : undefined
       }

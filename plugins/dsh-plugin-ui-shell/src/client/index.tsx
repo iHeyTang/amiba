@@ -270,6 +270,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
     conversationViews: ContributionsSource<ConversationViewEntry>;
     cordisPackages: import("./cordis-business.js").CordisPackages;
+    toolImagesAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
     commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
     conversationSource: (sessionId: string) => import("@deepseek-ai/dsh-client-runtime/client").SessionFace | undefined;
     fileMentions: import("@deepseek-ai/dsh-client-ui-conversation/client").ChatFileMentions["forClosing"];
@@ -306,6 +307,7 @@ function AmibaRoot({
   conversationViews,
   cordisPackages,
   commandRowKeys,
+  toolImagesAvailable,
   conversationSource,
   fileMentions,
   surfaces,
@@ -331,6 +333,7 @@ function AmibaRoot({
       renderSlotChain={renderSlotChain}
       cordisPackages={cordisPackages}
       commandRowKeys={commandRowKeys}
+      toolImagesAvailable={toolImagesAvailable}
       conversationSource={conversationSource}
       fileMentions={fileMentions}
       sessionsBridge={sessionsBridge}
@@ -675,6 +678,10 @@ export async function apply(ctx: ClientContext): Promise<void> {
               },
             };
           })(),
+          toolImagesAvailable: {
+            getSnapshot: () => ctx.slots.entriesOfSlot("tool.call.images").length > 0,
+            subscribe: (listener: () => void) => ctx.slots.subscribe("tool.call.images", listener),
+          },
           commandRowKeys: (() => {
             let version = -1;
             let keys: readonly string[] = [];
@@ -826,6 +833,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // declaration site differs, never the key/kind/scope/owner.
           "conversation.view": { kind: "list", scope: "session" },
           "conversation.message.images": { kind: "single", scope: "session" },
+          "tool.call.images": { kind: "single", scope: "session" },
           "conversation.approval.detail": { kind: "single", scope: "session" },
           "conversation.chat.assistant-actions": { kind: "list", scope: "session" },
           "tool.call.toolview": { kind: "keyed", scope: "session" },

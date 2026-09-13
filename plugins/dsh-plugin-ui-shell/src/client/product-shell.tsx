@@ -77,7 +77,7 @@ import {
   type QuestionSeatRequest,
   type ToolCallSeatRequest,
 } from "@amiba/ui";
-import { PresentationRoot, NavigationRow } from "@amiba/ui/plugin";
+import { PresentationRoot, NavigationRow, ToolImageEvidenceProvider } from "@amiba/ui/plugin";
 import { Blocks } from "lucide-react";
 import {
   useCallback,
@@ -176,7 +176,8 @@ export type AmibaShellSlot =
   | "conversation.message.images"
   | "conversation.approval.detail"
   | "conversation.chat.assistant-actions"
-  | "tool.call.toolview";
+  | "tool.call.toolview"
+  | "tool.call.images";
 
 /** The official DSH child-slot dispatcher, handed down from AmibaRoot. */
 export type AmibaShellRenderSlot =
@@ -353,6 +354,7 @@ function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string)
 interface ProductShellProps {
   renderSlotChain: PropsRenderSlots<AmibaShellSlot>["renderSlotChain"];
   cordisPackages: CordisPackages;
+  toolImagesAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
   commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
   conversationSource: (sessionId: string) => import("@deepseek-ai/dsh-client-runtime/client").SessionFace | undefined;
     fileMentions: import("@deepseek-ai/dsh-client-ui-conversation/client").ChatFileMentions["forClosing"];
@@ -410,6 +412,7 @@ function ProductShellInner({
   renderSlotChain,
   cordisPackages,
   commandRowKeys,
+  toolImagesAvailable,
   conversationSource,
   fileMentions,
   directoryFlows,
@@ -430,6 +433,7 @@ function ProductShellInner({
   useOfficialWorkspaces,
 }: ProductShellProps): ReactElement {
   const { t } = useT();
+  const hasToolImages = useSyncExternalStore(toolImagesAvailable.subscribe, toolImagesAvailable.getSnapshot, toolImagesAvailable.getSnapshot);
   const platform = getPlatform();
   const desktop = platform.kind === "desktop";
   const topBarHeightPx = platform.windowChrome?.topBarHeightPx ?? 40;
@@ -633,9 +637,11 @@ function ProductShellInner({
   // Unknown tools retain the generic row; plugin registrations still win.
   const renderToolViewSeat = useCallback(
     (request: ToolCallSeatRequest) => {
-      const owner = trajectory.inspectCall
-        ? { ...request.owner, inspect: () => trajectory.inspectCall?.(request.owner.callId) }
-        : request.owner;
+      const owner = {
+        ...request.owner,
+        ...(loadMessageImage ? { loadImage: loadMessageImage } : {}),
+        ...(trajectory.inspectCall ? { inspect: () => trajectory.inspectCall?.(request.owner.callId) } : {}),
+      };
       const fallback = renderSlot("tool.call.toolview", owner, {
         entryKey: request.owner.toolName,
         fallback: renderOfficialToolFallback(owner, request.fallback),
@@ -645,11 +651,15 @@ function ProductShellInner({
         { ...owner, fallback },
         { fallback },
       );
-      return request.owner.toolName === "cordis_run" ? <>{row}<CordisBusiness owner={request.owner}
+      const withImages = <ToolImageEvidenceProvider callId={owner.callId}
+        render={hasToolImages && loadMessageImage ? images => renderSlot("tool.call.images", { images, loadImage: loadMessageImage, align: "start" }) : undefined}>
+        {row}
+      </ToolImageEvidenceProvider>;
+      return request.owner.toolName === "cordis_run" ? <>{withImages}<CordisBusiness owner={request.owner}
         source={conversationSource(sessions.activeId)} packages={cordisPackages}
-        render={owner => renderSlot("tool.view.cordis", owner, { entryKey: `${owner.pluginId}.${owner.packageId}` })} /></> : row;
+        render={owner => renderSlot("tool.view.cordis", owner, { entryKey: `${owner.pluginId}.${owner.packageId}` })} /></> : withImages;
     },
-    [renderSlot, conversationSource, sessions.activeId, cordisPackages, trajectory.inspectCall],
+    [renderSlot, conversationSource, sessions.activeId, cordisPackages, trajectory.inspectCall, hasToolImages, loadMessageImage],
   );
 
   // Amiba's KEYED per-question seat. Dispatched once per pending request with

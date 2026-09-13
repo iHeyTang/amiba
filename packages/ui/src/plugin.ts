@@ -174,3 +174,5 @@ export { EmptyStateVisualProvider, type EmptyStateVisualRenderer } from "./primi
 export { PresentationRoot, usePresentationCoordinator, useSurfaceActivity, useSurfaceInteraction } from "./primitives/interaction-region";
 
 export { ConversationSubmitProvider } from "./chat/conversation-submit";
+
+export { ToolImageEvidenceProvider } from "./chat/bubble/tool-image-evidence";

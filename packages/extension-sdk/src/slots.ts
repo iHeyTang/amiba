@@ -372,6 +372,8 @@ declare module "@deepseek-ai/dsh-client-ui-tool/client" {
     presentation?: "row" | "summary";
     revealToolCall?: (callId: string) => void;
     revealVersion?: number;
+    /** Available on image-aware hosts; rc.2 tool owners predate this member. */
+    loadImage?: ToolImageLoader;
   }
 }
 export type { ToolCallOwnerProps } from "@deepseek-ai/dsh-client-ui-tool/client";
@@ -823,3 +825,21 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
 
 /** Canonical durable image currency already present in the installed rc.2 API. */
 export type ImageAttachmentRef = import("@deepseek-ai/dsh-client-ui-conversation/client").MessageImagesOwnerProps["images"][number]["attachment"];
+
+/** Tool image contract mirrored from c291e796; rc.2 has only message images. */
+export type ToolImageSource = { readonly attachment: ImageAttachmentRef } | {
+  readonly preview: { readonly url: string; readonly name?: string; readonly width?: number; readonly height?: number };
+};
+export type ToolImageLoader = ((attachment: ImageAttachmentRef) => Promise<string>) & {
+  peek?: (attachment: ImageAttachmentRef) => string | undefined;
+};
+export interface ToolImagesOwnerProps {
+  images: readonly ToolImageSource[];
+  loadImage: ToolImageLoader;
+  align: "start" | "end";
+}
+declare module "@deepseek-ai/dsh-client-ui-slots" {
+  interface SlotMap {
+    "tool.call.images": { kind: "single"; scope: "session"; owner: ToolImagesOwnerProps };
+  }
+}
