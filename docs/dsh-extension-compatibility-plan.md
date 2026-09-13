@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：文档完整读取与分页读取核心（2026-09-13）
+
+核对固定源 api/workspace-files 的 read/readBytes/readAll 与 fs-local.streamWholeText：文本按 1-based LF 行分页，末尾 LF 不增加空行；严格 UTF-8 解码，开头 8192 字节与返回页拒绝 NUL；默认每页 2 MiB/5000 行，完整读取 32 MiB，超限拒绝而不截断。分页可以读取大于完整文件上限的文件。官方新版部分读取允许工作区外路径，与 Amiba 当前会话授权不同，后续适配保持现有授权边界。
+
+新增 document-file-reader.ts：完整/字节窗口/文本分页共享同一打开文件描述符及其 bigint metadata 版本；分块解码和行计数不缓存跳过的行，支持 AbortSignal，所有路径均 finally 关闭描述符。提供 code/details 错误供后续 IPC 显式序列化，未替换原 readPreviewFile 或 statWorkspaceFile。行分页迁移保留 DeepSeek MIT 归属，并加入桌面 LICENSE.deepseek。
+
+7 项真实文件测试通过（/tmp/amiba-document-reader-tests.log），包含 5 项文档读取测试和 2 项原文件预览回归：空文件/空行/尾 LF/CRLF/越界页、跨 64 KiB UTF-8、超限及边界、二进制和损坏编码、完整读取及字节窗口、非法范围、文件缺失/目录及开始前/打开期间取消。主进程 TypeScript 检查退出 0（/tmp/amiba-document-reader-types.log）。
+
+此处完成读取核心，尚未接入产品调用；下一步必须连接会话授权、保留 code/details 的 IPC、取消与文档 owner/renderer 生命周期。不能把辅助函数测试计为 #56 文档入口完成。43/1/20 统计不变，完整目标仍未完成。
+
 ## 进行中：侧栏窄屏自动全屏（2026-09-13）
 
 按固定源 SidebarRight.tsx 的 viewportWidth < 768 规则派生自动全屏，使用 resize 外部快照读取当前视口，不修改已保存 layout.mode；变宽后自动回到手动模式。窄屏点击退出全屏与固定源一致：收起并设置 push。仅影响新增侧栏展示，原工作区轨道、文件预览、尺寸和样式不改写。
