@@ -307,7 +307,12 @@ if (args.has("--update-lock")) {
 const dependencyLockContent = await fsp.readFile(dependencyLock, "utf8");
 validateDependencyLock(JSON.parse(appPackageJsonContent), JSON.parse(await fsp.readFile(dependencyManifest, "utf8")), JSON.parse(dependencyLockContent));
 const workspaceManifest = JSON.parse(await fsp.readFile(path.join(workspaceDir, "package.json"), "utf8"));
-const reviewedPatches = workspaceManifest.pnpm?.patchedDependencies ?? {};
+// The Web frontend embeds ui-primitives; patch its published artifact as well
+// as the pnpm development package. It is installed only in the npm runtime.
+const reviewedPatches = {
+  ...workspaceManifest.pnpm?.patchedDependencies,
+  "@deepseek-ai/dsh-web-frontend@0.1.1-rc.2": "patches/@deepseek-ai__dsh-web-frontend@0.1.1-rc.2.patch",
+};
 const patchSetHash = await patchSetDigest(reviewedPatches, file => fsp.readFile(path.resolve(workspaceDir, file), "utf8"));
 const dependencyLockHash = createHash("sha256").update(dependencyLockContent).digest("hex");
 const appTreeHash = createHash("sha256")
@@ -761,6 +766,18 @@ try {
     const name = specifier.slice(0, split);
     const version = specifier.slice(split + 1);
     const packageDir = path.join(appDir, "node_modules", name);
+    // ui-primitives is a compiler-only shell dependency, absent from npm runtime.
+    // Its live singleton is embedded in dsh-web-frontend, patched separately.
+    // Keep all other missing runtime patch targets fatal.
+    if (specifier === "@deepseek-ai/dsh-client-ui-primitives@0.1.1-rc.2") {
+      try {
+        await fsp.access(path.join(packageDir, "package.json"));
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+        console.log(`[dsh:runtime] ${specifier} development patch has a matching Web frontend runtime patch`);
+        continue;
+      }
+    }
     const installed = JSON.parse(await fsp.readFile(path.join(packageDir, "package.json"), "utf8"));
     if (installed.version !== version) fail(`Patch version mismatch for ${specifier}`);
     const args = ["--batch", "-p1", "-i", path.resolve(workspaceDir, patchPath)];

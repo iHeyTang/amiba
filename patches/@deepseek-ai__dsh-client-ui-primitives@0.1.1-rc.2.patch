@@ -1,0 +1,135 @@
+diff --git a/lib/index.js b/lib/index.js
+index df6eecc014f10a7c9ac97b77447b749cb29325e4..8fc71c17e5889883c24e95449abc82631491cbc4 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -5438,7 +5438,7 @@ function renderFootnoteReference(node, key, context) {
+ * @param context - The pass state after all blocks rendered.
+ * @returns The section, or null when no referenced footnote has a definition.
+ */
+-function renderFootnoteSection(context) {
++function renderFootnoteSection(context, footnotes = "Footnotes") {
+ 	const items = [];
+ 	for (const id of context.footnoteOrder) {
+ 		const definition = context.targets.footnotes.get(id);
+@@ -5466,7 +5466,7 @@ function renderFootnoteSection(context) {
+ 		children: [jsx("h2", {
+ 			id: "footnote-label",
+ 			className: "sr-only",
+-			children: "Footnotes"
++			children: footnotes
+ 		}), jsx("ol", { children: items })]
+ 	}, "footnotes");
+ }
+@@ -5485,7 +5485,7 @@ function renderFootnoteSection(context) {
+ * full parse self-heals it.
+ */
+ /** One settled full render: parse with math, resolve references, append the footnote section. */
+-function renderSettled(text, codeLabels, fileMentions) {
++function renderSettled(text, codeLabels, fileMentions, footnotes) {
+ 	const root = parseGfmWithMath(text);
+ 	const targets = createReferenceTargets();
+ 	collectReferenceTargets(root.children, targets);
+@@ -5501,7 +5501,7 @@ function renderSettled(text, codeLabels, fileMentions) {
+ 		node,
+ 		key: index
+ 	})), context), false);
+-	const section = renderFootnoteSection(context);
++	const section = renderFootnoteSection(context, footnotes);
+ 	return section === null ? blocks : [
+ 		...blocks,
+ 		"\n",
+@@ -5526,7 +5526,8 @@ var StreamingRenderer = class {
+ 	lastText = null;
+ 	lastRendered = [];
+ 	/** @param codeLabels - Fence copy labels baked into cached elements; the owner replaces the renderer when they change. */
+-	constructor(codeLabels) {
++	constructor(codeLabels, footnotes) {
++		this.footnotes = footnotes;
+ 		this.codeLabels = codeLabels;
+ 	}
+ 	/**
+@@ -5583,7 +5584,7 @@ var StreamingRenderer = class {
+ 			if (children.length > 0) children.push("\n");
+ 			children.push(element);
+ 		}
+-		const section = renderFootnoteSection(tailContext);
++		const section = renderFootnoteSection(tailContext, this.footnotes);
+ 		if (section !== null) children.push("\n", section);
+ 		this.lastText = text;
+ 		this.lastRendered = children;
+@@ -5606,16 +5607,20 @@ var StreamingRenderer = class {
+ * relative links, and unsafe protocols are disabled, while absolute HTTP(S)
+ * images render directly.
+ */
+-const MarkdownText = memo(function MarkdownText({ text, streaming = false, codeLabels, fileMentions }) {
++const MarkdownText = memo(function MarkdownText({ text, streaming = false, codeLabels: legacyCodeLabels, labels, fileMentions }) {
++	const codeLabels = labels?.code ?? legacyCodeLabels;
++	const footnotes = labels?.footnotes;
+ 	const streamRef = useRef(null);
+ 	const streamLabelsRef = useRef(codeLabels);
++	const streamFootnotesRef = useRef(footnotes);
+ 	const children = useMemo(() => {
+ 		if (!streaming) {
+ 			streamRef.current = null;
+-			return renderSettled(text, codeLabels, fileMentions);
++			return renderSettled(text, codeLabels, fileMentions, footnotes);
+ 		}
+-		if (streamRef.current === null || streamLabelsRef.current !== codeLabels) {
+-			streamRef.current = new StreamingRenderer(codeLabels);
++		if (streamRef.current === null || streamLabelsRef.current !== codeLabels || streamFootnotesRef.current !== footnotes) {
++			streamRef.current = new StreamingRenderer(codeLabels, footnotes);
++			streamFootnotesRef.current = footnotes;
+ 			streamLabelsRef.current = codeLabels;
+ 		}
+ 		return streamRef.current.render(text);
+@@ -5623,6 +5628,7 @@ const MarkdownText = memo(function MarkdownText({ text, streaming = false, codeL
+ 		text,
+ 		streaming,
+ 		codeLabels,
++		footnotes,
+ 		fileMentions
+ 	]);
+ 	return jsx("div", {
+diff --git a/lib/types/index.d.ts b/lib/types/index.d.ts
+index ea0f0102e9b5397952cacd1b3cf4923ae8d05910..310631095f22401c9ccb8401e5cc306f457144a0 100644
+--- a/lib/types/index.d.ts
++++ b/lib/types/index.d.ts
+@@ -44,7 +44,7 @@ export { CodeBlock } from './markdown/CodeBlock.tsx';
+ export type { CodeBlockProps } from './markdown/CodeBlock.tsx';
+ export { JsonBlock } from './markdown/JsonBlock.tsx';
+ export { MarkdownText } from './markdown/MarkdownText.tsx';
+-export type { MarkdownCodeLabels, MarkdownFileMentions } from './markdown/MarkdownText.tsx';
++export type { MarkdownCodeLabels, MarkdownFileMentions, MarkdownLabels } from './markdown/MarkdownText.tsx';
+ export { MessageText } from './markdown/MessageText.tsx';
+ export { extractMarkdownPlainText } from './markdown/plain-text.ts';
+ export type { MarkdownPlainTextMode, MarkdownPlainTextOptions } from './markdown/plain-text.ts';
+diff --git a/lib/types/markdown/MarkdownText.d.ts b/lib/types/markdown/MarkdownText.d.ts
+index 9447c6a8249afe5acd02e9633fd984422b8bac01..506c2680b8eaaf90d7c2b6ef127daee7ac6bf803 100644
+--- a/lib/types/markdown/MarkdownText.d.ts
++++ b/lib/types/markdown/MarkdownText.d.ts
+@@ -13,6 +13,11 @@
+ import type { MarkdownCodeLabels, MarkdownFileMentions } from './render.tsx';
+ import 'katex/dist/katex.min.css';
+ export type { MarkdownCodeLabels, MarkdownFileMentions } from './render.tsx';
++/** Localized Markdown chrome; optional on MarkdownText for rc.2 callers. */
++export interface MarkdownLabels {
++    code: MarkdownCodeLabels;
++    footnotes: string;
++}
+ /**
+  * Render untrusted assistant-authored Markdown as semantic React elements.
+  * @param props - Markdown source text preserved by the session projection;
+@@ -29,10 +34,12 @@ export type { MarkdownCodeLabels, MarkdownFileMentions } from './render.tsx';
+  * relative links, and unsafe protocols are disabled, while absolute HTTP(S)
+  * images render directly.
+  */
+-export declare const MarkdownText: import("react").MemoExoticComponent<({ text, streaming, codeLabels, fileMentions }: {
++export declare const MarkdownText: import("react").MemoExoticComponent<({ text, streaming, codeLabels, labels, fileMentions }: {
+     text: string;
+     streaming?: boolean;
+     codeLabels?: MarkdownCodeLabels | undefined;
++    /** New labels take precedence; omitted labels preserve rc.2 defaults. */
++    labels?: MarkdownLabels | undefined;
+     fileMentions?: MarkdownFileMentions | undefined;
+ }) => import("react").JSX.Element>;
+ //# sourceMappingURL=MarkdownText.d.ts.map

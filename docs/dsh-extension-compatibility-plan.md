@@ -5,6 +5,14 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：Markdown labels 与脚注本地化（2026-09-14）
+
+为实际 rc.2 MarkdownText 补入新版 MarkdownLabels 的 code/footnotes 参数，保留可选旧 codeLabels 及默认英文标题；新 labels 提供时优先使用。流式缓存同时考虑脚注文案变化，结束渲染使用同一文案。文档 MarkdownBody 传递其 locale，未修改 CSS 或原聊天调用方。
+
+171 项文档测试、插件类型检查及 2 项运行时补丁复用测试通过。测试涵盖流式/结束脚注、同文本语言切换、旧复制文案及新参数优先级。首次构建暴露 ui-primitives 仅为编译期依赖；首次桌面 smoke 进一步发现实际 singleton 来自 dsh-web-frontend 预打包文件，因此增加该固定版本发布文件的对应补丁，而非仅修改开发依赖。运行时 digest 同时包含两份补丁；编译期包缺失仅豁免此明确目标，实际 Web frontend 的补丁应用与版本检查仍严格执行。最终完整桌面构建通过（/tmp/amiba-markdown-labels-build-3.log）。
+
+最终真实桌面 --compat --sidebar-right 退出 0（/tmp/amiba-markdown-labels-smoke-5.log）。测试通过公共 locale 服务显式切换 zh/en 并等待脚注标题变化，再按 getSnapshot().active 恢复原语言，独立注入上下文在恢复后释放。修正了测试默认中文假设和复用已卸载上下文的问题；没有改变产品默认语言。其他文档、实际 PDF 字体/CMap、侧栏和原输入回归通过，最终 PDF 截图已检查。44/0/20 统计不变；复杂 PDF 图像、其他图片格式、独立 Web、队列及其余全量服务语义仍待完成。
+
 ## 进行中：PDF 标准字体和 CMap 实际验证（2026-09-13）
 
 扩展确定性 PDF fixture，加入未内嵌 Symbol 字体，以及 Type0/CIDFont 的 UniJIS-UCS2-H 文本。桌面 smoke 观察真实 Worker 的 FetchBinaryData 请求与成功回复，记录同一次调用的资源名和字节长度，再检查画布输出；没有替换资源工厂或字体解码。

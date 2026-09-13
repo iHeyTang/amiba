@@ -43,10 +43,21 @@ export async function smokeDocumentPreview({ evaluate, wait, fileWorkspace, scre
     await wait(() => evaluate("!document.querySelector('[data-document-custom]') && document.querySelector('[data-textpreview-line=\"1\"]')?.textContent.includes('DOCUMENT_UPDATED')"));
     await evaluate("window.__sidebarService.close(window.__documentSavedId)");
     await wait(() => evaluate("window.__documentSavedSignal.aborted && !document.querySelector('[data-textpreview-body]')"));
-    await writeFile(markdownFile, '# DOCUMENT_MARKDOWN\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n[Document link](https://example.com/)\n\n```js\nconst answer = 42;\n```');
+    await writeFile(markdownFile, '# DOCUMENT_MARKDOWN\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n[Document link](https://example.com/)\n\n```js\nconst answer = 42;\n```\n\nFootnote[^one].\n\n[^one]: DOCUMENT_FOOTNOTE');
     await evaluate("window.__sidebarService.openResource(window.__documentAddress.replace(/\\.txt$/,'.md'))");
     await wait(() => evaluate("document.querySelector('[data-document-markdown] h1')?.textContent==='DOCUMENT_MARKDOWN' && !!document.querySelector('[data-document-markdown] table')"));
     assert.equal(await evaluate("document.querySelector('[data-document-markdown] a')?.getAttribute('href')"), 'https://example.com/');
+    await evaluate("(async()=>{window.__markdownLocaleFiber=await window.__probeCtx.inject(['locale'],child=>{window.__markdownLocaleCtx=child})})()");
+    const previousLocale = await evaluate("window.__markdownLocaleCtx.locale.getSnapshot().active");
+    try {
+      await evaluate("window.__markdownLocaleCtx.locale.setLocale('zh')");
+      await wait(() => evaluate("document.querySelector('[data-document-markdown] [data-footnotes] h2')?.textContent==='脚注'"));
+      await evaluate("window.__markdownLocaleCtx.locale.setLocale('en')");
+      await wait(() => evaluate("document.querySelector('[data-document-markdown] [data-footnotes] h2')?.textContent==='Footnotes'"));
+    } finally {
+      await evaluate(`window.__markdownLocaleCtx.locale.setLocale(${JSON.stringify(previousLocale)});window.__markdownLocaleFiber.dispose()`);
+    }
+    assert.ok(await evaluate("document.querySelector('[data-document-markdown] [data-footnotes] li')?.textContent.includes('DOCUMENT_FOOTNOTE')"));
     assert.ok(await evaluate("document.querySelector('[data-document-markdown] code')?.textContent.includes('const answer = 42;')"));
     assert.ok(await evaluate(`(()=>{
       const root=document.querySelector('[data-document-markdown]');

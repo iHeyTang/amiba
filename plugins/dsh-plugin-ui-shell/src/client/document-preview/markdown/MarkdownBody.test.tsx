@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
 import { MarkdownBody, type MarkdownBodyProps } from './MarkdownBody.js'
 import { markdownDefinition } from './index.js'
 import { DocumentPreviewRegistry } from '../document/registry.js'
@@ -34,4 +35,26 @@ it('matches Markdown suffixes and yields to external implementations', () => {
   expect(registry.candidates('README.md')[0]?.id).toBe('external')
   off()
   expect(registry.candidates('README.md')[0]).toBe(builtin)
+})
+
+it('localizes streamed and settled footnotes and updates labels without source changes', () => {
+  const text = 'Note[^one].\n\n[^one]: Footnote body.'
+  const localized = { ...props(text, false), t: (key: string) => key === 'footnotes' ? '脚注' : key } as MarkdownBodyProps
+  const view = render(<MarkdownBody {...localized} />)
+  expect(screen.getByRole('heading', { name: '脚注' })).toBeTruthy()
+  view.rerender(<MarkdownBody {...localized} t={((key: string) => key === 'footnotes' ? 'Notes' : key) as MarkdownBodyProps['t']} />)
+  expect(screen.getByRole('heading', { name: 'Notes' })).toBeTruthy()
+  view.rerender(<MarkdownBody {...localized} content={props(text).content} />)
+  expect(screen.getByRole('heading', { name: '脚注' })).toBeTruthy()
+  expect(view.container.querySelector('[data-footnotes] li')?.textContent).toContain('Footnote body.')
+})
+it('preserves rc.2 default footnotes and legacy code labels while accepting newer labels', async () => {
+  const text = 'Note[^one].\n\n[^one]: Footnote body.\n\n```js\nconst n = 1;\n```'
+  const view = render(<MarkdownText text={text} codeLabels={{ copyLabel: 'Legacy copy' }} />)
+  expect(screen.getByRole('heading', { name: 'Footnotes' })).toBeTruthy()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Legacy copy' })).toBeTruthy())
+  view.rerender(<MarkdownText text={text} codeLabels={{ copyLabel: 'Legacy copy' }} labels={{ code: { copyLabel: 'New copy' }, footnotes: 'Notes' }} />)
+  expect(screen.getByRole('heading', { name: 'Notes' })).toBeTruthy()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'New copy' })).toBeTruthy())
+  expect(screen.queryByRole('button', { name: 'Legacy copy' })).toBeNull()
 })
