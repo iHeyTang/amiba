@@ -59,6 +59,29 @@ function snapshot() {
 }
 
 describe("workbench state is owned by the session", () => {
+  it("handles official details open and close without changing the selected resource or other sessions", async () => {
+    const user = userEvent.setup();
+    const view = render(<Harness sessionId="session-1" />);
+    await user.click(screen.getByRole("button", { name: "open file" }));
+    const dispatch = (action: string) => act(() => {
+      window.dispatchEvent(new CustomEvent("amiba:dsh-layout-action", { detail: { action } }));
+    });
+    dispatch("close-details");
+    expect(snapshot()).toMatchObject({ open: "false", mode: "preview", tabs: "1" });
+    dispatch("open-details");
+    dispatch("open-details");
+    expect(snapshot()).toMatchObject({ open: "true", mode: "preview", tabs: "1" });
+    view.rerender(<Harness sessionId="session-2" />);
+    expect(snapshot()).toMatchObject({ open: "false", mode: "files", tabs: "0" });
+    dispatch("open-details");
+    expect(snapshot()).toMatchObject({ open: "true", mode: "files", tabs: "0" });
+    dispatch("close-details");
+    view.rerender(<Harness sessionId="session-1" />);
+    expect(snapshot()).toMatchObject({ open: "true", mode: "preview", tabs: "1" });
+    view.rerender(<Harness sessionId="" />);
+    dispatch("open-details");
+    expect(snapshot()).toMatchObject({ open: "false", tabs: "0" });
+  });
   it("does not carry one session's workbench over to another", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<Harness sessionId="session-1" />);

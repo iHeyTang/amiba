@@ -71,6 +71,40 @@ describe("legacy tool details", () => {
     expect(view.container.innerHTML).toBe("");
     expect(draw).not.toHaveBeenCalled();
   });
+  it("reveals its selected tab horizontally without scrolling other containers", () => {
+    const rectangles = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function(this: HTMLElement) {
+      return { left: this.getAttribute("role") === "tab" ? -40 : 0, right: this.getAttribute("role") === "tab" ? 80 : 240 } as DOMRect;
+    });
+    try {
+      const draw = () => null;
+      const inactive = { ...panel, placement: "tab" as const, activePanel: "files" };
+      const view = render(<div role="tablist"><LegacyToolDetails {...props} panel={inactive} render={draw} /></div>);
+      const rail = screen.getByRole("tablist");
+      rail.scrollLeft = 80;
+      rail.scrollTop = 25;
+      view.rerender(<div role="tablist"><LegacyToolDetails {...props} panel={{ ...inactive, activePanel: LEGACY_TOOL_DETAILS_PANEL }} render={draw} /></div>);
+      expect(rail.scrollLeft).toBe(40);
+      expect(rail.scrollTop).toBe(25);
+      expect(screen.getByRole("tab").getAttribute("aria-selected")).toBe("true");
+    } finally { rectangles.mockRestore(); }
+  });
+  it("subscribes only while the contributed detail body is active", () => {
+    const release = vi.fn();
+    const store = { getSnapshot: vi.fn(() => snapshot(settled)), subscribe: vi.fn(() => release) };
+    // React external stores require a stable cached snapshot.
+    const current = snapshot(settled);
+    store.getSnapshot.mockReturnValue(current);
+    const draw = () => null;
+    const view = render(<LegacyToolDetails {...props} source={store} enabled={false} render={draw} />);
+    expect(store.subscribe).not.toHaveBeenCalled();
+    expect(store.getSnapshot).not.toHaveBeenCalled();
+    view.rerender(<LegacyToolDetails {...props} source={store} panel={{ ...panel, placement: "tab" }} render={draw} />);
+    expect(store.subscribe).not.toHaveBeenCalled();
+    view.rerender(<LegacyToolDetails {...props} source={store} render={draw} />);
+    expect(store.subscribe).toHaveBeenCalledOnce();
+    view.rerender(<LegacyToolDetails {...props} source={store} panel={{ ...panel, activePanel: "files" }} render={draw} />);
+    expect(release).toHaveBeenCalledOnce();
+  });
   it("isolates errors and recovers replacements while retaining selection controls", () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     try {

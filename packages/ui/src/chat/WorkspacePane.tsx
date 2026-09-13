@@ -850,6 +850,16 @@ export function WorkspacePaneProvider({
     },
     [updateActiveSession],
   );
+  useEffect(() => {
+    if (!enabled) return;
+    const onLayoutAction = (event: Event) => {
+      const action = (event as CustomEvent<{ action?: unknown }>).detail?.action;
+      if (action === "open-details") persistOpen(true);
+      else if (action === "close-details") persistOpen(false);
+    };
+    window.addEventListener("amiba:dsh-layout-action", onLayoutAction);
+    return () => window.removeEventListener("amiba:dsh-layout-action", onLayoutAction);
+  }, [enabled, persistOpen]);
   const setMode = useCallback(
     (mode: WorkbenchMode) => {
       updateActiveSession((state) =>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import type { ObservableSnapshot, WorkbenchPanelOwner } from "@amiba/extension-sdk";
 import type { ConversationSnapshot, ToolCallBlock } from "@deepseek-ai/dsh-client-runtime/client";
 import type { DetailsToolOwnerProps } from "@deepseek-ai/dsh-client-ui-conversation/client";
@@ -31,16 +31,29 @@ export function LegacyToolDetails({ enabled = true, source, sessionId, cwd, pane
   label: string;
   emptyLabel: string;
 }) {
-  const subscribe = useCallback((listener: () => void) => source?.subscribe(listener) ?? (() => {}), [source]);
-  const read = useCallback(() => source?.getSnapshot(), [source]);
+  const tab = useRef<HTMLButtonElement>(null);
+  const active = panel.activePanel === LEGACY_TOOL_DETAILS_PANEL;
+  const reading = enabled && active && panel.placement === "content";
+  const subscribe = useCallback((listener: () => void) => reading ? source?.subscribe(listener) ?? (() => {}) : () => {}, [source, reading]);
+  const read = useCallback(() => reading ? source?.getSnapshot() : undefined, [source, reading]);
   const snapshot = useSyncExternalStore(subscribe, read, read);
+  useLayoutEffect(() => {
+    if (!enabled || !active || !tab.current) return;
+    const rail = tab.current.closest<HTMLElement>('[role="tablist"]');
+    if (!rail) return;
+    const buttonRect = tab.current.getBoundingClientRect();
+    const railRect = rail.getBoundingClientRect();
+    // Move only this horizontal rail; never scroll the transcript or page.
+    if (buttonRect.left < railRect.left) rail.scrollLeft += buttonRect.left - railRect.left;
+    else if (buttonRect.right > railRect.right) rail.scrollLeft += buttonRect.right - railRect.right;
+  }, [enabled, active, sessionId, label]);
   useEffect(() => {
     if (!enabled && panel.placement === "tab") panel.closePanel?.(LEGACY_TOOL_DETAILS_PANEL);
   }, [enabled, panel.placement, panel.closePanel]);
   if (!enabled) return null;
   const calls = legacyToolCalls(snapshot?.sessionId === sessionId ? snapshot : undefined);
-  if (panel.placement === "tab") return <button type="button" role="tab" aria-selected={panel.activePanel === LEGACY_TOOL_DETAILS_PANEL}
-    className="shrink-0 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted/45 hover:text-foreground"
+  if (panel.placement === "tab") return <button ref={tab} type="button" role="tab" aria-selected={active}
+    className="shrink-0 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted/45 hover:text-foreground aria-selected:bg-muted aria-selected:text-foreground"
     onClick={() => panel.openPanel(LEGACY_TOOL_DETAILS_PANEL)}>{label}</button>;
   if (panel.activePanel !== LEGACY_TOOL_DETAILS_PANEL) return null;
   const selected = calls.find(call => call.callId === selectedCallId);

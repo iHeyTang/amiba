@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：详情页签可见性、跨会话验证与公共面板开关（2026-09-13）
+
+修复选中的旧版详情页签留在标签条左边界外的问题：只调整其所属横向标签条的 scrollLeft，并增加该附加页签的选中样式，不滚动聊天正文/页面。回归在修复前失败（/tmp/amiba-legacy-tab-red.log，1 失败/6 通过）；修复后详情及轨迹 10 项通过（/tmp/amiba-legacy-tab-tests.log）。只有插件存在且详情正文处于活动面板时才订阅工具快照，页签、停用及其他面板不额外订阅。
+
+真实跨会话 smoke 的准备暴露了另一处既有缺口：layout.openDetails/closeDetails 仅发送 amiba:dsh-layout-action，工作台没有监听。已在 WorkspacePaneProvider 的当前会话状态中接入这两个事件，仅调用原 persistOpen，保留原资源、模式及其他会话记录；enabled 为 false 时不注册。新增测试先复现原失败（/tmp/amiba-layout-details-red.log），再通过重复打开、关闭后文件保留、跨会话及空首页检查。工作台会话隔离与响应式共 16 项通过（/tmp/amiba-layout-details-tests.log）；本轮相关测试合计 26 项，UI/shell 类型检查通过。
+
+最终完整桌面构建 /tmp/amiba-layout-details-build.log 退出 0，包含公共开关修复；之前 /tmp/amiba-legacy-tab-build.log 仅对应此前的页签修改。实际 --compat --legacy-tool-details 退出 0（/tmp/amiba-legacy-session-smoke.log）：公共关闭/重复打开保留同一文件预览 DOM；页签实际边界在标签条内；Host 创建另一会话后不继承旧调用，返回原会话恢复原 callId 与准确插件 sessionId；卸载恢复原文件内容。目录、配置、下载、会话、Markdown、文件及 HMR 基础回归同时通过。已查看最新 amiba-legacy-tool-details.png，页签完整可见，原聊天与工具卡片保留。
+
+统计保持 38/6/20。完整官方 ui-tool 的 apply 同时注册详情正文、工具树和多种原子卡片，不能仅凭此次 probe 宣称整包兼容；其原卡片覆盖问题、实际运行中调用更新、多尺寸键盘导航和独立 Web 仍需验证。新版右侧栏六项及所有其他服务未完成范围继续保留。
+
 ## 最新进展：旧版工具详情可选面板（2026-09-13）
 
 conversation.details.tool 以实际 rc.2 已有 single/session 契约声明并导出其 canonical owner。只在存在插件贡献时提供现有工作台内的可选页签，不覆盖原工具卡片、工具外部打开及轨迹 inspect。面板从当前会话官方 nodes/runningCalls 取真实对象，递归包括子调用；选择由会话 id 与 callId 保存，失去窗口中的调用时不偷偷切换其他调用，不用另一会话快照渲染。选中运行调用完成后，订阅用新官方 settled slice 更新。错误边界仅隔离插件正文，选择控件保留，renderer 替换可恢复。
