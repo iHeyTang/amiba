@@ -5,6 +5,14 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：框架会话 store 的控制器 adoption 生命周期（2026-09-13）
+
+增加 createSidebarRightSessionStore，供后续面板与标题席位共享同一个真实 runtime handle；由框架创建实例时按 scopeKey 交给控制器 adopt，不另造会话缓存或替代 store。未带 scopeKey 的实例不冒充会话；所有 adoption 随席位注册所有者释放，重复 dispose 幂等，已释放所有者拒绝再创建实例。TabDomain 的最终释放仍归外层插件，确保先移除席位和监听，再取消所有资源 occurrence。
+
+241 项右侧栏测试通过（/tmp/amiba-session-store-tests-3.log）：新增真实 rc.2 store、控制器、注册表联合测试，验证多会话隔离、标签回调操作原会话、资源 pin、owner 释放后旧回调不再修改 store、停止订阅后 store 提交不再驱动资源生命周期、最终 domain dispose 取消资源。首次测试直接加载仅供浏览器的 ModuleLoader bundle 报 window 未定义，改用已有完整 factory 测试加载器后通过，未改生产逻辑。类型检查见 /tmp/amiba-session-store-types-2.log。
+
+此处完成的是后续实际注册会使用的生命周期连接，尚未调用到产品面板入口；不把内部测试算作五项右侧栏 UI 已可用。实际席位、公开服务、正文和跨平台验证继续，原有能力和样式未变，39/5/20 不变。
+
 ## 进行中：扩展 entry 的 keyedHooks 通用绑定（2026-09-13）
 
 实际组装右侧栏前发现 rc.2 的 bindInjectHooks 仅处理普通 hooks，之前根级标准来源适配尚未覆盖 entry.inject.keyedHooks。现回补该通用入口：按名称生成 useX Hook，复用根级 keyed source 的稳定绑定与缺失值逻辑，同时移除注入容器并保留业务属性及普通 Hook。框架持有的 SlotHookFactory/hookContext 不变；没有用逐个组件手动绑定掩盖通用契约缺口。
