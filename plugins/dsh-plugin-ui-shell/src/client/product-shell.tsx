@@ -549,11 +549,11 @@ function ProductShellInner({
         ? [
             makeWorkspaceFilesProvider(
               platform.workspaceFiles,
-              () => activeIdRef.current,
+              sessions.activeId,
             ),
           ]
         : [],
-    [platform.workspaceFiles],
+    [platform.workspaceFiles, sessions.activeId],
   );
   const pendingOpenSessionRef = useRef<{ sessionId: string; subagent?: AgentSubagentAddress } | null>(null);
   const externalNavigationRevision = useRef(0);

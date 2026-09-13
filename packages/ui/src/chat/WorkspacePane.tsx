@@ -262,6 +262,8 @@ interface WorkspacePaneContextValue {
   openFile(path: string, line?: number): void;
   openReview(resource: WorkspaceReviewResource): void;
   beginTurn(turnIndex: number): Promise<void>;
+  /** Prepare the addressed workspace without selecting it or opening its pane. */
+  beginTurnFor(sessionId: string, turnIndex: number): Promise<void>;
   refreshCheckpoints(): Promise<void>;
   restoreCheckpoint(checkpointId: string): Promise<void>;
   restoreBeforeTurn(turnIndex: number): Promise<void>;
@@ -301,6 +303,7 @@ const EMPTY_CONTEXT: WorkspacePaneContextValue = {
   openFile: () => {},
   openReview: () => {},
   beginTurn: async () => {},
+  beginTurnFor: async () => {},
   refreshCheckpoints: async () => {},
   restoreCheckpoint: async () => {},
   restoreBeforeTurn: async () => {},
@@ -705,6 +708,7 @@ export function WorkspacePaneProvider({
     Record<string, WorkspaceCheckpoint[]>
   >({});
   const activeTurnCheckpointIds = useRef(new Map<string, string>());
+  const checkpointAttempts = useRef(new Map<string, object>());
   const markedCheckpointIds = useRef(new Set<string>());
   const extensions = useWorkbenchExtensions();
   const enabled = Boolean(sessionId && (capability || extensions.length));
@@ -1092,35 +1096,41 @@ export function WorkspacePaneProvider({
     [extensions, resources, sessionId, openResourceIn],
   );
 
-  const beginTurn = useCallback(
-    async (turnIndex: number) => {
-      if (!sessionId) return;
+  const beginTurnFor = useCallback(
+    async (targetSessionId: string, turnIndex: number) => {
+      if (!targetSessionId) return;
       const development = capability?.development;
       if (development) {
+        const attempt = {};
+        checkpointAttempts.current.set(targetSessionId, attempt);
+        const latest = () => checkpointAttempts.current.get(targetSessionId) === attempt;
         try {
           const checkpoint = await development.createCheckpoint(
-            sessionId,
+            targetSessionId,
             `Before task ${turnIndex + 1}`,
             { kind: "turn-start", turnIndex },
           );
           if (!checkpoint) {
             // Workspace isn't a Git repository — checkpoints simply don't
             // apply to this session.
-            activeTurnCheckpointIds.current.delete(sessionId);
+            if (latest()) activeTurnCheckpointIds.current.delete(targetSessionId);
             return;
           }
-          activeTurnCheckpointIds.current.set(sessionId, checkpoint.id);
-          updateCheckpoints((current) => [
+          if (latest()) activeTurnCheckpointIds.current.set(targetSessionId, checkpoint.id);
+          updateSessionCheckpoints(targetSessionId, (current) => [
             checkpoint,
             ...current.filter((item) => item.id !== checkpoint.id),
           ]);
         } catch {
-          activeTurnCheckpointIds.current.delete(sessionId);
+          if (latest()) activeTurnCheckpointIds.current.delete(targetSessionId);
+        } finally {
+          if (latest()) checkpointAttempts.current.delete(targetSessionId);
         }
       }
     },
-    [capability?.development, sessionId, updateCheckpoints],
+    [capability?.development, updateSessionCheckpoints],
   );
+  const beginTurn = useCallback((turnIndex: number) => beginTurnFor(sessionId, turnIndex), [beginTurnFor, sessionId]);
 
   const markActiveCheckpointChanged = useCallback(
     (targetSessionId: string) => {
@@ -1272,6 +1282,7 @@ export function WorkspacePaneProvider({
       openFile,
       openReview,
       beginTurn,
+      beginTurnFor,
       refreshCheckpoints,
       restoreCheckpoint,
       restoreBeforeTurn,
@@ -1293,6 +1304,7 @@ export function WorkspacePaneProvider({
       activeState.terminalOpen,
       activeTab,
       beginTurn,
+      beginTurnFor,
       canOpenToolEvent,
       capability,
       checkpoints,

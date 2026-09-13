@@ -1360,3 +1360,15 @@ pipelines retain mounted component state.
 - 尚未将标准 inputActions.submit 接到离屏发送。原 ChatSurface.runChatTurn 同时依赖当前会话的工作目录、消息、检查点和交接闭包；后续必须使这些步骤按目标会话执行，并衔接驻留草稿/图片/命令事务。不能用直接调用 session.prompt、切换用户当前页面或创建另一套隐藏 ChatSurface 代替。
 
 验证记录：/tmp/amiba-submission-receipt-tests.log、/tmp/amiba-submission-receipt-types.log、/tmp/amiba-submission-receipt-build.log、/tmp/amiba-submission-receipt-smoke.log。完整桌面构建及包含离屏图片、队列恢复、附件引用、Cordis、轨迹和子会话冷恢复的组合回归均通过，退出码 0；桌面回归验证原 submit 路径，新增接收确认的分支语义由引擎测试覆盖，尚未声称离屏标准提交已完成。
+
+
+### 目标会话的检查点与原生文件搜索（2026-09-13）
+
+- WorkspacePane 增加 beginTurnFor(sessionId, turnIndex)，直接调用该目标的原开发能力，并更新其检查点集合和活动检查点。旧 beginTurn(turnIndex) 委托到当前会话，原 UI 调用及默认行为保留；后台工具事件仍由现有 observeToolEvent 按事件会话标记修改。
+- 每个目标的检查点创建请求独立跟踪；较旧请求晚到的成功、失败或非 Git 空结果，不能覆盖或删除较新请求的活动检查点。实际创建的历史检查点仍保留，不删除文件或恢复点。
+- 原生 workspace-files provider 允许直接传入固定 sessionId，ProductShell 按会话构建实例；保留的提供者不会因当前页面选择改变而改查另一个会话。旧 getSessionId 回调形式仍支持。这里改的是搜索地址绑定，原有文件引用序列化仍返回相同路径。
+- 19 项 React 工作区/文件提供者/目录选择测试、UI 与插件类型检查通过。测试覆盖后台创建期间切换前台、后台修改标记、迟到请求和现有面板行为。既有文件树测试缺少目录选择上下文，在 HEAD 的原 WorkspacePane 上也复现同样失败（/tmp/amiba-addressed-preparation-baseline-test.log）；仅为该夹具补齐实际上下文，未改产品按钮逻辑。
+- 完整桌面构建和组合回归通过，退出码 0；原卡片样式、附件/队列、离屏图片、Cordis、轨迹及子会话冷恢复继续通过。后台检查点接口由 React/适配器测试覆盖；此次未声称标准 inputActions.submit 已能离屏发送。
+- 记录：/tmp/amiba-addressed-preparation-tests.log、/tmp/amiba-addressed-preparation-ui-types.log、/tmp/amiba-addressed-preparation-plugin-types.log、/tmp/amiba-addressed-preparation-build.log、/tmp/amiba-addressed-preparation-smoke.log。
+
+后续仍须接通按目标会话准备消息/模型/工作目录的原引擎发送，并处理驻留草稿、命令、图片和接收结果的事务。已确认原生文件 serialize 只返回路径，搜索的会话地址现已固定；不得把当前会话的 pendingModelSelection、activeMessages 或工作区 UI 状态用于其他目标。Host 附件 ID 由 randomUUID 生成，不能假定重复上传会按内容去重；离屏图片发送还需要保存和交接已暂存附件，避免失败重试重复上传和遗留文件。

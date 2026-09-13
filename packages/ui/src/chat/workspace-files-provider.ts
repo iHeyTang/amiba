@@ -11,8 +11,11 @@ import type {
 /** Host-neutral @file provider backed by an optional workspace capability. */
 export function makeWorkspaceFilesProvider(
   files: WorkspaceFilesAdapter,
-  getSessionId: () => string,
+  session: string | (() => string),
 ): TriggerProvider {
+  // A fixed address is safe to retain for background work. Older embedders
+  // may still deliberately supply a live selection callback.
+  const getSessionId = typeof session === "function" ? session : () => session;
   return {
     trigger: "@",
     id: "files",
