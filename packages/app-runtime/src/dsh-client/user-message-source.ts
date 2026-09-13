@@ -4,6 +4,8 @@ import type {
   PluginMessageOrigin,
 } from "@amiba/app-runtime/protocol"
 
+import { durableContentImages } from "./content-images"
+
 import { splitFileAttachmentsFromPrompt } from "../core/attachments/format"
 import type { AttachmentBadge } from "../core/attachments/types"
 
@@ -171,30 +173,8 @@ export function userMessageText(content: unknown): UserMessageText {
     badges.push(...split.badges)
     if (split.text) texts.push(split.text)
   }
-  const images = Array.isArray(content)
-    ? content.flatMap((part): MessageImage[] => {
-        const item = record(part)
-        if (item?.type !== "image" || !isImageReference(item.attachment)) return []
-        return [{ attachment: item.attachment }]
-      })
-    : []
+  const images = durableContentImages(content)
   return { text: texts.join("\n"), badges, images }
-}
-
-/** Reject malformed references without minting an identity for legacy inline bytes. */
-function isImageReference(value: unknown): value is MessageImage["attachment"] {
-  const ref = record(value)
-  const positive = (n: unknown) => typeof n === "number" && Number.isSafeInteger(n) && n > 0
-  if (!ref || typeof ref.attachmentId !== "string" || !ref.attachmentId
-    || typeof ref.mediaType !== "string"
-    || !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(ref.mediaType)
-    || !positive(ref.bytes) || !positive(ref.width) || !positive(ref.height)
-    || (ref.name !== undefined && typeof ref.name !== "string")) return false
-  if (ref.originalDimensions !== undefined) {
-    const dimensions = record(ref.originalDimensions)
-    if (!dimensions || !positive(dimensions.width) || !positive(dimensions.height)) return false
-  }
-  return true
 }
 
 /**

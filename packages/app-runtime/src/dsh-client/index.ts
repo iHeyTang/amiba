@@ -848,3 +848,5 @@ export function parseDshWebSocketFrame(data: string): DshMuxEnvelope {
 export * from "./amiba-event-bridge"
 
 export * from "./assistant-text-source";
+
+export { durableContentImages } from "./content-images";

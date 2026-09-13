@@ -89,6 +89,7 @@ export {
   toolCallErrorCode,
   toolCallFailed,
   toolCallResultText,
+  toolCallResultImages,
   toolCallSettled,
   toolCallStartedAt,
 } from "./chat/bubble/tool-call-block";

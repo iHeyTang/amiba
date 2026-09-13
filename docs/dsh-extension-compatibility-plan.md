@@ -5,6 +5,14 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：工具图片的共享提取基础（2026-09-13）
+
+工具原始结果已由实时桥和历史投影完整保留。现将用户消息的持久图片校验提取为 durableContentImages，并为工具展示提供 toolCallResultImages：只提取当前结果直属的 image 块，保留原引用对象、顺序和重复出现次数，不借用 subCalls 的图片，不把内联字节、preview 或暂存 ID 伪装成持久引用。用户文字和附件提取逻辑保持不变。
+
+验证：图片消息与工具 wire 测试 29 项、工具展示及图片读取测试 10 项通过；Runtime 和 UI 类型检查通过。实时与历史两条路径都覆盖图片、混合文本、重复引用和嵌套结果隔离。日志：/tmp/amiba-tool-images-runtime-tests.log、/tmp/amiba-tool-images-ui-tests.log、/tmp/amiba-tool-images-runtime-types.log、/tmp/amiba-tool-images-ui-types.log。此步骤未变更渲染入口，未运行完整桌面构建或新的真实 Host 冒烟。
+
+tool.call.images 仍待完成，统计保持 32/11/21。下一步需在原工具详情折叠区接入授权 loader 和插槽，同时保持无插件时的卡片 DOM 与展开按钮：renderSlot 即使没有 occupant 也返回 React 元素，不能仅以 ReactNode 非空判断是否增加 detail。官方 read_image 原生 quietSuccess 卡片尤其要验证此边界。全部 64 项及服务兼容目标继续保留。
+
 ## 最新进展：消息图片授权读取与渲染（2026-09-13）
 
 主 shell 接入 conversation.message.images：从当前真实 SessionFace 读取持久图片，经 FullScreenChatView/ChatSurface/MessageTurns/UserStickyBubble 传入原用户消息。原文字、附件徽标和控件保持不变；插件为空时不增 DOM，渲染异常由局部边界隔离。暂未扩展到本人发送过程中的本地 preview 回显、工具图片或轨迹图片。
