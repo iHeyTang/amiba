@@ -61,6 +61,7 @@ export interface InputTriggerBridgeDeps {
   residentDraft?(sessionId: string): {
     subscribe(listener: () => void): () => void;
     setDisplayText(text: string): void;
+    readInputDraft(): ReturnType<NonNullable<TriggerEditorOps["readInputDraft"]>>;
   };
   /** Actual Host inbox state, distinct from the native local pending queue. */
   sessionFor?(sessionId: string): InputQueueSession | undefined;
@@ -149,7 +150,10 @@ export function createInputTriggerBridge(
       let snapshot: readonly ComposerAttachment[] | undefined;
       source = {
         getSnapshot() {
-          const images = imageBindings.get(id)?.ops.getImages();
+          // The native composer releases its browser images on session switch
+          // and unmount. A bound resident document therefore has no draft images
+          // until the original image owner mounts (including queued restoration).
+          const images = imageBindings.get(id)?.ops.getImages() ?? (residentInputs.has(id) ? [] : undefined);
           if (!images) return snapshot = undefined;
           if (!snapshot || snapshot.length !== images.length || images.some((image, i) => image !== snapshot![i])) {
             snapshot = Object.freeze([...images]);
@@ -190,6 +194,23 @@ export function createInputTriggerBridge(
   const submitters = new Map<string, { submit: () => boolean }>();
   const editors = new Map<string, { ops: TriggerEditorOps; draft: ReturnType<typeof bindInputDraft> }>();
   const draftCursors = new Map<string, InputDraftCursor>();
+  const residentInputs = new Map<string, {
+    source: NonNullable<ReturnType<NonNullable<InputTriggerBridgeDeps["residentDraft"]>>>;
+    draft?: ReturnType<typeof bindInputDraft>;
+  }>();
+  const cursorFor = (id: string) => {
+    let cursor = draftCursors.get(id);
+    if (!cursor) { cursor = { revision: -1, occurrence: 0 }; draftCursors.set(id, cursor); }
+    return cursor;
+  };
+  const readDraft = (id: string) => {
+    const editor = editors.get(id);
+    if (editor) return editor.draft.read();
+    const resident = residentInputs.get(id);
+    if (!resident) return undefined;
+    resident.draft ??= bindInputDraft({ readInputDraft: resident.source.readInputDraft } as TriggerEditorOps, cursorFor(id));
+    return resident.draft.read();
+  };
   const draftListeners = new Map<string, Set<() => void>>();
   const draftSourcesBySession = new Map<string, InputDraftSource>();
   const notifyDraft = (id: string) => { for (const listener of draftListeners.get(id) ?? []) listener(); };
@@ -197,7 +218,7 @@ export function createInputTriggerBridge(
     let source = draftSourcesBySession.get(id);
     if (!source) {
       source = {
-        getSnapshot: () => editors.get(id)?.draft.read(),
+        getSnapshot: () => readDraft(id),
         subscribe(listener) {
           let subscribers = draftListeners.get(id);
           if (!subscribers) { subscribers = new Set(); draftListeners.set(id, subscribers); }
@@ -221,9 +242,19 @@ export function createInputTriggerBridge(
   return {
     bindInputSession(sessionId, session) {
       const binding = { session };
-      const offDraft = deps.residentDraft?.(sessionId).subscribe(() => {});
+      const source = deps.residentDraft?.(sessionId);
+      const resident = source && { source };
+      if (resident) residentInputs.set(sessionId, resident);
       inputSessions.set(sessionId, binding);
+      const offDraft = source?.subscribe(() => {
+        if (inputSessions.get(sessionId) !== binding || editors.has(sessionId)) return;
+        readDraft(sessionId);
+        notifyDraft(sessionId);
+      });
+      readDraft(sessionId);
       notifyInputSessions();
+      notifyDraft(sessionId);
+      notifyImages(sessionId);
       let active = true;
       return () => {
         if (!active) return;
@@ -231,7 +262,10 @@ export function createInputTriggerBridge(
         offDraft?.();
         if (inputSessions.get(sessionId) !== binding) return;
         inputSessions.delete(sessionId);
+        residentInputs.delete(sessionId);
         notifyInputSessions();
+        notifyDraft(sessionId);
+        notifyImages(sessionId);
       };
     },
     inputStateSource(sessionId) {
@@ -307,7 +341,19 @@ export function createInputTriggerBridge(
       draft.setDisplayText(text);
       return true;
     },
-    setInputDraft: (sessionId, text, expectedRevision) => editors.get(sessionId)?.draft.write(text, expectedRevision) ?? false,
+    setInputDraft(sessionId, text, expectedRevision) {
+      const editor = editors.get(sessionId);
+      if (editor) return editor.draft.write(text, expectedRevision);
+      const session = inputSessions.get(sessionId)?.session;
+      const resident = residentInputs.get(sessionId);
+      if (!session || !resident || session.getSnapshot().subagent?.address.mode === "one-shot") return false;
+      const before = readDraft(sessionId)!;
+      if (expectedRevision !== undefined && before.draftRev !== expectedRevision) return false;
+      resident.source.setDisplayText(text);
+      return before.draft !== text && readDraft(sessionId)?.draft === text;
+    },
+    // Preserve the existing mounted-editor readiness API. Standard useInput and
+    // observable draft reads include residency without changing this signal.
     inputDraftFor: (sessionId) => editors.get(sessionId)?.draft.read(),
     draftSources: () => draftSources,
     registerSources(sources, drafts = false) {
@@ -361,9 +407,10 @@ export function createInputTriggerBridge(
     bindEditor(sessionId: string, ops: TriggerEditorOps): () => void {
       const actx = deps.scopeOf(sessionId);
       if (actx === undefined) return () => {};
-      let cursor = draftCursors.get(sessionId);
-      if (!cursor) { cursor = { revision: -1, occurrence: 0 }; draftCursors.set(sessionId, cursor); }
-      editors.get(sessionId)?.draft.read();
+      const cursor = cursorFor(sessionId);
+      readDraft(sessionId);
+      const resident = residentInputs.get(sessionId);
+      if (resident) resident.draft = undefined;
       const binding = { ops, draft: bindInputDraft(ops, cursor) };
       editors.set(sessionId, binding);
       const current = () => editors.get(sessionId) === binding;

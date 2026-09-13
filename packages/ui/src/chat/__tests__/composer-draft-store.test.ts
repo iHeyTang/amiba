@@ -31,6 +31,9 @@ it("restores lossless canonical tokens and keeps each session's setters addresse
   const off = restored.subscribe(()=>{});
   await tick();
   expect(restored.getSnapshot()).toBe(text + "!");
+  expect(restored.readInputDraft().draft).toBe(composerDraftDisplayText(restored.getDocument()));
+  expect(restored.readInputDraft().occurrences).toHaveLength(1);
+  expect(restored.readInputDraft().draftRev).toBeGreaterThan(0);
   expect(values["amiba.composer.draft.one"]).toEqual({version:2,...one.getDocument()});
   off(); offOne(); offTwo();
 });
@@ -46,6 +49,7 @@ it("does not overwrite an edit or explicit clear with a delayed initial read", a
     resolve({"amiba.composer.draft.session":{version:1,text:"Old disk draft"}});
     await tick();
     expect(source.getSnapshot()).toBe(next);
+    expect(source.readInputDraft().draft).toBe(next);
     off();
   }
 });

@@ -60,11 +60,10 @@ import type {} from "@deepseek-ai/dsh-client-ui-settings/client";
 // Amiba's runtime declares only the adopted keys on the ui-shell root;
 // a registration into any other type-visible conversation.* key simply
 // waits in ctx.slots.inject with no render site — authoring implication,
-// not a hazard. CAVEAT (recorded Phase-2 deferral): the merge also makes
-// `useInput`/`inputActions` type-visible on every session-scope component,
-// but amiba runs no ui-conversation runtime and registers no
-// sessions.provide bundle for them, so they are `undefined` at runtime
-// until a later phase provides an input machine. The framework members
+// not a hazard. The shell provides standard `useInput` and `inputActions`
+// from the original editor and its resident native draft. Offscreen text
+// reads/writes remain available; image mutation and submission still require
+// their mounted native owners. The framework members
 // (`sessionId`/`useSession`/`useProjection`) ARE live — dsh-client-runtime
 // itself binds those once a session is current.
 import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
@@ -444,7 +443,8 @@ export type ToolCallToolviewOwnerProps = OwnerOf<"tool.call.toolview">;
 //     all owners are bound. References use full @label UTF-16 ranges in rc.2,
 //     not the native trigger scanner's single-placeholder coordinates.
 //     The four input-region owner dispatches are mounted while these real
-//     sources are available; useInput/inputActions registration remains separate. An unavailable editor/session must not be masked by
+//     sources are available. Standard useInput is also registered through
+//     sessions.provide, with resident text after editor release. An unavailable session must not be masked by
 //     an invented empty complete state; local pending messages are not Host
 //     inbox rows. Full conversation service adoption also requires the same
 //     image authority and native send/cancel semantics.

@@ -1,10 +1,14 @@
 import { composerDraftDocument, decodeComposerDraft, updateLegacyDraftDocument, updatePublicDraftDocument, type ComposerDraftDocument } from "./composer-draft-document";
 import type { ParsedPart } from "./composer/serialize";
 import type { StorageAdapter } from "@amiba/app-runtime/platform";
+import { ResidentInputProjection } from "./composer-resident-input";
+import type { ComposerInputDraft } from "./composer/triggers/contracts";
 
 export interface ComposerDraftSource {
   getSnapshot(): string;
   getDocument(): ComposerDraftDocument;
+  /** Native document in official coordinates; used only without a mounted editor. */
+  readInputDraft(): ComposerInputDraft;
   setParts(parts: readonly ParsedPart[]): void;
   /** Full visible text, preserving unedited references without parsing new tokens. */
   setDisplayText(text: string): void;
@@ -16,6 +20,8 @@ export interface ComposerDraftSource {
 export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: string): ComposerDraftSource {
   const key = sessionId ? `amiba.composer.draft.${sessionId}` : undefined;
   let document = composerDraftDocument([]);
+  const inputProjection = new ResidentInputProjection();
+  let inputDraft = inputProjection.update(document);
   let fingerprint = JSON.stringify(document);
   let revision = 0;
   let readGeneration = 0;
@@ -27,6 +33,7 @@ export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: 
     const key = JSON.stringify(next);
     if (key === fingerprint) return false;
     document = next;
+    inputDraft = inputProjection.update(next);
     fingerprint = key;
     for (const listener of listeners) listener();
     return true;
@@ -51,6 +58,7 @@ export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: 
   return {
     getSnapshot: () => document.text,
     getDocument: () => document,
+    readInputDraft: () => inputDraft,
     setParts(parts) {
       const next = composerDraftDocument(parts);
       if (JSON.stringify(next) === fingerprint) return;

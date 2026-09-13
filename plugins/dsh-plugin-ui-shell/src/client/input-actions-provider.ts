@@ -7,6 +7,7 @@ export function createInputActionsProvider(bridge: AmibaInputTriggerBridge): Ses
   const actions = new Map<string, ConversationInputActions>();
   const bindings = new Map<string, { session: unknown; ctx: unknown; dispose(): void }>();
   return {
+    hooks: ["input"],
     props: ["inputActions"],
     dispose() {
       for (const binding of [...bindings.values()]) binding.dispose();
@@ -45,7 +46,18 @@ export function createInputActionsProvider(bridge: AmibaInputTriggerBridge): Ses
         } satisfies ConversationInputActions);
         actions.set(sessionId, inputActions);
       }
-      return { props: { inputActions } };
+      const source = bridge.inputStateSource(sessionId);
+      return {
+        hooks: { input: {
+          getSnapshot() {
+            const snapshot = source.getSnapshot();
+            if (!snapshot) throw new Error(`Native input state is unavailable for session ${sessionId}`);
+            return snapshot;
+          },
+          subscribe: listener => source.subscribe(listener),
+        } },
+        props: { inputActions },
+      };
     },
   };
 }

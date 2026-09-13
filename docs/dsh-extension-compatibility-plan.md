@@ -1325,3 +1325,15 @@ pipelines retain mounted component state.
 - 完整 Desktop 构建通过（/tmp/amiba-legacy-file-refs-build.log）。新增 --legacy-file-refs 使用真实 Host 创建未登记文件，检查原元数据没有 retainedBy；测试 Host 插件直接写入旧格式的规范历史事件，不经过新发送逻辑。刷新 renderer 后打开该历史，检查元数据新增原会话 ID，再请求删除并逐字节读取验证文件保留。
 - 最终组合回归 /tmp/amiba-legacy-file-refs-smoke.log 退出 0，包含该迁移、原 Host 引用、队列/图片恢复及清理、输入/命令、动态插件、轨迹、子会话及嵌套 Host 冷重启。无 JSX/CSS 改动，原界面检查继续通过。
 - 回收边界核对：当前 Amiba 的移出列表操作是 workspace.archiveSession；sessions-store 明确保留日志且归档视图仍可打开。因此不把归档接为 release-session，也不在兼容任务中新增永久删除能力。按需迁移不等于全库扫描，未打开旧会话的引用尚未预登记；其他窗口在引擎收到提交前的准备阶段仍需继续核对。
+
+
+### 标准 useInput 与驻留输入快照（2026-09-13）
+
+- 根据实际 rc.2 的 sessions.provide 契约注册 `hooks: ["input"]`，由官方渲染器生成 selector Hook；保留原输入器和 inputActions。
+- 原生 ComposerDraftSource 增加只读输入投影：实际文字/引用使用完整 @label 的 UTF-16 坐标，普通 token 形状文字不被重新解释。持久化恢复和外部修改通过原订阅通知；连续修改即使没有中间读取，也会推进修订。未改动引用在驻留文本编辑中保留独立 ID。
+- 挂载时继续使用真实 Lexical 状态、命令阶段、浏览器图片和 SessionFace 的 Host inbox；离屏时使用原生驻留草稿，遵循已有的退出命令和清空浏览器图片策略。离屏修订写入拒绝过期版本和一次性只读子会话。
+- 保留 `inputDraftFor` 的原有“已挂载编辑器”含义。第一次桌面回归发现把该接口改成离屏可读会使既有就绪检查提前通过，已恢复旧语义；新增驻留读取经 `inputDraftSource`、`inputStateSource` 和标准 useInput 提供。编辑器重绑定会推进修订并重分配公共 occurrence ID，避免旧写入命中新绑定。
+- 验证：40 项桥接测试、64 项原生草稿/真实 Lexical 编辑测试通过，补充验证异步恢复后的输入投影及迟到读取隔离；插件类型检查和完整桌面构建通过。桌面插件视图直接调用 useInput，四个输入区域同时比较标准 Hook 与真实 owner 状态；离屏写入、订阅、过期拒绝、切换/刷新以及原卡片样式尺寸均通过。
+- 范围仍未全部完成：离屏图片修改和提交、跨挂载公共引用 ID 连续性、引用外观/失效/粘贴语义、原生队列与 Host inbox 的完整行为对齐仍需继续处理。
+
+验证记录：`/tmp/amiba-resident-input-tests.log`、`/tmp/amiba-resident-input-ui-tests.log`、`/tmp/amiba-resident-input-hydration-tests.log`、`/tmp/amiba-resident-input-ui-types.log`、`/tmp/amiba-resident-input-build2.log`、`/tmp/amiba-resident-input-smoke3.log`。完整组合桌面回归退出码为 0，包含队列/图片刷新、Host 附件引用、旧历史附件迁移、Cordis、轨迹加载、命令展示、running 恢复及两级子会话冷重启。

@@ -126,7 +126,7 @@ it("edits the addressed resident document offscreen and never bypasses a mounted
   };
   const {actions,bind,provider,bridge}=fixture(id=>{
     const source=sourceFor(id);
-    return {setDisplayText:source.setDisplayText,subscribe(listener){watches++;const off=source.subscribe(listener);return()=>{watches--;off();};}};
+    return {readInputDraft:source.readInputDraft,setDisplayText:source.setDisplayText,subscribe(listener){watches++;const off=source.subscribe(listener);return()=>{watches--;off();};}};
   });
   const source=sourceFor("a");
   source.set("@[dsh.reference:files|id|Label|clip]");
@@ -136,6 +136,7 @@ it("edits the addressed resident document offscreen and never bypasses a mounted
   expect(source.getDocument().parts.filter(part=>part.kind==="mention")).toHaveLength(1);
   expect(other.read()).toBe("initial");
   expect(bridge.inputDraftFor("a")).toBeUndefined();
+  expect(bridge.inputDraftSource("a").getSnapshot()?.draft).toBe(composerDraftDisplayText(source.getDocument()));
   const mounted=bind("a");mounted.edit.mockReturnValue(false);
   const before=source.getDocument();
   expect(()=>action.setDraft("not admitted")).toThrow("cannot accept");
@@ -163,10 +164,43 @@ it("honors the actual offscreen one-shot session's read-only address", () => {
   provider.dispose();
 });
 
+it("provides non-null standard input before mount, follows native changes, and rejects stale offscreen writes", () => {
+  const source = createComposerDraftSource();
+  const { provider, bridge, bind } = fixture(() => source);
+  const queue: never[] = [];
+  const contribution = provider.resolve({ sessionId: "a", session: {
+    getSnapshot: () => ({ queue }), subscribe: () => () => {},
+  }, ctx: { effect: (effect: () => () => void) => effect() } } as never);
+  expect(provider.hooks).toEqual(["input"]);
+  const input = contribution.hooks!.input;
+  const read = () => input.getSnapshot() as ReturnType<typeof source.readInputDraft> & { imageIds: unknown[]; queue: unknown[] };
+  expect(read()).toMatchObject({ draft: "", phase: "plain", imageIds: [], occurrences: [] });
+  expect(read().queue).toBe(queue);
+  const observed: unknown[] = [];
+  const off = input.subscribe(() => observed.push(read()));
+  const initial = read();
+  source.setDisplayText("resident");
+  expect(read().draft).toBe("resident");
+  expect(read().draftRev).toBeGreaterThan(initial.draftRev);
+  expect(bridge.setInputDraft("a", "stale", initial.draftRev)).toBe(false);
+  expect(bridge.setInputDraft("a", "accepted", read().draftRev)).toBe(true);
+  const beforeMount = read();
+  const editor = bind("a");
+  expect(read().draft).toBe("initial");
+  expect(read().draftRev).toBeGreaterThan(beforeMount.draftRev);
+  const mounted = read();
+  editor.off();
+  expect(read().draft).toBe("accepted");
+  expect(read().draftRev).toBeGreaterThan(mounted.draftRev);
+  expect(bridge.setInputDraft("a", "stale mounted", mounted.draftRev)).toBe(false);
+  expect(observed.length).toBeGreaterThan(3);
+  off(); provider.dispose();
+});
+
 it("keeps the replacement owner's resident watch and releases stale owner watches exactly once", () => {
   const source=createComposerDraftSource();
   let watches=0;
-  const {provider}=fixture(()=>({setDisplayText:source.setDisplayText,subscribe(listener){watches++;const off=source.subscribe(listener);return()=>{watches--;off();};}}));
+  const {provider}=fixture(()=>({readInputDraft:source.readInputDraft,setDisplayText:source.setDisplayText,subscribe(listener){watches++;const off=source.subscribe(listener);return()=>{watches--;off();};}}));
   const owner=()=>({sessionId:"same",session:{getSnapshot:()=>({queue:[]}),subscribe:()=>()=>{}},ctx:{effect:(effect:()=>()=>void)=>effect()}});
   const first=owner(),second=owner();
   const actions=provider.resolve(first as never).props!.inputActions as ConversationInputActions;
