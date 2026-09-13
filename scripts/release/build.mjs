@@ -53,6 +53,19 @@ const config = {
   // Reserved URL only enables metadata generation for local QA. Embedded sources stay empty.
   publish: [{ provider: 'generic', url: settings.sources[0] || 'https://local-test.invalid/', channel: settings.channel }],
   mac: { ...pkg.build.mac, target: ['dmg', 'zip'], hardenedRuntime: !localOnly && !unsignedMac, ...(localOnly || unsignedMac ? { identity: null, notarize: false } : {}) },
+  ...(target.startsWith('darwin') && (localOnly || unsignedMac) ? {
+    dmg: {
+      ...pkg.build.dmg,
+      background: path.join(root, 'scripts/release/assets/dmg-unsigned.png'),
+      window: { width: 720, height: 532 },
+      iconSize: 88,
+      iconTextSize: 14,
+      contents: [
+        { x: 205, y: 175 },
+        { x: 515, y: 175, type: 'link', path: '/Applications' },
+      ],
+    },
+  } : {}),
   win: { ...pkg.build.win, target: ['nsis'] },
 };
 const configFile = path.join(output, 'builder.json');
@@ -62,7 +75,11 @@ run(['exec', 'node', 'scripts/fix-node-pty-permissions.mjs'], desktop);
 for (const name of fs.readdirSync(output)) {
   if ((name.startsWith(`Amiba-${version}-`) && /\.(dmg|zip|exe|blockmap)$/.test(name)) || [metadataName(target), 'release-manifest.json', 'package-footprint.json'].includes(name)) fs.rmSync(path.join(output, name), { force: true });
 }
-run(['exec', 'electron-builder', '--config', configFile, target.startsWith('darwin') ? '--mac' : '--win', `--${process.arch}`, '--publish', 'never'], desktop);
+if (target.startsWith('darwin')) {
+  run(['exec', 'node', 'scripts/release/package-mac.mjs', configFile]);
+} else {
+  run(['exec', 'electron-builder', '--config', configFile, '--win', `--${process.arch}`, '--publish', 'never'], desktop);
+}
 const resources = target.startsWith('darwin')
   ? path.join(output, process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'Amiba.app/Contents/Resources')
   : path.join(output, 'win-unpacked/resources');

@@ -231,3 +231,12 @@ gh workflow run desktop-release.yml --ref main -f mode=verify -f target=all -f r
 - 发布工具本地 24 项测试通过。Apple Developer ID 签名、公证和跨版本自动升级仍未实测；当前 Mac 使用手动安装更新，Windows 保留自动更新配置。
 
 0.1.1 的首次运行在公开前主动取消，用于修复 Mac 本地封装签名和运行时绝对链接；没有发布该版本，重新执行流水线正常递增至 0.1.2。CDN POST 接口仍待配置，本次通过 GitHub 分发。
+
+
+### Mac 安装窗口提示
+
+未签名发布和本地测试 DMG 的安装窗口直接显示中文安装步骤及“系统设置 → 隐私与安全性 → 仍要打开”指引。提示使用普通/Retina 两套背景图片，图标位于提示上方；已签名发布不显示未认证提示。
+
+`package-mac.mjs` 在压缩 DMG 前通过 Finder 写入原生背景引用、窗口大小和图标位置，避免 dmg-builder 25 生成的旧引用在新版 macOS 上显示白底。该步骤需要构建机具备 Finder 图形会话；自托管 Mac 构建机需登录桌面。本机已实际重新打包、只读挂载并截图确认文字完整、图标不遮挡。此项尚未在 GitHub macOS runner 上复验。
+
+背景源文件为 `scripts/release/assets/render-dmg-background.swift`，在 macOS 执行即可重新生成 PNG；正常打包直接使用已提交的图片，无需运行 Swift。改动随下一次构建生效，已发布的 v0.1.2 附件不覆盖。
