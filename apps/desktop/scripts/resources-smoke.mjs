@@ -48,5 +48,30 @@ export async function smokeResources({ evaluate, wait }) {
   await wait(() => evaluate("document.querySelector('[data-resource-probe]')?.textContent==='none:' && window.__resourceFeeds[1].signal.aborted"));
   await evaluate("window.__resourceOffB()");
   await wait(() => evaluate("!document.querySelector('[data-resource-probe]')"));
+  await evaluate(`(() => {
+    const ctx=window.__probeCtx,h=window.__probeCreateElement,React=window.__probeRequire('react');
+    const source=value=>{const listeners=new Set();return {getSnapshot:()=>value,subscribe(fn){listeners.add(fn);return ()=>listeners.delete(fn)},set(next){value=next;for(const fn of listeners)fn()},count:()=>listeners.size}};
+    const fixed=source('fixed'),a=source(1),b=source(2);
+    window.__entryKeyed={fixed,a,b};
+    window.__entryKeyedOff=ctx.slots.register({name:'sidebar.footer.action',id:'entry-keyed-probe',inject:()=>({hooks:{fixed},keyedHooks:{item:key=>({a,b})[key]},note:'business'})},props=>{
+      const [key,setKey]=React.useState('a');window.__entryKeyed.setKey=setKey;
+      const value=props.useItem(key,snapshot=>snapshot??-1);
+      const ordinary=props.useFixed(value=>value);
+      return h('output',{'data-entry-keyed':''},[ordinary,value,props.note,String('hooks' in props),String('keyedHooks' in props)].join(':'));
+    });
+  })()`);
+  const entryText = text => evaluate("document.querySelector('[data-entry-keyed]')?.textContent==="+JSON.stringify(text));
+  await wait(() => entryText('fixed:1:business:false:false'));
+  await evaluate('window.__entryKeyed.a.set(3)');
+  await wait(() => entryText('fixed:3:business:false:false'));
+  await evaluate("window.__entryKeyed.setKey('b')");
+  await wait(() => entryText('fixed:2:business:false:false'));
+  await wait(() => evaluate('window.__entryKeyed.a.count()===0 && window.__entryKeyed.b.count()===1'));
+  await evaluate("window.__entryKeyed.setKey('missing');window.__entryKeyed.fixed.set('updated')");
+  await wait(() => entryText('updated:-1:business:false:false'));
+  await wait(() => evaluate('window.__entryKeyed.b.count()===0'));
+  await evaluate('window.__entryKeyedOff()');
+  await wait(() => evaluate("!document.querySelector('[data-entry-keyed]') && window.__entryKeyed.fixed.count()===0"));
+  console.log('Entry inject keyedHooks passed actual renderer binding, ordinary hooks and business props, source updates, key switching, missing keys and unregistration cleanup.');
   console.log('Resources passed real global hook binding, shared stream, retained pin across consumer remount, last-holder abort, stable source reopening and caller fiber provider unload.');
 }

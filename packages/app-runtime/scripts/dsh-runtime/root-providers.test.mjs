@@ -118,13 +118,14 @@ function between(source, first, last) {
   return source.slice(a, b);
 }
 const actualHelpers = [
+  between(renderer, 'function bindInjectHooks(', '\n\t\tconst slotInjectCache'),
   between(renderer, 'function bindSnapshotSelector(', '\n\t\t//#endregion'),
   between(renderer, 'function observableHook(', '\n\t\tfunction SessionMaybeProvider('),
   between(renderer, 'const rootKeyedHookCache =', '\n\t\tfunction standardKit('),
 ].join('\n');
-const { standardProps, useRootBinding } = new Function('react', 'import_with_selector',
+const { standardProps, useRootBinding, bindInjectHooks } = new Function('react', 'import_with_selector',
   'const noopSubscribe = () => () => {}; class SlotAssemblyError extends Error {}\n' + actualHelpers +
-  '\nreturn {standardProps, useRootBinding};')(React, requireRenderer('use-sync-external-store/shim/with-selector'));
+  '\nreturn {standardProps, useRootBinding, bindInjectHooks};')(React, requireRenderer('use-sync-external-store/shim/with-selector'));
 function observable(initial) {
   let value = initial;
   const listeners = new Set();
@@ -197,4 +198,40 @@ test('real React consumers observe roster and source changes, retain draft DOM, 
   mountedRoot = undefined;
   assert.equal(replacement.subscriptions, 0);
   assert.equal(a.subscriptions, 0);
+});
+
+test('entry keyed hooks bind lazily, preserve ordinary hooks, switch sources and clean subscriptions', async t => {
+  const dom = new JSDOM('<div id="keyed-root"></div>');
+  const globals = { window: globalThis.window, document: globalThis.document, IS_REACT_ACT_ENVIRONMENT: globalThis.IS_REACT_ACT_ENVIRONMENT };
+  Object.assign(globalThis, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
+  const mounted = createRoot(dom.window.document.getElementById('keyed-root'));
+  t.after(async () => { await React.act(() => mounted.unmount()); dom.window.close(); Object.assign(globalThis, globals); });
+  const a = observable({ count: 1 }), b = observable({ count: 2 }), fixed = observable('fixed');
+  let lookups = 0;
+  const resolve = key => { lookups++; return key === 'a' ? a : key === 'b' ? b : undefined; };
+  const props = bindInjectHooks({ hooks: { fixed }, keyedHooks: { item: resolve }, note: 'kept' });
+  assert.equal(lookups, 0);
+  assert.equal(props.note, 'kept');
+  assert.equal('hooks' in props, false);
+  assert.equal('keyedHooks' in props, false);
+  assert.equal(bindInjectHooks({ keyedHooks: { item: resolve } }).useItem, props.useItem);
+  function View({ name }) {
+    const count = props.useItem(name, value => value?.count ?? -1);
+    const label = props.useFixed(value => value);
+    return React.createElement('output', null, `${label}:${count}`);
+  }
+  await React.act(() => mounted.render(React.createElement(View, { name: 'a' })));
+  assert.equal(dom.window.document.querySelector('output').textContent, 'fixed:1');
+  assert.equal(a.subscriptions, 1);
+  await React.act(() => { a.set({ count: 3 }); fixed.set('updated'); });
+  assert.equal(dom.window.document.querySelector('output').textContent, 'updated:3');
+  await React.act(() => mounted.render(React.createElement(View, { name: 'b' })));
+  assert.equal(a.subscriptions, 0);
+  assert.equal(b.subscriptions, 1);
+  assert.equal(dom.window.document.querySelector('output').textContent, 'updated:2');
+  await React.act(() => mounted.render(React.createElement(View, { name: 'missing' })));
+  assert.equal(b.subscriptions, 0);
+  assert.equal(dom.window.document.querySelector('output').textContent, 'updated:-1');
+  await React.act(() => mounted.render(null));
+  assert.equal(fixed.subscriptions, 0);
 });

@@ -2,8 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import * as React from 'react';
-import type { HostObservable, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots';
-import type { KeyedSnapshotSelectorHook } from '../client/sidebar-right/contract/keyed-snapshot.js';
+import type { HostObservable, SnapshotSelectorHook, KeyedSnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots';
 import { extractBundleClosure } from '../../scripts/extract-bundle-closure.mjs';
 
 // Exercise the installed, patched rc.2 renderer's real selector and keyed

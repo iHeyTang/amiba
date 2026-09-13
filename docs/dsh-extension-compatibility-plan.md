@@ -5,6 +5,18 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：扩展 entry 的 keyedHooks 通用绑定（2026-09-13）
+
+实际组装右侧栏前发现 rc.2 的 bindInjectHooks 仅处理普通 hooks，之前根级标准来源适配尚未覆盖 entry.inject.keyedHooks。现回补该通用入口：按名称生成 useX Hook，复用根级 keyed source 的稳定绑定与缺失值逻辑，同时移除注入容器并保留业务属性及普通 Hook。框架持有的 SlotHookFactory/hookContext 不变；没有用逐个组件手动绑定掩盖通用契约缺口。
+
+实际 ui-slots 包导出 KeyedStandardSource、KeyedHooksSources、KeyedSnapshotSelectorHook 和 PropsKeyedHooks，InjectFace 同时映射普通与 keyed 容器；删除上一阶段临时本地同形类型，tabInfo 与测试 helper 改用公开类型。两个 rc.2 补丁与锁文件 hash 已同步，未升级依赖版本。根目录离线安装退出 0（/tmp/amiba-keyed-install.log）。
+
+实际 renderer 绑定的 5 项 React 测试通过（/tmp/amiba-entry-keyed-tests-2.log）：新增注入时不求值、复用绑定、普通与 keyed 来源共存、业务属性保留、来源更新、切键退订、缺失键及卸载清理。最初 helper 漏提取 bindInjectHooks 声明，补齐测试加载后通过。静态类型检查通过（/tmp/amiba-entry-keyed-types.log）。资源和右侧栏回归日志确认 17 个文件、318 项测试全部通过（/tmp/amiba-entry-keyed-regression.log）；完整桌面构建日志到达最终依赖核验成功（/tmp/amiba-entry-keyed-build.log）。这两次工具会话返回在上下文压缩时丢失，未恢复退出码；进程已结束且成功结尾完整，不重复构建。
+
+真实桌面 --compat --resources --root-providers 退出 0（/tmp/amiba-entry-keyed-smoke-2.log）：entry 注入经真实 ModuleLoader/renderer 验证普通和 keyed Hook、业务属性、值更新、切键、缺失键及卸载订阅清理；根级来源、共享资源流与原文件、会话、配置、Markdown、HMR 回归通过。首次 smoke 的普通 useFixed 调用漏传必需 selector，报错明确位于测试插件；补上 selector 后通过，未修改产品接口（/tmp/amiba-entry-keyed-smoke.log）。源码 diff 检查通过；补丁文件只报告合法 unified diff 上下文标记空格后接原始 tab，不改写补丁上下文。
+
+右侧栏真实 pane、公开服务与正文仍未挂载；本节只完成通用 entry keyedHooks 前置能力，现有 UI 和 39/5/20 统计不变。
+
 ## 进行中：右侧栏 tabInfo Hook 与插槽类型契约（2026-09-13）
 
 迁移固定 c291e796 的 tabInfoFactory/guideTabInfoFactory：从框架提供的会话 store 和按 tabId 绑定的导航 source 组合信息，只有已提交的布局记录且导航仍绑定时才可读取；找不到任一部分即拒绝，避免已关闭标签继续显示旧快照。正文可见性跟随 activeTab，标题在侧栏展开时允许未选中标签，浮动标签保持可见；signal/actions 来自 occurrence，移动或折叠不替换生命周期。

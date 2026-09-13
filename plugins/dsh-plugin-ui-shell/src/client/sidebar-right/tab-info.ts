@@ -1,10 +1,9 @@
 // Adapted from DeepSeek c291e796, MIT. See LICENSE.deepseek.
-import type { KeyedSnapshotSelectorHook } from './contract/keyed-snapshot.js'
 /** Slot-owned tab information derived from framework-bound store and navigation hooks. */
 import { useMemo } from 'react'
 import { findTabPane } from './dockkit/index.js'
 import type { TabId } from './dockkit/index.js'
-import type { PropsStore, SlotHookFactory } from '@deepseek-ai/dsh-client-ui-slots'
+import type { KeyedSnapshotSelectorHook, PropsStore, SlotHookFactory } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarRightTabActions, SidebarRightTabNavigation, UseSidebarRightTabInfo } from './contract/slots.js'
 import type { createSidebarRightStore } from './stores.js'
 
