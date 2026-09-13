@@ -1,31 +1,38 @@
 import { providerOnboardingI18n } from "./i18n-onboarding.js";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { GuideStepOwner } from "@amiba/dsh-plugin-onboarding/client";
-import { Button, usePluginT } from "@amiba/ui/plugin";
+import { Button, Input, usePluginT } from "@amiba/ui/plugin";
 import type { ProviderSettingsController } from "./ModelProviderConfigTab.js";
-import { OfficialProviderEditor } from "./OfficialProviderEditor.js";
 import type { ModelPlaneSnapshotShape } from "./view-types.js";
+
+// Public account pages, verified against each provider's own documentation.
+export const PROVIDER_KEY_PAGES = {
+  tokendance: "https://tokendance.space/keys",
+  deepseek: "https://platform.deepseek.com/api_keys",
+} as const;
+type Page = "choose" | "key" | "model";
 export function ProviderOnboarding({
   adapter,
   complete,
   say,
   openSection,
+  renderActions,
 }: GuideStepOwner & { adapter: ProviderSettingsController }) {
   const { t } = usePluginT(providerOnboardingI18n);
   const [snapshot, setSnapshot] = useState<ModelPlaneSnapshotShape>();
-  const [selected, setSelected] = useState("tokendance");
+  const [selected, setSelected] =
+    useState<keyof typeof PROVIDER_KEY_PAGES>("tokendance");
+  const [page, setPage] = useState<Page>("choose");
   const [model, setModel] = useState("");
-  const [editing, setEditing] = useState(false);
+  const [key, setKey] = useState("");
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
+  const saving = useRef(false);
+  const heading = useRef<HTMLHeadingElement>(null);
   const load = useCallback(async () => {
-    try {
-      const next = await adapter.snapshot();
-      setSnapshot(next);
-      setFailed(false);
-    } catch {
-      setFailed(true);
-    }
+    const next = await adapter.snapshot();
+    setSnapshot(next);
+    return next;
   }, [adapter]);
   useEffect(() => {
     let live = true;
@@ -34,26 +41,47 @@ export function ProviderOnboarding({
       const current = ++generation;
       try {
         const next = await adapter.snapshot();
-        if (live && current === generation) {
-          setSnapshot(next);
-          setFailed(false);
-        }
+        if (live && current === generation) setSnapshot(next);
       } catch {
         if (live && current === generation) setFailed(true);
       }
     };
     void refresh();
-    const off = adapter.subscribe?.(() => void refresh());
+    const off = adapter.subscribe?.(() => {
+      if (!saving.current) void refresh();
+    });
     return () => {
       live = false;
       off?.();
     };
   }, [adapter]);
-  // Keep copy stable: usePluginT returns a realm translation callback.
   useEffect(() => {
-    say(t("setup.choose"), "waiting");
-  }, [say, t]);
+    heading.current?.focus();
+  }, [page]);
+  useEffect(() => {
+    say(
+      t(
+        pending
+          ? "setup.saving"
+          : failed
+            ? "setup.failed"
+            : page === "choose"
+              ? "setup.choose"
+              : page === "key"
+                ? "setup.keyTalk"
+                : "setup.modelTalk",
+      ),
+      pending ? "loading" : failed ? "failed" : "waiting",
+    );
+  }, [page, pending, failed, say, t]);
   const provider = snapshot?.providers.find((p) => p.id === selected);
+  const config = provider?.configuration;
+  const credential = config?.credentialFields[0];
+  const stored =
+    !!credential && snapshot?.credentials[credential.ref]?.configured === true;
+  const writable =
+    provider?.editable &&
+    snapshot?.credentials[credential?.ref ?? ""]?.writable !== false;
   const models = provider?.enabled
     ? provider.models.filter((m) => m.enabled !== false)
     : [];
@@ -66,103 +94,241 @@ export function ProviderOnboarding({
     : models.some((m) => m.id === defaultModel)
       ? defaultModel
       : (models[0]?.id ?? "");
-  async function configure() {
-    if (!provider?.configuration || pending) return;
+  const providerName = selected === "tokendance" ? "TokenDance" : "DeepSeek";
+  async function run(action: () => Promise<void>) {
+    if (saving.current) return;
+    saving.current = true;
     setPending(true);
     setFailed(false);
-    say(t("setup.loading"), "loading");
     try {
-      // Dormant provider profiles must exist before the schema can expose
-      // their default credential references (TokenDance ships undeclared).
-      if (!provider.official?.active) {
-        if (!adapter.configure)
-          throw new Error("Provider configuration unavailable");
+      await action();
+    } catch {
+      await load().catch(() => {});
+      setFailed(true);
+    } finally {
+      saving.current = false;
+      setPending(false);
+    }
+  }
+  function next() {
+    return run(async () => {
+      if (page === "choose") {
+        const latest = await load();
+        const current = latest.providers.find((p) => p.id === selected);
+        if (!current?.configuration) throw new Error("Provider unavailable");
+        // Materialize the dormant profile so DSH supplies its default
+        // credential reference. Do not invent a ref or change endpoints.
+        if (!current.official?.active) {
+          if (!current.editable || !adapter.configure)
+            throw new Error("Settings read-only");
+          setSnapshot(
+            await adapter.configure(selected, {
+              expectedRevision: current.configuration.revision,
+              ops: [
+                { op: "set", path: [], value: current.configuration.value },
+              ],
+              credentials: [],
+            }),
+          );
+        }
+        setPage("key");
+      } else if (page === "key") {
+        const latest = await load();
+        const current = latest.providers.find((p) => p.id === selected);
+        const field = current?.configuration?.credentialFields[0];
+        if (!current?.configuration || !field)
+          throw new Error("Credential unavailable");
+        if (key.trim()) {
+          if (
+            !adapter.configure ||
+            !current.editable ||
+            latest.credentials[field.ref]?.writable === false
+          )
+            throw new Error("Credential read-only");
+          const next = await adapter.configure(selected, {
+            expectedRevision: current.configuration.revision,
+            ops: [],
+            credentials: [{ ref: field.ref, value: key.trim() }],
+          });
+          setSnapshot(next);
+          setKey("");
+        } else if (!latest.credentials[field.ref]?.configured)
+          throw new Error("Credential missing");
+        setPage("model");
+      } else {
+        if (!chosen) return;
         setSnapshot(
-          await adapter.configure(provider.id, {
-            expectedRevision: provider.configuration.revision,
-            ops: [{ op: "set", path: [], value: provider.configuration.value }],
-            credentials: [],
-          }),
+          await adapter.setDefaultSelection(
+            { provider: selected, model: chosen },
+            snapshot?.revision,
+          ),
         );
+        await complete();
       }
-      setEditing(true);
-      say(t("setup.choose"), "waiting");
-    } catch {
-      setFailed(true);
-      say(t("setup.failed"), "failed");
-    } finally {
-      setPending(false);
-    }
+    });
   }
-  async function proceed() {
-    if (!chosen || pending) return;
-    setPending(true);
-    setFailed(false);
-    say(t("setup.working"), "loading");
-    try {
-      const next = await adapter.setDefaultSelection(
-        { provider: selected, model: chosen },
-        snapshot?.revision,
-      );
-      setSnapshot(next);
-      await complete();
-      say(t("setup.saved"), "completed");
-    } catch {
-      await load();
-      setFailed(true);
-      say(t("setup.failed"), "failed");
-    } finally {
-      setPending(false);
-    }
-  }
+  const disabled =
+    pending ||
+    (page === "choose"
+      ? !config || (!provider?.official?.active && !writable)
+      : page === "key"
+        ? !credential || (!key.trim() && !stored) || (!!key.trim() && !writable)
+        : !chosen);
+  const stages: Page[] = ["choose", "key", "model"];
   return (
-    <div className="space-y-4">
-      <div
-        className="grid gap-3 sm:grid-cols-2"
-        role="group"
-        aria-label={t("setup.model")}
+    <div className="space-y-5 pt-4">
+      <ol
+        className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground"
+        aria-label={t("setup.progress")}
       >
-        {[
-          { id: "tokendance", name: "TokenDance", description: "setup.token" },
-          { id: "deepseek", name: "DeepSeek", description: "setup.deepseek" },
-        ].map((item) => (
+        {stages.map((stage, index) => (
+          <li
+            key={stage}
+            aria-current={page === stage ? "step" : undefined}
+            className={page === stage ? "font-medium text-foreground" : ""}
+          >
+            {index + 1} · {t(`setup.stage.${stage}`)}
+          </li>
+        ))}
+      </ol>
+      <h3
+        ref={heading}
+        tabIndex={-1}
+        className="text-base font-semibold outline-none"
+      >
+        {page === "choose"
+          ? t("setup.selectTitle")
+          : page === "key"
+            ? `${providerName} · ${t("setup.keyTitle")}`
+            : t("setup.modelTitle")}
+      </h3>
+      {page === "choose" ? (
+        <>
+          <div
+            className="grid gap-3 sm:grid-cols-2"
+            role="group"
+            aria-label={t("setup.selectTitle")}
+          >
+            {(
+              [
+                {
+                  id: "tokendance",
+                  name: "TokenDance",
+                  description: "setup.token",
+                },
+                {
+                  id: "deepseek",
+                  name: "DeepSeek",
+                  description: "setup.deepseek",
+                },
+              ] as const
+            ).map((item) => (
+              <button
+                type="button"
+                key={item.id}
+                aria-pressed={selected === item.id}
+                disabled={pending}
+                onClick={() => {
+                  setSelected(item.id);
+                  setModel("");
+                  setKey("");
+                  setFailed(false);
+                }}
+                className={`rounded-xl border p-4 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected === item.id ? "border-primary bg-muted" : "border-border"}`}
+              >
+                <span className="block text-sm font-semibold">{item.name}</span>
+                <span className="mt-2 block text-xs leading-relaxed text-muted-foreground">
+                  {t(item.description)}
+                </span>
+              </button>
+            ))}
+          </div>
           <button
             type="button"
-            key={item.id}
-            aria-pressed={selected === item.id}
             disabled={pending}
-            onClick={() => {
-              setSelected(item.id);
-              setModel("");
-              say(t(item.description), "waiting");
-            }}
-            className={`rounded-xl border p-4 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected === item.id ? "border-primary bg-muted" : "border-border"}`}
+            onClick={() => openSection("models")}
+            className="text-xs text-muted-foreground underline underline-offset-4"
           >
-            <span className="block text-sm font-semibold">{item.name}</span>
-            <span className="mt-2 block text-xs leading-relaxed text-muted-foreground">
-              {t(item.description)}
-            </span>
+            {t("setup.other")}
           </button>
-        ))}
-      </div>
-      {!snapshot ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t(failed ? "setup.failed" : "setup.loading")}
-        </p>
-      ) : !provider ? (
-        <p className="text-sm text-muted-foreground">{t("setup.missing")}</p>
+          {!snapshot ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {t("setup.loading")}
+            </p>
+          ) : !provider ? (
+            <p className="text-sm text-muted-foreground">
+              {t("setup.missing")}
+            </p>
+          ) : null}
+        </>
+      ) : page === "key" ? (
+        <>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {t("setup.keyExplain")}
+          </p>
+          <ol className="list-decimal space-y-2 pl-5 text-sm leading-relaxed">
+            <li>
+              <a
+                href={PROVIDER_KEY_PAGES[selected]}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-primary underline underline-offset-4"
+              >
+                {t(
+                  selected === "tokendance"
+                    ? "setup.token.open"
+                    : "setup.deepseek.open",
+                )}{" "}
+                ↗
+              </a>
+              {t("setup.login")}
+            </li>
+            <li>
+              {t(
+                selected === "tokendance"
+                  ? "setup.token.create"
+                  : "setup.deepseek.create",
+              )}
+            </li>
+            <li>{t("setup.copy")}</li>
+          </ol>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {t("setup.billing")}
+          </p>
+          <form
+            id="onboarding-provider-key"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!disabled) void next();
+            }}
+            className="space-y-2"
+          >
+            <label htmlFor="onboarding-api-key" className="text-sm font-medium">
+              {providerName} API Key
+            </label>
+            <Input
+              id="onboarding-api-key"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              autoCapitalize="none"
+              value={key}
+              disabled={pending || !writable}
+              placeholder={t(
+                stored ? "setup.storedPlaceholder" : "setup.keyPlaceholder",
+              )}
+              onChange={(e) => setKey(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t(stored ? "setup.stored" : "setup.keyPrivacy")}
+            </p>
+          </form>
+        </>
       ) : (
         <>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {t("setup.hint")}
+          <p className="text-sm text-muted-foreground">
+            {t("setup.modelHint")}
           </p>
-          <Button
-            variant="outline"
-            disabled={pending || !provider.editable}
-            onClick={() => void configure()}
-          >
-            {t("setup.configure")} · {provider.displayName}
-          </Button>
           {models.length > 0 ? (
             <label className="block space-y-2 text-sm">
               <span>{t("setup.model")}</span>
@@ -181,43 +347,63 @@ export function ProviderOnboarding({
               </select>
             </label>
           ) : (
-            <p className="text-xs text-muted-foreground">{t("setup.fix")}</p>
+            <p role="status" className="text-sm text-muted-foreground">
+              {t("setup.noModels")}
+            </p>
           )}
         </>
       )}
-      {failed && snapshot && (
+      {failed && (
         <p role="alert" className="text-sm text-destructive">
           {t("setup.failed")}
         </p>
       )}
-      <div className="flex flex-wrap gap-2">
-        <Button disabled={!chosen || pending} onClick={() => void proceed()}>
-          {t("setup.continue")}
-        </Button>
-        <Button variant="ghost" disabled={pending} onClick={() => void load()}>
-          {t("setup.retry")}
-        </Button>
+      {(failed || (page === "model" && !models.length)) && (
         <Button
           variant="ghost"
           disabled={pending}
-          onClick={() => openSection("models")}
+          onClick={() =>
+            void run(async () => {
+              await load();
+            })
+          }
         >
-          {t("setup.other")}
+          {t("setup.retry")}
         </Button>
-      </div>
-      {editing && provider && snapshot && (
-        <OfficialProviderEditor
-          key={provider.id}
-          provider={provider}
-          snapshot={snapshot}
-          adapter={adapter}
-          onClose={() => setEditing(false)}
-          onSaved={(next) => {
-            setSnapshot(next);
-            setEditing(false);
-            say(t("setup.choose"), "waiting");
-          }}
-        />
+      )}
+      {renderActions(
+        <>
+          {page !== "choose" && (
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                setPage(page === "model" ? "key" : "choose");
+                setFailed(false);
+              }}
+            >
+              {t("setup.back")}
+            </Button>
+          )}
+          <Button
+            disabled={disabled}
+            type={page === "key" ? "submit" : "button"}
+            form={page === "key" ? "onboarding-provider-key" : undefined}
+            onClick={page === "key" ? undefined : () => void next()}
+          >
+            {t(
+              pending
+                ? "setup.saving"
+                : page === "choose"
+                  ? "setup.next"
+                  : page === "key"
+                    ? stored && !key.trim()
+                      ? "setup.next"
+                      : "setup.saveKey"
+                    : "setup.finish",
+            )}
+          </Button>
+        </>,
       )}
     </div>
   );

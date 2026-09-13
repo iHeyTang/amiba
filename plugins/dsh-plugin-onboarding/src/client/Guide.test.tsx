@@ -1,3 +1,4 @@
+import type { GuideStepOwner } from "./contracts.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   act,
@@ -133,5 +134,43 @@ describe("persistent guide", () => {
     expect(close).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText("Start using Amiba"));
     await waitFor(() => expect(close).toHaveBeenCalledOnce());
+  });
+  it("renders step actions in the shared footer and submits the body form from there", async () => {
+    const { props, store } = fixture();
+    props.renderSlot = ((
+      name: string,
+      owner: GuideStepOwner,
+      filter?: { only?: string },
+    ) =>
+      name === "amiba.onboarding.companion" ? null : (
+        <>
+          <form
+            id="test-guide-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void owner.complete();
+            }}
+          >
+            <span>Body {filter?.only}</span>
+          </form>
+          {owner.renderActions(
+            <button type="submit" form="test-guide-form">
+              Next {filter?.only}
+            </button>,
+          )}
+        </>
+      )) as GuideProps["renderSlot"];
+    render(<Guide {...props} />);
+    fireEvent.click(await screen.findByText("Let's get set up"));
+    const button = await screen.findByText("Next models");
+    expect(button.closest("footer")).not.toBeNull();
+    expect(
+      screen.getByText("Skip this step").compareDocumentPosition(button) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    fireEvent.click(button);
+    await screen.findByText("Next extra");
+    expect(screen.queryByText("Next models")).toBeNull();
+    expect(store.mark).toHaveBeenCalledWith("models", false);
   });
 });

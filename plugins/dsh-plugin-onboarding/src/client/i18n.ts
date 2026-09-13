@@ -1,6 +1,7 @@
 import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
 export const guideI18n: PluginCatalogOverlay = {
   en: {
+    "guide.navigation": "Setup navigation",
     "guide.title": "Welcome to Amiba",
     "guide.description": "A little setup, with a companion by your side.",
     "guide.hello":
@@ -24,6 +25,7 @@ export const guideI18n: PluginCatalogOverlay = {
       "No setup steps are available yet. You can return from Settings → Setup guide.",
   },
   "zh-CN": {
+    "guide.navigation": "引导操作",
     "guide.title": "欢迎来到 Amiba",
     "guide.description": "做一点准备，让小伙伴陪你开始。",
     "guide.hello":

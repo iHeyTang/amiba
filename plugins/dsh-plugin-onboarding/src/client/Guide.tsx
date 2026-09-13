@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 import type { PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
 import {
   Button,
@@ -36,6 +43,12 @@ export function Guide({
   const { t } = usePluginT(guideI18n);
   const rows = useSyncExternalStore(steps.subscribe, steps.getSnapshot);
   const [progress, setProgress] = useState<Progress>();
+  const [actionsHost, setActionsHost] = useState<HTMLDivElement | null>(null);
+  const renderActions = useCallback(
+    (actions: ReactNode) =>
+      actionsHost ? createPortal(actions, actionsHost) : null,
+    [actionsHost],
+  );
   const [started, setStarted] = useState(false);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -144,77 +157,89 @@ export function Guide({
       }}
     >
       <DialogContent
-        className="flex max-h-[90vh] max-w-2xl flex-col overflow-y-auto"
+        className="flex max-h-[90vh] max-w-2xl flex-col overflow-hidden"
         onInteractOutside={(e) => e.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle>{t("guide.title")}</DialogTitle>
           <DialogDescription>{t("guide.description")}</DialogDescription>
         </DialogHeader>
-        <div className="flex items-center gap-4 py-3">
-          <div className="flex h-28 w-28 shrink-0 items-center justify-center">
-            {renderSlot("amiba.onboarding.companion", { mood })}
-          </div>
-          <p
-            role={error ? "alert" : "status"}
-            className="rounded-2xl bg-muted px-4 py-3 text-sm leading-relaxed"
-          >
-            {message}
-          </p>
-        </div>
-        {started && rows.length > 0 && (
-          <ol
-            aria-label={t("guide.settings")}
-            className="flex flex-wrap gap-3 text-xs text-muted-foreground"
-          >
-            {rows.map((row, index) => (
-              <li
-                key={row.id}
-                aria-current={active?.id === row.id ? "step" : undefined}
-                className={
-                  active?.id === row.id ? "font-medium text-foreground" : ""
-                }
-              >
-                {progress?.skipped?.includes(row.id)
-                  ? "–"
-                  : progress?.completed.includes(row.id)
-                    ? "✓"
-                    : index + 1}{" "}
-                · {row.label}
-              </li>
-            ))}
-          </ol>
-        )}
-        {active &&
-          renderSlot(
-            "amiba.onboarding.step",
-            { complete, say, openSection },
-            { only: active.id },
-          )}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-          <Button variant="ghost" disabled={working} onClick={close}>
-            {t("guide.later")}
-          </Button>
-          {!progress ? (
-            <Button onClick={() => setRetry((n) => n + 1)}>
-              {t("guide.retry")}
-            </Button>
-          ) : !started ? (
-            <Button onClick={() => setStarted(true)}>{t("guide.start")}</Button>
-          ) : ready ? (
-            <Button disabled={working} onClick={() => void finish()}>
-              {t("guide.done")}
-            </Button>
-          ) : (
-            <Button
-              variant="ghost"
-              disabled={working}
-              onClick={() => void complete(true).catch(() => {})}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="flex items-center gap-4 pb-5 pt-2">
+            <div className="flex h-28 w-28 shrink-0 items-center justify-center">
+              {renderSlot("amiba.onboarding.companion", { mood })}
+            </div>
+            <p
+              role={error ? "alert" : "status"}
+              className="rounded-2xl bg-muted px-4 py-3 text-sm leading-relaxed"
             >
-              {t("guide.skip")}
-            </Button>
+              {message}
+            </p>
+          </div>
+          {started && rows.length > 1 && (
+            <ol
+              aria-label={t("guide.settings")}
+              className="flex flex-wrap gap-3 text-xs text-muted-foreground"
+            >
+              {rows.map((row, index) => (
+                <li
+                  key={row.id}
+                  aria-current={active?.id === row.id ? "step" : undefined}
+                  className={
+                    active?.id === row.id ? "font-medium text-foreground" : ""
+                  }
+                >
+                  {progress?.skipped?.includes(row.id)
+                    ? "–"
+                    : progress?.completed.includes(row.id)
+                      ? "✓"
+                      : index + 1}{" "}
+                  · {row.label}
+                </li>
+              ))}
+            </ol>
           )}
+          {active &&
+            renderSlot(
+              "amiba.onboarding.step",
+              { complete, say, openSection, renderActions },
+              { only: active.id },
+            )}
         </div>
+        <footer
+          className="flex shrink-0 flex-wrap items-center gap-2 border-t pt-4"
+          aria-label={t("guide.navigation")}
+        >
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" disabled={working} onClick={close}>
+              {t("guide.later")}
+            </Button>
+            {active && rows.length > 1 && (
+              <Button
+                variant="ghost"
+                disabled={working}
+                onClick={() => void complete(true).catch(() => {})}
+              >
+                {t("guide.skip")}
+              </Button>
+            )}
+          </div>
+          <div ref={setActionsHost} className="ml-auto flex items-center gap-2">
+            {!progress ? (
+              <Button onClick={() => setRetry((n) => n + 1)}>
+                {t("guide.retry")}
+              </Button>
+            ) : !started ? (
+              <Button onClick={() => setStarted(true)}>
+                {t("guide.start")}
+              </Button>
+            ) : ready ? (
+              <Button disabled={working} onClick={() => void finish()}>
+                {t("guide.done")}
+              </Button>
+            ) : null}
+          </div>
+        </footer>
       </DialogContent>
     </Dialog>
   );

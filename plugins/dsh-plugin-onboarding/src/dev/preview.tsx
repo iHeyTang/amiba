@@ -10,7 +10,10 @@ import { PetView } from "../../../dsh-plugin-pets/src/client/PetView";
 import { grovePack, makeConfig } from "../../../dsh-plugin-pets/src/model";
 import type { GuideMood, GuideStepOwner } from "../client/contracts";
 import type { ProviderSettingsController } from "../../../dsh-plugin-model-plane/src/client/ModelProviderConfigTab";
-import type { ModelPlaneSnapshotShape } from "../../../dsh-plugin-model-plane/src/client/view-types";
+import type {
+  ConfigureProviderInput,
+  ModelPlaneSnapshotShape,
+} from "../../../dsh-plugin-model-plane/src/client/view-types";
 import "../../../dsh-plugin-ui-shell/src/dev/surfaces.css";
 setPlatform({
   storage: {
@@ -70,7 +73,16 @@ let snapshot: ModelPlaneSnapshotShape = {
 };
 const adapter = {
   snapshot: async () => snapshot,
-  configure: async (id: string) => {
+  configure: async (id: string, input: ConfigureProviderInput) => {
+    if (input.credentials.some((edit) => edit.value?.trim())) {
+      snapshot = {
+        ...snapshot,
+        credentials: {
+          ...snapshot.credentials,
+          [`${id.toUpperCase()}_API_KEY`]: { configured: true, writable: true },
+        },
+      };
+    }
     snapshot = {
       ...snapshot,
       providers: snapshot.providers.map((p) =>

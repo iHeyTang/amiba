@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type {} from "@deepseek-ai/dsh-client-ui-slots";
 export type GuideMood = "idle" | "waiting" | "loading" | "completed" | "failed";
 export interface GuideStepOwner {
@@ -6,6 +7,8 @@ export interface GuideStepOwner {
   /** Pet dialogue; never include secrets or raw API responses. */
   say(message: string, mood?: GuideMood): void;
   openSection(id: string): void;
+  /** Render step navigation into the guide’s shared bottom-right action area. */
+  renderActions(actions: ReactNode): ReactNode;
 }
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotMap {

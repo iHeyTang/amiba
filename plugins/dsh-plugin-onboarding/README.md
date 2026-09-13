@@ -10,9 +10,16 @@
   读取或保存失败时可重试，不把错误当作完成。
 - 模型插件注册 `models` 步骤，推荐 **TokenDance（Amiba 推荐）** 与
   **DeepSeek（DSH 官方）**。它复用 DSH 原生 provider 配置、凭据及默认模型接口。
-  尚未声明的 TokenDance profile 在用户点「配置服务」时初始化；凭据未配置、
+  流程分为「选择服务 → 获取并填写 Key → 选择模型」三页。主操作统一放在右下角，
+  「上一步」在主操作左侧，「稍后继续」在左下角。
+  尚未声明的 TokenDance profile 在选择服务后点「下一步」时初始化；凭据未配置、
   provider 不可用或没有启用模型时不能继续。选择默认模型并成功保存后才完成步骤。
-  不复制用户的个人密钥，也不通过模型请求验证余额或权限。
+  Key 页仅显示获取教程和密码输入框，已有 Key 可留空沿用；保存成功后清空输入，
+  切换服务也清空未保存的 Key。不复制用户的个人密钥，也不通过模型请求验证余额或权限。
+  官方获取入口：[TokenDance API 密钥](https://tokendance.space/keys)、
+  [DeepSeek API Keys](https://platform.deepseek.com/api_keys)。
+  操作说明依据 [TokenDance 密钥文档](https://tokendance.space/docs/api-keys) 和
+  [DeepSeek 首次调用文档](https://api-docs.deepseek.com/zh-cn/)。
 - 宠物插件注册向导角色：使用当前宠物；新用户宠物库为空时预览内置 Mofli，
   不向宠物库写入默认数据。欢迎、等待、保存、完成和错误有对应对话与表情。
 
@@ -22,6 +29,8 @@
 
 - `amiba.onboarding.step`：root/list。以稳定 `id` 标识步骤，按 `order` 排序。
   每次只渲染第一个未处理步骤。步骤可在加载/卸载时动态变化。
+  `renderActions(ReactNode)` 通过 portal 把步骤导航渲染到公共页脚右侧；正文表单可用 `form` id 与页脚提交按钮关联。
+  正文独立滚动，页脚始终可见。只有多个扩展步骤时显示总进度和次要的跳过入口，避免与步骤内部进度重复。
 - `amiba.onboarding.companion`：root/single。宠物或其他角色通过 `mood` 响应状态。
 
 接入方可以声明本插件为 optional peer，并通过 `/client` 的 type-only import
@@ -31,11 +40,12 @@
 ```tsx
 import type { GuideStepOwner } from '@amiba/dsh-plugin-onboarding/client';
 
-function Setup({ complete, say, openSection }: GuideStepOwner) {
+function Setup({ complete, say, openSection, renderActions }: GuideStepOwner) {
   // 完成业务配置后 await complete()；失败时保留本步骤供用户重试。
   // say('现在连接你的服务吧', 'waiting') 可以让宠物提供简短提示。
   // openSection('your-settings') 关闭向导并转到已有设置页面，保留当前进度。
-  return <button onClick={() => openSection('your-settings')}>去配置</button>;
+  // 主操作通过 renderActions 放入公共页脚，保持步骤间的位置一致。
+  return renderActions(<button onClick={() => openSection('your-settings')}>下一步</button>);
 }
 ctx.slots.inject('amiba.onboarding.step', () => ctx.slots.register({
   name: 'amiba.onboarding.step', id: 'your-plugin.connection.v1', order: 20,

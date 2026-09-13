@@ -22,7 +22,8 @@
       "external": [
         "@amiba/dsh-plugin-ui-shell/client",
         "react",
-        "react/jsx-runtime"
+        "react/jsx-runtime",
+        "react-dom"
       ],
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
