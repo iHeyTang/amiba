@@ -24,11 +24,6 @@ on:
         type: choice
         options: [unsigned, signed]
         default: unsigned
-      bump:
-        description: Version increment for Release (default patch)
-        type: choice
-        options: [patch, minor, major]
-        default: patch
   push:
     branches: [main]
 
@@ -44,7 +39,7 @@ jobs:
   plan:
     name: Prepare
     permissions:
-      contents: write
+      contents: read
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
