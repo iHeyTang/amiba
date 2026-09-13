@@ -1,3 +1,4 @@
+import { smokeFileStat } from "./file-stat-smoke.mjs";
 import { smokeResources } from "./resources-smoke.mjs";
 import { smokeRightTabRegistry } from "./right-tab-registry-smoke.mjs";
 import { smokeMainPanelList } from "./main-panel-list-smoke.mjs";
@@ -1664,6 +1665,7 @@ try {
     assert.ok(fileWorkspace && (await realpath(fileWorkspace)).startsWith(await realpath(profile)), "file fixture must stay inside the temporary workspace");
     const openedFile = path.join(fileWorkspace, "compat-open.txt");
     await writeFile(openedFile, "COMPAT_FILE_OPENED");
+    await smokeFileStat({ evaluate, fileWorkspace, openedFile });
     await evaluate(`window.__turnTailOwners[7].openFile(${JSON.stringify(openedFile)});void 0`);
     await wait(() => evaluate("document.querySelector('[data-workspace-file-preview]')?.textContent.includes('COMPAT_FILE_OPENED')"));
     await writeFile(path.join(profile, "turn-tail-open"), "open");

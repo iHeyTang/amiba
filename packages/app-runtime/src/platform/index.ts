@@ -500,6 +500,14 @@ export interface WorkspaceAdapter {
   onChange(cb: (change: WorkspaceChange) => void): () => void;
 }
 
+/** File metadata independent of preview size or encoding limits. */
+export interface WorkspaceFileStat {
+  readonly absolutePath: string;
+  /** Opaque freshness token; consumers must not parse it. */
+  readonly version: string;
+  readonly bytes?: number;
+}
+
 export interface WorkspaceFileDocument {
   /** Canonical absolute path after main-process workspace validation. */
   path: string;
@@ -621,6 +629,7 @@ export interface WorkspaceFilesAdapter {
   list(sessionId: string, path?: string): Promise<WorkspaceTreeEntry[]>;
   search(sessionId: string, query: string): Promise<WorkspaceTreeEntry[]>;
   read(sessionId: string, path: string): Promise<WorkspaceFileDocument>;
+  stat?(sessionId: string, path: string): Promise<WorkspaceFileStat>;
   readBytes?(sessionId: string, path: string): Promise<WorkspaceFileBytes>;
   reveal(sessionId: string, path: string): Promise<void>;
   openExternal(sessionId: string, path: string): Promise<void>;

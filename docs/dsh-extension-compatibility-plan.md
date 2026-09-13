@@ -5,6 +5,14 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：文件资源真实元数据接口（2026-09-13）
+
+增加可选 WorkspaceFilesAdapter.stat，经 Electron preload 的 files:stat 路由到主进程；调用原 resolveFileForSession 完成工作区 realpath 与越界检查后，仅 stat 文件，不读取正文。返回 canonical absolutePath、完整 bytes 与 opaque version；版本包含设备、inode、大小及纳秒 mtime/ctime，检测替换与恢复 mtime 的写入。原 read/readBytes、预览上限和 UI 不变；不向缺少后端的 Web 平台伪造实现。
+
+真实文件测试覆盖超过 32 MB 的二进制元数据、稳定重复读取、同大小替换、目录拒绝与删除；保留原二进制往返和文本上限回归。文件监听及官方 file provider 尚未接通，不能把 stat 单独算作文档扩展完成。现有监听还会忽略 node_modules 等目录且不监听默认 HOME；后续需要针对资源的监听，不能仅复用工作区树事件并宣称完整覆盖。
+
+验证：2 项真实文件测试通过（/tmp/amiba-file-stat-tests.log）；主进程类型检查通过（/tmp/amiba-file-stat-node-types.log）。首次渲染端检查发现独立 global.d.ts 缺少桥接声明，已补齐 WorkspaceFileStat 导入和 stat 方法，复查通过（/tmp/amiba-file-stat-renderer-types-2.log）。完整桌面构建退出 0（/tmp/amiba-file-stat-build.log）；构建后唯一生产侧修改为不影响输出的 .d.ts 声明。--compat 桌面 smoke 退出 0（/tmp/amiba-file-stat-smoke.log）：通过真实 IPC 核实相对/绝对地址同一 canonical 身份、大文件完整大小、目录拒绝，以及绝对越界、相对越界、符号链接越界拒绝；原文件预览、Markdown、会话、配置与 HMR 回归通过。
+
 ## 进行中：文件资源地址协议（2026-09-13）
 
 按固定 c291e796 迁移 file-address 的构造、解析及 48 项上游测试，通过 shell 客户端入口导出 sessionFileAddress、absoluteFileAddress、parseFileAddress 和 FileAddress。保留 Session 身份、POSIX/Windows/UNC 路径、单次解码和未归一化的点路径；授权仍由后端处理，地址解析成功不代表有读取权限。源文件保留 MIT 归属，由现有客户端许可 banner 覆盖。

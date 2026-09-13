@@ -1,4 +1,4 @@
-import { readPreviewFile } from "./file-preview";
+import { readPreviewFile, statWorkspaceFile } from "./file-preview";
 import { resolve as resolvePath } from "node:path";
 
 import {
@@ -370,6 +370,11 @@ export function registerIpcHandlers() {
     (_e, args: { sessionId: string; path: string }) =>
       readWorkspaceFile(args.sessionId, args.path),
   );
+
+  ipcMain.handle("files:stat", async (_e, args: { sessionId: string; path: string }) => {
+    const resolved = await workspaceManager.resolveFileForSession(args.sessionId, args.path);
+    return statWorkspaceFile(resolved);
+  });
 
   ipcMain.handle("files:read-bytes", (_e, args: { sessionId: string; path: string }) => readWorkspaceFile(args.sessionId, args.path, true));
 
