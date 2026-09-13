@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：右侧栏 tabInfo Hook 与插槽类型契约（2026-09-13）
+
+迁移固定 c291e796 的 tabInfoFactory/guideTabInfoFactory：从框架提供的会话 store 和按 tabId 绑定的导航 source 组合信息，只有已提交的布局记录且导航仍绑定时才可读取；找不到任一部分即拒绝，避免已关闭标签继续显示旧快照。正文可见性跟随 activeTab，标题在侧栏展开时允许未选中标签，浮动标签保持可见；signal/actions 来自 occurrence，移动或折叠不替换生命周期。
+
+增加 pane.tab、pane.tab.title、tab.guide、tab.menu.item 的类型契约与本地同形 KeyedSnapshotSelectorHook；沿用 rc.2 原生 hookContext/SlotHookFactory，没有改写框架。导航类型复用已迁移文件。rightbar.session/root 所有权、完整 locale namespace 及真实注册/挂载仍未处理，不能将类型声明当作入口已可用。
+
+239 项右侧栏测试通过（/tmp/amiba-tab-info-tests-3.log）：新增 3 项官方已提交关系测试和 1 项正文/标题/折叠/浮动/身份稳定的真实 React Hook 测试，使用真实 rc.2 store 与已打补丁 renderer 的选择器绑定。测试 helper 初次使用 import.meta.url 时被 jsdom/Vite 转成浏览器 URL，Node createRequire 拒绝；改为已知插件测试目录下的绝对文件路径后通过，未改生产逻辑。Helper 放在 src/dev，不进入产品输出。类型检查（/tmp/amiba-tab-info-types-2.log）和插件包构建（/tmp/amiba-tab-info-build.log）均退出 0；尚未做实际桌面 pane 验证。
+
+后续继续把这些 hookContext 绑定到实际右侧 pane，补 body/title/guide/menu 渲染、文件正文和平台验证；当前 UI 和 39/5/20 统计不变。
+
 ## 进行中：右侧栏会话状态、控制器与默认页（2026-09-13）
 
 迁移固定 c291e796 的 stores/service/defaultSeed 及 guide 元数据定义。状态动作使用已安装 rc.2 的真实 runtime/client.defineStore 与 EngineStoreHandle，保留官方 BoundActions 契约，未以本地仿制 store 替代。布局变更仍由纯规划器产生，整次操作记录一个历史条目；页面按 pane 去重，资源按 kind/contentId 揭示，替换/浮动/停靠/分栏/关闭/撤销重做遵循官方规则。控制器区分当前挂载席位与已采用的会话 store，标签自身动作始终指向原会话；过期的 binding/adoption 释放不清除新的所有者。
