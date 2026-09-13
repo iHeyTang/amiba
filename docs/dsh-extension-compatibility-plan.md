@@ -5,6 +5,14 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：工具单独引用的图片授权（2026-09-13）
+
+补齐上一轮共享图片夹具无法证明的授权场景：Host 另存不同字节、2×1 的有效 PNG，确认其 attachmentId 与用户消息的 1×1 PNG 不同。第二张图片只写入真实 tool/result，不写入用户消息；同一工具结果同时保留第一张共享图片，继续覆盖出现顺序与共享缓存。
+
+真实 --compat --message-images --tool-images 已终态退出 0（/tmp/amiba-tool-only-image-smoke.log）。工具图片插件获得两个准确引用，展开后实际解码宽度分别为 1 和 2；用户消息图片集合不含工具单独引用 ID。拥有者会话可以读取第二张图，未引用会话对它明确返回 Image is not referenced by this session；切换会话后旧 URL 失效，历史重开后两张图片均重新解码，第二张图使用新的 URL。共享图仍与消息图复用相同缓存。插件卸载卡片 DOM 恢复、目录、设置、ZIP、视图切换、turn-tail、Markdown、文件操作及 HMR 回归通过。此次仅修改真实 Host 夹具与冒烟断言，无产品或样式修改，复用已通过构建的生产文件。
+
+嵌套工具下一步依据：原生 run_code 的 SemanticToolRow evidence 当前只展示代码和文本，虽然 ToolCallOwnerProps.block.subCalls 已完整保留，但还没有在其详情内逐个分发子工具视图。固定新版官方 ToolCallTree 会递归以子调用自己的 callId/name/block/openFile/loadImage 分发同一 tool.call.toolview。需要将这条逐调用展示路径适配到原详情折叠区，保留父卡片证据，并为每个子调用建立自己的图片上下文；不能把子图片合并进父结果代替该行为。此缺口仍未标记完成，全部 64 项及服务目标不变，统计保持 33/10/21。
+
 ## 最新进展：工具图片的桌面展示入口（2026-09-13）
 
 主 shell 声明 tool.call.images 的新版 single/session 契约，提供 images/loadImage/align，并向工具 owner 附加当前会话读取器。复用消息图片的按会话授权、pending/URL 缓存与释放流程，不另造图片身份。rc.2 的 ToolCallOwnerProps 仍兼容旧宿主，loadImage 在类型中为可选；主 shell 会话读取器准备好后实际提供。preview 类型与新版契约对齐，但当前结果提取只产出持久引用，不能据此声称 preview 已验证。

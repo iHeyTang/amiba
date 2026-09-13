@@ -393,6 +393,8 @@ try {
       await evaluate("window.__imageOff=window.__probeCtx.slots.register({name:'conversation.message.images',id:'compat-images',priority:-100},owner=>{window.__imageOwner=owner;return window.__probeCreateElement('div',{'data-compat-images':''},window.__probeCreateElement('button',{onClick:async e=>{const target=e.currentTarget.parentElement.querySelector('img');const first=owner.loadImage(owner.images[0].attachment);const second=owner.loadImage(owner.images[0].attachment);window.__imageShared=first===second;target.src=await first;}},'Load real image'),window.__probeCreateElement('img',{'data-compat-image':'',alt:'Compatibility image'}))});void 0");
       await writeFile(path.join(profile,'message-image-create'),'create');
       const ref=await wait(async()=>{try{return JSON.parse(await readFile(path.join(profile,'message-image-ref.json'),'utf8'))}catch{return false}});
+      const toolRef=process.argv.includes('--tool-images') ? await wait(async()=>{try{return JSON.parse(await readFile(path.join(profile,'tool-image-ref.json'),'utf8'))}catch{return false}}) : undefined;
+      if(toolRef) assert.notEqual(toolRef.attachmentId,ref.attachmentId,'tool-only image must have its own Host identity');
       await wait(()=>evaluate("!!document.querySelector('[data-compat-images]')"));
       assert.deepEqual(await evaluate("window.__imageOwner.images"),[{attachment:ref}]);
       assert.equal(await evaluate("window.__imageOwner.sessionId"),await evaluate("window.__compatSessionId"));
@@ -405,7 +407,7 @@ try {
         await wait(()=>evaluate("(()=>{document.querySelectorAll('[data-execution-summary] > button[aria-expanded=false]').forEach(n=>n.click());return !!Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-tool-image.png'))})()"));
         await evaluate("window.__toolImageButton=Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-tool-image.png'));window.__toolImageBaseline=window.__toolImageButton.parentElement.cloneNode(true);void 0");
         assert.equal(await evaluate("window.__toolImageButton.disabled"),true);
-        await evaluate("window.__toolImageOff=window.__probeCtx.slots.register({name:'tool.call.images',id:'compat-tool-images',priority:-100},window.__toolImageComponent=owner=>{window.__toolImageOwner=owner;return window.__probeCreateElement('div',{'data-compat-tool-images':''},window.__probeCreateElement('button',{onClick:async e=>{const target=e.currentTarget.parentElement.querySelector('img');target.src=await owner.loadImage(owner.images[0].attachment)}},'Load tool image'),window.__probeCreateElement('img',{'data-compat-tool-image':'',alt:'Tool image'}))});void 0");
+        await evaluate("window.__toolImageOff=window.__probeCtx.slots.register({name:'tool.call.images',id:'compat-tool-images',priority:-100},window.__toolImageComponent=owner=>{window.__toolImageOwner=owner;return window.__probeCreateElement('div',{'data-compat-tool-images':''},window.__probeCreateElement('button',{onClick:async e=>{const targets=e.currentTarget.parentElement.querySelectorAll('img');await Promise.all(owner.images.map(async (source,index)=>{targets[index].src=await owner.loadImage(source.attachment)}))}},'Load tool image'),window.__probeCreateElement('img',{'data-compat-tool-image':'',alt:'Tool image'}),window.__probeCreateElement('img',{'data-compat-tool-only-image':'',alt:'Tool-only image'}))});void 0");
         try {
         await wait(()=>evaluate("(()=>{window.__toolImageButton=Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-tool-image.png'));return window.__toolImageButton&&!window.__toolImageButton.disabled&&window.__toolImageButton.getAttribute('aria-expanded')==='false'})()"));
         } catch (error) {
@@ -415,12 +417,14 @@ try {
         assert.equal(await evaluate("!!document.querySelector('[data-compat-tool-images]')"),false);
         await evaluate("window.__toolImageButton.click();void 0");
         await wait(()=>evaluate("!!document.querySelector('[data-compat-tool-images]')"));
-        assert.deepEqual(await evaluate("window.__toolImageOwner.images"),[{attachment:ref}]);
+        assert.deepEqual(await evaluate("window.__toolImageOwner.images"),[{attachment:ref},{attachment:toolRef}]);
         assert.equal(await evaluate("window.__toolImageOwner.align"),'start');
         assert.equal(await evaluate("window.__toolImageOwner.sessionId"),await evaluate("window.__compatSessionId"));
         await evaluate("document.querySelector('[data-compat-tool-images] button').click();void 0");
-        await wait(()=>evaluate("document.querySelector('[data-compat-tool-image]')?.naturalWidth===1"));
+        await wait(()=>evaluate("document.querySelector('[data-compat-tool-image]')?.naturalWidth===1&&document.querySelector('[data-compat-tool-only-image]')?.naturalWidth===2"));
         assert.equal(await evaluate("document.querySelector('[data-compat-tool-image]').src"),await evaluate("window.__oldImageUrl"),'tool and message must reuse the same authorized session cache');
+        await evaluate("window.__toolOnlyRef=window.__toolImageOwner.images[1].attachment;window.__oldToolOnlyUrl=document.querySelector('[data-compat-tool-only-image]').src;void 0");
+        assert.equal(await evaluate("window.__imageOwner.images.some(image=>image.attachment.attachmentId===window.__toolOnlyRef.attachmentId)"),false,'the user message must not authorize the tool-only image');
         await writeFile(path.join(tmpdir(),'amiba-tool-image.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
         await evaluate("window.__toolImageOff();void 0");
         await wait(()=>evaluate("(()=>{window.__toolImageButton=Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-tool-image.png'));return !document.querySelector('[data-compat-tool-images]')&&window.__toolImageButton?.disabled})()"));
@@ -434,6 +438,13 @@ try {
       assert.equal(denied.ok,false,'foreign session must not read an unreferenced image');
       assert.equal(denied.error.message,'Image is not referenced by this session.');
       await wait(()=>evaluate("fetch(window.__oldImageUrl).then(()=>false,()=>true)"));
+      if(toolRef) {
+        const toolDenied=await evaluate("window.__probeCtx.sessions.binding(window.__foreignImageSession).session.readAttachment(window.__toolOnlyRef.attachmentId)");
+        assert.equal(toolDenied.ok,false);
+        assert.equal(toolDenied.error.message,'Image is not referenced by this session.');
+        await wait(()=>evaluate("fetch(window.__oldToolOnlyUrl).then(()=>false,()=>true)"));
+      }
+
       await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
       await wait(()=>evaluate("!!document.querySelector('[data-compat-images]')"));
       assert.deepEqual(await evaluate("window.__imageOwner.images"),[{attachment:ref}]);
@@ -444,13 +455,14 @@ try {
         await wait(()=>evaluate("(()=>{document.querySelectorAll('[data-execution-summary] > button[aria-expanded=false]').forEach(n=>n.click());return !!Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-tool-image.png'))})()"));
         await evaluate("window.__toolImageOff=window.__probeCtx.slots.register({name:'tool.call.images',id:'compat-tool-images',priority:-100},window.__toolImageComponent);void 0");
         await wait(()=>evaluate("(()=>{const button=Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-tool-image.png'));if(button?.getAttribute('aria-expanded')==='false')button.click();return !!document.querySelector('[data-compat-tool-images]')})()"));
-        assert.deepEqual(await evaluate("window.__toolImageOwner.images"),[{attachment:ref}]);
+        assert.deepEqual(await evaluate("window.__toolImageOwner.images"),[{attachment:ref},{attachment:toolRef}]);
         await evaluate("document.querySelector('[data-compat-tool-images] button').click();void 0");
-        await wait(()=>evaluate("document.querySelector('[data-compat-tool-image]')?.naturalWidth===1"));
+        await wait(()=>evaluate("document.querySelector('[data-compat-tool-image]')?.naturalWidth===1&&document.querySelector('[data-compat-tool-only-image]')?.naturalWidth===2"));
         assert.equal(await evaluate("document.querySelector('[data-compat-tool-image]').src"),await evaluate("document.querySelector('[data-compat-image]').src"));
         await evaluate("window.__toolImageOff();void 0");
         await wait(()=>evaluate("!document.querySelector('[data-compat-tool-images]')"));
-        console.log('Tool image history reopen reused the new authorized session URL');
+        assert.notEqual(await evaluate("window.__toolImageOwner.loadImage.peek(window.__toolOnlyRef)"),await evaluate("window.__oldToolOnlyUrl"));
+        console.log('Tool-only image passed real Host authorization, exact foreign-session rejection, URL revocation and history reloading; shared image still reuses the message cache');
       }
       await writeFile(path.join(tmpdir(),'amiba-message-image.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
       await evaluate("window.__imageOff();delete window.__imageOff;void 0");
