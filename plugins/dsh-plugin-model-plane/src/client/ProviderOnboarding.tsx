@@ -251,7 +251,7 @@ export function ProviderOnboarding({
             ).map((item) => (
               <div
                 key={item.id}
-                className={`flex flex-col gap-2 rounded-xl border p-2 transition-colors ${selected === item.id ? "border-primary bg-primary/5" : "border-border bg-background"}`}
+                className={`relative flex flex-col gap-2 rounded-xl border p-2 transition-colors ${selected === item.id ? "border-primary bg-primary/5 hover:bg-primary/10" : "border-border bg-background hover:bg-muted/50"}`}
               >
                 <button
                   type="button"
@@ -263,7 +263,7 @@ export function ProviderOnboarding({
                     setKey("");
                     setFailed(false);
                   }}
-                  className="flex-1 rounded-lg p-2 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  className="flex-1 rounded-lg p-2 text-left after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
                 >
                   <span className="flex items-center justify-between gap-2 text-sm font-semibold">
                     {item.name}
@@ -289,7 +289,7 @@ export function ProviderOnboarding({
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`${item.name} ${t("setup.website")}`}
-                  className="mx-2 mb-2 flex w-fit items-center gap-1 rounded py-1 text-xs text-muted-foreground underline-offset-4 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="relative z-10 mx-2 mb-2 flex w-fit items-center gap-1 rounded py-1 text-xs text-muted-foreground underline-offset-4 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {t("setup.website")}
                   <ArrowUpRight aria-hidden="true" className="h-3 w-3" />
