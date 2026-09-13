@@ -26,7 +26,7 @@ export function ciPlan({ ref = '', inputs = {}, version }) {
   const publish = mode === 'release';
   if (publish && target !== 'all') throw new Error('Release requires all three platforms');
   if (publish && !['unsigned', 'signed'].includes(inputs.mac_signing || 'unsigned')) throw new Error('Invalid macOS signing mode');
-  if (publish && !['patch', 'minor', 'major'].includes(inputs.bump || 'patch')) throw new Error('Invalid version bump');
+  if (inputs.bump !== undefined) throw new Error('Version changes must be merged through a PR before Release');
   return { matrix: { include }, mode, publish };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -35,7 +35,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   let commit = process.env.GITHUB_SHA;
   let plan = ciPlan({ ref: process.env.GITHUB_REF, inputs: event.inputs, version });
   if (plan.mode === 'release') {
-    ({ version, commit } = prepareRelease({ env: process.env, bump: event.inputs?.bump || 'patch', macSigning: event.inputs?.mac_signing || 'unsigned' }));
+    ({ version, commit } = prepareRelease({ env: process.env, macSigning: event.inputs?.mac_signing || 'unsigned' }));
     plan = ciPlan({ ref: process.env.GITHUB_REF, inputs: event.inputs, version });
   }
   fs.appendFileSync(process.env.GITHUB_OUTPUT, `commit=${commit}\nversion=${version}\nmatrix=${JSON.stringify(plan.matrix)}\nmode=${plan.mode}\npublish=${plan.publish}\n`);

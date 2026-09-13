@@ -23,50 +23,30 @@ test('missing release configuration fails before requests or version changes', (
   assert.equal(calls, 0);
 });
 
-test('one-click release commits both versions, pins the new SHA and reuses it on retry', () => {
+test('release uses the merged version and never mutates repository refs', () => {
   const directory = fixture();
-  let head = base, commitBody;
-  const mutations = [];
-  const request = (args, input) => {
-    const route = args[1].replace('repos/owner/repo/', '');
-    const body = input ? JSON.parse(input) : undefined;
-    if (body) mutations.push({ route, body });
-    if (route === 'git/ref/heads/main') return JSON.stringify({ object: { sha: head } });
-    if (route === `git/commits/${base}`) return JSON.stringify({ tree: { sha: 'old-tree' } });
-    if (route === `git/commits/${next}`) return JSON.stringify({ ...commitBody, parents: [{ sha: base }] });
-    if (route === 'git/trees') {
-      assert.equal(body.base_tree, 'old-tree');
-      assert.deepEqual(body.tree.map(file => file.path), ['package.json', 'apps/desktop/package.json']);
-      for (const file of body.tree) assert.equal(JSON.parse(file.content).version, '0.1.1');
-      return JSON.stringify({ sha: 'new-tree' });
-    }
-    if (route === 'git/commits') { commitBody = body; return JSON.stringify({ sha: next }); }
-    if (route === 'git/refs/heads/main') { assert.equal(body.force, false); head = body.sha; return '{}'; }
-    throw new Error(`Unexpected request ${route}`);
-  };
   try {
+    let calls = 0;
+    const request = (args, input) => {
+      calls++;
+      assert.deepEqual(args, ['api', 'repos/owner/repo/git/ref/heads/main']);
+      assert.equal(input, undefined);
+      return JSON.stringify({ object: { sha: base } });
+    };
     const options = { env, directory, request, preflight: () => undefined };
-    assert.deepEqual(prepareRelease(options), { version: '0.1.1', commit: next });
-    const count = mutations.length;
-    assert.deepEqual(prepareRelease(options), { version: '0.1.1', commit: next });
-    assert.equal(mutations.length, count, 'retry must not write another version commit');
-    assert.match(commitBody.message, /\[skip ci\]/);
-    assert.deepEqual(commitBody.parents, [base]);
-    assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'package.json'))).version, '0.1.0', 'planning checkout stays unchanged');
+    assert.deepEqual(prepareRelease(options), { version: '0.1.0', commit: base });
+    assert.deepEqual(prepareRelease(options), { version: '0.1.0', commit: base });
+    assert.equal(calls, 2);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'package.json'))).version, '0.1.0');
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
-test('stale main and reserved versions cannot write a version commit', () => {
+test('stale main and already published versions fail without mutations', () => {
   const directory = fixture();
   try {
-    let writes = 0;
-    const request = (args, input) => {
-      if (input) writes++;
-      return JSON.stringify(args[1].endsWith('heads/main') ? { object: { sha: next } } : { message: 'another change', parents: [{ sha: base }] });
-    };
+    const request = () => JSON.stringify({ object: { sha: next } });
     assert.throws(() => prepareRelease({ env, directory, request, preflight: () => undefined }), /main changed/);
-    assert.equal(writes, 0);
-    assert.throws(() => prepareRelease({ env, directory, request: () => JSON.stringify({ object: { sha: base } }), preflight: () => ({ draft: true }) }), /already has a draft/);
+    assert.throws(() => prepareRelease({ env, directory, request: () => JSON.stringify({ object: { sha: base } }), preflight: () => { throw new Error('already published'); } }), /already published/);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 

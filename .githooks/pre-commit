@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+branch=$(git symbolic-ref --quiet --short HEAD || true)
+if [ -z "$branch" ] || [ "$branch" = main ] || [ "$(git rev-parse --absolute-git-dir)" = "$(git rev-parse --path-format=absolute --git-common-dir)" ]; then
+  echo 'Commit rejected: create a feature branch in a separate git worktree, then open a PR.' >&2
+  exit 1
+fi
