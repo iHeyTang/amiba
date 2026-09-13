@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：完整 Dockkit React 交互层（2026-09-13）
+
+迁移固定 c291e796 的 DockSurface、FloatLayer、PaneTree、TabPanel、TabTitle、TabMenu、指针所有权、DOM 测量、渲染类型和 CSS module，共 10 个文件；与固定源逐文件比对，仅 MIT 归属及 .ts/.tsx→.js 导入后缀不同。纯引擎 index 保持不导入 React/CSS，单独 react.ts 提供 UI 入口，避免模型消费者意外加载 DOM 样式。模块样式没有全局 body/root 选择器；尚未导入实际产品面板，因此未改变现有 UI。
+
+显式加入开发依赖 clsx 2.1.1 和 UI primitives 0.1.1-rc.2，用已有宿主 external 提供生产 primitives。首次 catalog 规格不存在，改为固定实际 rc.2；安装退出 0（/tmp/amiba-dock-ui-install-3.log），没有升级运行基线。Vitest 配置保留原 Vite 配置，只对 primitives 内联转换，使真实包的 CSS 可以加载；未用空组件替代 Tooltip 或图标。
+
+新增迁移 79 项组件测试与 5 项 DOM 测量测试。适配 Vitest 2 的断言名称（一次调用+参数分开断言），保留原断言语义；本地 jsdom 没有 PointerEvent，测试内用带 pointerId 的 MouseEvent 子类保留坐标，解决原先 21 项拖拽失败和 NaN。生产手势逻辑保持原样。84 项通过（/tmp/amiba-dock-ui-tests-4.log），随后全部右侧栏 325 项通过（/tmp/amiba-dock-ui-regression.log），类型检查及插件包构建退出 0（/tmp/amiba-dock-ui-types-2.log、/tmp/amiba-dock-ui-build.log）。
+
+覆盖 tab/body/title 显示、菜单外部条目、拖拽落点及取消、另一指针隔离、分栏空间限制、浮动移动缩放、卸载清理和嵌入控件。jsdom 几何由测试提供，不等于真实浏览器布局验收；实际 pane 席位、服务注册和原生面板整合仍待接入。此阶段没有把组件测试计入入口兼容数，39/5/20 不变。
+
 ## 进行中：框架会话 store 的控制器 adoption 生命周期（2026-09-13）
 
 增加 createSidebarRightSessionStore，供后续面板与标题席位共享同一个真实 runtime handle；由框架创建实例时按 scopeKey 交给控制器 adopt，不另造会话缓存或替代 store。未带 scopeKey 的实例不冒充会话；所有 adoption 随席位注册所有者释放，重复 dispose 幂等，已释放所有者拒绝再创建实例。TabDomain 的最终释放仍归外层插件，确保先移除席位和监听，再取消所有资源 occurrence。
