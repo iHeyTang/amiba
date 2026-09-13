@@ -20,9 +20,10 @@ test('CI rejects non-main refs and prevents publishing disabled test updates', (
   }
 });
 
-test('installer verification reuses only a Windows artifact and cannot publish it', () => {
+test('installer verification reuses one target artifact and cannot publish it', () => {
   const inputs = { mode: 'verify', target: 'win32-x64', run_id: '12345' };
   assert.equal(ciPlan({version:'0.1.0', inputs}).mode, 'verify');
+  assert.equal(ciPlan({version:'0.1.0', inputs:{...inputs, target:'darwin-x64'}}).mode, 'verify');
   assert.throws(() => ciPlan({version:'0.1.0', inputs:{...inputs, target:'all'}}));
   assert.throws(() => ciPlan({version:'0.1.0', inputs:{...inputs, run_id:'bad'}}));
   assert.throws(() => ciPlan({version:'0.1.0', inputs:{...inputs, publish_draft:true}}));

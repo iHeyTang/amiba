@@ -25,4 +25,5 @@ const model = concat(integer(1, 8), bytes(7, graph), bytes(8, integer(2, 13)));
   const memos = await import(pathToFileURL(fromRuntime.resolve('@memtensor/memos-local-plugin/dist/adapters/deepseek-harness/index.js')).href);
   assert.equal(typeof memos.apply, 'function');
   console.log('Verified packaged memory: native ONNX CPU inference, Transformers and MemOS adapter load; no model download');
-})().then(() => process.exit(0), error => { console.error(error); process.exit(1); });
+// Let native inference pools finish their cleanup; forced process.exit races ONNX 1.22 on Intel Mac.
+})().catch(error => { console.error(error); process.exitCode = 1; });

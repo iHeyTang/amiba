@@ -79,7 +79,7 @@ macOS 自动更新必须签名；面向公开分发还需 Apple Developer ID 和
 在 Actions 的 **Desktop build and release → Run workflow** 中选择：
 
 - `target=all`、`mode=test`：生成三个架构的未签名测试包，关闭客户端更新，产物保留在 Actions Artifacts 7 天。
-- `target=win32-x64`、`mode=verify`、`run_id=<已有构建 ID>`：复用原 EXE 验证安装与终端运行，不重新编译、不发布。
+- `target=<单个平台>`、`mode=verify`、`run_id=<已有构建 ID>`：复用原安装包验证运行，不重新编译、不发布。Windows 静默安装 EXE，Mac 解压更新 ZIP 并检查 DMG。
 - `target=win32-x64`、`mode=release`、`publish_draft=true`：生成 Windows 发布包并上传草稿 Release，允许没有代码签名证书。
 - `target=all`、`mode=release`、`publish_draft=true`：三个架构发布包全部通过后，依次上传同一个草稿 Release。必须先配置 Mac 签名与公证 secrets。
 

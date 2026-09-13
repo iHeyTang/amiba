@@ -13,7 +13,7 @@ export function ciPlan({ ref = '', inputs = {}, version }) {
   const mode = inputs.mode || 'test';
   if (!['test', 'release', 'verify'].includes(mode)) throw new Error('Invalid build mode');
   const target = inputs.target || 'all';
-  if (mode === 'verify' && (target !== 'win32-x64' || !/^[0-9]+$/.test(inputs.run_id || ''))) throw new Error('Verify mode requires a Windows target and artifact run ID');
+  if (mode === 'verify' && (target === 'all' || !/^[0-9]+$/.test(inputs.run_id || ''))) throw new Error('Verify mode requires a single target and artifact run ID');
   const include = runnerTargets.filter(row => target === 'all' || row.target === target);
   if (!include.length) throw new Error('Invalid build target');
   const publish = inputs.publish_draft === true || inputs.publish_draft === 'true';

@@ -41,6 +41,10 @@ if (process.platform === 'win32') {
   assert.ok(fs.existsSync(electron), 'NSIS must install the application executable');
 } else {
   const app = path.join(output, process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'Amiba.app');
+  if (!fs.existsSync(app)) {
+    // Verify mode downloads installers only; unpack the already-hash-checked updater ZIP.
+    run('ditto', ['-x', '-k', path.join(output, `Amiba-${version}-mac-${process.arch}.zip`), path.dirname(app)], process.env, 300000);
+  }
   electron = path.join(app, 'Contents/MacOS/Amiba');
   resources = path.join(app, 'Contents/Resources');
   run('hdiutil', ['verify', path.join(output, `Amiba-${version}-mac-${process.arch}.dmg`)]);

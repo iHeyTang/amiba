@@ -14,7 +14,7 @@ on:
         options: [test, release, verify]
         default: test
       run_id:
-        description: Existing artifact run ID for Windows verify mode
+        description: Existing artifact run ID for single-target verify mode
         type: string
         required: false
       publish_draft:
@@ -110,6 +110,7 @@ jobs:
         if: needs.plan.outputs.mode == 'verify'
         env:
           ARTIFACT_RUN_ID: ${{ inputs.run_id }}
+          ARTIFACT_TARGET: ${{ matrix.target }}
           GH_TOKEN: ${{ github.token }}
         run: node scripts/release/download-verification.mjs
       - name: Smoke test packaged runtime and installer
