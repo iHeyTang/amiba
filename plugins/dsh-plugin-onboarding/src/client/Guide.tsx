@@ -11,7 +11,6 @@ import {
   Button,
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogDescription,
   usePluginT,
@@ -157,89 +156,122 @@ export function Guide({
       }}
     >
       <DialogContent
-        className="flex max-h-[90vh] max-w-2xl flex-col overflow-hidden"
+        hideDefaultClose
+        className="grid h-[min(760px,90vh)] max-w-4xl grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 md:h-[min(640px,90vh)] md:grid-cols-[224px_minmax(0,1fr)] md:grid-rows-1"
         onInteractOutside={(e) => e.preventDefault()}
       >
-        <DialogHeader>
-          <DialogTitle>{t("guide.title")}</DialogTitle>
-          <DialogDescription>{t("guide.description")}</DialogDescription>
-        </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="flex items-center gap-4 pb-5 pt-2">
+        <DialogTitle className="sr-only">{t("guide.settings")}</DialogTitle>
+        <DialogDescription className="sr-only">
+          {t("guide.description")}
+        </DialogDescription>
+        <aside className="flex flex-col bg-muted/50 p-5 md:p-6">
+          <div className="flex items-center gap-2 text-xs tracking-wide text-muted-foreground">
+            <span className="font-semibold text-foreground">AMIBA</span>
+            <span aria-hidden="true">/</span>
+            {t("guide.companionLabel")}
+          </div>
+          <div className="flex items-center gap-3 pt-3 md:my-auto md:flex-col md:gap-4 md:py-8">
             <div className="flex h-28 w-28 shrink-0 items-center justify-center">
               {renderSlot("amiba.onboarding.companion", { mood })}
             </div>
             <p
               role={error ? "alert" : "status"}
-              className="rounded-2xl bg-muted px-4 py-3 text-sm leading-relaxed"
+              className="rounded-2xl bg-background px-4 py-4 text-sm leading-relaxed"
             >
               {message}
             </p>
           </div>
-          {started && rows.length > 1 && (
-            <ol
-              aria-label={t("guide.settings")}
-              className="flex flex-wrap gap-3 text-xs text-muted-foreground"
-            >
-              {rows.map((row, index) => (
-                <li
-                  key={row.id}
-                  aria-current={active?.id === row.id ? "step" : undefined}
-                  className={
-                    active?.id === row.id ? "font-medium text-foreground" : ""
-                  }
-                >
-                  {progress?.skipped?.includes(row.id)
-                    ? "–"
-                    : progress?.completed.includes(row.id)
-                      ? "✓"
-                      : index + 1}{" "}
-                  · {row.label}
-                </li>
-              ))}
-            </ol>
-          )}
-          {active &&
-            renderSlot(
-              "amiba.onboarding.step",
-              { complete, say, openSection, renderActions },
-              { only: active.id },
+        </aside>
+        <div className="flex min-h-0 min-w-0 flex-col px-6 pb-5 pt-6 md:px-8 md:pt-8">
+          <div className="min-h-0 flex-1 overflow-y-auto pb-6">
+            {!started && (
+              <div className="flex h-full flex-col justify-center gap-4">
+                <h2 className="text-2xl font-semibold tracking-tight">
+                  {t("guide.introTitle")}
+                </h2>
+                <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+                  {t("guide.introBody")}
+                </p>
+              </div>
             )}
-        </div>
-        <footer
-          className="flex shrink-0 flex-wrap items-center gap-2 border-t pt-4"
-          aria-label={t("guide.navigation")}
-        >
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" disabled={working} onClick={close}>
-              {t("guide.later")}
-            </Button>
-            {active && rows.length > 1 && (
-              <Button
-                variant="ghost"
-                disabled={working}
-                onClick={() => void complete(true).catch(() => {})}
+            {ready && (
+              <div className="flex h-full flex-col justify-center gap-4">
+                <h2 className="text-2xl font-semibold tracking-tight">
+                  {t("guide.finishTitle")}
+                </h2>
+                <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+                  {t("guide.finishBody")}
+                </p>
+              </div>
+            )}
+            {started && rows.length > 1 && (
+              <ol
+                aria-label={t("guide.settings")}
+                className="flex flex-wrap gap-3 text-xs text-muted-foreground"
               >
-                {t("guide.skip")}
-              </Button>
+                {rows.map((row, index) => (
+                  <li
+                    key={row.id}
+                    aria-current={active?.id === row.id ? "step" : undefined}
+                    className={
+                      active?.id === row.id ? "font-medium text-foreground" : ""
+                    }
+                  >
+                    {progress?.skipped?.includes(row.id)
+                      ? "–"
+                      : progress?.completed.includes(row.id)
+                        ? "✓"
+                        : index + 1}{" "}
+                    · {row.label}
+                  </li>
+                ))}
+              </ol>
             )}
+            {active &&
+              renderSlot(
+                "amiba.onboarding.step",
+                { complete, say, openSection, renderActions },
+                { only: active.id },
+              )}
           </div>
-          <div ref={setActionsHost} className="ml-auto flex items-center gap-2">
-            {!progress ? (
-              <Button onClick={() => setRetry((n) => n + 1)}>
-                {t("guide.retry")}
+          <footer
+            className="flex shrink-0 flex-wrap items-center gap-2 border-t pt-4"
+            aria-label={t("guide.navigation")}
+          >
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" disabled={working} onClick={close}>
+                {t("guide.later")}
               </Button>
-            ) : !started ? (
-              <Button onClick={() => setStarted(true)}>
-                {t("guide.start")}
-              </Button>
-            ) : ready ? (
-              <Button disabled={working} onClick={() => void finish()}>
-                {t("guide.done")}
-              </Button>
-            ) : null}
-          </div>
-        </footer>
+              {active && rows.length > 1 && (
+                <Button
+                  variant="ghost"
+                  disabled={working}
+                  onClick={() => void complete(true).catch(() => {})}
+                >
+                  {t("guide.skip")}
+                </Button>
+              )}
+            </div>
+            <div
+              ref={setActionsHost}
+              className="ml-auto flex items-center gap-2"
+            >
+              {!progress ? (
+                <Button onClick={() => setRetry((n) => n + 1)}>
+                  {t("guide.retry")}
+                </Button>
+              ) : !started ? (
+                <Button onClick={() => setStarted(true)}>
+                  {t("guide.start")}
+                </Button>
+              ) : ready ? (
+                <Button disabled={working} onClick={() => void finish()}>
+                  {t("guide.done")}
+                </Button>
+              ) : null}
+            </div>
+          </footer>
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -1,6 +1,13 @@
 import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
 export const guideI18n: PluginCatalogOverlay = {
   en: {
+    "guide.companionLabel": "First steps",
+    "guide.introTitle": "Start with a small idea.",
+    "guide.introBody":
+      "Write some code, organize your notes, or turn an idea into something real. Let's prepare your workspace.",
+    "guide.finishTitle": "Your next step is yours.",
+    "guide.finishBody":
+      "Start a conversation from the home screen. You can revisit your connections in Settings → Models & services at any time.",
     "guide.navigation": "Setup navigation",
     "guide.title": "Welcome to Amiba",
     "guide.description": "A little setup, with a companion by your side.",
@@ -25,6 +32,13 @@ export const guideI18n: PluginCatalogOverlay = {
       "No setup steps are available yet. You can return from Settings → Setup guide.",
   },
   "zh-CN": {
+    "guide.companionLabel": "起步",
+    "guide.introTitle": "从一个小想法开始。",
+    "guide.introBody":
+      "写一段代码、整理一份资料，或把一个想法变成作品。先为你的工作空间做一点准备。",
+    "guide.finishTitle": "接下来，交给你的想法。",
+    "guide.finishBody":
+      "回到首页，开始一段对话。以后也可以随时在「设置 → 模型与服务」中调整连接。",
     "guide.navigation": "引导操作",
     "guide.title": "欢迎来到 Amiba",
     "guide.description": "做一点准备，让小伙伴陪你开始。",

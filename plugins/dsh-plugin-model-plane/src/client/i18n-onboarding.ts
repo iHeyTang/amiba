@@ -1,6 +1,7 @@
 import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
 export const providerOnboardingI18n: PluginCatalogOverlay = {
   en: {
+    "setup.website": "Visit website",
     "setup.choose":
       "Choose a service first. I'll help you get your own Key on the next page.",
     "setup.token":
@@ -55,6 +56,7 @@ export const providerOnboardingI18n: PluginCatalogOverlay = {
     "setup.other": "Already using another service? Open Models & services",
   },
   "zh-CN": {
+    "setup.website": "访问官网",
     "setup.choose": "先选一个服务吧。下一步，我会陪你拿到自己的 Key。",
     "setup.token": "Amiba 推荐 · 一个账号，接入多种模型。",
     "setup.deepseek": "DSH 官方 · 直接接入 DeepSeek 模型。",

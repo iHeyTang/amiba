@@ -1,3 +1,4 @@
+import { Check, ArrowUpRight } from "lucide-react";
 import { providerOnboardingI18n } from "./i18n-onboarding.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GuideStepOwner } from "@amiba/dsh-plugin-onboarding/client";
@@ -176,25 +177,42 @@ export function ProviderOnboarding({
         : !chosen);
   const stages: Page[] = ["choose", "key", "model"];
   return (
-    <div className="space-y-5 pt-4">
-      <ol
-        className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground"
-        aria-label={t("setup.progress")}
-      >
-        {stages.map((stage, index) => (
-          <li
-            key={stage}
-            aria-current={page === stage ? "step" : undefined}
-            className={page === stage ? "font-medium text-foreground" : ""}
-          >
-            {index + 1} · {t(`setup.stage.${stage}`)}
-          </li>
-        ))}
+    <div className="space-y-6">
+      <ol className="flex items-start pb-3" aria-label={t("setup.progress")}>
+        {stages.map((stage, index) => {
+          const current = stages.indexOf(page);
+          const done = index < current;
+          return (
+            <li
+              key={stage}
+              aria-current={page === stage ? "step" : undefined}
+              className="relative flex flex-1 flex-col items-center gap-2 text-center"
+            >
+              {index < stages.length - 1 && (
+                <span
+                  aria-hidden="true"
+                  className={`absolute left-1/2 top-4 h-px w-full ${done ? "bg-primary" : "bg-border"}`}
+                />
+              )}
+              <span
+                aria-hidden="true"
+                className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold ${done ? "border-primary bg-primary text-primary-foreground" : page === stage ? "border-primary bg-background text-primary ring-4 ring-primary/10" : "border-border bg-background text-muted-foreground"}`}
+              >
+                {done ? <Check className="h-3.5 w-3.5" /> : index + 1}
+              </span>
+              <span
+                className={`text-xs ${page === stage ? "font-semibold text-foreground" : "text-muted-foreground"}`}
+              >
+                {t(`setup.stage.${stage}`)}
+              </span>
+            </li>
+          );
+        })}
       </ol>
       <h3
         ref={heading}
         tabIndex={-1}
-        className="text-base font-semibold outline-none"
+        className="text-xl font-semibold tracking-tight outline-none"
       >
         {page === "choose"
           ? t("setup.selectTitle")
@@ -223,24 +241,52 @@ export function ProviderOnboarding({
                 },
               ] as const
             ).map((item) => (
-              <button
-                type="button"
+              <div
                 key={item.id}
-                aria-pressed={selected === item.id}
-                disabled={pending}
-                onClick={() => {
-                  setSelected(item.id);
-                  setModel("");
-                  setKey("");
-                  setFailed(false);
-                }}
-                className={`rounded-xl border p-4 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected === item.id ? "border-primary bg-muted" : "border-border"}`}
+                className={`flex flex-col rounded-xl border transition-colors ${selected === item.id ? "border-primary bg-primary/5" : "border-border bg-background"}`}
               >
-                <span className="block text-sm font-semibold">{item.name}</span>
-                <span className="mt-2 block text-xs leading-relaxed text-muted-foreground">
-                  {t(item.description)}
-                </span>
-              </button>
+                <button
+                  type="button"
+                  aria-pressed={selected === item.id}
+                  disabled={pending}
+                  onClick={() => {
+                    setSelected(item.id);
+                    setModel("");
+                    setKey("");
+                    setFailed(false);
+                  }}
+                  className="flex-1 rounded-t-xl p-4 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                >
+                  <span className="flex items-center justify-between gap-2 text-sm font-semibold">
+                    {item.name}
+                    <span
+                      aria-hidden="true"
+                      className={`flex h-4 w-4 items-center justify-center rounded-full border ${selected === item.id ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}
+                    >
+                      {selected === item.id && (
+                        <Check className="h-2.5 w-2.5" />
+                      )}
+                    </span>
+                  </span>
+                  <span className="mt-2 block text-xs leading-relaxed text-muted-foreground">
+                    {t(item.description)}
+                  </span>
+                </button>
+                <a
+                  href={
+                    item.id === "tokendance"
+                      ? "https://tokendance.space/"
+                      : "https://www.deepseek.com/"
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`${item.name} ${t("setup.website")}`}
+                  className="mx-4 mb-4 flex w-fit items-center gap-1 text-xs text-muted-foreground underline-offset-4 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {t("setup.website")}
+                  <ArrowUpRight aria-hidden="true" className="h-3 w-3" />
+                </a>
+              </div>
             ))}
           </div>
           <button
