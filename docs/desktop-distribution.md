@@ -235,7 +235,7 @@ gh workflow run desktop-release.yml --ref main -f mode=verify -f target=all -f r
 
 ### Mac 安装窗口提示
 
-未签名发布和本地测试 DMG 的安装窗口直接显示中文安装步骤及“系统设置 → 隐私与安全性 → 仍要打开”指引。提示使用普通/Retina 两套背景图片，图标位于提示上方；已签名发布不显示未认证提示。
+未签名发布和本地测试 DMG 的安装窗口直接显示首次打开被拦截时的“系统设置 → 隐私与安全性 → 仍要打开”指引。提示使用普通/Retina 两套背景图片，图标位于提示上方；已签名发布不显示未认证提示。
 
 `package-mac.mjs` 在压缩 DMG 前通过 Finder 写入原生背景引用、窗口大小和图标位置，避免 dmg-builder 25 生成的旧引用在新版 macOS 上显示白底。该步骤需要构建机具备 Finder 图形会话；自托管 Mac 构建机需登录桌面。本机已实际重新打包、只读挂载并截图确认文字完整、图标不遮挡。此项尚未在 GitHub macOS runner 上复验。
 

@@ -57,12 +57,12 @@ const config = {
     dmg: {
       ...pkg.build.dmg,
       background: path.join(root, 'scripts/release/assets/dmg-unsigned.png'),
-      window: { width: 720, height: 532 },
+      window: { width: 720, height: 432 },
       iconSize: 88,
       iconTextSize: 14,
       contents: [
-        { x: 205, y: 175 },
-        { x: 515, y: 175, type: 'link', path: '/Applications' },
+        { x: 205, y: 75 },
+        { x: 515, y: 75, type: 'link', path: '/Applications' },
       ],
     },
   } : {}),
