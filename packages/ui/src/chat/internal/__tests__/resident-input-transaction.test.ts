@@ -14,7 +14,7 @@ function fixture() {
     source, claims, sessionId: "target", available: () => true,
     controller: () => ({ serializeReference: serialize, adjudicate } as unknown as ComposerTriggerController), providers: () => [],
     images: () => [], prepare: vi.fn(async () => ({ attachments: [], release })), consume: vi.fn(),
-    send: vi.fn(async request => { request.onDispatch?.(); return { kind: "accepted" as const }; }),
+    send: vi.fn(async request => { request.onDispatch?.(request.sessionId); return { kind: "accepted" as const }; }),
     submitClaim: vi.fn(async () => ({ kind: "success" as const })), changed: vi.fn(),
   };
   const transaction = createResidentInputTransaction(deps);
@@ -57,7 +57,7 @@ it("keeps a newer draft after Host acceptance and consumes only the captured ima
   const image = { image: { id: "captured" }, release: vi.fn() } as unknown as ComposerDraftImageRegistration;
   f.deps.images = () => [image];
   let finish!: (receipt: SubmitReceipt) => void;
-  f.deps.send = vi.fn<ResidentInputTransactionDeps["send"]>(request => { request.onDispatch?.(); return new Promise<SubmitReceipt>(resolve => { finish = resolve; }); });
+  f.deps.send = vi.fn<ResidentInputTransactionDeps["send"]>(request => { request.onDispatch?.(request.sessionId); return new Promise<SubmitReceipt>(resolve => { finish = resolve; }); });
   f.transaction.submit();
   await vi.waitFor(() => expect(f.deps.send).toHaveBeenCalled());
   f.source.setDisplayText("new draft");
@@ -124,7 +124,7 @@ it("queues an already-resolved busy-session input with its original document ins
   const f = fixture();
   const document = f.source.getDocument();
   f.deps.busy = () => true;
-  f.deps.enqueue = vi.fn(async request => { request.onDispatch?.(); return { queueId: "queued" }; });
+  f.deps.enqueue = vi.fn(async request => { request.onDispatch?.(request.sessionId); return { queueId: "queued" }; });
   f.transaction.submit(); await f.settled();
   expect(f.deps.enqueue).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "target", text: "original", draft: document }), []);
   expect(f.deps.send).not.toHaveBeenCalled();

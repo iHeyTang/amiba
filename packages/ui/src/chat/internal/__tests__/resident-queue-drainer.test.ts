@@ -23,7 +23,7 @@ async function fixture(items = [row("first"), row("second")]) {
     queue: () => queue, offscreen: () => !active, busy: () => busy,
     watchReadiness: (_id, changed) => { watchers.add(changed); return () => { watchers.delete(changed); }; },
     resolve: vi.fn(async () => "resolved"),
-    send: vi.fn<ResidentQueueDrainerDeps["send"]>(async request => { request.onDispatch?.(); return { kind: "accepted" }; }),
+    send: vi.fn<ResidentQueueDrainerDeps["send"]>(async request => { request.onDispatch?.(request.sessionId); return { kind: "accepted" }; }),
     drainNative: vi.fn(),
     retainedAttachments: () => [],
   };
@@ -78,7 +78,7 @@ it.each(["rejected", "unconfirmed"] as const)("restores a %s dispatch before new
   const first = { ...row("first"), attachments: [attachment] };
   const f = await fixture([first]);
   let finish!: (receipt: SubmitReceipt) => void;
-  vi.mocked(f.deps.send).mockImplementation(request => { request.onDispatch?.(); return new Promise(resolve => { finish = resolve; }); });
+  vi.mocked(f.deps.send).mockImplementation(request => { request.onDispatch?.(request.sessionId); return new Promise(resolve => { finish = resolve; }); });
   f.worker.completed("target"); await vi.waitFor(() => expect(f.deps.send).toHaveBeenCalledOnce());
   expect(f.queue.getSnapshot()).toEqual([]);
   deleteUnretainedAttachments([attachment], []); expect(removeFile).not.toHaveBeenCalled();
@@ -97,7 +97,7 @@ it.each(["rejected", "unconfirmed"] as const)("restores a %s dispatch before new
 it("a turn completing before its acceptance promise settles advances once after that receipt", async () => {
   const f = await fixture();
   let finish!: (receipt: SubmitReceipt) => void;
-  vi.mocked(f.deps.send).mockImplementationOnce(request => { request.onDispatch?.(); return new Promise(resolve => { finish = resolve; }); });
+  vi.mocked(f.deps.send).mockImplementationOnce(request => { request.onDispatch?.(request.sessionId); return new Promise(resolve => { finish = resolve; }); });
   f.worker.completed("target"); await vi.waitFor(() => expect(f.deps.send).toHaveBeenCalledOnce());
   f.worker.completed("target"); f.worker.completed("target");
   finish({ kind: "accepted" }); await tick();
@@ -124,7 +124,7 @@ it("a preparation error keeps the original row and publishes a paused notice; ex
 it("native preemption owns its replacement completion even when the old receipt arrives late", async () => {
   const f = await fixture();
   let finish!: (receipt: SubmitReceipt) => void;
-  vi.mocked(f.deps.send).mockImplementationOnce(request => { request.onDispatch?.(); return new Promise(resolve => { finish = resolve; }); });
+  vi.mocked(f.deps.send).mockImplementationOnce(request => { request.onDispatch?.(request.sessionId); return new Promise(resolve => { finish = resolve; }); });
   f.worker.completed("target"); await vi.waitFor(() => expect(f.deps.send).toHaveBeenCalledOnce());
   f.activate(); f.worker.displaced("target"); f.worker.completed("target");
   finish({ kind: "accepted" }); await tick();

@@ -108,7 +108,7 @@ describe("official input action provider", () => {
     await vi.waitFor(() => expect(bridge.inputSubmissionSource!("a").getSnapshot().pending).toBe(false));
     expect(a.isPaused()).toBe(true);
     expect(source.getSnapshot()).toBe("explicit retry");
-    send.mockImplementation(async request => { request.onDispatch?.(); return { kind: "accepted" }; });
+    send.mockImplementation(async request => { request.onDispatch?.(request.sessionId); return { kind: "accepted" }; });
     action.submit();
     await vi.waitFor(() => expect(bridge.inputSubmissionSource!("a").getSnapshot().pending).toBe(false));
     expect(a.isPaused()).toBe(false);
@@ -120,7 +120,7 @@ describe("official input action provider", () => {
     const action = actions("a");
     let finish!: (value: import("@amiba/app-runtime/protocol").SubmitReceipt) => void;
     const send = vi.fn<Parameters<NonNullable<typeof bridge.bindResidentTurnSender>>[0]>(request => {
-      request.onDispatch?.();
+      request.onDispatch?.(request.sessionId);
       return new Promise(resolve => { finish = resolve; });
     });
     bridge.bindResidentTurnSender!(send);

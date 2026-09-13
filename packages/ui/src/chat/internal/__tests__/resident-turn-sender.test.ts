@@ -72,3 +72,19 @@ it("honors cancellation and actual one-shot child restrictions without dispatch"
   expect(deps.checkpoint).not.toHaveBeenCalled();
   expect(deps.dispatch).not.toHaveBeenCalled();
 });
+
+
+it("reports the authoritative target at dispatch and does not announce rejected preparation", async () => {
+  const { deps, send } = fixture();
+  const onDispatch = vi.fn();
+  vi.mocked(deps.dispatch).mockImplementation(async () => {
+    expect(onDispatch).toHaveBeenCalledWith("target");
+    return { kind: "accepted" };
+  });
+  await send({ ...request, onDispatch });
+  expect(onDispatch).toHaveBeenCalledOnce();
+  onDispatch.mockClear();
+  vi.mocked(deps.prepare).mockRejectedValueOnce(new Error("owner unavailable"));
+  expect((await send({ ...request, onDispatch })).kind).toBe("rejected");
+  expect(onDispatch).not.toHaveBeenCalled();
+});

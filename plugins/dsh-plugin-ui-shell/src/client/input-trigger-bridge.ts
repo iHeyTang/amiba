@@ -305,7 +305,7 @@ export function createInputTriggerBridge(
           if (!queue) throw new Error("The native conversation queue is unavailable.");
           await queue.ready();
           request.signal?.throwIfAborted();
-          request.onDispatch?.();
+          request.onDispatch?.(id);
           const queueId = shortId("q");
           queue.update(previous => [...previous, { queueId, text: request.text, draft: request.draft,
             attachments: request.attachments.map(attachment => ({ ...attachment })) }]);
@@ -318,8 +318,8 @@ export function createInputTriggerBridge(
         controller: () => bridge.controllerFor(id), providers: () => deps.mentionProviders?.(id) ?? [],
         images: () => residentImages.get(id) ?? [], prepare: (images, signal) => imageStaging.acquire(images, signal),
         consume: images => { const consumed = new Set(images); filterResidentImages(id, (_image, registration) => !consumed.has(registration)); },
-        send: request => residentSender ? residentSender.send({ ...request, onDispatch: () => {
-          request.onDispatch?.();
+        send: request => residentSender ? residentSender.send({ ...request, onDispatch: targetId => {
+          request.onDispatch?.(targetId);
           deps.pendingQueue?.(id).setPaused(false);
         } }) : Promise.resolve({ kind: "rejected", error: "The resident conversation sender is unavailable." }),
         submitClaim: (claim, args, images) => bridge.submitClaim!(id, claim, args, images),

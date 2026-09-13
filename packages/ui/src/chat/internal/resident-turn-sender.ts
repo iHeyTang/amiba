@@ -65,7 +65,7 @@ export function createResidentTurnSender(deps: ResidentTurnSenderDeps) {
         check(target);
         await deps.markdown(target);
         check(target); check(request.sessionId);
-        request.onDispatch?.();
+        request.onDispatch?.(target);
         dispatched = true;
         return deps.dispatch({ payload, messages, workspacePath });
       });

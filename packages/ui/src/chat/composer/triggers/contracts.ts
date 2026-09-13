@@ -170,8 +170,9 @@ export interface ResidentTurnRequest {
   text: string;
   attachments: readonly import("@amiba/app-runtime/core").Attachment[];
   signal?: AbortSignal;
-  /** Internal transaction boundary, immediately before engine dispatch or local queue admission. */
-  onDispatch?(): void;
+  /** Internal transaction boundary immediately before dispatch/admission.
+   * Receives the prepared engine target, or the owning session for local queue admission. */
+  onDispatch?(targetSessionId: string): void;
 }
 
 export interface ResidentInputSubmissionState {
