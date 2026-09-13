@@ -1,3 +1,4 @@
+import { createFileResourceProvider } from "./resources/file-provider.js";
 export { sessionFileAddress, absoluteFileAddress, parseFileAddress, type FileAddress } from "./resources/file-address.js";
 import { ResourceRegistry } from "./resources/resources.js";
 export type { Resources, ResourceProtocol, ResourceProvider, ResourceSnapshot, ResourceStatus, ResourceOpenContext, UseResource } from "./resources/contract.js";
@@ -575,6 +576,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
     const disposeRightTabRegistry = ctx.reflect.provide("sidebarRightTabs", new SidebarRightTabRegistry(ctx));
     const resources = new ResourceRegistry(ctx);
     const disposeResources = ctx.reflect.provide("resources", resources);
+    const workspaceFiles = getPlatform().workspaceFiles;
+    const disposeFileProvider = workspaceFiles?.stat ? resources.register(createFileResourceProvider(workspaceFiles)) : undefined;
     const disposeResourceHook = ctx.slots.provideRoot({ keyedHooks: { resource: address => resources.source(address) } });
     const visibility = createSessionVisibility();
     const disposeVisibility = ctx.reflect.provide(
@@ -1070,6 +1073,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       if (mainPanels === panelNavigation) mainPanels = undefined;
       disposeRoot();
       sessionsBridge.dispose();
+      disposeFileProvider?.();
       disposeResourceHook();
       void disposeResources();
       void disposeRightTabRegistry();

@@ -5,6 +5,14 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：真实 file 资源提供器与状态恢复（2026-09-13）
+
+在具备真实 WorkspaceFilesAdapter.stat 的平台注册 file provider，通过现有 ResourceRegistry / useResource 接入文件元数据。按地址原样传 sessionId/path 给主进程，不从会话摘要推断路径；无 Session 的 absolute 地址返回 unknown-workspace，非法地址返回 unsupported-address。未实现 stat 的平台不注册伪提供器。
+
+rc.2 原监听没有完整 change-feed 语义，因此本阶段采用持有期间的每秒元数据校验：首读立即开始，同值去重，失败后继续重试，文件删除/重新创建及原工作区树忽略的目录可恢复；最后持有者取消后清理等待定时器，不再请求，迟到 IPC 结果丢弃。失败保留最后成功值由真实 ResourceRegistry 处理。此方式约有一秒加 IPC 耗时的更新延迟，按活跃地址产生 stat 请求，不保证捕获两次检查间的短暂变化；它是状态适配进展，不是新版官方事件流的完整等价实现。后续仍需事件驱动监听/错误契约完善与独立 Web 验证，五项右侧栏与 39/5/20 统计不变。
+
+验证：资源目录 77 项测试通过（/tmp/amiba-file-provider-resource-tests.log），其中新增提供器测试覆盖缺失恢复、版本/大小更新、重复帧去重、删除重建、取消清理、迟到结果和未授权地址不触发后端。首次类型检查发现测试回调参数遮蔽 typeof value，修正测试命名后通过（/tmp/amiba-file-provider-types-2.log）。完整桌面构建退出 0（/tmp/amiba-file-provider-build.log），--compat --resources 退出 0（/tmp/amiba-file-provider-smoke.log）：真实 useResource 插槽读取 .cache 中带空格/#/? 的文件，初次缺失、创建、修改、删除保留旧值、重建及卸载清空状态均通过；共享流、pin、取消、元数据权限和原会话/配置/Markdown/文件/HMR 回归通过。默认 HOME 通过相同 stat 路径实现，但此次没有独立写入 HOME 的桌面用例，不扩大实测结论。
+
 ## 进行中：文件资源真实元数据接口（2026-09-13）
 
 增加可选 WorkspaceFilesAdapter.stat，经 Electron preload 的 files:stat 路由到主进程；调用原 resolveFileForSession 完成工作区 realpath 与越界检查后，仅 stat 文件，不读取正文。返回 canonical absolutePath、完整 bytes 与 opaque version；版本包含设备、inode、大小及纳秒 mtime/ctime，检测替换与恢复 mtime 的写入。原 read/readBytes、预览上限和 UI 不变；不向缺少后端的 Web 平台伪造实现。
