@@ -60,6 +60,7 @@ if (process.platform === 'win32') {
   }
   electron = path.join(app, 'Contents/MacOS/Amiba');
   resources = path.join(app, 'Contents/Resources');
+  if (packageManifest.macSigning === 'unsigned' && packageManifest.distributable) run('codesign', ['--verify', '--deep', '--strict', app], process.env, 300000);
   run('hdiutil', ['verify', path.join(output, `Amiba-${version}-mac-${process.arch}.dmg`)]);
   run('unzip', ['-tq', path.join(output, `Amiba-${version}-mac-${process.arch}.zip`)], process.env, 300000);
 }

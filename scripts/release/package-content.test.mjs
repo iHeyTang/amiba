@@ -43,3 +43,20 @@ test('builder 25 exclusions work with real workspace paths as well as node_modul
   }
   assert.equal(filter(path.join(root, 'packages/app-runtime/dist/dsh-runtime/index.js'), fileStat), true);
 });
+
+test('runtime CLI links remain usable after moving the package off the build machine', { skip: process.platform === 'win32' }, async () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'amiba-portable-links-'));
+  try {
+    const source = path.join(temp, 'source'), destination = path.join(temp, 'package');
+    fs.mkdirSync(path.join(source, 'app/node_modules/.bin'), { recursive: true });
+    fs.writeFileSync(path.join(source, 'runtime-manifest.json'), JSON.stringify({ platform: 'darwin', arch: 'arm64' }));
+    const cli = path.join(source, 'app/cli.js'), link = path.join(source, 'app/node_modules/.bin/cli');
+    fs.writeFileSync(cli, 'portable CLI'); fs.symlinkSync(cli, link);
+    await stageRuntime(source, destination, 'darwin-arm64');
+    assert.equal(fs.readlinkSync(link), cli, 'development runtime is untouched');
+    const packagedLink = path.join(destination, 'app/node_modules/.bin/cli');
+    assert.ok(!path.isAbsolute(fs.readlinkSync(packagedLink)));
+    fs.rmSync(source, { recursive: true });
+    assert.equal(fs.readFileSync(packagedLink, 'utf8'), 'portable CLI');
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+});

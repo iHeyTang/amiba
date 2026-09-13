@@ -9,4 +9,14 @@ module.exports = async context => {
     : path.join(context.appOutDir, 'resources');
   const marker = JSON.parse(fs.readFileSync(path.join(resources, 'resources/dsh-runtime/runtime-manifest.json')));
   verifyPackageContents(resources, `${marker.platform}-${marker.arch}`);
+  if (context.electronPlatformName === 'darwin' && context.packager.platformSpecificBuildOptions.identity === null) {
+    // No Apple account or certificate is involved. Seal the final bundle locally
+    // instead of leaving Electron's linker signature bound to its original app.
+    const { spawnSync } = require('node:child_process');
+    const app = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
+    for (const args of [['--force', '--deep', '--sign', '-', '--timestamp=none', app], ['--verify', '--deep', '--strict', app]]) {
+      const result = spawnSync('codesign', args, { encoding: 'utf8', timeout: 300000 });
+      if (result.error || result.status !== 0) throw new Error(`Ad-hoc bundle sealing failed: ${result.error?.message || result.stderr}`);
+    }
+  }
 };

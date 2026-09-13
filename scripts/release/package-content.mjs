@@ -36,6 +36,28 @@ export function inventory(directory) {
   visit(directory);
   return rows;
 }
+export function relocateRuntimeLinks(source, destination) {
+  const origin = path.resolve(source), staged = path.resolve(destination);
+  function visit(current) {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const filename = path.join(current, entry.name);
+      if (entry.isDirectory()) visit(filename);
+      else if (entry.isSymbolicLink()) {
+        const link = fs.readlinkSync(filename);
+        const originalFile = path.join(origin, path.relative(staged, filename));
+        const resolved = path.resolve(path.dirname(originalFile), link);
+        if (resolved !== origin && !resolved.startsWith(origin + path.sep)) throw new Error(`Runtime link escapes package: ${path.relative(staged, filename)}`);
+        const portable = path.relative(path.dirname(filename), path.join(staged, path.relative(origin, resolved)));
+        if (link !== portable) {
+          const isDirectory = fs.statSync(filename).isDirectory();
+          fs.unlinkSync(filename);
+          fs.symlinkSync(portable, filename, isDirectory ? 'dir' : 'file');
+        }
+      }
+    }
+  }
+  visit(staged);
+}
 export async function stageRuntime(source, destination, target) {
   if (!targets.includes(target)) throw new Error('Invalid package target');
   const resolvedSource = path.resolve(source), resolvedDestination = path.resolve(destination);
@@ -50,6 +72,7 @@ export async function stageRuntime(source, destination, target) {
     recursive: true, verbatimSymlinks: true,
     filter: filename => !exclusionReason(path.relative(source, filename), target),
   });
+  relocateRuntimeLinks(source, destination);
   const after = inventory(destination);
   if (after.some(row => exclusionReason(row.name, target))) throw new Error('Unexpected files in staged runtime');
   const removedBytesByReason = {};

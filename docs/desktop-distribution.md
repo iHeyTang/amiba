@@ -215,6 +215,6 @@ gh workflow run desktop-release.yml --ref main -f mode=verify -f target=all -f r
 
 ### 未签名发布
 
-当前默认允许未签名发布。Mac 包的 `release-config.json` 更新源为空，运行检查会验证这一点；公开 Release 只提供 Mac DMG/ZIP，不提供 Mac 自动更新清单。Windows 保留 EXE、blockmap 和更新清单。Release 说明自动提示 Mac 安装限制。
+当前默认允许未签名发布。Mac 使用无需账号、证书和网络的 ad-hoc 本地签名封装完整应用，不提供 Apple Developer ID 身份认证，也不进行公证。运行时命令链接转换为包内相对路径；构建和成品检查执行 codesign 严格校验。Mac 包的 `release-config.json` 更新源为空，运行检查会验证这一点；公开 Release 只提供 Mac DMG/ZIP，不提供 Mac 自动更新清单。Windows 保留 EXE、blockmap 和更新清单。Release 说明自动提示 Mac 安装限制。
 
 用户从网络下载 Mac 包后，系统可能拦截启动；可根据 [Apple 官方说明](https://support.apple.com/102445) 在“系统设置 → 隐私与安全性”中手动允许该应用。后续 Mac 版本暂时需要手动下载安装，切换到签名版时也需要安排一次手动安装。
