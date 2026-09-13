@@ -3,8 +3,9 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { createRequire } = require('node:module');
 const { pathToFileURL } = require('node:url');
-const runtime = process.argv[2];
-const fromRuntime = createRequire(path.join(runtime, 'app/package.json'));
+const runtime = path.resolve(process.argv[2]);
+const fromPlugin = createRequire(path.join(runtime, 'app/node_modules/@amiba/dsh-plugin-memory-memos/package.json'));
+const fromRuntime = createRequire(fromPlugin.resolve('@memtensor/memos-local-plugin'));
 // Minimal ONNX Identity graph: float32[2] X -> Y, opset 13, IR 8.
 // This fixture tests the native inference backend without shipping/downloading weights.
 const integer = (field, value) => Buffer.from([field << 3, value]);

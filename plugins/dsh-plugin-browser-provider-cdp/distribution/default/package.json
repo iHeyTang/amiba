@@ -1,0 +1,11 @@
+{
+  "name": "@amiba/dsh-plugin-browser-provider-cdp",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {},
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": "^3.0.0",
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "overrides": {}
+}

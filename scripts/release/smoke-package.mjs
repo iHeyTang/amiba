@@ -77,6 +77,7 @@ assert.equal(`${manifest.platform}-${manifest.arch}`, target);
 const node = path.join(runtime, process.platform === 'win32' ? 'node/node.exe' : 'node/bin/node');
 assert.equal(run(node, ['-p', "process.platform + '-' + process.arch"]).trim(), target);
 run(node, [path.join(root, 'scripts/release/smoke-memory.cjs'), runtime], process.env, 120000);
+run(node, [path.join(root, 'scripts/release/smoke-pets.mjs'), runtime], process.env, 30000);
 const probe = `
   const assert = require('node:assert/strict');
   assert.equal(process.platform + '-' + process.arch, ${JSON.stringify(target)});

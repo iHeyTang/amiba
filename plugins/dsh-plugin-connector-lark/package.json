@@ -7,7 +7,10 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "exports": {
-    ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
     "./client": {
       "types": "./lib/client/index.d.ts",
       "default": "./lib/client.js"
@@ -30,7 +33,9 @@
       "platform": "web"
     }
   },
-  "files": ["lib"],
+  "files": [
+    "lib"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && vite build",
     "typecheck": "tsc --noEmit",
@@ -44,7 +49,6 @@
     "@amiba/ui": "workspace:*",
     "@larksuiteoapi/node-sdk": "^1.73.0",
     "@deepseek-ai/schemastery": "catalog:",
-    "lucide-react": "^0.460.0",
     "qrcode-generator": "^2.0.4",
     "react": "18.3.1",
     "react-dom": "18.3.1",
@@ -72,6 +76,7 @@
     "react-dom": "18.3.1",
     "typescript": "5.6.3",
     "vite": "^5.4.11",
-    "vitest": "^2.1.4"
+    "vitest": "^2.1.4",
+    "lucide-react": "^0.460.0"
   }
 }

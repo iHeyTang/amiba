@@ -31,7 +31,7 @@ Actions 软件包直接保留 `Amiba-<版本>-<系统>-<架构>.dmg/.zip/.exe` �
 
 记忆插件、Transformers、目标平台 ONNX、ONNX Web、npm/pnpm 和 Node 编译头文件保留；本次没有改成按需下载。每次构建保存 `package-footprint.json`，包含裁剪字节数与最终资源目录统计。安装检查还会用内置 Node 执行小型离线 ONNX 图，并加载 Transformers 和 MemOS 适配器，不下载模型。
 
-ONNX 1.24.3 的 npm 包缺少 Darwin x64 原生绑定（上游 microsoft/onnxruntime#27961），因此 Intel Mac 使用单独锁文件，将 Node 推理库固定为 1.22.0；ARM/Windows 保持原依赖。更新依赖锁时需分别运行 `pnpm runtime:lock` 和 `pnpm runtime:lock --lock-target=darwin-x64`，提交两个锁文件及对应 manifest。
+ONNX 1.24.3 的 npm 包缺少 Darwin x64 原生绑定（上游 microsoft/onnxruntime#27961），因此 Intel Mac 使用单独锁文件，将 Node 推理库固定为 1.22.0；ARM/Windows 保持原依赖。更新依赖锁时需分别运行 `pnpm runtime:lock` 和 `pnpm runtime:lock --lock-target=darwin-x64`，提交宿主与各插件的锁文件及对应 manifest；Intel 的差异锁位于记忆插件的 `distribution/darwin-x64/`，不再位于宿主目录。详见 [插件分发](plugin-distribution.md)。
 
 可以用 `AMIBA_DSH_SMOKE_RUNTIME_DIR=<已打包运行时绝对路径> AMIBA_DSH_SMOKE_CHECK=MemOS node packages/app-runtime/scripts/dsh-runtime/smoke.mjs` 验证成品中的 DSH 启动、插件安装与 MemOS 就绪状态。测试使用独立临时用户目录。
 
