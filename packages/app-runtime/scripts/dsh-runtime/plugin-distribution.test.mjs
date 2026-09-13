@@ -92,3 +92,7 @@ test('static resource packages retain files without retaining an unused executab
     assert.notEqual(distributionHashes('host','lock',['pet'],[{}]).appTreeHash,distributionHashes('host','lock',['pet'],[{assetDependencies:['studio']}]).appTreeHash);
   } finally { fs.rmSync(dir,{recursive:true,force:true}); }
 });
+
+test('a stable peer range does not implicitly accept a prerelease host', () => {
+  assert.throws(() => checkHostContract({name:'example',peerDependencies:{framework:'^1.0.0'}},{packages:{'node_modules/framework':{version:'1.1.0-beta.1'}}}), /does not satisfy/);
+});

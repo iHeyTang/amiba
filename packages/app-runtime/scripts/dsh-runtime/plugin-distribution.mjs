@@ -23,7 +23,7 @@ export function pluginInstallManifest(plugin, host, resolveCatalog, target) {
 export function checkHostContract(manifest, hostLock) {
   for (const [name, range] of Object.entries(manifest.peerDependencies ?? {})) {
     const version = hostLock.packages[`node_modules/${name}`]?.version;
-    if (!version || !semver.satisfies(version, range, { includePrerelease: true }))
+    if (!version || !semver.satisfies(version, range))
       throw new Error(`${manifest.name}: host ${name}@${version ?? 'missing'} does not satisfy ${range}`);
   }
 }
@@ -64,8 +64,10 @@ export function isolatePluginDependencies(directory, manifest, hostLock, policy 
     const location = resolve(from, name);
     const installed = packages.get(location);
     const shared = hostLock.packages[`node_modules/${name}`];
+    const owner = packages.get(from);
+    const requiredRange = policy.overrides?.[`${owner?.name}@${owner?.version}`]?.[name] ?? range;
     const hostInterface = name in (manifest.peerDependencies ?? {}) || name in (hostLock.packages['']?.dependencies ?? {});
-    if (hostInterface && shared && (name.startsWith('@deepseek-ai/') || !installed || installed.version === shared.version) && semver.satisfies(shared.version, range, { includePrerelease: true })) return;
+    if (hostInterface && shared && (name.startsWith('@deepseek-ai/') || !installed || installed.version === shared.version) && semver.satisfies(shared.version, requiredRange)) return;
     if (hostInterface && name.startsWith('@deepseek-ai/')) throw new Error(`${manifest.name}: incompatible host dependency ${name}@${range}`);
     if (!installed) {
       if (optional) return;
