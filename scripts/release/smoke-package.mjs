@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { verifyPackageContents } from './package-content.mjs';
@@ -12,6 +13,18 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const version = JSON.parse(fs.readFileSync(path.join(root, 'apps/desktop/package.json'))).version;
 const output = path.join(root, 'apps/desktop/dist', target);
 validateMetadata(output, target, version);
+// The installer and update bundle travel separately; verify their shared manifest
+// before executing an installer or extracting the application.
+const packageManifest = JSON.parse(fs.readFileSync(path.join(output, 'release-manifest.json')));
+assert.equal(packageManifest.target, target);
+assert.equal(packageManifest.version, version);
+for (const { name, sha512 } of packageManifest.files) {
+  assert.equal(name, path.basename(name));
+  assert.ok(!name.includes('\\'));
+  const actual = createHash('sha512').update(fs.readFileSync(path.join(output, name))).digest('base64');
+  assert.equal(actual, sha512, `Artifact integrity mismatch: ${name}`);
+}
+
 function run(command, args, env = process.env, timeout = 120000) {
   const result = spawnSync(command, args, { encoding: 'utf8', env, timeout, maxBuffer: 4 * 1024 * 1024 });
   if (result.error || result.status !== 0) throw new Error(`${command} failed: ${result.error?.message || result.status}\n${result.stderr}\n${result.stdout}`);

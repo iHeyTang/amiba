@@ -79,22 +79,22 @@ macOS 自动更新必须签名；面向公开分发还需 Apple Developer ID 和
 在 Actions 的 **Desktop build and release → Run workflow** 中选择：
 
 - `target=all`、`mode=test`：生成三个架构的未签名测试包，关闭客户端更新，产物保留在 Actions Artifacts 7 天。
-- `target=<单个平台>`、`mode=verify`、`run_id=<已有构建 ID>`：复用原安装包验证运行，不重新编译、不发布。Windows 静默安装 EXE，Mac 解压更新 ZIP 并检查 DMG。
-- `target=win32-x64`、`mode=release`、`publish_draft=true`：生成 Windows 发布包并上传草稿 Release，允许没有代码签名证书。
+- `target=all`（或单个平台）、`mode=verify`、`run_id=<已有构建 ID>`：复用原安装包验证运行，不重新编译、不发布。Windows 静默安装 EXE，Mac 解压更新 ZIP 并检查 DMG。
+- `target=win32-x64`、`mode=release`、`publish_draft=false`：单独生成 Windows 发布候选包，允许没有代码签名证书；草稿汇总必须选择全部平台。
 - `target=all`、`mode=release`、`publish_draft=true`：三个架构发布包全部通过后，依次上传同一个草稿 Release。必须先配置 Mac 签名与公证 secrets。
 
-也可在本机触发云端 Windows 构建：
+也可在本机触发云端三平台发布构建：
 
 ```sh
 gh workflow run desktop-release.yml --repo iHeyTang/amiba --ref main \
-  -f target=win32-x64 -f mode=release -f publish_draft=true
+  -f target=all -f mode=release -f publish_draft=true
 ```
 
 手动运行时选择 `main` 分支。首次运行不需要本机 Windows 虚拟机。
 
 仅 `main` 分支的 push 自动执行三个架构的 test 构建。其他分支和标签的 push 均不触发；手动选择非 `main` 引用时所有作业跳过。创建 Release 草稿需在 `main` 手动运行并设置 `mode=release`、`publish_draft=true`，Release 版本取自桌面 package.json。
 
-构建后校验更新清单的版本、目标架构和 SHA-512，运行内置 Node 与 Electron 原生 PTY。Mac 额外校验 DMG 和 ZIP；Windows 在临时 CI 机器里静默安装 EXE 后检查安装结果。安装包生成后即保存 Artifacts，运行检查失败时也保留文件便于排查；只有检查通过才允许上传 Release。上传 Release 时先验证所有目标文件，再顺序上传，草稿绑定实际构建提交。CI 上传后再次下载草稿资产，并按原构建记录检查 SHA-512。
+构建后校验更新清单的版本、目标架构和 SHA-512，运行内置 Node 与 Electron 原生 PTY。Mac 额外校验 DMG 和 ZIP；Windows 在临时 CI 机器里静默安装 EXE 后检查安装结果。安装包检查通过后保存为独立 Artifacts；运行检查失败时保留更新文件与报告便于排查；只有全部平台检查通过才允许上传 Release。上传 Release 时先验证所有目标文件，再顺序上传，草稿绑定实际构建提交。CI 上传后再次下载草稿资产，并按原构建记录检查 SHA-512。
 
 仓库 Variables 的 `AMIBA_UPDATE_URLS` 可指定 CDN 下载目录；GitHub 下载源作为兜底。发布用 Secrets：Mac 的 `CSC_LINK`、`CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`；Windows 可选 `WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD`。
 
@@ -168,3 +168,25 @@ Docker 的 `UseVirtualizationFramework` 与 `UseVirtualizationFrameworkRosetta` 
 参考：[Microsoft x64 模拟说明](https://learn.microsoft.com/en-us/windows/arm/apps-on-arm-x86-emulation)、[UTM Windows 安装指南](https://docs.getutm.app/guides/windows/)、[Homebrew Wine 状态](https://formulae.brew.sh/cask/wine-stable)。
 
 GitHub 发布仓库已在线确认是公开的 `iHeyTang/amiba`，当前 CLI 身份具有 ADMIN 权限，调查时尚无 Release。CDN 现阶段按需求只保留 POST 适配器，未选定实际接口不会阻塞本轮适配代码。
+
+
+### Actions 下载入口
+
+每个平台通过 `upload-artifact@v7` 的 `archive: false` 单独上传带版本号的安装文件：
+`Amiba-<version>-mac-arm64.dmg`、`Amiba-<version>-mac-x64.dmg`、`Amiba-<version>-win-x64.exe`。
+点击单个安装文件即可下载原始 DMG/EXE；不要选择下载全部 artifacts。
+更新 ZIP、blockmap、更新清单和构建 manifest 保存在 `amiba-<version>-<target>-<mode>-<run>-<attempt>` 中；诊断报告保存在 `reports-*` 中。
+安装文件只在该平台冒烟检查通过后上传；失败时可以保留更新文件和报告供排查。
+运行标题显示模式、目标平台和复用来源，作业 Summary 提供安装文件入口、构建来源及测试包状态。
+
+`mode=verify` 支持 `target=all`，可在同一次运行中复验原有三个平台的安装包，无需重建。
+同时兼容旧的完整 ZIP artifact 和新的安装文件/更新文件拆分布局；拆分文件在执行前按原始 manifest 校验 SHA-512。
+例如：
+
+```sh
+gh workflow run desktop-release.yml --ref main -f mode=verify -f target=all -f run_id=<原始构建运行ID>
+```
+
+Release 草稿自动汇总同一构建的三个平台，要求 `mode=release,target=all,publish_draft=true`。
+流水线会重新合并分开下载的安装文件和更新文件，验证三个平台的版本、源码提交、构建 ID 与文件哈希后，逐个上传为独立 Release assets。
+测试/复验不会创建正式更新 Release；Mac 正式发布仍需签名与公证配置。
