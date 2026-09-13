@@ -1296,3 +1296,12 @@ pipelines retain mounted component state.
 - --queue-files 增强验证真实 inputImagesFor 返回的 File、名称、MIME、完整字节、官方 registry 查找和 ID 与 Host ID 不同。新增 --queue-image-reload 完整刷新 renderer，从真实持久化队列重新编辑图片并执行同样检查，最后删除原行并确认浏览器注册和原文件均释放。另确认离开编辑中的会话后新会话不残留 Cancel edit。
 - 最终组合桌面回归 /tmp/amiba-queue-image-restore-smoke.log 退出 0，含原有动态插件、输入/图片/命令、离屏引用、队列解析及刷新、运行状态、轨迹、子会话及嵌套 Host 冷重启和插件开发生命周期。原编辑器、卡片尺寸及样式检查通过。
 - 本项重建 File 和新的浏览器 ID，不宣称持久化原 File 对象身份、原 lastModified 或跨 renderer 的浏览器 ID。发送中所有权、离屏图片操作和完整官方输入/Host inbox 状态仍需继续适配。子会话图片测试仍限于队列暂存、编辑和删除，不宣称 rc.2 支持子会话图片发送。
+
+### 当前窗口发送期间的附件保留（2026-09-13）
+
+- 原队列和输入框保留检查无法覆盖已离开草稿、仍等待发送准备的附件。原 runChatTurn 在会话交接、Agent/工作目录准备及实际发送前存在异步等待，此时删除共享队列副本可能提前删除正在使用的文件。
+- 增加 withSendingAttachments，按 Host ID 对当前 renderer 中重叠的发送分别计数。原 runChatTurn 在进入既有发送函数前取得临时保留，覆盖早退、准备错误、交接和完整执行，在 finally 释放。没有改变原发送正文、附件身份或提交接口。
+- deleteUnretainedAttachments 同时检查发送保留；原图片移除与清空也使用这项检查。发送结束只解除临时保留，不自动删除可能已进入历史或已恢复到草稿的文件；仍由原清理动作决定删除。
+- 原生图片注册、图片恢复、附件所有权、队列和 Composer 触发管线共 79 项测试通过（/tmp/amiba-sending-files-tests2.log），包括受控等待期间删除队列副本和原图片、重叠发送、同一发送内重复 ID、准备拒绝后的释放及无自动删除。UI 类型检查通过（/tmp/amiba-sending-files-types2.log）。
+- 完整 Desktop 构建通过（/tmp/amiba-sending-files-build.log）；组合桌面回归 /tmp/amiba-sending-files-smoke.log 退出 0，覆盖原有图片注册/恢复/清理、队列发送、刷新、离屏草稿、命令、动态插件、轨迹及子会话冷重启。未修改 JSX 或 CSS，原卡片尺寸及样式检查通过。受控暂停发送期间的竞争条件由上述 hook 测试验证，未把现有桌面组合探针宣称为该竞争条件的专用端到端验证。
+- 本保留表仅属于当前 renderer，不是 Host 的持久化引用表。跨窗口同时操作、已发送历史中的长期文件引用、跨重启所有权仍需由 Host 层继续核对；完整官方图片及输入生命周期尚未全部完成。

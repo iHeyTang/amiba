@@ -1,4 +1,4 @@
-import { deleteUnretainedAttachments } from "./internal/attachment-ownership";
+import { deleteUnretainedAttachments, withSendingAttachments } from "./internal/attachment-ownership";
 import { useSessionComposerDraft } from "./use-session-composer-draft";
 import { useConversationSubmitHandoff } from "./useConversationSubmitHandoff";
 import { usePrepareConversationSubmit } from "./conversation-submit";
@@ -1572,6 +1572,10 @@ export default function ChatSurface({
 
 
   async function runChatTurn(args: RunChatTurnArgs): Promise<void> {
+    return withSendingAttachments(args.attachments, () => runChatTurnWithFiles(args));
+  }
+
+  async function runChatTurnWithFiles(args: RunChatTurnArgs): Promise<void> {
     const { text, attachments: attachmentsForTurn } = args;
     const restoreDraft = () => {
       if (args.draft) composerDraftSource.setParts(args.draft.parts);

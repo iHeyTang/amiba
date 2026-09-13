@@ -1,3 +1,4 @@
+import { withSendingAttachments } from "../attachment-ownership";
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -353,4 +354,24 @@ it("committing edited attachments releases the discarded original without deleti
   await act(async()=>{await result.current.send("edited");});
   expect(attachmentFiles.remove.mock.calls).toEqual([["removed"]]);
   expect(args.runChatTurn).toHaveBeenCalledWith({text:"edited",attachments:[image("kept"),image("new")]});
+});
+
+
+it("deleting a duplicate queue row preserves files held by the dispatched turn",async()=>{
+  attachmentFiles.remove.mockClear();
+  const shared={attachmentId:"held",uiId:"held",name:"held.png",mime:"image/png",size:3,kind:"image" as const};
+  let finish!:()=>void;
+  let active!:Promise<void>;
+  const args=makeArgs({input:"",runChatTurn:turn=>{
+    active=withSendingAttachments(turn.attachments,()=>new Promise<void>(resolve=>{finish=resolve;}));
+    return active;
+  }});
+  const {result}=renderHook(()=>usePendingQueue(args));
+  act(()=>result.current.setQueue([{queueId:"send",text:"send",attachments:[shared]},{queueId:"duplicate",text:"later",attachments:[{...shared,uiId:"copy"}]}]));
+  act(()=>result.current.sendNow("send"));
+  await act(async()=>{result.current.remove("duplicate");});
+  expect(result.current.queue).toHaveLength(0);
+  expect(attachmentFiles.remove).not.toHaveBeenCalled();
+  await act(async()=>{finish();await active;});
+  expect(attachmentFiles.remove).not.toHaveBeenCalled();
 });

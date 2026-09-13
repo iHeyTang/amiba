@@ -1,3 +1,4 @@
+import { deleteUnretainedAttachments } from "./internal/attachment-ownership"
 import { getPlatform } from "@amiba/app-runtime/platform"
 /**
  * Composer-attachment hook + `<AttachmentToolbar>` component.
@@ -336,7 +337,7 @@ export function useComposerAttachments(
   const removeAttachment = useCallback((uiId: string) => {
     setAttachments((prev) => {
       const target = prev.find((a) => a.uiId === uiId)
-      if (target?.attachmentId && !retentionRef.current?.(target.attachmentId)) void deleteAttachmentFile(target)
+      if (target?.attachmentId && !retentionRef.current?.(target.attachmentId)) deleteUnretainedAttachments([target], [])
       return prev.filter((a) => a.uiId !== uiId)
     })
   }, [])
@@ -369,7 +370,7 @@ export function useComposerAttachments(
   const clearAttachments = useCallback(() => {
     setAttachments((prev) => {
       for (const a of prev) {
-        if (a.attachmentId && !retentionRef.current?.(a.attachmentId)) void deleteAttachmentFile(a)
+        if (a.attachmentId && !retentionRef.current?.(a.attachmentId)) deleteUnretainedAttachments([a], [])
       }
       return []
     })
