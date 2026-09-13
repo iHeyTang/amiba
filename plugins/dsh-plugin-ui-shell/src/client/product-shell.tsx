@@ -825,7 +825,7 @@ function ProductShellInner({
               messageSourceLabel={messageSourceLabel}
               slots={{
                 conversationViews: viewEntries,
-                conversationView: (id) => renderSlot("conversation.view", trajectory.owner, { only: id }),
+                conversationView: (id) => renderSlot("conversation.view", { ...trajectory.owner, ...(loadMessageImage ? { loadImage: loadMessageImage } : {}) }, { only: id }),
                 conversationViewSelection: trajectory.selection,
                 onConversationViewSelect: trajectory.select,
                 emptyState: (

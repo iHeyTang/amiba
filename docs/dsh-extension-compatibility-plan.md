@@ -5,6 +5,18 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：官方轨迹图片渲染接入（2026-09-13）
+
+固定 rc.2 trajectory 补丁已登记到 patchedDependencies、catalog、SDK peer/dev 和 pnpm lock，完整桌面构建成功应用到 managed runtime。补丁由 trajectory 的 conversation.view 入口声明 conversation.trajectory.images 子槽，按官方注册表订阅可用图片插件。shell 提供同一会话授权 loader；原 stateful TrajectoryView 保留为稳定子组件，通过上下文将图片回调送到预览、详情及工具输出。无 occupant 或无 loader 时保留原 rc.2 展示。连续持久图片成组，inline 图片顺序与原 DOM/classes 保留；compact 按原 preview 语义传入。
+
+7 项真实补丁测试通过，包括引用投影、无插件回退、混排分组及预览/详情参数。SDK 类型与 guard、shell 类型及完整桌面构建通过。真实 --compat --message-images --tool-images --trajectory-loader --cordis-business --trajectory-images 最终退出 0：正常 Host 配置激活已安装官方轨迹，两张不同真实 Host 图片均解码，共用当前 shell 的 session loader；插件卸载不改变选中记录、表头、编辑器连接与草稿；空图片插件不影响工具文本和编辑器；抛错插件由官方 renderer 取消选用，恢复原图片元数据，卸载后原轨迹继续可用。官方轨迹整体停用后保留默认 Chat。已查看 amiba-trajectory-images.png。动态 Cordis RPC/错误隔离、消息/工具图片、配置、目录、文件、Markdown、turn-tail、HMR 等回归通过。
+
+验证脚本同时修正旧 Blob URL 失效的断言：先前 fetch 可能直接被 CSP 的 connect-src 拒绝，不能单独证明 revoke。现在对旧 URL 新建 Image 并等待解码失败，同时验证切换前有效、历史重开新 URL 有效；最终桌面实测通过。本次包含消息及根工具图片，嵌套专用 URL 的相同断言已更新，但未在本次 flags 中重跑，不以旧 fetch 结果宣称该项真实释放已证实。
+
+测试脚本前两处前提已修正：此前图片测试已展开工具区，Cordis 测试不能再一直等待折叠按钮；官方 renderer 错误写入日志并取消选用，不在界面显示错误字符串。未为测试改变产品行为。日志：/tmp/amiba-trajectory-image-render-tests-3.log、/tmp/amiba-trajectory-sdk-types.log、/tmp/amiba-trajectory-shell-types.log、/tmp/amiba-trajectory-image-build.log、/tmp/amiba-trajectory-image-smoke-5.log。smoke-2 为成功基础轮，smoke-3 因错误文案断言失败，smoke-4 因脚本编辑未成功而主动中止，不作为通过证据。
+
+入口统计更新为 34/9/21（已有基础/待验证/有条件），并非完整插件兼容率。完整新版图片插件依赖、真实预览交互、本人发送回显、独立 Web/Quick Ask、跨窗口/重启队列、右栏/模型/lineage 服务及其余条目均继续保留。全部 64 个入口和服务目标未完成。
+
 ## 最新进展：轨迹持久图片记录补丁基础（2026-09-13）
 
 新增固定 rc.2 的 trajectory 依赖补丁草稿（patches/@deepseek-ai__dsh-client-ui-trajectory@0.1.1-rc.2.patch），尚未登记到 patchedDependencies 或应用到生产运行时。补丁在 sourceBlock 和 assistantSourceBlock 中保留通过校验的原 attachment 对象，使用新版 TrajectorySourceBlock 的 attachment 字段；类型通过已有 ui-conversation peer 的 canonical 图片 owner 派生，不增加另一套图片身份。原 content 字符串、imageSrc/imageAlt、工具调用 ID/名称和旧图片路径全部保留，此阶段不修改 UI 渲染。

@@ -843,3 +843,12 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
     "tool.call.images": { kind: "single"; scope: "session"; owner: ToolImagesOwnerProps };
   }
 }
+
+/** Trajectory owns its image slot declaration; importing its contract retains the merge. */
+export type { TrajectoryImagesOwnerProps } from "@deepseek-ai/dsh-client-ui-trajectory/client";
+declare module "@deepseek-ai/dsh-client-ui-conversation/client" {
+  interface ConvViewOwnerProps {
+    /** Shared session-authorized loader supplied by image-aware shells. */
+    loadImage?: ToolImageLoader;
+  }
+}

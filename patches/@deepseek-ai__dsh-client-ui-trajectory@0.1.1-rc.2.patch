@@ -1,7 +1,105 @@
 diff --git a/lib/client.js b/lib/client.js
 --- a/lib/client.js
 +++ b/lib/client.js
-@@ -6591,6 +6591,19 @@
+@@ -3819,7 +3819,26 @@
+ 				children: text
+ 			});
+ 		}
++		// Image presentation stays optional; unoccupied slots preserve the rc.2 ledger.
++		const TrajectoryImagesContext = (0, react.createContext)(null);
++		function isTrajectoryImage(block, renderImages) {
++			return block.imageSrc !== void 0 || (renderImages !== null && block.attachment !== void 0);
++		}
++		/** Keep durable runs together without moving an inline image across them. */
++		function trajectoryImageRuns(images, renderImages) {
++			const runs = [];
++			for (let index = 0; index < images.length; index++) {
++				const block = images[index];
++				if (renderImages !== null && block.attachment !== void 0) {
++					const last = runs[runs.length - 1];
++					if (last?.images) last.images.push({ attachment: block.attachment });
++					else runs.push({ key: index, images: [{ attachment: block.attachment }] });
++				} else runs.push({ key: index, block });
++			}
++			return runs;
++		}
+ 		function SourceBlocks({ blocks, onOpenCall }) {
++			const renderImages = (0, react.useContext)(TrajectoryImagesContext);
+ 			return (0, react_jsx_runtime.jsx)("div", {
+ 				className: TrajectoryTable_module_css_default.sourceBlocks,
+ 				children: blocks.map((block, index) => (0, react_jsx_runtime.jsxs)("section", {
+@@ -3845,7 +3864,7 @@
+ 							className: TrajectoryTable_module_css_default.sourceBlockLabel,
+ 							children: `Block #${index + 1} ${block.type}`
+ 						})
+-					}), block.imageSrc !== void 0 ? (0, react_jsx_runtime.jsx)(PanelImage, { block }) : (0, react_jsx_runtime.jsx)("pre", {
++					}), isTrajectoryImage(block, renderImages) ? (0, react_jsx_runtime.jsx)(PanelImage, { block }) : (0, react_jsx_runtime.jsx)("pre", {
+ 						className: TrajectoryTable_module_css_default.sourceBlockContent,
+ 						children: block.content
+ 					})]
+@@ -3853,6 +3872,8 @@
+ 			});
+ 		}
+ 		function PanelImage({ block, preview = false }) {
++			const renderImages = (0, react.useContext)(TrajectoryImagesContext);
++			if (renderImages !== null && block.attachment !== void 0) return renderImages({ images: [{ attachment: block.attachment }], align: "start", compact: preview });
+ 			if (block.imageSrc === void 0) return null;
+ 			return (0, react_jsx_runtime.jsx)("a", {
+ 				className: preview ? `${TrajectoryTable_module_css_default.panelImageLink} ${TrajectoryTable_module_css_default.panelImageLinkPreview}` : TrajectoryTable_module_css_default.panelImageLink,
+@@ -3868,14 +3889,14 @@
+ 			});
+ 		}
+ 		function MessageImages({ blocks, preview }) {
+-			const images = blocks?.filter((block) => block.imageSrc !== void 0) ?? [];
++			const renderImages = (0, react.useContext)(TrajectoryImagesContext);
++			const images = blocks?.filter((block) => isTrajectoryImage(block, renderImages)) ?? [];
+ 			if (images.length === 0) return null;
+ 			return (0, react_jsx_runtime.jsx)("div", {
+ 				className: preview ? `${TrajectoryTable_module_css_default.messageImages} ${TrajectoryTable_module_css_default.messageImagesPreview}` : TrajectoryTable_module_css_default.messageImages,
+-				children: images.map((block, index) => (0, react_jsx_runtime.jsx)(PanelImage, {
+-					block,
+-					preview
+-				}, index))
++				children: trajectoryImageRuns(images, renderImages).map((run) => run.images
++					? (0, react_jsx_runtime.jsx)(react.Fragment, { children: renderImages({ images: run.images, align: "start", compact: preview === true }) }, run.key)
++					: (0, react_jsx_runtime.jsx)(PanelImage, { block: run.block, preview }, run.key))
+ 			});
+ 		}
+ 		function AssistantToolCalls({ blocks, preview, onOpenCall }) {
+@@ -4035,13 +4056,14 @@
+ 			});
+ 		}
+ 		function ToolOutputBlocks({ blocks, error, preview }) {
++			const renderImages = (0, react.useContext)(TrajectoryImagesContext);
+ 			return (0, react_jsx_runtime.jsx)("div", {
+ 				className: [
+ 					TrajectoryTable_module_css_default.resultBlocks,
+ 					preview ? TrajectoryTable_module_css_default.resultBlocksPreview : void 0,
+ 					error ? TrajectoryTable_module_css_default.errorPayload : void 0
+ 				].filter((value) => value !== void 0).join(" "),
+-				children: blocks.map((block, index) => block.imageSrc !== void 0 ? (0, react_jsx_runtime.jsx)(PanelImage, {
++				children: blocks.map((block, index) => isTrajectoryImage(block, renderImages) ? (0, react_jsx_runtime.jsx)(PanelImage, {
+ 					block,
+ 					preview
+ 				}, index) : block.content !== "" ? (0, react_jsx_runtime.jsx)("pre", {
+@@ -4051,6 +4073,7 @@
+ 			});
+ 		}
+ 		function MarkdownRecordContent({ record, rendered, preview = false, thinkingExpanded, onThinkingExpandedChange, onOpenCall }) {
++			const renderImages = (0, react.useContext)(TrajectoryImagesContext);
+ 			if (!rendered && record.cell.sourceBlocks && record.cell.sourceBlocks.length > 0) return (0, react_jsx_runtime.jsx)(SourceBlocks, {
+ 				blocks: record.cell.sourceBlocks,
+ 				onOpenCall
+@@ -4104,7 +4127,7 @@
+ 				});
+ 			}
+ 			const source = markdownSource(record);
+-			const hasImages = record.cell.sourceBlocks?.some((block) => block.imageSrc !== void 0) === true;
++			const hasImages = record.cell.sourceBlocks?.some((block) => isTrajectoryImage(block, renderImages)) === true;
+ 			const hasToolCalls = record.cell.kind === "message" && record.cell.sourceBlocks?.some((block) => block.type === "tool-call") === true;
+ 			if (!source && !hasImages && !hasToolCalls) {
+ 				const emptyLabel = isToolCallOnly(record.cell) ? "Tool call only" : record.cell.text || "No content";
+@@ -6591,6 +6614,19 @@
  			if (change.kind === "tools") return "Tools Updated";
  			return "System Prompt and Tools Updated";
  		}
@@ -21,7 +119,7 @@ diff --git a/lib/client.js b/lib/client.js
  		function assistantSourceBlock(block) {
  			switch (block.kind) {
  				case "text": return {
-@@ -6609,7 +6622,8 @@
+@@ -6609,7 +6645,8 @@
  				};
  				case "image": return {
  					type: "image",
@@ -31,7 +129,7 @@ diff --git a/lib/client.js b/lib/client.js
  				};
  				case "other": return sourceBlock(block.block);
  			}
-@@ -6625,11 +6639,13 @@
+@@ -6625,11 +6662,13 @@
  				type: type === "reasoning" ? "thinking" : type,
  				content: block.text
  			};
@@ -45,6 +143,39 @@ diff --git a/lib/client.js b/lib/client.js
  				...imageSrc !== void 0 ? { imageSrc } : {},
  				...imageAlt !== void 0 ? { imageAlt } : {}
  			};
+@@ -7004,7 +7043,14 @@
+ 				...total?.reasoning === void 0 && usage.reasoning === void 0 ? {} : { reasoning: (total?.reasoning ?? 0) + (usage.reasoning ?? 0) }
+ 			};
+ 		}
+-		function TrajectoryView({ useSession, useDuration, loadOlder, setActualDuration, inspect, onInspectDone, t }) {
++		function TrajectoryView(props) {
++			const available = props.useImageSlotsAvailable((value) => value);
++			const renderImages = (0, react.useMemo)(() => available && typeof props.loadImage === "function"
++				? (owner) => props.renderSlot("conversation.trajectory.images", { ...owner, loadImage: props.loadImage })
++				: null, [available, props.loadImage, props.renderSlot]);
++			return (0, react_jsx_runtime.jsx)(TrajectoryImagesContext.Provider, { value: renderImages, children: (0, react_jsx_runtime.jsx)(TrajectoryViewContent, props) });
++		}
++		function TrajectoryViewContent({ useSession, useDuration, loadOlder, setActualDuration, inspect, onInspectDone, t }) {
+ 			const [collapsedTurns, setCollapsedTurns] = (0, react.useState)(EMPTY_TURN_IDS);
+ 			const [collapsedAssistants, setCollapsedAssistants] = (0, react.useState)(EMPTY_RECORD_IDS);
+ 			const [timelineSelection, setTimelineSelection] = (0, react.useState)(null);
+@@ -7344,11 +7390,15 @@
+ 				order: 10,
+ 				locale: NS,
+ 				label: () => t("view.trajectory"),
++				children: { "conversation.trajectory.images": { kind: "single", scope: "session" } },
+ 				inject: (sessionId) => {
+ 					const session = ctx.sessions.binding(sessionId)?.session;
+ 					if (session === void 0) throw new Error(`ui-trajectory: session "${sessionId}" is unavailable`);
+ 					return {
+-						hooks: { duration },
++						hooks: { duration, imageSlotsAvailable: {
++							getSnapshot: () => ctx.slots.entriesOfSlot("conversation.trajectory.images").length > 0,
++							subscribe: (listener) => ctx.slots.subscribe("conversation.trajectory.images", listener)
++						} },
+ 						loadOlder: async () => {
+ 							const before = session.getSnapshot().views.get("trajectory");
+ 							await session.loadOlder();
 diff --git a/lib/types/client/trajectory-record.d.ts b/lib/types/client/trajectory-record.d.ts
 --- a/lib/types/client/trajectory-record.d.ts
 +++ b/lib/types/client/trajectory-record.d.ts
@@ -64,3 +195,58 @@ diff --git a/lib/types/client/trajectory-record.d.ts b/lib/types/client/trajecto
      imageSrc?: string;
      imageAlt?: string;
      callId?: string;
+diff --git a/lib/types/client/TrajectoryView.d.ts b/lib/types/client/TrajectoryView.d.ts
+--- a/lib/types/client/TrajectoryView.d.ts
++++ b/lib/types/client/TrajectoryView.d.ts
+@@ -1,14 +1,15 @@
+ /** Trajectory view: compact summary over a turn-aware event ledger. */
+-import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client';
+-import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
++import type { ConvViewProps, MessageImagesOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client';
++import type { InjectFace, PropsLocale, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots';
+ import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client';
+ /** Session-bound controls not already supplied by the conversation view slot. */
+ export interface TrajectoryViewInjected {
+     hooks: {
+         duration: SnapshotStore<boolean>;
++        imageSlotsAvailable: { getSnapshot(): boolean; subscribe(listener: () => void): () => void };
+     };
+     loadOlder: () => Promise<boolean>;
+     setActualDuration: (actualDuration: boolean) => void;
+ }
+-export declare function TrajectoryView({ useSession, useDuration, loadOlder, setActualDuration, inspect, onInspectDone, t, }: ConvViewProps & InjectFace<TrajectoryViewInjected> & PropsLocale<'trajectory'>): import("react").JSX.Element;
++export declare function TrajectoryView(props: ConvViewProps & InjectFace<TrajectoryViewInjected> & PropsLocale<'trajectory'> & PropsRenderSlots<'conversation.trajectory.images'> & { loadImage?: MessageImagesOwnerProps['loadImage'] }): import("react").JSX.Element;
+ //# sourceMappingURL=TrajectoryView.d.ts.map
+\ No newline at end of file
+diff --git a/lib/types/client/trajectory-contract.d.ts b/lib/types/client/trajectory-contract.d.ts
+--- a/lib/types/client/trajectory-contract.d.ts
++++ b/lib/types/client/trajectory-contract.d.ts
+@@ -61,4 +61,15 @@
+         trajectory: TrajectorySnapshot;
+     }
+ }
+-//# sourceMappingURL=trajectory-contract.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=trajectory-contract.d.ts.map
++export type TrajectoryImagesOwnerProps = import('@deepseek-ai/dsh-client-ui-conversation/client').MessageImagesOwnerProps & { compact?: boolean };
++/** Additive image presentation contract; the rc.2 ledger remains the fallback. */
++declare module '@deepseek-ai/dsh-client-ui-slots' {
++    interface SlotMap {
++        'conversation.trajectory.images': {
++            kind: 'single';
++            scope: 'session';
++            owner: TrajectoryImagesOwnerProps;
++        };
++    }
++}
+diff --git a/lib/types/client/index.d.ts b/lib/types/client/index.d.ts
+--- a/lib/types/client/index.d.ts
++++ b/lib/types/client/index.d.ts
+@@ -2,6 +2,7 @@
+  * Browser trajectory plugin contributing one entry to the conversation view
+  * slot without defining a service.
+  */
++export type { TrajectoryImagesOwnerProps } from './trajectory-contract.js';
+ import type { Context } from '@deepseek-ai/cordis';
+ /** Required services: the conversation slot, registries, ordinary Session paging, and the locale service. */
+ export declare const inject: string[];

@@ -49,7 +49,7 @@
 | 26 | `conversation.session.header.corner` | 桌面接入已验证 | 按新版 single/session 与空 owner 契约接入最右角，保留原标题和控件顺序；空内容不占宽度。真实插件已验证会话及注入身份、操作、会话切换、无当前会话隐藏、草稿保留、报错隔离和卸载尺寸恢复。依赖新版右侧栏服务的插件及独立 Web 另核对。 |
 | 27 | `conversation.session.header.lineage` | 新版契约，待验证 | 需要真实会话派生关系数据和导航回调。 |
 | 28 | `conversation.session.header.utilities` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
-| 29 | `conversation.trajectory.images` | 可适配，需补轨迹组件契约 | 实际 rc.2 TrajectoryViewInjected 没有图片 loader/渲染回调，内部 MessageImages/PanelImage 直接使用 sourceBlocks.imageSrc；新版由 trajectory 视图声明 single/session 图片槽并传递 loadImage。需要在图片引用、会话读取和实际渲染点接入，不能仅声明同名键；原轨迹界面与 inline 图片回退须保留。 |
+| 29 | `conversation.trajectory.images` | 入口已接入，桌面验证通过 | 固定 rc.2 可复现补丁保留原持久引用，在 trajectory 的 conversation.view 子声明 single/session 图片槽，并复用 shell 会话授权 loader。实际 Host 图激活与卸载、两张真实图片解码、准确 session/loader、空插件、抛错后恢复元数据以及原选中行/表头/编辑器草稿均验证通过。混合 inline/持久图片顺序与 compact 预览/详情有组件测试；完整新版图片插件依赖及独立 Web 仍待验证。 |
 | 30 | `conversation.view` | 可以适配，已验证 | 增加插件视图标签；保留原对话及草稿。依赖完整输入服务的视图另算。 |
 | 31 | `details` | 不能同时原样接管 | 完整接管该区域可能替换现有界面或创建第二套控制器。需拆出附加能力；不能宣称完整兼容。 |
 | 32 | `main` | 不能同时原样接管 | 完整接管该区域可能替换现有界面或创建第二套控制器。需拆出附加能力；不能宣称完整兼容。 |

@@ -37,6 +37,7 @@ if (process.argv.includes("--header-corner") && !process.argv.includes("--compat
 if (process.argv.includes("--message-images") && !process.argv.includes("--compat")) throw new Error("--message-images requires --compat");
 if (process.argv.includes("--tool-images") && !process.argv.includes("--message-images")) throw new Error("--tool-images requires --message-images");
 if (process.argv.includes("--nested-tools") && !process.argv.includes("--tool-images")) throw new Error("--nested-tools requires --tool-images");
+if (process.argv.includes("--trajectory-images") && !["--message-images", "--tool-images", "--trajectory-loader", "--cordis-business"].every(flag=>process.argv.includes(flag))) throw new Error("--trajectory-images requires --message-images --tool-images --trajectory-loader --cordis-business");
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const profile = await mkdtemp(path.join(tmpdir(), "amiba-plugin-app-"));
 async function port() {
@@ -470,19 +471,19 @@ try {
       const denied=await evaluate("window.__probeCtx.sessions.binding(window.__foreignImageSession).session.readAttachment(window.__imageRef.attachmentId)");
       assert.equal(denied.ok,false,'foreign session must not read an unreferenced image');
       assert.equal(denied.error.message,'Image is not referenced by this session.');
-      await wait(()=>evaluate("fetch(window.__oldImageUrl).then(()=>false,()=>true)"));
+      await wait(()=>evaluate("new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(false);image.onerror=()=>resolve(true);image.src=window.__oldImageUrl})"));
       if(toolRef) {
         const toolDenied=await evaluate("window.__probeCtx.sessions.binding(window.__foreignImageSession).session.readAttachment(window.__toolOnlyRef.attachmentId)");
         assert.equal(toolDenied.ok,false);
         assert.equal(toolDenied.error.message,'Image is not referenced by this session.');
-        await wait(()=>evaluate("fetch(window.__oldToolOnlyUrl).then(()=>false,()=>true)"));
+        await wait(()=>evaluate("new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(false);image.onerror=()=>resolve(true);image.src=window.__oldToolOnlyUrl})"));
       }
 
       if(nestedRef) {
         const nestedDenied=await evaluate("window.__probeCtx.sessions.binding(window.__foreignImageSession).session.readAttachment(window.__nestedOnlyRef.attachmentId)");
         assert.equal(nestedDenied.ok,false);
         assert.equal(nestedDenied.error.message,'Image is not referenced by this session.');
-        await wait(()=>evaluate("fetch(window.__oldNestedOnlyUrl).then(()=>false,()=>true)"));
+        await wait(()=>evaluate("new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(false);image.onerror=()=>resolve(true);image.src=window.__oldNestedOnlyUrl})"));
       }
       await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
       await wait(()=>evaluate("!!document.querySelector('[data-compat-images]')"));
@@ -559,9 +560,7 @@ try {
       await evaluate("window.__probeCtx.get('dynamicCordisRunner').startUserRun({agentId:window.__compatSessionId,pluginId:window.__cordisDefinition.pluginId,packageId:window.__cordisDefinition.packageId,mode:'run',hasClientHalf:true})");
       const loaded = await wait(() => evaluate("window.__probeCtx.get('dynamicCordisRunner').getSnapshot().find(row=>row.pluginId===window.__cordisDefinition.pluginId)"));
       await writeFile(path.join(profile, "cordis-card.json"), JSON.stringify({pluginRunId:loaded.pluginRunId}));
-      await wait(() => evaluate("!!document.querySelector('[data-execution-summary] > button[aria-expanded=false]')"));
-      await evaluate("document.querySelector('[data-execution-summary] > button[aria-expanded=false]').click();void 0");
-      await wait(() => evaluate("!!document.querySelector('[data-compat-dynamic]')"));
+      await wait(() => evaluate("(()=>{document.querySelectorAll('[data-execution-summary] > button[aria-expanded=false]').forEach(n=>n.click());return !!document.querySelector('[data-compat-dynamic]')})()"));
       assert.deepEqual(await evaluate("(()=>{const n=document.querySelector('[data-compat-dynamic]');return {pluginId:n.dataset.plugin,packageId:n.dataset.package,pluginRunId:n.dataset.run}})()"), {pluginId:definition.pluginId,packageId:definition.packageId,pluginRunId:loaded.pluginRunId});
       await evaluate("document.querySelector('[data-compat-dynamic]').click();void 0");
       await wait(() => evaluate("document.body.textContent.includes('COMPAT_DYNAMIC 1')"));
@@ -656,6 +655,38 @@ try {
       assert.ok(state.selected[0].includes(JSON.stringify(inspectedDefinition.packageId)));
       assert.ok(state.selected[0].includes("COMPAT_DYNAMIC_OUTPUT"));
       assert.equal(state.viewFont,"13px");
+      if(process.argv.includes("--trajectory-images")) {
+        await evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(n=>n.textContent==='Chat'||n.textContent==='对话').click();window.__traceToolOff=window.__probeCtx.slots.register({name:'tool.call.toolview',key:'read_image',priority:-100},owner=>{if(owner.callId==='compat-tool-image')window.__traceToolOwner=owner;return window.__probeCreateElement('button',{'data-trace-image-call':owner.callId,onClick:owner.inspect},'Inspect image trace')});void 0");
+        await wait(()=>evaluate("(()=>{document.querySelectorAll('[data-execution-summary] > button[aria-expanded=false]').forEach(n=>n.click());return !!document.querySelector('[data-trace-image-call=compat-tool-image]')})()"));
+        await evaluate("document.querySelector('[data-trace-image-call=compat-tool-image]').click();void 0");
+        await wait(()=>evaluate("document.querySelector('[data-conversation-view=trajectory] tr[data-record-index][aria-selected=true]')?.textContent.includes('compat-tool-image.png')"));
+        const traceRefs=[JSON.parse(await readFile(path.join(profile,'message-image-ref.json'),'utf8')),JSON.parse(await readFile(path.join(profile,'tool-image-ref.json'),'utf8'))];
+        await evaluate("window.__traceImageBefore={selected:document.querySelector('[data-conversation-view=trajectory] tr[aria-selected=true]').getAttribute('data-record-index'),headers:Array.from(document.querySelectorAll('[data-conversation-view=trajectory] th')).map(n=>n.textContent)};window.__trajectoryImageOwners={};window.__traceImagesOff=window.__probeCtx.slots.register({name:'conversation.trajectory.images',id:'compat-trajectory-images',priority:-100},owner=>{for(const image of owner.images)window.__trajectoryImageOwners[image.attachment.attachmentId]=owner;return window.__probeCreateElement('div',{'data-trajectory-compact':String(owner.compact)},...owner.images.map(({attachment},index)=>window.__probeCreateElement('div',{key:index,'data-trajectory-image-id':attachment.attachmentId},window.__probeCreateElement('button',{onClick:async e=>{const img=e.currentTarget.parentElement.querySelector('img');img.src=await owner.loadImage(attachment)}},'Load trajectory image'),window.__probeCreateElement('img',{alt:'Trajectory image'}))))});void 0");
+        for(const ref of traceRefs) {
+          const selector='[data-trajectory-image-id='+JSON.stringify(ref.attachmentId)+']';
+          await wait(()=>evaluate(`!!document.querySelector(${JSON.stringify(selector)})`));
+          assert.equal(await evaluate(`window.__trajectoryImageOwners[${JSON.stringify(ref.attachmentId)}].sessionId`),trajectorySessionId);
+          assert.equal(await evaluate(`window.__trajectoryImageOwners[${JSON.stringify(ref.attachmentId)}].loadImage===window.__traceToolOwner.loadImage`),true,'trajectory must reuse the current shell session loader');
+          await evaluate(`document.querySelector(${JSON.stringify(selector)}).querySelector('button').click();void 0`);
+          await wait(()=>evaluate(`document.querySelector(${JSON.stringify(selector)}).querySelector('img').naturalWidth===${ref.width}`));
+        }
+        await writeFile(path.join(tmpdir(),'amiba-trajectory-images.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+        await evaluate("window.__traceImagesOff();void 0");
+        await wait(()=>evaluate("!document.querySelector('[data-trajectory-image-id]')"));
+        assert.deepEqual(await evaluate("({selected:document.querySelector('[data-conversation-view=trajectory] tr[aria-selected=true]').getAttribute('data-record-index'),headers:Array.from(document.querySelectorAll('[data-conversation-view=trajectory] th')).map(n=>n.textContent)})"),await evaluate("window.__traceImageBefore"));
+        assert.equal(await evaluate("window.__trajectoryEditor.isConnected&&window.__trajectoryEditor.textContent==='COMPAT_TRAJECTORY_DRAFT'"),true);
+        await evaluate("window.__traceNullOff=window.__probeCtx.slots.register({name:'conversation.trajectory.images',id:'compat-trajectory-null',priority:-100},()=>null);void 0");
+        await wait(()=>evaluate("document.querySelector('[data-conversation-view=trajectory]')?.textContent.includes('COMPAT_TOOL_IMAGE_META')"));
+        assert.equal(await evaluate("window.__trajectoryEditor.isConnected&&window.__trajectoryEditor.textContent==='COMPAT_TRAJECTORY_DRAFT'"),true);
+        await evaluate("window.__traceNullOff();window.__traceErrorOff=window.__probeCtx.slots.register({name:'conversation.trajectory.images',id:'compat-trajectory-error',priority:-100},()=>{window.__traceErrorCalls=(window.__traceErrorCalls??0)+1;throw new Error('COMPAT_TRAJECTORY_IMAGE_FAILURE')});void 0");
+        await wait(()=>evaluate("window.__traceErrorCalls>0&&window.__probeCtx.slots.entriesOfSlot('conversation.trajectory.images').length===0&&document.querySelector('[data-conversation-view=trajectory]')?.textContent.includes('tool-only.png')"));
+        assert.equal(await evaluate("window.__trajectoryEditor.isConnected&&window.__trajectoryEditor.textContent==='COMPAT_TRAJECTORY_DRAFT'"),true);
+        await evaluate("window.__traceErrorOff();void 0");
+        await wait(()=>evaluate("!document.querySelector('[data-conversation-view=trajectory]')?.textContent.includes('COMPAT_TRAJECTORY_IMAGE_FAILURE')&&document.querySelector('[data-conversation-view=trajectory]')?.textContent.includes('COMPAT_TOOL_IMAGE_META')"));
+        assert.deepEqual(await evaluate("({selected:document.querySelector('[data-conversation-view=trajectory] tr[aria-selected=true]').getAttribute('data-record-index'),headers:Array.from(document.querySelectorAll('[data-conversation-view=trajectory] th')).map(n=>n.textContent)})"),await evaluate("window.__traceImageBefore"));
+        await evaluate("window.__traceToolOff();void 0");
+        console.log('Trajectory image slot passed actual installed view, true image refs and decoding, shared authorized loader, unchanged selection/headers/editor and unload fallback');
+      }
       await writeFile(path.join(tmpdir(),"amiba-trajectory-inspection.png"),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
       if (process.argv.includes("--trajectory-loader")) {
         await writeFile(path.join(profile,"trajectory-disable"),"disable");
