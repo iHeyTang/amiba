@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：代码文档视图（2026-09-13）
+
+当前 rc.2 CodeBlock 缺少 streaming、lineNumbers、contentRef；迁移固定源对应 CodeBlock、StreamingHighlightSession、viewport 高亮及语言表，仅供新增 code 文档正文。复用公共 writeClipboard，保留聊天及原文件代码组件。固定 shiki/@shikijs/langs 4.4.3（原 lock 已有），局部原生字体/颜色及浅深色 shiki token；不改全局 Markdown 样式。metadata 在 Markdown/HTML 之后注册，保留其默认优先级；text-pages 累积内容、行号、独立 scrollport 和换行接到文档 owner。
+
+初始 135 项文档测试退出 0。新增固定源代码/增量/viewport 测试仅涵盖 CodeBlock，不引入无关 ReadBlock 测试及组件。pnpm 添加依赖时产生的无关 hast 类型版本整理已还原，pnpm lock 仅增加本插件两个依赖。首次构建发现发布运行时依赖锁需更新；执行 runtime:lock 并保留 runtime-deps 两个文件，未绕过发布检查。
+
+首次桌面分页发现固定源 CodeBlock 仅保留“文本未变而结束”的 DOM，“最后一页追加且同时 EOF”会切换完整 HTML。局部实现补齐最后追加分支，保留已完成行及 scrollport；新增回归后 136 项文档测试通过（/tmp/amiba-document-code-tests-4.log），最终代码专项 47 项通过（/tmp/amiba-document-code-final-tests.log），类型检查退出 0（/tmp/amiba-document-code-types-3.log）。
+
+最终完整桌面构建退出 0（/tmp/amiba-document-code-build-3.log），含运行时和 bundle verifier；--compat --sidebar-right 退出 0（/tmp/amiba-document-code-smoke-2.log）。6002 行 TypeScript 实际高亮/颜色、5000 行分页、最后一页完成后的行 DOM 与 scrollport 保留、5002 行定位、换行切换和关闭通过。已查看 amiba-native-document.png，行号、语法颜色及布局正常，原聊天/输入器/工作区标签保留。Markdown/HTML/图片默认视图和既有文件、目录、配置、HMR 回归通过。PDF、脚注本地化、图片格式逐项桌面验证、独立 Web 与其他服务仍未完成，44/0/20 入口统计不变。
+
 ## 进行中：HTML 文档视图（2026-09-13）
 
 迁移固定源 HtmlBody、pack、bootstrap、UTF-8 工具、relative reader、metadata 与 locale。html/htm 采用完整字节，在 allow-scripts 的 opaque iframe 中打开；原文及有限直接引用的普通 JS/CSS 经 base64 序列化，依赖 Blob URL 在 iframe 自身创建。每个资源 4 MiB、最多 64 个、总计 32 MiB；保留官方 base 元素处理及不遍历模块、CSS 内部依赖、图片和运行时请求的范围，不能据此声称任意本地网站完整运行。
