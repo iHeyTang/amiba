@@ -13,7 +13,9 @@ if (process.platform !== 'darwin') throw new Error('Mac packaging requires macOS
 
 await build({
   projectDir: desktop,
-  config,
+  // A config object is merged with package.json, concatenating resource arrays.
+  // Load the complete generated config as a file, like the Windows CLI does.
+  config: path.resolve(process.argv[2]),
   targets: Platform.MAC.createTarget(config.mac.target, Arch[process.arch]),
   publish: 'never',
   ...(process.argv[3] ? { prepackaged: path.resolve(process.argv[3]) } : {}),
