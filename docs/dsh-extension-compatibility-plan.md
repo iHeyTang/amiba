@@ -5,7 +5,15 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
-## 最新进展：后台自动出队及前后台交接（2026-09-13）
+## 最新进展：重定向发送的完成归属（2026-09-13）
+
+ConversationLifecycle 的实际插件 handler 可将提交转到同来源的新会话段。发送派发回调现传出准备后的目标 ID（f72cb95）；后台工作器按该 ID 关联原队列，仅目标完成可以推进它，旧源会话的完成事件不重复派发。目标停止或被原生 Send now 打断时保留并暂停原队列；回执延迟及完成先于回执时也遵守 Stop。
+
+验证：发送器 6 项、队列工作器 20 项测试以及 UI 类型检查通过；新用例使用互相独立的新旧队列，覆盖目标完成、旧源完成、停止、抢占及回执顺序。日志：/tmp/amiba-redirect-queue-tests3.log、/tmp/amiba-redirect-queue-types2.log。该重定向变化尚未完成真实 Host 桌面验证，不能沿用上一里程碑的桌面通过结论。
+
+待补齐：切换到新目标后的原生队列展示和发送交接，新旧目标已有队列时的顺序协调，以及标准离屏直接发送的重定向关联。跨窗口、跨重启和完整官方服务范围继续保留。
+
+## 后台自动出队及前后台交接（2026-09-13）
 
 实际成功结束事件可推动同一 sessionPendingQueue 的后台 FIFO。工作器等待目标真正空闲，检查暂停和队首身份；已解析记录不重复运行 codec，暂存草稿使用目标会话真实引用服务解析。读取持久化记录、解除暂停本身不会触发发送。没有增加隐藏编辑器或更换原界面。
 

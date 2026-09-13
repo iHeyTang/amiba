@@ -151,3 +151,73 @@ it.each([false, true])("cleans a removed prepared image only when no native draf
   f.queue.update([]); await tick();
   expect(f.deps.send).not.toHaveBeenCalled(); expect(removeFile).toHaveBeenCalledTimes(retained ? 0 : 1);
 });
+
+
+async function redirectedFixture() {
+  const f = await fixture();
+  const other = createPendingQueueSource({
+    get: async () => ({}), set: async () => {}, remove: async () => {}, watch: () => () => {},
+  }, "rotated");
+  await other.ready();
+  f.deps.queue = id => id === "target" ? f.queue : other;
+  return { ...f, other };
+}
+
+it("uses the prepared target completion to continue the source queue and ignores the old source completion", async () => {
+  const f = await redirectedFixture();
+  vi.mocked(f.deps.send).mockImplementation(async request => {
+    request.onDispatch?.("rotated"); return { kind: "accepted" };
+  });
+  f.worker.completed("target"); await tick();
+  expect(f.deps.send).toHaveBeenCalledTimes(1);
+  f.worker.completed("target"); await tick();
+  expect(f.deps.send).toHaveBeenCalledTimes(1);
+  f.worker.completed("rotated"); await tick();
+  expect(vi.mocked(f.deps.send).mock.calls.map(([request]) => [request.sessionId, request.text]))
+    .toEqual([["target", "first"], ["target", "second"]]);
+});
+
+it.each(["interrupted", "displaced"] as const)("%s at the prepared target parks the original queue even before the receipt", async event => {
+  const f = await redirectedFixture();
+  let finish!: (receipt: SubmitReceipt) => void;
+  vi.mocked(f.deps.send).mockImplementation(request => {
+    request.onDispatch?.("rotated"); return new Promise(resolve => { finish = resolve; });
+  });
+  f.worker.completed("target"); await tick();
+  f.worker[event]("rotated");
+  finish({ kind: "accepted" }); await tick();
+  f.worker.completed("rotated"); await tick();
+  expect(f.queue.isPaused()).toBe(true);
+  expect(f.queue.getSnapshot().map(row => row.queueId)).toEqual(["second"]);
+  expect(f.deps.send).toHaveBeenCalledTimes(1);
+});
+
+it("settles a redirected completion received before its receipt exactly once", async () => {
+  const f = await redirectedFixture();
+  let finish!: (receipt: SubmitReceipt) => void;
+  vi.mocked(f.deps.send).mockImplementationOnce(request => {
+    request.onDispatch?.("rotated"); return new Promise(resolve => { finish = resolve; });
+  });
+  f.worker.completed("target"); await tick();
+  f.worker.completed("rotated");
+  expect(f.deps.send).toHaveBeenCalledTimes(1);
+  finish({ kind: "accepted" }); await tick();
+  expect(f.deps.send).toHaveBeenCalledTimes(2);
+  expect(f.queue.getSnapshot()).toEqual([]);
+});
+
+
+it("keeps a redirected Stop authoritative after completion but before receipt settlement", async () => {
+  const f = await redirectedFixture();
+  let finish!: (receipt: SubmitReceipt) => void;
+  vi.mocked(f.deps.send).mockImplementationOnce(request => {
+    request.onDispatch?.("rotated"); return new Promise(resolve => { finish = resolve; });
+  });
+  f.worker.completed("target"); await tick();
+  f.worker.completed("rotated");
+  f.worker.interrupted("rotated");
+  finish({ kind: "accepted" }); await tick();
+  expect(f.queue.isPaused()).toBe(true);
+  expect(f.other.isPaused()).toBe(true);
+  expect(f.deps.send).toHaveBeenCalledTimes(1);
+});

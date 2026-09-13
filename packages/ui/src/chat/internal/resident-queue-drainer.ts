@@ -15,12 +15,23 @@ export interface ResidentQueueDrainerDeps {
   retainedAttachments(): ResidentTurnRequest["attachments"];
 }
 
-type Attempt = { controller: AbortController; dispatched: boolean; completed: boolean; displaced?: boolean };
+type Attempt = { controller: AbortController; dispatched: boolean; completed: boolean; displaced?: boolean; targetId?: string };
 
 /** A real successful terminal event grants one drain, never a stored snapshot. */
 export function createResidentQueueDrainer(deps: ResidentQueueDrainerDeps) {
   const attempts = new Map<string, Attempt>();
-  const ownedTurns = new Set<string>();
+  const ownedTurns = new Map<string, { sourceId: string; attempt: Attempt }>();
+  const ownsSource = (id: string) => [...ownedTurns.values()].some(owner => owner.sourceId === id);
+  const releaseOwnership = (attempt: Attempt) => {
+    if (attempt.targetId && ownedTurns.get(attempt.targetId)?.attempt === attempt) ownedTurns.delete(attempt.targetId);
+  };
+  const detachOwnership = (id: string) => {
+    const pending = [...attempts.entries()].find(([, attempt]) => attempt.targetId === id && !attempt.displaced);
+    const owner = ownedTurns.get(id) ?? [...ownedTurns.values()].find(owner => owner.sourceId === id)
+      ?? (pending ? { sourceId: pending[0], attempt: pending[1] } : undefined);
+    if (owner) releaseOwnership(owner.attempt);
+    return owner;
+  };
   let enabled = true;
   const available = (id: string) => enabled && deps.offscreen(id);
 
@@ -49,7 +60,7 @@ export function createResidentQueueDrainer(deps: ResidentQueueDrainerDeps) {
       if (allowNative) deps.drainNative(id);
       return;
     }
-    if (attempts.has(id)) return;
+    if (attempts.has(id) || ownsSource(id)) return;
     const attempt: Attempt = { controller: new AbortController(), dispatched: false, completed: false };
     attempts.set(id, attempt);
     const queue = deps.queue(id);
@@ -83,10 +94,12 @@ export function createResidentQueueDrainer(deps: ResidentQueueDrainerDeps) {
           let receipt: SubmitReceipt;
           try {
             receipt = await deps.send({ sessionId: id, text: text.trim(), attachments: item.attachments,
-              signal: attempt.controller.signal, onDispatch: () => {
+              signal: attempt.controller.signal, onDispatch: targetId => {
                 check();
+                if (!targetId || ownedTurns.has(targetId)) throw new Error("The prepared conversation already has a queued dispatch owner.");
                 attempt.dispatched = true;
-                ownedTurns.add(id);
+                attempt.targetId = targetId;
+                ownedTurns.set(targetId, { sourceId: id, attempt });
                 // Match the native handoff: remove the row immediately before
                 // dispatch, while the sending lease owns its attachment files.
                 queue.update(rows => rows.filter(row => row.queueId !== item.queueId));
@@ -100,7 +113,7 @@ export function createResidentQueueDrainer(deps: ResidentQueueDrainerDeps) {
           accepted = receipt.kind === "accepted" && receipt.command?.kind !== "error";
           if (accepted) return;
           if (attempt.dispatched) {
-            ownedTurns.delete(id);
+            releaseOwnership(attempt);
             queue.update(rows => rows.some(row => row.queueId === item.queueId) ? rows : [item, ...rows]);
           } else if (attempt.controller.signal.aborted || !available(id)) return;
           queue.setPaused(true);
@@ -131,32 +144,41 @@ export function createResidentQueueDrainer(deps: ResidentQueueDrainerDeps) {
 
   return {
     completed(id: string) {
-      const owned = ownedTurns.delete(id);
-      const attempt = attempts.get(id);
+      // Only the actual dispatch target can settle a redirected turn.
+      const owner = ownedTurns.get(id);
+      if (!owner && ownsSource(id)) return;
+      if (owner) releaseOwnership(owner.attempt);
+      const sourceId = owner?.sourceId ?? id;
+      const attempt = attempts.get(sourceId);
       if (attempt) {
-        // Repeated completion notifications before dispatch do not grant a
-        // second send. A new turn ending before its receipt is handled later.
-        if (attempt.dispatched) attempt.completed = true;
+        if (attempt.dispatched && attempt.targetId === id) attempt.completed = true;
         return;
       }
-      drain(id, owned);
+      drain(sourceId, !!owner);
     },
     interrupted(id: string) {
-      ownedTurns.delete(id);
+      const owner = detachOwnership(id);
+      const sourceId = owner?.sourceId ?? id;
       deps.queue(id).setPaused(true);
-      const attempt = attempts.get(id);
-      if (attempt && !attempt.dispatched) attempt.controller.abort();
+      deps.queue(sourceId).setPaused(true);
+      const attempt = owner?.attempt ?? attempts.get(sourceId);
+      if (attempt) {
+        // A completion received before the receipt must not outlive Stop.
+        attempt.completed = false;
+        if (!attempt.dispatched) attempt.controller.abort();
+      }
     },
     displaced(id: string) {
-      // Native Send now owns the replacement turn and its existing finally
-      // drain. A late receipt for the displaced background turn cannot also
-      // continue that queue or consume the replacement's completion.
-      ownedTurns.delete(id);
-      const attempt = attempts.get(id);
+      const owner = detachOwnership(id);
+      const sourceId = owner?.sourceId ?? id;
+      // Native Send now belongs to the displayed target. A redirected source
+      // retains its remaining rows, paused until that source is explicitly resumed.
+      if (sourceId !== id) deps.queue(sourceId).setPaused(true);
+      const attempt = owner?.attempt ?? attempts.get(sourceId);
       if (!attempt) return;
       attempt.displaced = true;
       if (!attempt.dispatched) attempt.controller.abort();
-      attempts.delete(id);
+      if (attempts.get(sourceId) === attempt) attempts.delete(sourceId);
     },
     enteredForeground(id: string | null) {
       if (!id) return;
