@@ -17,9 +17,8 @@ const svg = renderer.svg;
 svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
 svg.setAttribute('width', '1024');
 svg.setAttribute('height', '1024');
-// Keep the existing warm paper tile and tilt the whole head, not just its eyes.
+// Keep the existing warm paper tile and the default upright head pose.
 const head = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-head.setAttribute('transform', 'rotate(7)');
 while (svg.firstChild) head.append(svg.firstChild);
 const tile = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
 for (const [key, value] of Object.entries({ x: -127.14, y: -127.14, width: 254.28, height: 254.28, rx: 55, fill: '#f4f2ed' })) tile.setAttribute(key, String(value));
