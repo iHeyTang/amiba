@@ -1035,10 +1035,13 @@ export function apply(ctx) {
       sessionId,
     });
     assert.ok(moved.workspace.sessionIds.includes(sessionId));
-    const searched = await rpc(baseUrl, "session.search", {
-      query: "DSH smoke",
+    // The async producer is still appending events. Search requires a stable
+    // persistence observation, which can briefly lag the live session on CI.
+    await waitFor("persisted session search", async () => {
+      const searched = await rpc(baseUrl, "session.search", { query: "DSH smoke" });
+      assert.ok(Array.isArray(searched.items));
+      return true;
     });
-    assert.ok(Array.isArray(searched.items));
     const history = await rpc(baseUrl, "session.history", {
       sessionId,
       maxMessages: 20,
