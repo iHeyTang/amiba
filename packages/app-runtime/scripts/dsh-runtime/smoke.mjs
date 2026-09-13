@@ -1,3 +1,4 @@
+import { stopChildProcess } from "./process-tools.mjs";
 /**
  * BUNDLE-COMPOSITION integration check (documented ruling).
  *
@@ -226,15 +227,7 @@ async function waitForReady() {
 }
 
 async function stopChild() {
-  if (!child || child.exitCode !== null) return;
-  await new Promise((resolve) => {
-    const force = setTimeout(() => child.kill("SIGKILL"), 5_000);
-    child.once("exit", () => {
-      clearTimeout(force);
-      resolve();
-    });
-    child.kill("SIGTERM");
-  });
+  await stopChildProcess(child);
 }
 
 async function rpc(baseUrl, method, payload = {}) {
