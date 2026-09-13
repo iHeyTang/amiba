@@ -3,14 +3,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { releaseSettings } from './config.mjs';
-import { verifiedArtifacts } from './artifacts.mjs';
+import { verifiedArtifacts, publicArtifactNames } from './artifacts.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const target = process.argv[2] || `${process.platform}-${process.arch}`;
 const { sources } = releaseSettings(process.env, target);
 const dir = path.join(root, 'apps/desktop/dist', target);
 const version = JSON.parse(fs.readFileSync(path.join(root, 'apps/desktop/package.json'))).version;
-const names = verifiedArtifacts(dir, target, version);
 const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'release-manifest.json')));
+const names = publicArtifactNames(manifest, verifiedArtifacts(dir, target, version));
 let failed = false;
 for (const source of sources) {
   for (const name of names) {

@@ -32,7 +32,9 @@ const runtimePackageDir = path.resolve(
   "../..",
 );
 const workspaceDir = path.resolve(runtimePackageDir, "../..");
-const runtimeDir = path.join(runtimePackageDir, "resources", "dsh-runtime");
+const runtimeDir = process.env.AMIBA_DSH_SMOKE_RUNTIME_DIR
+  ? path.resolve(process.env.AMIBA_DSH_SMOKE_RUNTIME_DIR)
+  : path.join(runtimePackageDir, "resources", "dsh-runtime");
 const runtimeNode =
   process.platform === "win32"
     ? path.join(runtimeDir, "node", "node.exe")

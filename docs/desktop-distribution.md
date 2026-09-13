@@ -4,7 +4,9 @@
 
 ## 版本管理
 
-产品版本唯一来源是 `apps/desktop/package.json`。UI 设置页和菜单在构建时直接读取该版本，桌面更新桥读取 Electron `app.getVersion()`，安装包、更新清单与 Release 标签使用相同版本。根 package.json 由升版命令同步；内部 workspace 包有自己的版本，不作为产品版本。
+产品版本唯一来源是 `apps/desktop/package.json`。UI 设置页和菜单在构建时直接读取该版本，桌面更新桥读取 Electron `app.getVersion()`，安装包、更新清单与 Release 标签使用相同版本。根 package.json 由自动发版或本地升版命令同步；内部 workspace 包有自己的版本，不作为产品版本。
+
+本地维护版本时可使用以下命令；GitHub 一键发版不需要提前执行：
 
 ```sh
 pnpm release:version patch # 0.1.0 -> 0.1.1
@@ -13,15 +15,25 @@ pnpm release:version major # 主版本加一，其余归零
 pnpm release:version:check
 ```
 
-一次发布只运行一种升版命令，然后提交并合并到 main，再从 main 手动运行 release 模式。普通 main 构建不自动升版。当前仅支持稳定版 `major.minor.patch`；预发布渠道尚未开放。
+GitHub 发版只需在 **Actions → Amiba Desktop → Run workflow** 选择 `main`、`mode=release`、`target=all`，`bump` 默认 `patch`（也可选 `minor` / `major`），`mac_signing` 默认 `unsigned`，`run_id` 留空。流水线检查配置、自动升版并提交到 main、并发构建三个平台、检查并回读全部附件、生成更新说明，最后自动公开 Release。不需要手动提交版本或发布草稿。普通 main 构建不自动升版。当前仅支持稳定版 `major.minor.patch`；预发布渠道尚未开放。
 
-Actions Artifacts 名称为 `amiba-<版本>-<平台架构>-<test|release|verify>-<run_id>-<attempt>`，例如 `amiba-0.1.1-win32-x64-test-123456-1`。内部安装包保留 `Amiba-0.1.1-win-x64.exe` 等标准名称；latest 更新清单保持固定名称，供客户端查询。历史 Artifacts 不会自动改名。
+Actions 软件包直接保留 `Amiba-<版本>-<系统>-<架构>.dmg/.zip/.exe` 文件名，内部校验文件放在 `metadata-<版本>-<平台架构>`。latest 更新清单保持固定名称，供客户端查询。历史 Artifacts 不会自动改名。
 
 产物清单记录版本、源码 SHA、构建编号、模式和工作区是否有未提交内容。正式本地构建要求工作区干净。发布前验证产物来自预期提交；同一 CI 发布的所有平台还必须属于同一运行和重试编号。
 
 正式构建在准备运行时之前查询 GitHub 的全部 Release：版本必须高于所有已发布稳定版本，公开同版本禁止覆盖；同版本草稿和已有标签必须指向本次源码提交。上传时再次检查，避免构建期间发布状态发生变化。旧草稿来自其他提交时必须升版，或显式清理旧草稿后重新发布，脚本不会自动覆盖它。正式构建需要已登录 gh，CI 使用 github.token。
 
-旧构建缺少来源记录，不能通过新的发布校验，需要重新构建；Windows verify 模式仍兼容旧 Artifact 名称用于安装验证。当前 `v0.1.0` 历史草稿属于早期提交，新代码正式发布应先升版。
+旧构建缺少来源记录，不能通过新的发布校验，需要重新构建；Windows verify 模式仍兼容旧 Artifact 名称用于安装验证。当前 `v0.1.0` 历史草稿属于早期提交，一键发版会从当前版本递增，不覆盖它。
+
+## 安装包内容与体积检查
+
+发布构建会创建独立的 `.package-resources/dsh-runtime` 副本，排除构建缓存、JS/CSS/TS source map，以及 ONNX 中非目标 OS/架构的二进制；开发运行时不受影响。ASAR 同时排除 workspace 包内重复的 DSH resources。打包完成、签名之前检查实际内容，禁止这些文件再次进入产物。
+
+记忆插件、Transformers、目标平台 ONNX、ONNX Web、npm/pnpm 和 Node 编译头文件保留；本次没有改成按需下载。每次构建保存 `package-footprint.json`，包含裁剪字节数与最终资源目录统计。安装检查还会用内置 Node 执行小型离线 ONNX 图，并加载 Transformers 和 MemOS 适配器，不下载模型。
+
+ONNX 1.24.3 的 npm 包缺少 Darwin x64 原生绑定（上游 microsoft/onnxruntime#27961），因此 Intel Mac 使用单独锁文件，将 Node 推理库固定为 1.22.0；ARM/Windows 保持原依赖。更新依赖锁时需分别运行 `pnpm runtime:lock` 和 `pnpm runtime:lock --lock-target=darwin-x64`，提交两个锁文件及对应 manifest。
+
+可以用 `AMIBA_DSH_SMOKE_RUNTIME_DIR=<已打包运行时绝对路径> AMIBA_DSH_SMOKE_CHECK=MemOS node packages/app-runtime/scripts/dsh-runtime/smoke.mjs` 验证成品中的 DSH 启动、插件安装与 MemOS 就绪状态。测试使用独立临时用户目录。
 
 ## 本地构建
 
@@ -33,7 +45,7 @@ Actions Artifacts 名称为 `amiba-<版本>-<平台架构>-<test|release|verify>
 
 Apple Silicon 上的 Intel 构建可在独立 checkout 中，通过 Rosetta 运行 x64 Node 和 pnpm；不要复用 ARM 的 node_modules、运行时目录或输出目录。Windows 请使用本地 Windows x64 机器或 VM；当前没有验证 Mac 上 Wine 交叉编译原生依赖。
 
-如果只想在配置发布服务前验证本地安装包，可运行 `pnpm release:build <target> --local-only`。此模式禁用更新源与 macOS 签名，产物不可通过发布脚本上传。默认正式发布模式要求代码签名成功。Windows 可使用 `pnpm release:build win32-x64 --allow-unsigned` 放宽证书要求并保留更新功能；已有签名配置仍会生效。Windows 可能显示未知发布者或 SmartScreen 提示。macOS 现有 Squirrel.Mac 自动安装依赖签名，`--local-only` 未签名测试包不支持该安装链路。
+如果只想在配置发布服务前验证本地安装包，可运行 `pnpm release:build <target> --local-only`。此模式禁用更新源与 macOS 签名，产物不可通过发布脚本上传。本地默认正式构建要求签名。使用 `pnpm release:build <target> --allow-unsigned` 可生成未签名发布包：Windows 保留更新功能；Mac 关闭更新源、签名和公证，允许手动下载安装。`--local-only` 仍是不可发布的测试包。未签名 Mac 发布不上传 Mac latest 清单和 blockmap，避免向客户端声明可自动安装的更新。
 
 Rosetta 下使用 Intel Node 的示例（`/path/to/node-darwin-x64` 换为已校验的官方 x64 Node 解压目录，在独立 checkout 内运行）：
 
@@ -66,27 +78,30 @@ macOS 自动更新必须签名；面向公开分发还需 Apple Developer ID 和
 
 工作流 `.github/workflows/desktop-release.yml` 使用三个原生托管环境：Windows x64 (`windows-2022`)、Mac Intel (`macos-15-intel`)、Mac ARM (`macos-15`)。不需要把当前 Mac 注册为 runner。Node 固定为 22.22.0，Python 固定为 3.11，以兼容现有原生模块工具链。
 
-在 Actions 的 **Desktop build and release → Run workflow** 中选择：
+在 Actions 的 **Amiba Desktop → Run workflow** 中选择：
 
 - `target=all`、`mode=test`：生成三个架构的未签名测试包，关闭客户端更新，产物保留在 Actions Artifacts 7 天。
-- `target=win32-x64`、`mode=verify`、`run_id=<已有构建 ID>`：复用原 EXE 验证安装与终端运行，不重新编译、不发布。
-- `target=win32-x64`、`mode=release`、`publish_draft=true`：生成 Windows 发布包并上传草稿 Release，允许没有代码签名证书。
-- `target=all`、`mode=release`、`publish_draft=true`：三个架构发布包全部通过后，依次上传同一个草稿 Release。必须先配置 Mac 签名与公证 secrets。
+- `target=all`（或单个平台）、`mode=verify`、`run_id=<已有构建 ID>`：复用原安装包验证运行，不重新编译、不发布。Windows 静默安装 EXE，Mac 解压更新 ZIP 并检查 DMG。
+- `target=all`、`mode=release`、`bump=patch`：自动升版、构建、校验、生成更新说明并公开 Release。`mac_signing=unsigned` 不需要 Apple 凭据；选择 `signed` 时必须先配置 Mac 签名与公证 secrets。
 
-也可在本机触发云端 Windows 构建：
+也可在本机触发云端三平台发布构建：
 
 ```sh
 gh workflow run desktop-release.yml --repo iHeyTang/amiba --ref main \
-  -f target=win32-x64 -f mode=release -f publish_draft=true
+  -f target=all -f mode=release -f bump=patch -f mac_signing=unsigned
 ```
 
 手动运行时选择 `main` 分支。首次运行不需要本机 Windows 虚拟机。
 
-仅 `main` 分支的 push 自动执行三个架构的 test 构建。其他分支和标签的 push 均不触发；手动选择非 `main` 引用时所有作业跳过。创建 Release 草稿需在 `main` 手动运行并设置 `mode=release`、`publish_draft=true`，Release 版本取自桌面 package.json。
+仅 `main` 分支的 push 自动执行三个架构的 test 构建。其他分支和标签的 push 均不触发；手动选择非 `main` 引用时所有作业跳过。正式发版需在 `main` 手动选择 `mode=release`，流水线按 `bump` 递增桌面版本并同步根 package.json。`publish_draft` 已移除，草稿只作为上传过程的中间状态。
 
-构建后校验更新清单的版本、目标架构和 SHA-512，运行内置 Node 与 Electron 原生 PTY。Mac 额外校验 DMG 和 ZIP；Windows 在临时 CI 机器里静默安装 EXE 后检查安装结果。安装包生成后即保存 Artifacts，运行检查失败时也保留文件便于排查；只有检查通过才允许上传 Release。上传 Release 时先验证所有目标文件，再顺序上传，草稿绑定实际构建提交。CI 上传后再次下载草稿资产，并按原构建记录检查 SHA-512。
+构建后校验更新清单的版本、目标架构和 SHA-512，运行内置 Node 与 Electron 原生 PTY。Mac 额外校验 DMG 和 ZIP；Windows 在临时 CI 机器里静默安装 EXE 后检查安装结果。安装包检查通过后保存为独立 Artifacts；运行检查失败时保留 metadata 与日志便于排查；只有全部平台检查通过才允许上传 Release。上传 Release 时先验证所有目标文件，再顺序上传，草稿绑定实际构建提交。CI 上传后再次下载草稿资产，并按原构建记录检查 SHA-512。全部通过后使用 GitHub 自动生成更新说明，将草稿发布并设为 Latest。
 
-仓库 Variables 的 `AMIBA_UPDATE_URLS` 可指定 CDN 下载目录；GitHub 下载源作为兜底。发布用 Secrets：Mac 的 `CSC_LINK`、`CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`；Windows 可选 `WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD`。
+仓库 Variables 的 `AMIBA_UPDATE_URLS` 可指定 CDN 下载目录；GitHub 下载源作为兜底。选择 `mac_signing=signed` 时使用 Secrets：Mac 的 `CSC_LINK`、`CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`；Windows 可选 `WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD`。
+
+升版前检查下载源配置；仅 `mac_signing=signed` 要求五项 Mac Secrets 齐全，缺配置时停止。`unsigned` 可在没有 Apple 凭据时直接升版构建并发布。main 必须允许工作流以 `contents: write` 写入版本提交；分支保护禁止此操作时会失败，不强制绕过。构建和发布固定检出自动生成的版本提交，避免 main 后续变化混入产物。版本提交带 `[skip ci]`，不会重复触发测试构建。
+
+失败后优先使用该次运行的 **Re-run failed jobs**。同一次尚未发布的运行完整重试时，若 main 仍是它生成的版本提交，会复用该提交；main 已有其他修改时停止，不覆盖新代码。点击新的 Run workflow 是新的一次发版，会尝试递增版本。发布作业在发布成功后因网络等原因重试时，只回读验证已有资产，不覆盖公开版本。
 
 ## GitHub 和国内 CDN
 
@@ -114,7 +129,7 @@ pnpm release:cdn darwin-arm64
 
 CDN 更新清单应采用短缓存或不缓存；版本化安装包可长期缓存。服务需支持 HTTPS、GET、HEAD、Range，并保留原始文件字节。
 
-全部平台上传并确认 CDN 可访问后，在 GitHub 发布草稿。发布后运行 `pnpm release:verify-online <target>`，它会逐个下载 CDN 与 GitHub 上的安装包、blockmap 和清单，并对照本地发布记录校验 SHA-512；该命令会产生完整安装包下载流量。首次分发前应在真实安装环境上完成一次版本 N → N+1 更新：检查每个架构命中正确 ZIP/EXE、网络中断重试、CDN 故障回退、校验失败拒绝安装、应用退出与重启后版本变化。
+本地手动发布时，全部平台上传并确认 CDN 可访问后，在 GitHub 发布草稿。GitHub 一键流程当前自动发布到 GitHub；CDN POST 仍是预留的独立适配器，待接口确定后接入。发布后运行 `pnpm release:verify-online <target>`，它会逐个下载 CDN 与 GitHub 上的安装包、blockmap 和清单，并对照本地发布记录校验 SHA-512；该命令会产生完整安装包下载流量。首次分发前应在真实安装环境上完成一次版本 N → N+1 更新：检查每个架构命中正确 ZIP/EXE、网络中断重试、CDN 故障回退、校验失败拒绝安装、应用退出与重启后版本变化。
 
 ## 客户端行为
 
@@ -158,3 +173,70 @@ Docker 的 `UseVirtualizationFramework` 与 `UseVirtualizationFrameworkRosetta` 
 参考：[Microsoft x64 模拟说明](https://learn.microsoft.com/en-us/windows/arm/apps-on-arm-x86-emulation)、[UTM Windows 安装指南](https://docs.getutm.app/guides/windows/)、[Homebrew Wine 状态](https://formulae.brew.sh/cask/wine-stable)。
 
 GitHub 发布仓库已在线确认是公开的 `iHeyTang/amiba`，当前 CLI 身份具有 ADMIN 权限，调查时尚无 Release。CDN 现阶段按需求只保留 POST 适配器，未选定实际接口不会阻塞本轮适配代码。
+
+
+### Actions 下载入口
+
+每个平台通过 `upload-artifact@v7` 的 `archive: false` 单独上传带版本号的安装文件：
+`Amiba-<version>-mac-arm64.dmg`、`Amiba-<version>-mac-x64.dmg`、`Amiba-<version>-win-x64.exe`。
+点击单个安装文件即可下载原始 DMG/EXE；不要选择下载全部 artifacts。
+Mac 更新 ZIP 同样直接上传，和 DMG 同名，仅后缀不同。blockmap、更新清单、构建 manifest 和体积清单保存在小型 `metadata-<version>-<target>` 中，供发布与复验使用。诊断信息写入作业日志，不再单独上传 reports。
+安装文件和更新 ZIP 只在该平台冒烟检查通过后上传；失败时保留 metadata 和日志供排查。
+工作流统一命名为 `Amiba Desktop`，运行标题使用 `Build / Verify / Release · All platforms`（单平台显示 `Windows x64`、`macOS Intel` 或 `macOS ARM`），作业 Summary 只提供原始文件下载链接及测试包状态。
+
+`mode=verify` 支持 `target=all`，可在同一次运行中复验原有三个平台的安装包，无需重建。
+同时兼容历史 artifact 布局；新的 DMG/EXE/ZIP 均保留原始文件名与内容，下载时禁止自动解压更新 ZIP；拆分文件在执行前按原始 manifest 校验 SHA-512。
+例如：
+
+```sh
+gh workflow run desktop-release.yml --ref main -f mode=verify -f target=all -f run_id=<原始构建运行ID>
+```
+
+一键发版自动汇总同一构建的三个平台，要求 `mode=release,target=all`，按 `bump` 递增版本。
+流水线会重新合并分开下载的安装文件和更新文件，验证三个平台的版本、源码提交、构建 ID 与文件哈希后，逐个上传为独立 Release assets，全部回读验证通过后自动生成更新说明并发布。
+测试/复验不会创建 Release。Mac 未签名发布允许手动分发；要启用 Mac 自动更新，需选择 `mac_signing=signed` 并配置签名与公证。
+
+
+2026-09-13 验证记录：
+
+- [首次三平台拆分上传](https://github.com/iHeyTang/amiba/actions/runs/34740759104)：三个平台成功。
+- [读取拆分产物再次复验](https://github.com/iHeyTang/amiba/actions/runs/34741097285)：三个平台成功，包含原始安装文件下载、manifest 完整性校验及原生运行检查。
+- 独立安装文件大小：ARM DMG 379,388,623 字节；Intel DMG 382,063,658 字节；Windows EXE 327,434,217 字节。下载响应为原始文件名，没有 ZIP 外壳。
+- 这两轮复用了原始构建 `34736708616` 的 0.1.0 测试包；manifest 保留原始源码提交及构建 ID，不将复验提交冒充安装包来源。
+- 本地发布工具 15 项测试通过；另验证三平台拆分文件合并，以及最后一个平台文件被篡改时整批上传前拒绝（上传命令使用替身，未修改 GitHub Release）。
+
+
+## 一键发版验证（2026-09-13）
+
+发布工具 21 项测试通过；使用模拟 GitHub CLI/API 和小型三平台文件执行实际 ci-upload/upload 脚本，验证上传、回读哈希、自动更新说明、公开发布、发布作业幂等重试，以及损坏文件在远端修改前被拒绝。
+
+[真实 Release 配置预检](https://github.com/iHeyTang/amiba/actions/runs/34743078625) 在 Prepare 阶段按预期报告缺少五项 Mac Secrets，main 未发生自动版本提交，版本保持 0.1.0，也没有创建或发布新 Release。该次预检未执行真实签名、公证或公开发布；后续未签名发布结果见下文。
+
+
+### 未签名发布
+
+当前默认允许未签名发布。Mac 使用无需账号、证书和网络的 ad-hoc 本地签名封装完整应用，不提供 Apple Developer ID 身份认证，也不进行公证。运行时命令链接转换为包内相对路径；构建和成品检查执行 codesign 严格校验。Mac 包的 `release-config.json` 更新源为空，运行检查会验证这一点；公开 Release 只提供 Mac DMG/ZIP，不提供 Mac 自动更新清单。Windows 保留 EXE、blockmap 和更新清单。Release 说明自动提示 Mac 安装限制。
+
+用户从网络下载 Mac 包后，系统可能拦截启动；可根据 [Apple 官方说明](https://support.apple.com/102445) 在“系统设置 → 隐私与安全性”中手动允许该应用。后续 Mac 版本暂时需要手动下载安装，切换到签名版时也需要安排一次手动安装。
+
+
+### 首次公开发布验证（2026-09-13）
+
+[Release v0.1.2](https://github.com/iHeyTang/amiba/releases/tag/v0.1.2) 已公开并设为 Latest；[完整流水线](https://github.com/iHeyTang/amiba/actions/runs/34744099935) 全部成功。采用 `mode=release,target=all,mac_signing=unsigned,bump=patch`，自动提交统一版本、构建三平台、上传回读校验、生成说明并发布。tag 与安装包源码均为 `26c3dbe99d76ad97d506fd85cfd7427c5f2983e4`。
+
+- macOS ARM DMG：382,926,734 字节；Intel DMG：387,194,022 字节；Windows EXE：327,434,008 字节。
+- 公开附件共七个：两组 Mac DMG/ZIP、Windows EXE/blockmap/latest-x64.yml；无 Mac 自动更新清单。
+- 三平台均通过安装文件完整性、包内 Node、原生 ONNX CPU 推理、Transformers/MemOS 加载及 Electron 原生 PTY 检查。Mac 另通过 ad-hoc 严格校验和更新源为空检查；Windows 实际执行静默安装。
+- 发布作业重新下载三平台公开附件并按构建 manifest 验证哈希后才公开；发布后再次确认 Latest、tag 源码与无需认证即可下载的 Windows 更新清单。
+- 发布工具本地 24 项测试通过。Apple Developer ID 签名、公证和跨版本自动升级仍未实测；当前 Mac 使用手动安装更新，Windows 保留自动更新配置。
+
+0.1.1 的首次运行在公开前主动取消，用于修复 Mac 本地封装签名和运行时绝对链接；没有发布该版本，重新执行流水线正常递增至 0.1.2。CDN POST 接口仍待配置，本次通过 GitHub 分发。
+
+
+### Mac 安装窗口提示
+
+未签名发布和本地测试 DMG 的安装窗口直接显示首次打开被拦截时的“系统设置 → 隐私与安全性 → 仍要打开”指引。提示使用普通/Retina 两套背景图片，图标位于提示上方；已签名发布不显示未认证提示。
+
+`package-mac.mjs` 在压缩 DMG 前通过 Finder 写入原生背景引用、窗口大小和图标位置，避免 dmg-builder 25 生成的旧引用在新版 macOS 上显示白底。该步骤需要构建机具备 Finder 图形会话；自托管 Mac 构建机需登录桌面。本机已实际重新打包、只读挂载并截图确认文字完整、图标不遮挡。此项尚未在 GitHub macOS runner 上复验。
+
+背景源文件为 `scripts/release/assets/render-dmg-background.swift`，在 macOS 执行即可重新生成 PNG；正常打包直接使用已提交的图片，无需运行 Swift。改动随下一次构建生效，已发布的 v0.1.2 附件不覆盖。

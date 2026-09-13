@@ -1,8 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { verifyPackageContents } from './package-content.mjs';
 import { validateMetadata } from './artifacts.mjs';
 
 const target = process.argv[2];
@@ -11,6 +13,18 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const version = JSON.parse(fs.readFileSync(path.join(root, 'apps/desktop/package.json'))).version;
 const output = path.join(root, 'apps/desktop/dist', target);
 validateMetadata(output, target, version);
+// The installer and update bundle travel separately; verify their shared manifest
+// before executing an installer or extracting the application.
+const packageManifest = JSON.parse(fs.readFileSync(path.join(output, 'release-manifest.json')));
+assert.equal(packageManifest.target, target);
+assert.equal(packageManifest.version, version);
+for (const { name, sha512 } of packageManifest.files) {
+  assert.equal(name, path.basename(name));
+  assert.ok(!name.includes('\\'));
+  const actual = createHash('sha512').update(fs.readFileSync(path.join(output, name))).digest('base64');
+  assert.equal(actual, sha512, `Artifact integrity mismatch: ${name}`);
+}
+
 function run(command, args, env = process.env, timeout = 120000) {
   const result = spawnSync(command, args, { encoding: 'utf8', env, timeout, maxBuffer: 4 * 1024 * 1024 });
   if (result.error || result.status !== 0) throw new Error(`${command} failed: ${result.error?.message || result.status}\n${result.stderr}\n${result.stdout}`);
@@ -40,16 +54,29 @@ if (process.platform === 'win32') {
   assert.ok(fs.existsSync(electron), 'NSIS must install the application executable');
 } else {
   const app = path.join(output, process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'Amiba.app');
+  if (!fs.existsSync(app)) {
+    // Verify mode downloads installers only; unpack the already-hash-checked updater ZIP.
+    run('ditto', ['-x', '-k', path.join(output, `Amiba-${version}-mac-${process.arch}.zip`), path.dirname(app)], process.env, 300000);
+  }
   electron = path.join(app, 'Contents/MacOS/Amiba');
   resources = path.join(app, 'Contents/Resources');
+  if (packageManifest.macSigning === 'unsigned' && packageManifest.distributable) run('codesign', ['--verify', '--deep', '--strict', app], process.env, 300000);
   run('hdiutil', ['verify', path.join(output, `Amiba-${version}-mac-${process.arch}.dmg`)]);
   run('unzip', ['-tq', path.join(output, `Amiba-${version}-mac-${process.arch}.zip`)], process.env, 300000);
 }
+if (packageManifest.macSigning === 'unsigned' && packageManifest.distributable) {
+  assert.equal(packageManifest.autoUpdate, false);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(resources, 'release-config.json'))).sources, []);
+  console.log('Verified unsigned macOS release: automatic updates disabled');
+}
+// Older artifacts can still be installed in verify mode; new packages must satisfy pruning checks.
+if (fs.existsSync(path.join(output, 'package-footprint.json'))) verifyPackageContents(resources, target);
 const runtime = path.join(resources, 'resources/dsh-runtime');
 const manifest = JSON.parse(fs.readFileSync(path.join(runtime, 'runtime-manifest.json')));
 assert.equal(`${manifest.platform}-${manifest.arch}`, target);
 const node = path.join(runtime, process.platform === 'win32' ? 'node/node.exe' : 'node/bin/node');
 assert.equal(run(node, ['-p', "process.platform + '-' + process.arch"]).trim(), target);
+run(node, [path.join(root, 'scripts/release/smoke-memory.cjs'), runtime], process.env, 120000);
 const probe = `
   const assert = require('node:assert/strict');
   assert.equal(process.platform + '-' + process.arch, ${JSON.stringify(target)});
