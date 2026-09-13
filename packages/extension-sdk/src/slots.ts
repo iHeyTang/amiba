@@ -707,6 +707,7 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
   }
   interface SlotMap {
     "main": { kind: "keyed"; scope: "root" };
+    "sidebar.panellist": { kind: "list"; scope: "root"; owner: { size: number; active: boolean } };
     "amiba.message.decoration": { kind: "list"; scope: "root"; owner: MessageDecorationOwner };
     "amiba.composer.accessory": { kind: "list"; scope: "root"; owner: ComposerAccessoryOwner };
     "amiba.emptyState.visual": { kind: "list"; scope: "root"; owner: EmptyStateVisualOwner };

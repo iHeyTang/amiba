@@ -73,7 +73,7 @@
 | 50 | `sidebar.brand.mark` | 新版契约，待验证 | 品牌替换须用户主动选择，不能随插件安装改变当前图标。 |
 | 51 | `sidebar.brand.name` | 新版契约，待验证 | 品牌替换须用户主动选择，不能随插件安装改变当前名称。 |
 | 52 | `sidebar.footer.action` | 可以适配，已验证 | 已传递真实 wide；空槽不占位，折叠及卸载已实测。 |
-| 53 | `sidebar.panellist` | 新版契约，待验证 | 固定版本中它是左侧全局面板图标列表，owner 为 size/active，id 对应 keyed/root main 面板；label/order 来自列表元数据。必须接入 selectPanel、全局 usePanelInfo 及主区域可选视图，不能误当右侧栏标签。beginNavigation 取消机制已接入，面板路由和根级注入仍未完成。 |
+| 53 | `sidebar.panellist` | 入口已接入，桌面验证通过 | 在原导航行附加全局面板入口，按 order 排序和 label 显示；用真实 main 注册判断可用性，缺少目标时暂不可点击。原侧栏展开态传 size=16、真实 active，采用原 NavigationRow 样式和键盘语义。实际桌面验证迟到 main 注册后启用、Enter 和鼠标切换、所选面板卸载返回聊天，以及原侧栏节点和当前会话保留。保留键 conversation、完整官方侧栏组件和独立 Web 仍另核对。 |
 | 54 | `sidebar.right.pane.tab` | 新版契约，待验证 | 需要新版右侧栏的选中、关闭、会话归属等语义。 |
 | 55 | `sidebar.right.pane.tab.title` | 新版契约，待验证 | 依赖真实右侧栏标签实例和标题更新生命周期。 |
 | 56 | `sidebar.right.tab.document` | 新版契约，待验证 | 需要文档资源身份、读取及预览生命周期。 |

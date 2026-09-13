@@ -1,3 +1,4 @@
+import { MainPanelList, type MainPanelRow } from "./main-panel-list.js";
 import type { MainPanelNavigation } from "./main-panel-navigation.js";
 import { LegacyToolDetails } from "./legacy-tool-details.js";
 import { sessionLineage, equalSessionLineage } from "./session-lineage.js";
@@ -147,6 +148,7 @@ const EMPTY_MESSAGE_SOURCES: readonly MessageSourceRow[] = [];
  */
 export type AmibaShellSlot =
   | "main"
+  | "sidebar.panellist"
   | Exclude<AmibaRootSlot, "amiba.agentPreset.section">
   | "settings.section"
   | "conversation.hero.workspace.directoryFlow"
@@ -361,6 +363,7 @@ function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string)
 
 interface ProductShellProps {
   mainPanels: MainPanelNavigation;
+  mainPanelList: ContributionsSource<MainPanelRow>;
   renderSlotChain: PropsRenderSlots<AmibaShellSlot>["renderSlotChain"];
   cordisPackages: CordisPackages;
   legacyToolDetailsAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
@@ -422,6 +425,7 @@ export function AmibaProductShell(props: ProductShellProps): ReactElement {
 
 function ProductShellInner({
   mainPanels,
+  mainPanelList,
   renderSlotChain,
   cordisPackages,
   commandRowKeys,
@@ -913,16 +917,20 @@ function ProductShellInner({
                 navigationBefore: renderSlot("amiba.navigation.before", {}),
                 workspaceNavigation: (activeView) =>
                   renderSlot("amiba.workspace.navigation", {
-                    activeView,
+                    activeView: activePanelId === null ? activeView : "",
                     sessionActivity: {
                       sessions: sessions.sessions,
                       visibleSessionId:
-                        activeView === "chats" ? sessions.activeId : "",
+                        activePanelId === null && activeView === "chats" ? sessions.activeId : "",
                       markUnread: sessions.markUnread,
                       markRead: sessions.markRead,
                     },
                   }),
-                navigationAfter: renderSlot("amiba.navigation.after", {}),
+                navigationAfter: <>
+                  <MainPanelList source={mainPanelList} navigation={mainPanels}
+                    renderIcon={(id, owner) => renderSlot("sidebar.panellist", owner, { only: id })} />
+                  {renderSlot("amiba.navigation.after", {})}
+                </>,
                 workspaceView: (viewId, owner) =>
                   renderSlot(
                     "amiba.workspace.view",

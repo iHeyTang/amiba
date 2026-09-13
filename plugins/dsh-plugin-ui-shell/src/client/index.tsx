@@ -1,3 +1,4 @@
+import { createMainPanelListSource, type MainPanelRow } from "./main-panel-list.js";
 import { MainPanelNavigation } from "./main-panel-navigation.js";
 import { LayoutNavigation } from "./layout-navigation.js";
 import { sessionComposerDraft, makeWorkspaceFilesProvider } from "@amiba/ui";
@@ -270,6 +271,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     markdownSource: ContributionsSource<MarkdownExtension>;
     surfaces: SurfaceSelections;
     mainPanels: MainPanelNavigation;
+    mainPanelList: ContributionsSource<MainPanelRow>;
     workbenchSource: ContributionsSource<WorkbenchViewExtension>;
     directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
     conversationViews: ContributionsSource<ConversationViewEntry>;
@@ -320,6 +322,7 @@ function AmibaRoot({
   fileMentions,
   surfaces,
   mainPanels,
+  mainPanelList,
   reportMarkdown,
   prepareConversation,
   renderSlotChain,
@@ -337,6 +340,7 @@ function AmibaRoot({
 
   return (
     <ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench}><MarkdownProvider extensions={markdown} report={reportMarkdown}><AmibaProductShell
+      mainPanelList={mainPanelList}
       mainPanels={mainPanels}
       dshClient={dshClient}
       openSettingsSection={openSettingsSection}
@@ -692,6 +696,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       dispatchLayoutAction("open-workspace", { viewId: "chats" });
     });
     const panelNavigation = mainPanels;
+    const mainPanelList = createMainPanelListSource(ctx.slots, id => ctx.slots.entriesOfSlot("main").some(entry => entry.options.key === id));
     const disposePanelInfo = ctx.slots.provideRoot({ hooks: { panelInfo: panelNavigation } });
     const disposeRoot = ctx.slots.register(
       {
@@ -704,6 +709,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
         inject: () => ({
           dshClient,
           mainPanels: panelNavigation,
+          mainPanelList,
           markdownSource,
           workbenchSource,
           directoryFlows,
@@ -803,6 +809,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "amiba.session.observer": { kind: "list", scope: "root" },
           "amiba.workspace.view": { kind: "list", scope: "root" },
           "main": { kind: "keyed", scope: "root" },
+          "sidebar.panellist": { kind: "list", scope: "root" },
           // Official vocabulary: the right-aligned session-header utilities
           // strip, from @deepseek-ai/dsh-client-ui-conversation (replaces
           // the retired amiba.chat.header.after). SESSION scope from a

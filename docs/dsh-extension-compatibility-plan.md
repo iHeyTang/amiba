@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：左侧全局面板图标列表（2026-09-13）
+
+第 53 项 sidebar.panellist 已接入原侧栏：metadata source 使用真实 SlotCore 的入口版本、order、label 与 main 注册状态；列表和 main 的迟到注册/卸载均触发更新，不调用图标的 inject 工厂。沿用 NavigationRow 的布局和样式，展开态向图标传 size=16 和实际 active。缺少匹配 main 时按钮禁用，避免把无效导航错误抛到点击处理；目标注册后自动启用。全局面板显示期间，原生工作区导航的 activeView/visibleSessionId 不再指向其背后被隐藏的工作区。
+
+7 项列表/导航测试通过（/tmp/amiba-panel-list-tests.log），使用真实 SlotCore 与原 NavigationRow，覆盖排序、动态标签、迟到主面板、卸载、真实选中 owner、订阅清理。最初测试按同步注册通知断言失败；核对官方微任务批量通知契约后改为等待真实通知，不修改生产时序。类型检查通过（/tmp/amiba-panel-list-types.log），完整桌面构建退出 0（/tmp/amiba-panel-list-build.log）。
+
+实际 --compat --main-panels --panel-list 退出 0（/tmp/amiba-panel-list-smoke-2.log）：排序、延迟 main 启用、真实 Enter 激活与鼠标切换、图标尺寸和选中态、卸载返回、原侧栏按钮节点及当前会话保留均通过，原主面板草稿回归与配置/文件/Markdown/HMR 基础回归亦通过。第一次 smoke 的 CDP Enter 未提供字符文本而超时；加入回车 text/unmodifiedText 并断言真实焦点后通过，未增加产品键盘事件补丁。
+
+已查看实际桌面截图 /var/folders/w1/6rt3z_zs1395fn30txrlysvr0000gn/T/amiba-global-panel-list.png：新增入口位于原工作区行之后，会话分组和原控件仍在，未新增外层布局或替换原导航。统计更新为 39 项已有接入基础、5 项待进一步适配、20 项有条件适配；不是完整插件兼容率。main conversation 保留键、完整官方侧栏组件/域依赖、独立 Web 与五项右侧栏继续处理。
+
 ## 进行中：全局 main 面板与当前会话保留（2026-09-13）
 
 已将 MainPanelNavigation 状态源接到 layout.selectPanel、provideRoot({hooks:{panelInfo}}) 与 keyed/root main 渲染入口。选择不存在的 key 会同步拒绝，保留原选择和待处理导航信号；有效选择取消先前异步导航；所选贡献卸载时返回原聊天区域。原生会话/工作区导航清除全局面板，避免强制改写原生目的地。selectPanel(null) 明确通过已有工作区导航请求 chats。
