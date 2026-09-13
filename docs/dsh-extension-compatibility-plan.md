@@ -1392,6 +1392,16 @@ pipelines retain mounted component state.
 
 ### 后续进展：标准离屏输入事务
 
+#### 再后续：原生队列共享数据源
+
+原 usePendingQueue 已改为订阅 sessionPendingQueue；同一存储适配器和会话共用唯一数据源，原队列组件、编辑/停止/发送逻辑、存储键与记录格式保留。初次加载前的乐观追加、移除以数据差异合并到已有记录，不重复执行包含副作用的 updater；写入串行，并提供 ready/flush 供后续离屏事务等待存储确认。存储通知按会话应用，迟到初次读取不能覆盖更新通知。新建对话仅 resetView，切换会话由订阅切换清空视图，均不以删除共享队列实现面板重置。
+
+32 项队列数据源及原生行为测试、UI 类型检查、完整桌面构建和全部兼容回归通过。桌面确认队列整页刷新恢复、暂存草稿自动出队、编辑后重新解析、图片恢复及文件所有权、会话切换和冷重启等原有流程正常。证据：/tmp/amiba-shared-queue-tests.log、/tmp/amiba-shared-queue-ui-types.log、/tmp/amiba-shared-queue-build.log、/tmp/amiba-shared-queue-smoke.log。
+
+离屏排队、后台出队和 Host inbox 对齐仍待使用该源继续接入。当前只统一单渲染器内的队列所有权，并没有宣称跨窗口同时写入具备 Host 原子事务保证。
+
+#### 标准离屏输入事务记录
+
 标准 inputActions.submit 已连接驻留输入事务及上一节的后台发送器。事务直接读取原生结构化草稿，复用 expandMentionPartsAsync、真实会话 InputTriggerController、CommandClaimStore、commandImages 和原上传准备缓存。官方引用交给 codec；普通文字不重新解析成引用。首次 slash 提交判定命令，第二次执行原 claim；共享命令状态可以交回原输入器。新增无界面的 composer-runtime 导出入口，避免状态逻辑加载终端视图。
 
 事务发布真实 adjudicating/submitting/claimed/plain 状态和错误提示，重复提交被阻止。草稿修改及编辑器返回会取消尚未派发的准备；后台发送器在实际引擎派发前调用 onDispatch，因此目录、检查点等准备期间也可以取消。已派发后仅在原文档身份未变时清空文本，仅消费捕获的图片注册，保留后来输入的新草稿。错误和未确认回执保留输入；命令失败保留 claim 供显式重试。原输入器订阅这份事务状态并阻止重复发送，沿用原布局和提示区域。

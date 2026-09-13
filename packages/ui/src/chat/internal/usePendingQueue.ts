@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { sessionPendingQueue, type PendingChatTurn } from "./pending-queue-store";
+export { pendingQueueStorageKey, type PendingChatTurn } from "./pending-queue-store";
 import { getPlatform } from "@amiba/app-runtime/platform";
 import { useT } from "@amiba/i18n";
 import { shortId } from "@amiba/app-runtime/utils";
@@ -13,24 +15,6 @@ import type { ComposerDraftSource } from "../composer-draft-store";
 
 import { pickSendText } from "./pickSendText";
 import { deleteUnretainedAttachments } from "./attachment-ownership";
-
-/** One user turn waiting while the model is still streaming the previous reply. */
-export interface PendingChatTurn {
-  queueId: string;
-  /** A draft stashed by Edit has not yet passed through reference codecs. */
-  needsResolution?: boolean;
-  text: string;
-  attachments: Attachment[];
-  /** Original editor nodes, separate from the resolved model payload. */
-  draft?: ComposerDraftDocument;
-}
-
-/** Per-session storage key for the pending-turn queue — survives reloads
- * so a fast refresh while items are queued doesn't lose them. Exported
- * so the surface can clean up its own keys when sessions are deleted. */
-export function pendingQueueStorageKey(sessionId: string): string {
-  return `pendingQueue:${sessionId}`;
-}
 
 /** Compact preview line for the chip row. Body trim + attachment count. */
 export function previewPendingTurn(t: PendingChatTurn): string {
@@ -123,6 +107,8 @@ export interface UsePendingQueueResult {
   // Cross-domain setters. `handleStreamError` clears the queue on
   // fatal engine error; the snapshot path may also need to wipe.
   setQueue: React.Dispatch<React.SetStateAction<PendingChatTurn[]>>;
+  /** Clear the outgoing panel projection without deleting its session queue. */
+  resetView(): void;
   setPaused: (v: boolean) => void;
   setEditingQueueId: (v: string | null) => void;
 
@@ -165,7 +151,13 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   const { t: _t } = useT();
   void _t; // i18n hook kept stable for future copy needs
 
-  const [queue, setQueue] = useState<PendingChatTurn[]>([]);
+  const [queue, setViewQueue] = useState<PendingChatTurn[]>([]);
+  const queueSource = useMemo(() => sessions.activeId ? sessionPendingQueue(getPlatform().storage, sessions.activeId) : undefined, [sessions.activeId]);
+  const setQueue = useCallback<React.Dispatch<React.SetStateAction<PendingChatTurn[]>>>(action => {
+    if (queueSource) queueSource.update(action);
+    else setViewQueue(action);
+  }, [queueSource]);
+  const resetView = useCallback(() => setViewQueue([]), []);
   const [paused, setPausedState] = useState(false);
   const queuePausedRef = useRef(false);
   useEffect(() => {
@@ -197,52 +189,15 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   // switching tabs should bring the prior session's queue back the next
   // time it's activated.
   // ---------------------------------------------------------------------
-  const queueHydratedForSessionRef = useRef<string>("");
-
   useEffect(() => {
-    const id = sessions.activeId;
-    if (!id || !sessions.ready) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await getPlatform().storage.get(pendingQueueStorageKey(id));
-        if (cancelled) return;
-        const raw = res[pendingQueueStorageKey(id)];
-        const restored: PendingChatTurn[] = Array.isArray(raw)
-          ? (raw as PendingChatTurn[])
-          : [];
-        // Only adopt if the user hasn't switched again during the read.
-        if (sessions.activeId !== id) return;
-        // If the user already queued items during the load window
-        // (clicked send while busy before storage.get resolved), keep
-        // those — overwriting with the persisted snapshot would lose
-        // their just-typed turn.
-        setQueue((prev) => (prev.length > 0 ? prev : restored));
-        queueHydratedForSessionRef.current = id;
-      } catch (e) {
-        console.warn("[sidepanel] load pendingQueue failed:", e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [sessions.activeId, sessions.ready]);
-
-  useEffect(() => {
-    const id = sessions.activeId;
-    if (!id) return;
-    // Skip writes for sessions we haven't hydrated yet — that initial
-    // [] state isn't an authoritative "queue is empty", it's just the
-    // pre-load placeholder.
-    if (queueHydratedForSessionRef.current !== id) return;
-    if (queue.length === 0) {
-      void getPlatform().storage.remove(pendingQueueStorageKey(id));
-    } else {
-      void getPlatform().storage.set({
-        [pendingQueueStorageKey(id)]: queue,
-      });
-    }
-  }, [queue, sessions.activeId]);
+    setViewQueue([]);
+    if (!queueSource || !sessions.ready) return;
+    let active = true;
+    const update = () => { if (active) setViewQueue(queueSource.getSnapshot()); };
+    const off = queueSource.subscribe(update);
+    update();
+    return () => { active = false; off(); };
+  }, [queueSource, sessions.ready]);
 
   // ---------------------------------------------------------------------
   // Actions.
@@ -302,7 +257,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
         ...(item.draft ? { draft: item.draft } : {}),
       }));
     });
-  }, [prepareItem, runChatTurn]);
+  }, [prepareItem, runChatTurn, setQueue]);
 
   const sendNow = useCallback(
     (queueId: string, textArg?: string): void => {
@@ -381,6 +336,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     [
       editingQueueId,
       prepareItem,
+      setQueue,
       queue,
       input,
       draftSource,
@@ -482,6 +438,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     setAttachmentError,
     setPendingSourceApp,
     sendNow,
+    setQueue,
   ]);
 
   const stop = useCallback((): void => {
@@ -525,7 +482,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
         setAttachments([]);
       }
     },
-    [editingQueueId, attachments, setInput, setAttachments, cancelResolution],
+    [editingQueueId, attachments, setInput, setAttachments, cancelResolution, setQueue],
   );
 
   /**
@@ -569,6 +526,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     },
     [
       queue,
+      setQueue,
       input,
       draftSource,
       cancelResolution,
@@ -595,6 +553,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     suppressFinallyDrainRef,
     ignoreAbortForSessionRef,
     setQueue,
+    resetView,
     setPaused,
     setEditingQueueId,
     send,

@@ -847,6 +847,7 @@ export default function ChatSurface({
     suppressFinallyDrainRef,
     ignoreAbortForSessionRef,
     setQueue: setPendingQueue,
+    resetView: resetPendingQueueView,
     setPaused: setQueuePaused,
     setEditingQueueId,
     send,
@@ -1519,9 +1520,8 @@ export default function ChatSurface({
       // busy/stop state after New chat.
       if (!sessions.activeId) setBusy(false);
       if (wasInitialised) {
-        // Drop in-memory queue; the load-effect below will repopulate
-        // from the new session's persisted queue.
-        setPendingQueue([]);
+        // The queue hook switches its projection to the new session;
+        // switching views does not mutate either session's queue.
         setEditingQueueId(null);
         // Queue is scoped to a session; switching tabs drops it, so
         // any paused flag for the prior session must drop too.
@@ -1961,7 +1961,7 @@ export default function ChatSurface({
     // The persisted queue still belongs to the outgoing session; only its
     // in-memory projection is cleared so it cannot flash inside the empty
     // persistent Composer while the session transition finishes.
-    setPendingQueue([]);
+    resetPendingQueueView();
     setEditingQueueId(null);
     setQueuePaused(false);
     resetApprovals();

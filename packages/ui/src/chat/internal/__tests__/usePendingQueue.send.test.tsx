@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { createComposerDraftSource } from "../../composer-draft-store";
 import { legacyDraftDocument } from "../../composer-draft-document";
 import { pickSendText } from "../pickSendText"
+import { sessionPendingQueue } from "../pending-queue-store";
 
 // --- Stub the platform + i18n the hook reaches for at import/runtime. The
 // queue hook only touches storage (persist effects) and useT (kept stable);
@@ -16,8 +17,10 @@ const storage = {
   remove: vi.fn(async () => {}),
   watch: vi.fn(() => () => {}),
 }
+let queueStorage = { ...storage };
+beforeEach(() => { queueStorage = { ...storage }; });
 vi.mock("@amiba/app-runtime/platform", () => ({
-  getPlatform: () => ({ storage, agentAttachments: attachmentFiles }),
+  getPlatform: () => ({ storage: queueStorage, agentAttachments: attachmentFiles }),
 }))
 vi.mock("@amiba/i18n", () => ({
   useT: () => ({ t: (k: string) => k }),
@@ -63,6 +66,18 @@ function makeArgs(
 
 describe("usePendingQueue.send — dispatches the mention-expanded text", () => {
   beforeEach(() => vi.clearAllMocks())
+
+  it("clears the outgoing panel projection without deleting its shared session queue", async () => {
+    const { result } = renderHook(() => usePendingQueue(makeArgs()));
+    const row = { queueId: "retained", text: "Later", attachments: [] };
+    await act(async () => { result.current.setQueue([row]); });
+    const source = sessionPendingQueue(queueStorage, "s1");
+    await source.flush();
+    act(() => result.current.resetView());
+    expect(result.current.queue).toEqual([]);
+    expect(source.getSnapshot()).toEqual([row]);
+    expect(storage.remove).not.toHaveBeenCalled();
+  });
 
   it("preserves the draft and queue while read-only and resumes normal sending after switching back", async () => {
     const args = makeArgs();
