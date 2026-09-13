@@ -1,3 +1,4 @@
+import { ProviderCardExtension, type ProviderCardRenderer } from "./model-settings-extensions.js";
 import { useState } from "react";
 import {
   Button,
@@ -329,10 +330,12 @@ export function OfficialProviderEditor({
   adapter,
   onClose,
   onSaved,
+  renderProviderCard,
 }: {
   provider: ModelProviderProfileShape;
   snapshot: ModelPlaneSnapshotShape;
   adapter: ProviderSettingsController;
+  renderProviderCard?: ProviderCardRenderer;
   onClose: () => void;
   onSaved: (snapshot: ModelPlaneSnapshotShape) => void;
 }) {
@@ -494,6 +497,7 @@ export function OfficialProviderEditor({
             </Button>
           </DialogFooter>
         </form>
+        <ProviderCardExtension owner={provider.providerCard} render={renderProviderCard} />
       </DialogContent>
     </Dialog>
   );

@@ -1,3 +1,4 @@
+import { ProviderCardExtension, ModelsFooterExtension, type ProviderCardRenderer } from "./model-settings-extensions.js";
 import { reasoningLabel } from "./reasoning-labels.js";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import { OfficialProviderEditor } from "./OfficialProviderEditor.js";
@@ -198,10 +199,14 @@ function providerStatus(
 export function ModelProviderConfigTab({
   adapter,
   assignments,
+  footer,
+  renderProviderCard,
   inventory = [],
 }: {
   adapter: ProviderSettingsController;
   assignments?: ReactNode;
+  footer?: ReactNode;
+  renderProviderCard?: ProviderCardRenderer;
   inventory?: AmibaProviderInventory[];
 }) {
   const { t } = useT();
@@ -337,6 +342,7 @@ export function ModelProviderConfigTab({
       ) : null}
 
       <ProviderServicesPanel
+        renderProviderCard={renderProviderCard}
         loading={loading}
         pending={pending}
         rows={displayRows}
@@ -372,6 +378,7 @@ export function ModelProviderConfigTab({
         <Plus className="h-3.5 w-3.5" />
         {t("options.models.provider.addCustom")}
       </Button>
+      <ModelsFooterExtension>{footer}</ModelsFooterExtension>
 
       {error ? (
         <p className="text-xs text-destructive" role="alert">
@@ -399,6 +406,7 @@ export function ModelProviderConfigTab({
       {activeProvider && snapshot && adapter.configure ? (
         <OfficialProviderEditor
           provider={activeProvider.provider}
+          renderProviderCard={renderProviderCard}
           snapshot={snapshot}
           adapter={adapter}
           onClose={() => setSelectedProviderId(null)}
@@ -564,6 +572,7 @@ function DefaultModelPanel({
 }
 
 function ProviderServicesPanel({
+  renderProviderCard,
   loading,
   pending,
   rows,
@@ -572,6 +581,7 @@ function ProviderServicesPanel({
   onModelEnabledChange,
   onProviderEnabledChange,
 }: {
+  renderProviderCard?: ProviderCardRenderer;
   loading: boolean;
   pending: string | null;
   rows: ProviderRow[];
@@ -748,6 +758,7 @@ function ProviderServicesPanel({
                     </div>
                   </div>
 
+                  <ProviderCardExtension owner={(row.sourceProvider ?? provider).providerCard} render={renderProviderCard} />
                   {isExpanded ? (
                     <ul className="divide-y divide-border/45 border-t border-border/40 bg-background">
                       {models.length ? (

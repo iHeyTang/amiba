@@ -1,3 +1,4 @@
+import { smokeModelSettingsSlots } from "./model-settings-slots-smoke.mjs";
 import { lineageLoaderFixture } from "./lineage-loader-fixture.mjs";
 import { messageImageFixture } from "./message-image-fixture.mjs";
 import { legacyAttachmentFixture } from "./legacy-attachment-fixture.mjs";
@@ -42,6 +43,7 @@ if (process.argv.includes("--message-images") && !process.argv.includes("--compa
 if (process.argv.includes("--tool-images") && !process.argv.includes("--message-images")) throw new Error("--tool-images requires --message-images");
 if (process.argv.includes("--nested-tools") && !process.argv.includes("--tool-images")) throw new Error("--nested-tools requires --tool-images");
 if (process.argv.includes("--trajectory-images") && !["--message-images", "--tool-images", "--trajectory-loader", "--cordis-business"].every(flag=>process.argv.includes(flag))) throw new Error("--trajectory-images requires --message-images --tool-images --trajectory-loader --cordis-business");
+if (process.argv.includes("--model-settings-slots") && !process.argv.includes("--compat")) throw new Error("--model-settings-slots requires --compat");
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const profile = await mkdtemp(path.join(tmpdir(), "amiba-plugin-app-"));
 async function port() {
@@ -369,6 +371,8 @@ try {
     await evaluate("window.__cardForm.scrollIntoView({block:'end'})");
     await writeFile(path.join(tmpdir(), "amiba-plugin-search-config.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
     console.log("All three official config forms passed actual Host save/reset; the search key remains blank.");
+
+    if (process.argv.includes("--model-settings-slots")) await smokeModelSettingsSlots({ evaluate, wait });
 
     const downloads = path.join(profile, "downloads");
     await mkdir(downloads, { recursive: true });

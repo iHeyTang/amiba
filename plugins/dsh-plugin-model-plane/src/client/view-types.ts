@@ -31,6 +31,7 @@ export interface ProviderConfiguration {
 }
 export interface ModelProviderProfileShape {
   official?: ConfigurableProviderView;
+  providerCard?: import("@amiba/extension-sdk").ProviderCardExtrasOwnerProps;
   id: string;
   displayName: string;
   protocol: string;

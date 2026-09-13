@@ -61,8 +61,8 @@
 | 38 | `settings.close` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 39 | `settings.general.item` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 40 | `settings.header` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
-| 41 | `settings.models.footer` | 新版契约，待验证 | 可考虑附加到模型设置；需先核对新版模型服务和 owner。 |
-| 42 | `settings.models.provider-card` | 可适配，需核对 provider 数据 | 固定 c291e796 源码将其定义为模型卡片内部的附加区域，并非整卡替换。按 settingsNs keyed 分发，owner 要求 provider 目录行及 configured/keyConfigured；已保存、首次配置和有目录行的添加草稿均需对应真实状态，不能以样式冲突判为仅能有条件支持。 |
+| 41 | `settings.models.footer` | 入口已接入，桌面验证通过 | 在原新增提供方按钮之后声明 list/root 页脚；不替换原页面。实际 SlotCore 注册/卸载及原控件保留通过。完整第三方插件与独立 Web 另核对。 |
+| 42 | `settings.models.provider-card` | 入口已接入，桌面验证通过 | 原卡片及 OfficialProviderEditor 内附加 keyed/root 区域，entryKey 使用真实 settingsNs；owner 保留原目录行，configured 按真实命名空间/路径判断，keyConfigured 独立描述 apiKeyEnv 或派生凭据。不会用 active 或原认证字段代替这两个事实，不改变原认证可用性。实际卡片与弹窗分发、卸载后表单/原控件保留通过；21 项相关测试涵盖首次配置、命名凭据切换与报错隔离。手动新路由草稿尚无官方目录行时不伪造 owner。完整第三方插件与独立 Web 另核对。 |
 | 43 | `settings.onboarding` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 44 | `settings.plugin.item` | 可以适配，卡片已验证 | 真实 rc.2 是按 Host namespace 分派的 keyed 槽；官方三种配置表单已接入，并通过真实 Host 保存及恢复继承检查。 |
 | 45 | `settings.plugins.tab` | 可以适配，已验证 | 真实标签页及内容面板；卸载回到原插件清单，保留筛选。 |

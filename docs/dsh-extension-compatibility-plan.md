@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：模型设置页脚与提供方卡片扩展（2026-09-13）
+
+settings.models.footer 与 settings.models.provider-card 已接到原模型设置页。前者在原新增按钮之后，后者附加于原卡片及配置弹窗，弹窗扩展放在 form 外以避免插件按钮提交原表单。原卡片、模型选择、认证判断及配置动作保留。SDK 补充固定 c291e796 的 list/root、keyed/root 契约及直接类型依赖，entryKey 使用真实 settingsNs。
+
+NativeProviderSettings 保留官方目录对象，configured 由命名空间存在性及 settingsPath 是否有值决定；keyConfigured 单独读取 apiKeyEnv 或规范派生凭据的 configured 元数据，不以 active、模型数量或其他 schema 认证字段替代。首次未配置目录行、路径配置后更新、命名密钥切换及现有认证仍可用均有状态测试。手动新增路由尚未产生目录行的草稿不制造官方 owner；真实目录行的首次配置在原卡片/配置弹窗接入。
+
+验证：21 项模型状态/页面/编辑器测试通过，模型包与 SDK（含 guard）类型检查通过；完整桌面构建产物包含本次生产改动（/tmp/amiba-model-slots-build.log）。实际 --compat --model-settings-slots 最终退出 0（/tmp/amiba-model-slots-smoke-final.log）：真实 Host 配置事实、按命名空间分发、具体配置弹窗中的扩展、卸载后保留表单及原卡片 DOM、取消原弹窗，以及报错后扩展区高度归零均通过。基础目录、设置保存/重置、会话、文件、Markdown 和 HMR 回归同时通过。首次两轮因测试将设置页 dialog 误当尚未关闭的配置弹窗而失败，不作为通过证据；最终以保存的具体弹窗节点及其 form 检查，避免列表扩展冒充弹窗扩展。
+
+统计由 35/9/20 更新为 37/7/20，仍是入口基础数量而非完整兼容率。完整第三方模型插件、独立 Web、右侧栏、队列及其他服务未完成项仍保留。未替换 Amiba 已有能力和样式，也未宣称全部兼容完成。
+
 ## 最新进展：lineage 常规配置启用和窗口布局（2026-09-13）
 
 新增 lineage-loader-fixture.mjs，通过隔离 smoke profile 的真实 ctx.loader.create/remove 启用/停用 @deepseek-ai/dsh-client-ui-subagent。正常 Host 客户端图包含该插件并明确不包含替换性的 ui-conversation root；renderer 按正常 boot 加载后官方目录可展开和选择子会话，主 shell 始终只有一个。停用并重载后 lineage 区域消失，原可续聊子会话历史、输入器、续聊及停止保持正常。未用手工 evaluate bundle 代替这一轮的图加载。/tmp/amiba-lineage-loader-smoke.log 退出 0。

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
   IApiClient,
+  ConfigurableProviderView,
   SettingsNamespaceView,
 } from "@deepseek-ai/dsh-api-remotes/client";
 import z from "@deepseek-ai/schemastery";
@@ -38,7 +39,7 @@ function fixture() {
       secrets: [],
     },
   ];
-  const provider = {
+  const provider: ConfigurableProviderView = {
     provider: "community",
     displayName: "Community",
     settingsNs: namespace.ns,
@@ -294,5 +295,35 @@ describe("Amiba UI uses native DSH APIs", () => {
       enabled: true,
     });
     expect(view.groups).toHaveLength(1);
+  });
+});
+
+describe("official provider-card state", () => {
+  it("retains the actual directory row and separates native auth from the card API-key fact", async () => {
+    const f = fixture();
+    const value = await f.controller.snapshot();
+    const profile = value.providers[0]!;
+    expect(profile.providerCard?.provider).toBe(f.provider);
+    expect(profile.providerCard).toMatchObject({ configured: true, keyConfigured: false });
+    expect(profile.availability).toBe("ready");
+    expect(f.api.credentials.describe).toHaveBeenCalledWith({ refs: ["COMMUNITY_KEY", "COMMUNITY_API_KEY"] });
+  });
+  it("joins dormant rows with their confirmed derived credential and updates after configuration", async () => {
+    const f = fixture();
+    f.provider.settingsPath = ["profiles", "custom"];
+    f.api.credentials.describe.mockResolvedValue(ok({
+      credentials: { COMMUNITY_API_KEY: { configured: true, writable: true } },
+    }) as never);
+    let value = await f.controller.snapshot();
+    expect(value.providers[0]?.providerCard).toMatchObject({ configured: false, keyConfigured: true });
+    f.namespace.value = { profiles: { custom: { apiKeyEnv: "NAMED_KEY" } } };
+    value = await f.controller.snapshot();
+    expect(value.providers[0]?.providerCard).toMatchObject({ configured: true, keyConfigured: false });
+    expect(f.api.credentials.describe).toHaveBeenLastCalledWith({ refs: ["NAMED_KEY"] });
+    f.api.credentials.describe.mockResolvedValue(ok({
+      credentials: { NAMED_KEY: { configured: true, writable: true } },
+    }) as never);
+    value = await f.controller.snapshot();
+    expect(value.providers[0]?.providerCard).toMatchObject({ configured: true, keyConfigured: true });
   });
 });

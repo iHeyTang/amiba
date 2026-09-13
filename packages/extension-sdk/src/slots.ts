@@ -855,3 +855,20 @@ declare module "@deepseek-ai/dsh-client-ui-conversation/client" {
 
 /** Keep the installed official lineage owner, including its branded session ID. */
 export type { ConversationHeaderLineageOwnerProps } from "@deepseek-ai/dsh-client-ui-conversation/client";
+
+/** Model settings additions from the fixed official models-page contract. */
+export interface ModelsFooterOwnerProps { children?: never }
+export type ModelsProviderDirectoryEntry =
+  Omit<Readonly<import("@deepseek-ai/dsh-api-remotes/client").ConfigurableProviderView>, "settingsPath"> &
+  { readonly settingsPath: readonly string[] };
+export interface ProviderCardExtrasOwnerProps {
+  provider: ModelsProviderDirectoryEntry;
+  configured: boolean;
+  keyConfigured: boolean;
+}
+declare module "@deepseek-ai/dsh-client-ui-slots" {
+  interface SlotMap {
+    "settings.models.footer": { kind: "list"; scope: "root"; owner: ModelsFooterOwnerProps };
+    "settings.models.provider-card": { kind: "keyed"; scope: "root"; owner: ProviderCardExtrasOwnerProps };
+  }
+}
