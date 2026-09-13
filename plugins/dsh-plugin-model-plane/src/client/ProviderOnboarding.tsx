@@ -1,8 +1,8 @@
-import { Check, ArrowUpRight } from "lucide-react";
+import { Check, ArrowUpRight, ChevronDown } from "lucide-react";
 import { providerOnboardingI18n } from "./i18n-onboarding.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GuideStepOwner } from "@amiba/dsh-plugin-onboarding/client";
-import { Button, Input, usePluginT } from "@amiba/ui/plugin";
+import { Button, Input, ModelPickerDialog, usePluginT } from "@amiba/ui/plugin";
 import type { ProviderSettingsController } from "./ModelProviderConfigTab.js";
 import type { ModelPlaneSnapshotShape } from "./view-types.js";
 
@@ -26,6 +26,7 @@ export function ProviderOnboarding({
     useState<keyof typeof PROVIDER_KEY_PAGES>("tokendance");
   const [page, setPage] = useState<Page>("choose");
   const [model, setModel] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [key, setKey] = useState("");
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -384,22 +385,43 @@ export function ProviderOnboarding({
             {t("setup.modelHint")}
           </p>
           {models.length > 0 ? (
-            <label className="block space-y-2 text-sm">
-              <span>{t("setup.model")}</span>
-              <select
-                aria-label={t("setup.model")}
+            <div className="space-y-2 text-sm">
+              <span id="onboarding-model-label">{t("setup.model")}</span>
+              <Button
+                variant="outline"
+                aria-labelledby="onboarding-model-label"
+                aria-haspopup="dialog"
+                aria-expanded={pickerOpen}
                 disabled={pending}
-                value={chosen}
-                onChange={(e) => setModel(e.target.value)}
-                className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="w-full justify-between"
+                onClick={() => setPickerOpen(true)}
               >
-                {models.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {models.find((m) => m.id === chosen)?.name ?? chosen}
+                <ChevronDown
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 text-muted-foreground"
+                />
+              </Button>
+              <ModelPickerDialog
+                open={pickerOpen}
+                onOpenChange={setPickerOpen}
+                title={t("setup.model")}
+                groups={[
+                  {
+                    id: selected,
+                    provider: selected,
+                    label: providerName,
+                    models: models.map((m) => ({ model: m.id, label: m.name })),
+                  },
+                ]}
+                selected={{ provider: selected, model: chosen }}
+                saving={pending}
+                onSelect={(_provider, modelId) => {
+                  setModel(modelId);
+                  setPickerOpen(false);
+                }}
+              />
+            </div>
           ) : (
             <p role="status" className="text-sm text-muted-foreground">
               {t("setup.noModels")}

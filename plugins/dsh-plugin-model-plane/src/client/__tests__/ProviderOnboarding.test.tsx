@@ -117,6 +117,38 @@ async function openKey(props: ReturnType<typeof fixture>) {
   await screen.findByLabelText("TokenDance API Key");
 }
 describe("provider setup pages", () => {
+  it("uses the shared model picker and saves the selected model only on completion", async () => {
+    const props = fixture(true);
+    props
+      .getData()
+      .providers[0]!.models.push({
+        id: "another-model",
+        name: "Another model",
+      });
+    await openKey(props);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Default model" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByRole("combobox"), {
+      target: { value: "Another" },
+    });
+    fireEvent.click(
+      await within(dialog).findByRole("option", { name: /Another model/ }),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Default model" }),
+    ).toHaveTextContent("Another model");
+    expect(props.adapter.setDefaultSelection).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Finish setup"));
+    await waitFor(() => expect(props.complete).toHaveBeenCalledOnce());
+    expect(props.adapter.setDefaultSelection).toHaveBeenCalledWith(
+      { provider: "tokendance", model: "another-model" },
+      1,
+    );
+  });
   it("returns from provider selection to welcome without writing configuration", async () => {
     const props = fixture();
     const backToWelcome = vi.fn();
@@ -134,7 +166,7 @@ describe("provider setup pages", () => {
       screen.getByRole("button", { name: /TokenDance.*Amiba recommendation/ }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByLabelText("TokenDance API Key")).toBeNull();
-    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Default model" })).toBeNull();
     const footer = screen.getByRole("contentinfo", { name: "Step actions" });
     await waitFor(() => expect(within(footer).getByText("Next")).toBeEnabled());
     fireEvent.click(within(footer).getByText("Next"));
@@ -151,7 +183,7 @@ describe("provider setup pages", () => {
     expect(
       screen.getByRole("button", { name: "Save and continue" }),
     ).toBeDisabled();
-    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Default model" })).toBeNull();
     fireEvent.click(screen.getByText("Back"));
     expect(
       screen.getByRole("button", { name: /TokenDance.*Amiba recommendation/ }),
@@ -164,7 +196,7 @@ describe("provider setup pages", () => {
     expect(input).toHaveAttribute("type", "password");
     fireEvent.change(input, { target: { value: "  test-key  " } });
     fireEvent.submit(input.closest("form")!);
-    await screen.findByRole("combobox");
+    await screen.findByRole("button", { name: "Default model" });
     expect(props.adapter.configure).toHaveBeenLastCalledWith("tokendance", {
       expectedRevision: 5,
       ops: [],
@@ -174,7 +206,7 @@ describe("provider setup pages", () => {
     fireEvent.click(screen.getByText("Back"));
     expect(await screen.findByLabelText("TokenDance API Key")).toHaveValue("");
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    await screen.findByRole("combobox");
+    await screen.findByRole("button", { name: "Default model" });
     fireEvent.click(screen.getByText("Finish setup"));
     await waitFor(() => expect(props.complete).toHaveBeenCalledOnce());
     expect(props.adapter.setDefaultSelection).toHaveBeenCalledWith(
@@ -199,7 +231,7 @@ describe("provider setup pages", () => {
     );
     expect(screen.getByText(/create a new API key/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    await screen.findByRole("combobox");
+    await screen.findByRole("button", { name: "Default model" });
     expect(props.adapter.configure).not.toHaveBeenCalled();
     vi.mocked(props.adapter.setDefaultSelection).mockRejectedValueOnce(
       new Error("conflict"),
@@ -226,7 +258,7 @@ describe("provider setup pages", () => {
     );
     expect(props.complete).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText("Save and continue"));
-    await screen.findByRole("combobox");
+    await screen.findByRole("button", { name: "Default model" });
   });
   it("clears unsaved keys when changing provider", async () => {
     const props = fixture();
