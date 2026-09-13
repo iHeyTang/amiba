@@ -180,14 +180,8 @@ export function Guide({
             </div>
             <p
               role={error ? "alert" : "status"}
-              className={`text-sm leading-relaxed ${started ? "rounded-2xl bg-background px-4 py-4" : "relative max-w-full whitespace-pre-line rounded-2xl bg-muted/60 px-6 py-5 leading-7 [text-wrap:balance]"}`}
+              className={`text-sm leading-relaxed ${started ? "rounded-2xl bg-background px-4 py-4" : "max-w-full whitespace-pre-line rounded-[28px] bg-muted/40 px-8 py-3 leading-7 [text-wrap:balance]"}`}
             >
-              {!started && (
-                <span
-                  aria-hidden="true"
-                  className="absolute -top-2 left-1/2 h-4 w-4 -translate-x-1/2 rotate-45 rounded-sm bg-muted/60"
-                />
-              )}
               {message}
             </p>
           </div>

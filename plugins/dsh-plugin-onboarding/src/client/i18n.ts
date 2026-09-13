@@ -12,7 +12,7 @@ export const guideI18n: PluginCatalogOverlay = {
     "guide.title": "Welcome to Amiba",
     "guide.description": "A little setup, with a companion by your side.",
     "guide.hello":
-      "Hi there!\nI'll help you connect a model service.\nThen let's start our first conversation.",
+      "Hi! I'll help you connect a model service.\nThen let's start our first conversation.",
     "guide.start": "Let's get set up",
     "guide.later": "Continue later",
     "guide.done": "Start using Amiba",
@@ -42,7 +42,7 @@ export const guideI18n: PluginCatalogOverlay = {
     "guide.navigation": "引导操作",
     "guide.title": "欢迎来到 Amiba",
     "guide.description": "做一点准备，让小伙伴陪你开始。",
-    "guide.hello": "你好呀！\n我会陪你接好模型服务，\n然后一起开始第一次对话。",
+    "guide.hello": "你好呀！我会陪你接好模型服务，\n然后一起开始第一次对话。",
     "guide.start": "一起开始配置",
     "guide.later": "稍后继续",
     "guide.done": "开始使用 Amiba",
