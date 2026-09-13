@@ -11,6 +11,8 @@ export interface GuideStepOwner {
   backToWelcome?(): void;
   /** Render step navigation into the guide’s shared bottom-right action area. */
   renderActions(actions: ReactNode): ReactNode;
+  /** Place step progress above the companion dialogue. */
+  renderProgress?(progress: ReactNode): ReactNode;
 }
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotMap {

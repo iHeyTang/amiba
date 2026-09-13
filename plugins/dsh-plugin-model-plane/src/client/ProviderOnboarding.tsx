@@ -18,6 +18,7 @@ export function ProviderOnboarding({
   say,
   openSection,
   renderActions,
+  renderProgress,
   backToWelcome,
 }: GuideStepOwner & { adapter: ProviderSettingsController }) {
   const { t } = usePluginT(providerOnboardingI18n);
@@ -182,47 +183,43 @@ export function ProviderOnboarding({
         ? !credential || (!key.trim() && !stored) || (!!key.trim() && !writable)
         : !chosen);
   const stages: Page[] = ["choose", "key", "model"];
-  return (
-    <div className="space-y-6">
-      <ol
-        className="flex items-start pb-3 pt-1"
-        aria-label={t("setup.progress")}
-      >
-        {stages.map((stage, index) => {
-          const current = stages.indexOf(page);
-          const done = index < current;
-          return (
-            <li
-              key={stage}
-              aria-current={page === stage ? "step" : undefined}
-              className="relative flex flex-1 flex-col items-center gap-2 text-center"
-            >
-              {index < stages.length - 1 && (
-                <span
-                  aria-hidden="true"
-                  className={`absolute left-1/2 top-4 h-px w-full ${done ? "bg-primary" : "bg-border"}`}
-                />
-              )}
+  const progressBar = (
+    <ol className="flex items-start pb-3 pt-1" aria-label={t("setup.progress")}>
+      {stages.map((stage, index) => {
+        const current = stages.indexOf(page);
+        const done = index < current;
+        return (
+          <li
+            key={stage}
+            aria-current={page === stage ? "step" : undefined}
+            className="relative flex flex-1 flex-col items-center gap-2 text-center"
+          >
+            {index < stages.length - 1 && (
               <span
                 aria-hidden="true"
-                className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold ${done ? "border-primary bg-primary text-primary-foreground" : page === stage ? "border-primary bg-background text-primary ring-4 ring-primary/10" : "border-border bg-background text-muted-foreground"}`}
-              >
-                {done ? <Check className="h-3.5 w-3.5" /> : index + 1}
-              </span>
-              <span
-                className={`text-xs ${page === stage ? "font-semibold text-foreground" : "text-muted-foreground"}`}
-              >
-                {t(`setup.stage.${stage}`)}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-      <h3
-        ref={heading}
-        tabIndex={-1}
-        className="text-xl font-semibold tracking-tight outline-none"
-      >
+                className={`absolute left-1/2 top-4 h-px w-full ${done ? "bg-primary" : "bg-border"}`}
+              />
+            )}
+            <span
+              aria-hidden="true"
+              className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold ${done ? "border-primary bg-primary text-primary-foreground" : page === stage ? "border-primary bg-background text-primary ring-4 ring-primary/10" : "border-border bg-background text-muted-foreground"}`}
+            >
+              {done ? <Check className="h-3.5 w-3.5" /> : index + 1}
+            </span>
+            <span
+              className={`text-xs ${page === stage ? "font-semibold text-foreground" : "text-muted-foreground"}`}
+            >
+              {t(`setup.stage.${stage}`)}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+  return (
+    <div className="space-y-6">
+      {renderProgress ? renderProgress(progressBar) : progressBar}
+      <h3 ref={heading} tabIndex={-1} className="sr-only">
         {page === "choose"
           ? t("setup.selectTitle")
           : page === "key"

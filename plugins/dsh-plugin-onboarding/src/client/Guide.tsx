@@ -48,6 +48,12 @@ export function Guide({
       actionsHost ? createPortal(actions, actionsHost) : null,
     [actionsHost],
   );
+  const [progressHost, setProgressHost] = useState<HTMLDivElement | null>(null);
+  const renderProgress = useCallback(
+    (content: ReactNode) =>
+      progressHost ? createPortal(content, progressHost) : null,
+    [progressHost],
+  );
   const [started, setStarted] = useState(false);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -165,29 +171,33 @@ export function Guide({
           {t("guide.description")}
         </DialogDescription>
         <aside
-          className={`flex flex-col px-6 pt-6 sm:px-8 ${started ? "shrink-0 bg-muted/50 pb-5" : "min-h-0 flex-1"}`}
+          className={`flex flex-col px-6 pt-6 sm:px-8 ${started ? "shrink-0 pb-2" : "min-h-0 flex-1"}`}
         >
-          <div className="flex items-center gap-2 text-xs tracking-wide text-muted-foreground">
-            <span className="font-semibold text-foreground">AMIBA</span>
-            <span aria-hidden="true">/</span>
-            {t("guide.companionLabel")}
-          </div>
+          {started ? (
+            <div ref={setProgressHost} className="pt-1" />
+          ) : (
+            <div className="flex items-center gap-2 text-xs tracking-wide text-muted-foreground">
+              <span className="font-semibold text-foreground">AMIBA</span>
+              <span aria-hidden="true">/</span>
+              {t("guide.companionLabel")}
+            </div>
+          )}
           <div
-            className={`flex gap-4 ${started ? "items-center pt-3" : "min-h-0 flex-1 flex-col items-center justify-center py-6 text-center"}`}
+            className={`flex gap-4 ${started ? "items-center pt-5" : "min-h-0 flex-1 flex-col items-center justify-center py-6 text-center"}`}
           >
             <div className="flex h-28 w-28 shrink-0 items-center justify-center">
               {renderSlot("amiba.onboarding.companion", { mood })}
             </div>
             <p
               role={error ? "alert" : "status"}
-              className={`text-sm leading-relaxed ${started ? "rounded-2xl bg-background px-4 py-4" : "max-w-full whitespace-pre-line rounded-[28px] bg-muted/40 px-8 py-3 leading-7 [text-wrap:balance]"}`}
+              className={`text-sm leading-relaxed ${started ? "rounded-2xl bg-muted/40 px-4 py-4" : "max-w-full whitespace-pre-line rounded-[28px] bg-muted/40 px-8 py-3 leading-7 [text-wrap:balance]"}`}
             >
               {message}
             </p>
           </div>
         </aside>
         <div
-          className={`flex min-h-0 min-w-0 flex-col px-6 pb-5 sm:px-8 ${started ? "flex-1 pt-6" : "shrink-0"}`}
+          className={`flex min-h-0 min-w-0 flex-col px-6 pb-5 sm:px-8 ${started ? "flex-1 pt-2" : "shrink-0"}`}
         >
           {started && (
             <div
@@ -237,6 +247,7 @@ export function Guide({
                     say,
                     openSection,
                     renderActions,
+                    renderProgress,
                     backToWelcome: () => {
                       setDialogue(undefined);
                       setStarted(false);

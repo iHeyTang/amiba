@@ -164,6 +164,9 @@ describe("persistent guide", () => {
     ) =>
       name === "amiba.onboarding.companion" ? null : (
         <>
+          {owner.renderProgress?.(
+            <nav aria-label="Test progress">Progress {filter?.only}</nav>,
+          )}
           <form
             id="test-guide-form"
             onSubmit={(e) => {
@@ -184,6 +187,11 @@ describe("persistent guide", () => {
     fireEvent.click(await screen.findByText("Let's get set up"));
     const button = await screen.findByText("Next models");
     expect(button.closest("footer")).not.toBeNull();
+    const progress = screen.getByRole("navigation", { name: "Test progress" });
+    expect(
+      progress.compareDocumentPosition(screen.getByRole("status")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(
       screen.getByText("Skip this step").compareDocumentPosition(button) &
         Node.DOCUMENT_POSITION_FOLLOWING,
