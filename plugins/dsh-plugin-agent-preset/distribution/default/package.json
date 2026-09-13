@@ -2,9 +2,7 @@
   "name": "@amiba/dsh-plugin-agent-preset",
   "version": "0.1.0",
   "private": true,
-  "dependencies": {
-    "lucide-react": "^0.460.0"
-  },
+  "dependencies": {},
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-api-remotes": "0.1.1-rc.2",

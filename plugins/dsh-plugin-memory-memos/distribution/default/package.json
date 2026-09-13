@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "lucide-react": "^0.460.0",
     "zod": "^4.4.3",
     "@memtensor/memos-local-plugin": "2.0.18"
   },

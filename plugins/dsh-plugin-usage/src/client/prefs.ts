@@ -9,7 +9,7 @@
  * are unchanged, so previously stored day-range choices carry over.
  */
 
-import { getPlatform } from "@amiba/app-runtime/platform";
+import { getPlatform } from "@amiba/dsh-plugin-ui-shell/client";
 
 export async function readUsagePref<T>(key: string, fallback: T): Promise<T> {
   try {

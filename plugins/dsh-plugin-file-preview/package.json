@@ -45,8 +45,7 @@
     "@amiba/extension-sdk": "workspace:*",
     "@amiba/dsh-plugin-ui-shell": "workspace:*",
     "@amiba/app-runtime": "workspace:*",
-    "@amiba/i18n": "workspace:*",
-    "lucide-react": "^0.460.0"
+    "@amiba/i18n": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
@@ -72,6 +71,7 @@
     "react-dom": "18.3.1",
     "typescript": "5.6.3",
     "vite": "^5.4.11",
-    "vitest": "^2.1.4"
+    "vitest": "^2.1.4",
+    "lucide-react": "^0.460.0"
   }
 }

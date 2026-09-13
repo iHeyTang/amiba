@@ -4,7 +4,6 @@
   "private": true,
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.73.0",
-    "lucide-react": "^0.460.0",
     "qrcode-generator": "^2.0.4",
     "zod": "^4.4.3"
   },
