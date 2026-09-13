@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { pdfImageFixture } from './pdf-image-fixture.mjs';
 import { pdfFixture } from './pdf-document-fixture.mjs';
 export async function smokePdfDocument({ evaluate, wait, fileWorkspace, screenshot }) {
   const file = path.join(fileWorkspace, '.cache/compat-document.pdf');
@@ -38,6 +39,21 @@ export async function smokePdfDocument({ evaluate, wait, fileWorkspace, screensh
     await screenshot?.();
     await evaluate("window.__sidebarService.close(window.__sidebarService.active().id)");
     await wait(() => evaluate("!document.querySelector('[data-pdf-preview]') && window.__pdfWorkers.every(worker=>worker.__terminated)"));
+    for (const kind of ['jpeg','jpx','soft-mask']) {
+      await writeFile(file, pdfImageFixture(kind));
+      const assetStart = await evaluate("window.__pdfAssetReplies.length");
+      await evaluate("window.__sidebarService.openResource('dsh-resource://file/session/'+encodeURIComponent(window.__compatSessionId)+'/.cache/compat-document.pdf')");
+      await wait(() => evaluate("document.querySelectorAll('[data-pdf-page] canvas:not([hidden])').length===1"));
+      const pixels = await evaluate("(()=>{const canvas=document.querySelector('[data-pdf-page] canvas');const context=canvas.getContext('2d');return [0.25,0.75].map(x=>[...context.getImageData(Math.floor(canvas.width*x),Math.floor(canvas.height/2),1,1).data])})()");
+      const expected = kind==='soft-mask'?[[128,112,48,255],[32,64,224,255]]:[[224,32,32,255],[32,64,224,255]];
+      pixels.forEach((pixel,index)=>assert.ok(pixel.every((channel,c)=>Math.abs(channel-expected[index][c])<=25), `${kind}: actual PDF image pixels ${pixel}`));
+      if (kind==='jpx') assert.ok(await evaluate(`window.__pdfAssetReplies.slice(${assetStart}).some(asset=>asset.kind==='wasmUrl' && asset.filename==='openjpeg.wasm' && asset.bytes>1000)`), 'JPEG 2000 must use the real bundled WASM resource');
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      await screenshot?.();
+      await evaluate("window.__sidebarService.close(window.__sidebarService.active().id)");
+      await wait(() => evaluate("!document.querySelector('[data-pdf-preview]') && window.__pdfWorkers.every(worker=>worker.__terminated)"));
+      console.log(`PDF ${kind} image passed actual decode, composited pixel output and Worker termination.`);
+    }
     console.log('PDF CMap passed actual UniJIS-UCS2-H.bcmap resource delivery and completed page rendering.');
     console.log('PDF standard font passed actual FoxitSymbol.pfb byte transfer and glyph rasterization in the module Worker path.');
     console.log('PDF document passed real module Worker, two-page red/blue raster output, damaged reload/error/retry cleanup, recovery and worker termination on tab close.');

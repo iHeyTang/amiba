@@ -5,6 +5,12 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：PDF 嵌入图片、WASM 与透明蒙版（2026-09-14）
+
+新增二进制安全的 PDF image XObject fixture，xref 按字节偏移生成。三种样本分别使用 DCTDecode/JPEG、JPXDecode/JPEG 2000、FlateDecode RGB 加灰度 SMask；背景为绿色，左右像素可明确区分图片缺失、色彩错误及未应用透明度。JPEG 2000 色块为自行编码数据，无外部文档。测试经实际文件授权、文档页、PDF Worker 和画布绘制检查像素；JPX 额外要求本次 Worker 的 FetchBinaryData/openjpeg.wasm 成功回复，不以资产存在代替实际使用。
+
+--compat --sidebar-right 退出 0（/tmp/amiba-pdf-images-smoke.log），三种图片像素和关闭 Worker 清理均通过；透明蒙版的最终截图已查看，半透明左半区与绿色背景正确混合，原会话/输入保留。标准字体/CMap、全图片格式与动画、其他文档及侧栏回归同时通过。只增加测试和证据，沿用 fce007ca 完整构建的产品。不能以三个样本推断所有 PDF 编码；多页可见性/位置恢复、独立 Web 及完整服务语义仍待完成。44/0/20 统计不变。
+
 ## 进行中：图片格式与动画实际验证（2026-09-14）
 
 新增自制的 32×32 色块编码 fixtures，覆盖 baseline JPG、progressive JPEG、GIF、lossless/lossy WebP、24 位 BMP，以及含 16/32 像素条目的 PNG/DIB ICO；另加无限循环双帧 GIF/WebP。fixture 以 base64 保存在测试模块，Pillow 只用于生成，运行测试无需该依赖。实际文件使用大写后缀，经过原文件授权/完整字节读取和 ImageBody 后检查解码像素及 intrinsic 尺寸；每个样本都验证损坏文件重载、恢复、替换/关闭 URL 不再可加载。动画检查实际 compositor 的图片区域截图，再读取截图像素，确认红蓝两帧均显示；不以 drawImage 的首帧或文件元数据代替动画验证。
