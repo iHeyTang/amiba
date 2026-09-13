@@ -16,3 +16,25 @@
   --dsw-alias-scrollbar-hover-l2: hsl(var(--muted-foreground) / 0.45);
   --dsw-shadow-lv3: 0 10px 30px hsl(var(--foreground) / 0.12), 0 0 0 1px hsl(var(--border));
 }
+
+/* Reserve the existing measured right-edge controls only while this addition
+ * has content. The native title keeps its ordinary footprint. */
+@container amiba-chat-column (max-width: 79.999rem) {
+  [data-content-header-leading]:has(> [data-content-header-lineage]:not(:empty)) {
+    max-width: calc(100% - var(--amiba-workbench-controls-inset, 2.75rem));
+  }
+  [data-content-header-leading]:has(> [data-content-header-lineage]:not(:empty)) > [data-content-header-title] {
+    flex-shrink: 0;
+  }
+}
+
+/* The existing wide layout reserves only 11rem for the native title. Keep
+ * that layout intact and place navigation immediately after its title area. */
+@container amiba-chat-column (min-width: 80rem) {
+  .amiba-chat-header--wide-overlay [data-content-header-lineage] {
+    position: absolute;
+    left: calc(100% + 10px);
+    width: max-content;
+    max-width: calc(100cqw - 11rem - var(--amiba-workbench-controls-inset, 2.75rem) - 32px);
+  }
+}

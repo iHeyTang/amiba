@@ -1,3 +1,4 @@
+import { lineageLoaderFixture } from "./lineage-loader-fixture.mjs";
 import { messageImageFixture } from "./message-image-fixture.mjs";
 import { legacyAttachmentFixture } from "./legacy-attachment-fixture.mjs";
 import { trajectoryLoaderFixture } from "./trajectory-loader-fixture.mjs";
@@ -31,6 +32,8 @@ if (process.argv.includes("--redirect-queue") && !process.argv.includes("--backg
 if (process.argv.includes("--approval-detail") && !["--compat", "--child-continuation"].every(flag => process.argv.includes(flag))) {
   throw new Error("--approval-detail requires --compat --child-continuation");
 }
+if (process.argv.includes("--lineage-layout") && !process.argv.includes("--header-lineage")) throw new Error("--lineage-layout requires --header-lineage");
+if (process.argv.includes("--lineage-loader") && !process.argv.includes("--header-lineage")) throw new Error("--lineage-loader requires --header-lineage");
 if (process.argv.includes("--header-lineage") && !["--compat", "--child-continuation"].every(flag=>process.argv.includes(flag))) throw new Error("--header-lineage requires --compat --child-continuation");
 if (process.argv.includes("--header-corner") && !process.argv.includes("--compat")) {
   throw new Error("--header-corner requires --compat");
@@ -179,7 +182,7 @@ try {
   // Write only to this smoke's temporary session, through the real Host log.
   const fixtureCwd = await realpath(profile);
   const turnFixture = process.argv.includes("--compat") ? `let fixtureSession:any;ctx.on('session/created',(s:any)=>{if(s.header.origin==='subagent'||!${JSON.stringify([profile, fixtureCwd])}.includes(s.header.cwd)||s.events.some((e:any)=>e.type==='turn/start'&&e.data.turn===7))return;fixtureSession=s;s.append('turn/start',{turn:7});s.append('user/message',{id:'compat-user',role:'user',source:{kind:'user'},content:[{type:'text',text:'COMPAT_TURN_INPUT'}]},{surfaceOp:'append'});s.append('step/start',{turn:7,step:1});s.append('assistant/message',{turn:7,step:1,message:{id:'compat-assistant',role:'assistant',source:{kind:'model',provider:'compat',model:'fixture'},content:[{type:'text',text:'COMPAT_TURN_REPLY'}]}},{surfaceOp:'append'});s.append('step/end',{turn:7,step:1});s.append('turn/end',{turn:7,reason:{kind:'completed'}});if(${JSON.stringify(process.argv.includes('--command-rows'))})s.append('command/run',{commandId:'compat-row-command',name:'compat-row',args:'  原始😀'});console.log('AMIBA_PROBE_TURN '+s.id);});ctx.effect(()=>{const watcher=watch(${JSON.stringify(profile)},()=>{const s=fixtureSession;if(!s)return;if(existsSync(${JSON.stringify(path.join(profile,'command-row-done'))})&&!s.events.some((e:any)=>e.type==='command/done'&&e.data.commandId==='compat-row-command'))s.append('command/done',{commandId:'compat-row-command',kind:'success',text:'COMPAT_COMMAND_RESULT'});if(existsSync(${JSON.stringify(path.join(profile,'child-create'))})&&!ctx.sessions.get('compat-child')){const child=ctx.sessions.create('compat-child',{meta:{cwd:s.header.cwd,parentSession:s.id,origin:'subagent',delegationDepth:1}});child.append('turn/start',{turn:1});child.append('subagent/descriptor',{version:2,mode:'one-shot',provider:'compat',label:'Compatibility child'});child.append('user/message',{id:'compat-child-user',role:'user',source:{kind:'user'},content:[{type:'text',text:'COMPAT_CHILD_INPUT'}]},{surfaceOp:'append'});child.append('step/start',{turn:1,step:1});child.append('assistant/message',{turn:1,step:1,message:{id:'compat-child-assistant',role:'assistant',source:{kind:'model',provider:'compat',model:'fixture'},content:[{type:'text',text:'COMPAT_CHILD_REPLY'}]}},{surfaceOp:'append'});child.append('step/end',{turn:1,step:1});child.append('turn/end',{turn:1,reason:{kind:'completed'}});console.log('AMIBA_PROBE_CHILD '+child.id);}if(existsSync(${JSON.stringify(path.join(profile,'turn-tail-open'))})&&!s.events.some((e:any)=>e.type==='turn/start'&&e.data.turn===8)){s.append('turn/start',{turn:8});s.append('user/message',{id:'compat-empty-user',role:'user',source:{kind:'plugin',plugin:'compat-test',form:'relay'},content:[{type:'text',text:'COMPAT_EMPTY_TURN_INPUT'}]},{surfaceOp:'append'});}if(existsSync(${JSON.stringify(path.join(profile,'turn-tail-close'))})&&!s.events.some((e:any)=>e.type==='turn/end'&&e.data.turn===8)){s.append('turn/end',{turn:8,reason:{kind:'blocked'}});}if(existsSync(${JSON.stringify(path.join(profile,'turn-tail-deliverables'))})&&!s.events.some((e:any)=>e.type==='turn/start'&&e.data.turn===9)){s.append('turn/start',{turn:9});s.append('user/message',{id:'compat-produced-user',role:'user',source:{kind:'plugin',plugin:'compat-test',form:'relay'},content:[{type:'text',text:'COMPAT_PRODUCED_INPUT'}]},{surfaceOp:'append'});s.append('step/start',{turn:9,step:1});for(let i=0;i<7;i++){const filePath=${JSON.stringify(path.join(profile,'compat-produced'))}+(i===0?'':String(i+1))+'.txt';const callId='compat-write-call-'+i;s.append('tool/call',{turn:9,step:1,callId,name:'write',arguments:JSON.stringify({file_path:filePath,content:'COMPAT_PRODUCED_FILE_CONTENT'})});s.append('tool/result',{turn:9,step:1,message:{id:'compat-write-result-'+i,role:'user',source:{kind:'tool',callId},content:[{type:'tool-result',toolCallId:callId,content:[{type:'text',text:'Written'}]}]}},{surfaceOp:'append'});}s.append('step/end',{turn:9,step:1});s.append('step/start',{turn:9,step:2});const mention=String.fromCharCode(96)+'compat-produced.txt'+String.fromCharCode(96);const prefix='COMPAT_PRODUCED_PREFIX '+mention;const suffix='COMPAT_PRODUCED_REPLY <think>COMPAT_PRIVATE_THOUGHT</think> '+mention;s.append('assistant/chunk',{turn:9,step:2,chunk:{type:'text-delta',index:0,text:prefix}});s.append('assistant/chunk',{turn:9,step:2,chunk:{type:'reasoning-delta',index:1,text:'COMPAT_SOURCE_THOUGHT'}});s.append('assistant/chunk',{turn:9,step:2,chunk:{type:'text-delta',index:2,text:suffix}});if(!${JSON.stringify(process.argv.includes('--interrupted-prose'))})s.append('assistant/message',{turn:9,step:2,message:{id:'compat-produced-reply',role:'assistant',source:{kind:'model',provider:'compat',model:'fixture'},content:[{type:'text',text:prefix},{type:'reasoning',text:'COMPAT_SOURCE_THOUGHT'},{type:'text',text:suffix}]}},{surfaceOp:'append'});s.append('step/end',{turn:9,step:2});s.append('turn/end',{turn:9,reason:{kind:${JSON.stringify(process.argv.includes('--interrupted-prose') ? 'blocked' : 'completed')}}});}});return()=>watcher.close();});` : "";
-  const source = version => native ? `import {watch,existsSync,readFileSync,writeFileSync} from 'node:fs';export const inject=['amibaRuntimeGateway','sessions'${process.argv.includes('--trajectory-loader') ? ",'clientModules'" : ''}${process.argv.includes('--cordis-business') ? ",'dynamicCordisRunner'" : ''}${process.argv.includes('--child-continuation') ? ",'agents','subagents','llm'" : ''}${process.argv.includes('--message-images') ? ",'attachments'" : ''}${process.argv.includes('--approval-detail') ? ",'approval'" : ''}${process.argv.includes('--redirect-queue') ? ",'amibaConversations'" : ''}]; export async function apply(ctx:any) { ${process.argv.includes('--child-continuation') ? continuableChildFixture(root, profile, process.argv.includes('--redirect-queue'), process.argv.includes('--approval-detail')) : ''} if(!existsSync(${JSON.stringify(path.join(profile,'cold-restart'))})){ ${turnFixture} ${process.argv.includes("--message-images") ? messageImageFixture(profile,fixtureCwd,process.argv.includes("--tool-images"),process.argv.includes("--nested-tools")) : ""} ${process.argv.includes("--legacy-file-refs") ? legacyAttachmentFixture(profile) : ""} ${process.argv.includes("--trajectory-loader") ? trajectoryLoaderFixture(profile) : ""} ${process.argv.includes('--cordis-business') ? cordisBusinessFixture(profile,fixtureCwd) : ''} } let lease:string|undefined;let disposed=false;ctx.effect(()=>async()=>{disposed=true;if(lease)await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease})});lease=await ctx.amibaRuntimeGateway.call('amiba_native_attach',{packageName:'dsh-plugin-probe',instanceId:'probe-'+Date.now()});if(disposed){await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease});return}console.log('AMIBA_PROBE_HOST_${version}'); }` : hostSource(version);
+  const source = version => native ? `import {watch,existsSync,readFileSync,writeFileSync} from 'node:fs';export const inject=['amibaRuntimeGateway','sessions'${(process.argv.includes('--trajectory-loader') || process.argv.includes('--lineage-loader')) ? ",'clientModules'" : ''}${process.argv.includes('--cordis-business') ? ",'dynamicCordisRunner'" : ''}${process.argv.includes('--child-continuation') ? ",'agents','subagents','llm'" : ''}${process.argv.includes('--message-images') ? ",'attachments'" : ''}${process.argv.includes('--approval-detail') ? ",'approval'" : ''}${process.argv.includes('--redirect-queue') ? ",'amibaConversations'" : ''}]; export async function apply(ctx:any) { ${process.argv.includes('--child-continuation') ? continuableChildFixture(root, profile, process.argv.includes('--redirect-queue'), process.argv.includes('--approval-detail')) : ''} if(!existsSync(${JSON.stringify(path.join(profile,'cold-restart'))})){ ${turnFixture} ${process.argv.includes("--message-images") ? messageImageFixture(profile,fixtureCwd,process.argv.includes("--tool-images"),process.argv.includes("--nested-tools")) : ""} ${process.argv.includes("--legacy-file-refs") ? legacyAttachmentFixture(profile) : ""} ${process.argv.includes("--trajectory-loader") ? trajectoryLoaderFixture(profile) : ""} ${process.argv.includes("--lineage-loader") ? lineageLoaderFixture(profile) : ""} ${process.argv.includes('--cordis-business') ? cordisBusinessFixture(profile,fixtureCwd) : ''} } let lease:string|undefined;let disposed=false;ctx.effect(()=>async()=>{disposed=true;if(lease)await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease})});lease=await ctx.amibaRuntimeGateway.call('amiba_native_attach',{packageName:'dsh-plugin-probe',instanceId:'probe-'+Date.now()});if(disposed){await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease});return}console.log('AMIBA_PROBE_HOST_${version}'); }` : hostSource(version);
   await writeFile(path.join(project, "src/index.ts"), source(1));
   await writeFile(path.join(project, "src/client.ts"), clientSource(1));
   cli = spawn(process.execPath, [process.env.AMIBA_SMOKE_CLI || path.join(root, "apps/cli/dist/cli.js"), "--dsh-home", home, "plugin", "dev"], { cwd: project, env: {...process.env}, stdio: ["ignore", "pipe", "pipe"] });
@@ -1031,7 +1034,23 @@ try {
         await evaluate("window.__lineageOff();void 0");
         await wait(()=>evaluate("!document.querySelector('[data-compat-lineage]')"));
         assert.equal(await evaluate("!!Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0)"),true);
-        if (await evaluate("window.__probeCtx.slots.entriesOfSlot('conversation.session.header.lineage').length===0")) {
+        if (process.argv.includes("--lineage-loader")) {
+          const originalSession = await evaluate("window.__compatSessionId");
+          await writeFile(path.join(profile,"lineage-enable"),"enable");
+          const receipt = await wait(async()=>{
+            const error = await readFile(path.join(profile,"lineage-loader-error.txt"),"utf8").catch(()=>null);
+            if(error) throw new Error(error);
+            return readFile(path.join(profile,"lineage-enabled.json"),"utf8").then(JSON.parse).catch(()=>false);
+          });
+          assert.ok(receipt.graph.some(entry=>entry.id==='@deepseek-ai/dsh-client-ui-subagent'));
+          assert.ok(!receipt.graph.some(entry=>entry.id==='@deepseek-ai/dsh-client-ui-conversation'),'lineage must not enable a replacement conversation root');
+          await evaluate("window.__lineageBootBefore=true;void 0");
+          await call("Page.reload",{});
+          await wait(()=>evaluate("!window.__lineageBootBefore&&!!window.__probeCtx?.sessions&&window.__probeCtx.slots.entriesOfSlot('conversation.session.header.lineage').length>0"));
+          await evaluate(`window.__compatSessionId=${JSON.stringify(originalSession)};void 0`);
+          assert.equal(await evaluate("document.querySelectorAll('[data-amiba-product-shell]').length"),1);
+          console.log("Official lineage activated through Host configuration and normal renderer boot");
+        } else if (await evaluate("window.__probeCtx.slots.entriesOfSlot('conversation.session.header.lineage').length===0")) {
           await evaluate(await readFile(path.join(root,"packages/app-runtime/resources/dsh-runtime/app/node_modules/@deepseek-ai/dsh-client-ui-subagent/lib/client.js"),"utf8"));
           await evaluate("window.__lineageOfficialFiber=window.__probeCtx.plugin(window.__probeRequire('@deepseek-ai/dsh-client-ui-subagent'));void 0");
         }
@@ -1054,6 +1073,51 @@ try {
         await evaluate("Array.from(document.querySelectorAll('[role=treeitem]')).find(n=>n.textContent.includes('Continuable compatibility child')).click();void 0");
         await wait(()=>evaluate("window.__probeCtx.sessions.list.getSnapshot().current==='compat-continuable-child'&&document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_NATIVE_FOLLOWUP')&&!document.querySelector('[role=tree]')"));
         console.log("Lineage passed actual multi-level Host sessions, current and ancestor owners, parent navigation, native title/editor preservation, empty/error plugins, and installed official catalog keyboard opening and child navigation");
+        if (process.argv.includes("--lineage-layout")) {
+          await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-child',childSessionId:'compat-nested-child',mode:'continuable'});void 0");
+          await wait(()=>evaluate("document.body.textContent.includes('COMPAT_NESTED_REPLY COMPAT_NESTED_INITIAL')&&!!document.querySelector('[data-content-header-lineage]')"));
+          const layouts = [];
+          for (const width of [960,720,1600]) {
+            await call("Emulation.setDeviceMetricsOverride",{width,height:1000,deviceScaleFactor:1,mobile:false});
+            await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+            layouts.push(await evaluate("(()=>{const lineage=document.querySelector('[data-content-header-lineage]').getBoundingClientRect();const title=document.querySelector('[data-content-header-title]').getBoundingClientRect();const edge=document.querySelector('[data-workspace-edge-toggle]').getBoundingClientRect();return {width:innerWidth,titleWidth:title.width,lineageRight:lineage.right,controlsLeft:edge.left}})()"));
+            const navigationButtons = await evaluate("document.querySelectorAll('[data-content-header-lineage] button[aria-haspopup=tree]').length");
+            assert.ok(navigationButtons>=2);
+            for(let index=0;index<navigationButtons;index++) {
+              await evaluate(`document.querySelectorAll('[data-content-header-lineage] button[aria-haspopup=tree]')[${index}].focus();new Promise(resolve=>requestAnimationFrame(resolve))`);
+              const focused = await evaluate("(()=>{const region=document.querySelector('[data-content-header-lineage]').getBoundingClientRect();const button=document.activeElement.getBoundingClientRect();return {left:button.left,right:button.right,width:button.width,regionLeft:region.left,regionRight:region.right}})()");
+              assert.ok(focused.width>=12&&focused.left>=focused.regionLeft-1&&focused.right<=focused.regionRight+1,"each lineage button must remain keyboard-reachable at "+width);
+            }
+            await writeFile(path.join(tmpdir(),'amiba-lineage-layout-'+width+'.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+          }
+          await call("Emulation.clearDeviceMetricsOverride",{});
+          console.log("Lineage header geometry",layouts);
+          for(const layout of layouts) {
+            assert.ok(layout.titleWidth>0,"lineage must not collapse the native title at "+layout.width);
+            assert.ok(layout.lineageRight<=layout.controlsLeft,"lineage must not overlap existing controls at "+layout.width);
+          }
+          await evaluate("window.__probeCtx.sessions.open('compat-continuable-child');void 0");
+          await wait(()=>evaluate("window.__probeCtx.sessions.list.getSnapshot().current==='compat-continuable-child'&&document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_NATIVE_FOLLOWUP')"));
+        }
+
+        if (process.argv.includes("--lineage-loader")) {
+          const originalSession = await evaluate("window.__compatSessionId");
+          await writeFile(path.join(profile,"lineage-disable"),"disable");
+          const receipt = await wait(async()=>{
+            const error = await readFile(path.join(profile,"lineage-loader-error.txt"),"utf8").catch(()=>null);
+            if(error) throw new Error(error);
+            return readFile(path.join(profile,"lineage-disabled.json"),"utf8").then(JSON.parse).catch(()=>false);
+          });
+          assert.ok(!receipt.graph.some(entry=>entry.id==='@deepseek-ai/dsh-client-ui-subagent'));
+          await evaluate("window.__lineageBootBefore=true;void 0");
+          await call("Page.reload",{});
+          await wait(()=>evaluate("!window.__lineageBootBefore&&!!window.__probeCtx?.sessions&&window.__probeCtx.slots.entriesOfSlot('conversation.session.header.lineage').length===0"));
+          await evaluate(`window.__compatSessionId=${JSON.stringify(originalSession)};window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-parent',childSessionId:'compat-continuable-child',mode:'continuable'});void 0`);
+          await wait(()=>evaluate("document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_NATIVE_FOLLOWUP')&&!document.querySelector('[data-content-header-lineage]')"));
+          assert.equal(await evaluate("document.querySelectorAll('[data-amiba-product-shell]').length"),1);
+          console.log("Official lineage removal retained the native shell and continuable child history");
+        }
+
 
       }
       const literal = 'COMPAT_LITERAL_ @[dsh.reference:unregistered-example|id|label|clip]';

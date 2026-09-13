@@ -47,7 +47,7 @@
 | 24 | `conversation.session.header` | 只能按组件分别适配 | 这是已有界面的替换入口。可复用服务或增加可选展示，但默认能力和样式必须保留。 |
 | 25 | `conversation.session.header.actions` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 26 | `conversation.session.header.corner` | 桌面接入已验证 | 按新版 single/session 与空 owner 契约接入最右角，保留原标题和控件顺序；空内容不占宽度。真实插件已验证会话及注入身份、操作、会话切换、无当前会话隐藏、草稿保留、报错隔离和卸载尺寸恢复。依赖新版右侧栏服务的插件及独立 Web 另核对。 |
-| 27 | `conversation.session.header.lineage` | 入口已接入，桌面验证通过 | 复用 rc.2 已有 lineage 类型和真实 sessions 列表，按官方规则为当前及子会话祖先传入 lineageSessionId/displayTitle/openTitle；祖先 owner 保留当前查看会话的标准上下文。导航附加在原可编辑标题旁，原重命名/编辑器不替换。实际多层 Host 会话、祖先回跳、已安装官方目录组件的键盘展开和子会话选择、空/失败插件、浅深色弹层通过；常规 Host 插件图启用、窄窗口、后续新版及独立 Web 仍待验证。 |
+| 27 | `conversation.session.header.lineage` | 入口已接入，桌面验证通过 | 复用 rc.2 已有 lineage 类型和真实 sessions 列表，按官方规则为当前及子会话祖先传入 lineageSessionId/displayTitle/openTitle；祖先 owner 保留当前查看会话的标准上下文。导航附加在原可编辑标题旁，原重命名/编辑器不替换。实际多层 Host 会话、祖先回跳、已安装官方目录组件的键盘展开和子会话选择、空/失败插件、浅深色弹层通过；常规 Host 插件图启用/停用与正常 renderer boot、720/960/1600px 不遮挡原控件和键盘可达验证已通过；后续新版及独立 Web 仍待验证。 |
 | 28 | `conversation.session.header.utilities` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 29 | `conversation.trajectory.images` | 入口已接入，桌面验证通过 | 固定 rc.2 可复现补丁保留原持久引用，在 trajectory 的 conversation.view 子声明 single/session 图片槽，并复用 shell 会话授权 loader。实际 Host 图激活与卸载、两张真实图片解码、准确 session/loader、空插件、抛错后恢复元数据以及原选中行/表头/编辑器草稿均验证通过。混合 inline/持久图片顺序与 compact 预览/详情有组件测试；完整新版图片插件依赖及独立 Web 仍待验证。 |
 | 30 | `conversation.view` | 可以适配，已验证 | 增加插件视图标签；保留原对话及草稿。依赖完整输入服务的视图另算。 |

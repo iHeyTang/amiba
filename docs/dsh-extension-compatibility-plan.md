@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：lineage 常规配置启用和窗口布局（2026-09-13）
+
+新增 lineage-loader-fixture.mjs，通过隔离 smoke profile 的真实 ctx.loader.create/remove 启用/停用 @deepseek-ai/dsh-client-ui-subagent。正常 Host 客户端图包含该插件并明确不包含替换性的 ui-conversation root；renderer 按正常 boot 加载后官方目录可展开和选择子会话，主 shell 始终只有一个。停用并重载后 lineage 区域消失，原可续聊子会话历史、输入器、续聊及停止保持正常。未用手工 evaluate bundle 代替这一轮的图加载。/tmp/amiba-lineage-loader-smoke.log 退出 0。
+
+窗口验证发现此前真实缺陷：720px 下导航右边界 698px 超过原控件左边界 618px；1600px 下宽屏原 11rem 标题布局把标题压至 0px。仅在非空 lineage 出现时，普通布局复用已测量的右控件 inset 预留空间并保留原标题宽度；导航允许收缩/横向滚动，逐个按钮仍可键盘聚焦。宽屏保持原 11rem 标题布局，将 lineage 绝对定位到原标题区域之后，并用容器宽度限制其边界。无插件或空插件不触发这些布局规则。
+
+修复后 FullScreenChatView 25 项测试及完整桌面构建通过（/tmp/amiba-lineage-layout-ui-tests.log、/tmp/amiba-lineage-layout-build.log）。真实 --compat --child-continuation --child-navigation --header-corner --header-lineage --lineage-loader --lineage-layout 退出 0（/tmp/amiba-lineage-layout-smoke-2.log）。720/960px 下原标题宽度均为 164.49px，导航与原右侧控件保持 30px 间距；1600px 下标题宽度为 140px，导航不侵占右控件。三个尺寸都逐个聚焦真实官方导航按钮并确认可见边界；已查看 amiba-lineage-layout-720.png 和 amiba-lineage-layout-1600.png。浅/深色官方弹层、常规配置移除、只读子会话、续聊/停止、角标、文件/目录、Markdown、turn-tail、HMR 等回归通过。最初失败的 /tmp/amiba-lineage-layout-smoke.log 不作通过证据。
+
+本轮产品变化只涉及 lineage 扩展区及其启用时的空间分配，没有替换原标题、编辑器或右侧控件。统计保持 35/9/20；常规图与已测窗口尺寸不再列为 lineage 的未验证项。固定版本以外的组件与私有样式、独立 Web/Quick Ask，以及全部队列、模型、右侧栏和其他扩展/服务未完成项继续保留，完整目标尚未达成。
+
 ## 最新进展：父子会话标题导航接入（2026-09-13）
 
 conversation.session.header.lineage 已接入主 shell，复用实际 rc.2 已有的官方 owner 类型及 branded SessionId，不补造重复接口。sessionLineage 只从真实官方 byId/current 派生：当前标题及 origin=subagent 的祖先按上游顺序分发；普通 fork 不视为子 Agent，缺失祖先和循环止步，不编造名称；Amiba 与官方当前会话尚未一致时不泄露旧会话导航。祖先 openTitle 通过 ctx.sessions.open 和既有选择桥打开真实目标，祖先的 owner 与标准 sessionId 保持各自语义。

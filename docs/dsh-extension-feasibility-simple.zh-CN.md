@@ -28,7 +28,7 @@
 | 22 | `conversation.message.images` | 持久图片已接入，实时插件消息和历史重新打开通过真实 Host 验证；按会话授权读取、缓存、释放及插件卸载回退已验证。本人发送回显、preview 及独立 Web 仍待补齐；工具和轨迹分别见第 62、29 项。 |
 | 25 | `conversation.session.header.actions` | 已接入，依赖另核对；具体未完成项见详细表。 |
 | 26 | `conversation.session.header.corner` | 会话角标已通过真实插件桌面验证；空内容、报错及卸载不增加宽度，保留原标题和控件。新版右侧栏服务及独立 Web 另核对。 |
-| 27 | `conversation.session.header.lineage` | 真实多层祖先导航已接入，保留原可编辑标题；已安装官方目录组件的展开、选择和浅深色弹层通过桌面验证。常规插件配置启用、窄窗口及独立 Web 仍另验证。 |
+| 27 | `conversation.session.header.lineage` | 真实多层祖先导航已接入，保留原可编辑标题；常规 Host 配置启用/停用、官方目录组件、浅深色弹层及 720/960/1600px 布局通过桌面验证。后续版本与独立 Web 仍另验证。 |
 | 28 | `conversation.session.header.utilities` | 已接入，依赖另核对；具体未完成项见详细表。 |
 | 29 | `conversation.trajectory.images` | 持久图片已接入官方轨迹组件，真实桌面解码、共享授权读取、卸载及报错回退通过；保留原轨迹和编辑器。预览混排已有组件测试，完整新版图片插件及独立 Web 仍待验证。 |
 | 30 | `conversation.view` | 可以适配，已验证；具体未完成项见详细表。 |

@@ -1306,7 +1306,7 @@ function ContentHeader({
           {lineage ? (
             <div
               data-content-header-lineage
-              className="app-no-drag flex min-w-0 shrink-0 items-center gap-0.5 empty:hidden"
+              className="app-no-drag flex min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] empty:hidden"
             >
               <WorkbenchViewBoundary fallback={null} resetKey={lineage}>
                 {lineage}
