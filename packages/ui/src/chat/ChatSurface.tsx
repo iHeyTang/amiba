@@ -335,6 +335,7 @@ export interface ChatSurfaceProps {
      * Amiba's own `ToolSpec`-driven chip, which is also the `fallback` of
      * every unclaimed tool name.
      */
+    approvalDetail?: (callId: string) => ReactNode;
     assistantActions?: (messageId: string) => ReactNode;
     turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
     messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
@@ -2497,6 +2498,7 @@ export default function ChatSurface({
             )}
             {hasActive && pendingApprovals.length > 0 && (
               <ApprovalBanner
+                renderDetail={slots?.approvalDetail}
                 approvals={pendingApprovals}
                 inFlight={approvalInFlight}
                 error={approvalError}

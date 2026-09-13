@@ -3,7 +3,7 @@ import path from 'node:path';
 
 // Test-only model adapter. Real DSH agents, inboxes, subagent ownership and
 // event transports remain in use; no external model request is necessary.
-export function continuableChildFixture(root, profile, redirectQueue = false) {
+export function continuableChildFixture(root, profile, redirectQueue = false, approvalDetail = false) {
   const adapterUrl = pathToFileURL(path.join(root, 'packages/app-runtime/resources/dsh-runtime/app/node_modules/@deepseek-ai/dsh-llm/lib/index.js')).href;
   return `
     const adapterUrl = ${JSON.stringify(adapterUrl)};
@@ -27,6 +27,18 @@ export function continuableChildFixture(root, profile, redirectQueue = false) {
         console.log('AMIBA_PROBE_MODEL '+options.sessionId+' '+input);
         const literal=options.messages.filter((m:any)=>m.role==='user').flatMap((m:any)=>m.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text)).reverse().find((text:string)=>text.startsWith('COMPAT_LITERAL_'));
         if(literal) console.log('AMIBA_PROBE_LITERAL_INPUT '+options.sessionId+' '+JSON.stringify(literal));
+        ${approvalDetail ? `if(input.startsWith('COMPAT_LITERAL_APPROVAL_') && options.sessionId==='compat-continuable-child' && !approvalInputs.has(input)) {
+          approvalInputs.add(input);
+          const agent=ctx.agents.get(options.sessionId);
+          const session=ctx.sessions.get(options.sessionId);
+          const step=session.events.filter((e:any)=>e.type==='step/start').at(-1).data;
+          const callId='approval-'+input.slice('COMPAT_LITERAL_APPROVAL_'.length);
+          session.append('tool/call',{turn:step.turn,step:step.step,callId,name:'compat_approval',arguments:'{}'});
+          ctx.approval.setPolicy(agent,'ask');
+          const outcome=await ctx.approval.request({agent,toolName:'compat_approval',callId,reason:'COMPAT_APPROVAL_REASON',signal:options.signal});
+          console.log('AMIBA_PROBE_APPROVAL '+callId+' '+outcome);
+          session.append('tool/result',{turn:step.turn,step:step.step,message:{id:callId+'-result',role:'user',source:{kind:'tool',callId},content:[{type:'tool-result',toolCallId:callId,content:[{type:'text',text:outcome}]}]}},{surfaceOp:'append'});
+        }` : ''}
         yield {type:'block-start',index:0,blockType:'text'};
         yield {type:'text-delta',index:0,text};
         if(input==='COMPAT_LITERAL_BACKGROUND_HOLD' && options.sessionId==='compat-continuable-child') {
@@ -56,6 +68,7 @@ export function continuableChildFixture(root, profile, redirectQueue = false) {
     ctx.effect(()=>()=>registration());
     ${redirectQueue ? `ctx.effect(()=>ctx.amibaConversations.registerSubmitHandler('compat-rotation',async (_origin:any,sessionId:string)=>
       sessionId==='compat-continuable-child' && existsSync(${JSON.stringify(path.join(profile, 'queue-redirect'))}) ? 'compat-continuable-parent' : sessionId));` : ''}
+    const approvalInputs=new Set<string>();
     let started=false;
     let nestedCreated=false;
     ctx.effect(()=>{

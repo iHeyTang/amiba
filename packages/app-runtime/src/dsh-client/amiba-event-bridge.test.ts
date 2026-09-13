@@ -207,12 +207,13 @@ describe("DshAmibaEventBridge", () => {
         type: "approval/requested",
         sessionId: "s",
         approvalId: "a",
+        callId: "actual-call",
         toolName: "bash",
       },
     })[0]?.event
     expect(approval).toMatchObject({
       kind: "approvalRequest",
-      request: { requestId: "approval-rpc", approvalId: "a" },
+      request: { requestId: "approval-rpc", approvalId: "a", sessionId: "s", toolCallId: "actual-call" },
     })
   })
 })

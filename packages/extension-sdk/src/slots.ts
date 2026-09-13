@@ -792,3 +792,17 @@ export type ConversationInputActions = PropsRuntime<"conversation.input.left">["
 export type ComposerAttachmentsOwner = OwnerOf<"conversation.input.attachments">;
 
 export type CommandRowOwner = OwnerOf<"conversation.chat.commandview">;
+
+/** Additive approval contract from official c291e796, absent in the rc.2 SDK. */
+export interface ApprovalDetailOwnerProps {
+  callId: ToolCallToolviewOwnerProps["callId"];
+}
+declare module "@deepseek-ai/dsh-client-ui-slots" {
+  interface SlotMap {
+    "conversation.approval.detail": {
+      kind: "single";
+      scope: "session";
+      owner: ApprovalDetailOwnerProps;
+    };
+  }
+}

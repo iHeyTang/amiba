@@ -5,7 +5,17 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
-## 最新进展：真实 Host 重定向与目标目录恢复（2026-09-13）
+## 最新进展：审批详情扩展（2026-09-13）
+
+接入固定新版 c291e796 的 conversation.approval.detail single/session 契约。SDK owner 复用已安装工具调用 ID 类型；主 shell 的真实会话作用域将审批事件 callId 送入可选详情，FullScreenChatView 和 ChatSurface 透传到现有 ApprovalBanner。没有调用关联或没有插件时不增加 DOM；独立错误边界保护原审批按钮，并在审批身份变化后恢复详情。未修改四种决定、请求回传、代码、倒计时、布局类名或样式。
+
+验证：审批组件 4 项（含原视觉优先级、身份更新、无关联和报错恢复），事件桥 4 项通过；UI、SDK（含契约 guard）、shell 类型检查通过；完整桌面构建及生产依赖检查通过。真实 Host --compat --child-continuation --approval-detail 用例通过：真实子会话中记录工具调用并调用官方 approval.request，详情/无插件/报错三种情况下四个原按钮存在，允许与拒绝实际返回 Host，连续审批之后仍可续聊及停止。已有目录、表单、下载、turn-tail、Markdown、插件卸载和 HMR 回归通过；已查看审批截图。测试模型使用本地确定性适配器，Host、审批服务、日志和事件传输均为实际实现。
+
+日志：/tmp/amiba-approval-detail-test.log、/tmp/amiba-approval-detail-bridge-test.log、/tmp/amiba-approval-detail-sdk-types.log、/tmp/amiba-approval-detail-types-{0,1}.log、/tmp/amiba-approval-detail-build.log、/tmp/amiba-approval-detail-smoke-6.log。测试开发中修复重复审批和工具结果缺少消息 ID；此前失败运行不作为通过证据。
+
+入口统计更新为 30 项已有基础、13 项待验证、21 项有条件；这不是完整插件兼容率。独立 Web、第三方私有依赖，以及下面记录的全部队列/服务缺口继续保留。
+
+## 真实 Host 重定向与目标目录恢复（2026-09-13）
 
 后台发送准备锁现同时暴露原会话和准备后的目标，标准输入可据此进入原队列。重定向目标正在结束旧回合时等待其真实空闲；停止、切回前台、组件关闭会取消等待并释放订阅。既有工作器按实际目标完成事件推进原队列。
 

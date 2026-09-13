@@ -8,7 +8,8 @@ import {
 import { type TranslateFn, useT } from "@amiba/i18n"
 import { cn } from "../../primitives"
 import { Loader2, X } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
+import { WorkbenchViewBoundary } from "../workbench-extensions"
 import { ComposerDockSheet } from "../ComposerDockSheet"
 import { ApprovalCode } from "./approval-syntax"
 
@@ -116,6 +117,7 @@ export interface ApprovalBannerProps {
   error: string | null
   onRespond: (request: ApprovalRequest, decision: ApprovalDecision) => void
   onDismissError: () => void
+  renderDetail?: (callId: string) => ReactNode
 }
 
 /**
@@ -134,7 +136,8 @@ export function ApprovalBanner({
   inFlight,
   error,
   onRespond,
-  onDismissError
+  onDismissError,
+  renderDetail
 }: ApprovalBannerProps) {
   const { t } = useT()
   const decisions = approvalDecisions(t)
@@ -194,6 +197,12 @@ export function ApprovalBanner({
                 </pre>
               )}
 
+              {req.toolCallId && renderDetail && (
+                <WorkbenchViewBoundary key={`${req.sessionId ?? ""}:${req.approvalId}:${req.toolCallId}`} fallback={null}>
+                  <ApprovalDetail callId={req.toolCallId} render={renderDetail} />
+                </WorkbenchViewBoundary>
+              )}
+
               <div data-approval-actions className="mt-2 flex flex-wrap items-center gap-2">
                 {decisions.map((d) => {
                   const isPending = pending === d.value
@@ -228,6 +237,15 @@ export function ApprovalBanner({
       </div>
     </ComposerDockSheet>
   )
+}
+
+// Invoke plugin rendering inside the boundary, so a synchronous failure cannot
+// prevent the existing approval controls from rendering.
+function ApprovalDetail({ callId, render }: {
+  callId: string
+  render: (callId: string) => ReactNode
+}) {
+  return render(callId)
 }
 
 /**
