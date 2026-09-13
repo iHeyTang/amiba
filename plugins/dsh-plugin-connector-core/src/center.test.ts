@@ -2442,3 +2442,50 @@ it("admits members to shared conversations while keeping pairing and approval au
   await center.setOwners(connect.id, ["replacement"]);
   await expect(bridge.canApprove!(channel, "owner")).resolves.toBe(false);
 });
+
+
+describe("transient onboarding input", () => {
+  it("exposes only the challenge and consumes its answer once", async () => {
+    const { center } = await harness();
+    const { provider, getHandle } = fakeOnboardingProvider();
+    center.registerProvider(provider);
+    const view = center.beginOnboarding({ provider: "fake-onboard", name: "Scan", agentPreset: "restricted" });
+    const pending = getHandle()!.requestInput!("Verification code");
+    const input = center.pollOnboarding(view.sessionId).input!;
+    expect(input.label).toBe("Verification code");
+    expect(() => center.submitOnboardingInput(view.sessionId, "wrong", "123456")).toThrow("unavailable");
+    const result = center.submitOnboardingInput(view.sessionId, input.id, "123456");
+    expect(await pending).toBe("123456");
+    expect(result.input).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain("123456");
+    expect(() => center.submitOnboardingInput(view.sessionId, input.id, "123456")).toThrow("unavailable");
+    center.cancelOnboarding(view.sessionId);
+  });
+  it("rejects pending input when the wizard closes or the provider aborts", async () => {
+    const { center } = await harness();
+    const { provider, getHandle } = fakeOnboardingProvider();
+    center.registerProvider(provider);
+    const view = center.beginOnboarding({ provider: "fake-onboard", name: "Scan", agentPreset: "restricted" });
+    const pending = getHandle()!.requestInput!("Code");
+    center.cancelOnboarding(view.sessionId);
+    await expect(pending).rejects.toThrow("cancelled");
+    expect(center.pollOnboarding(view.sessionId).input).toBeUndefined();
+  });
+});
+
+it('removes a connection when the wizard is cancelled during provisioning', async () => {
+  const { center } = await harness();
+  const { provider, gate } = fakeOnboardingProvider();
+  let release!: () => void;
+  const blocked = new Promise<void>(resolve => { release = resolve; });
+  const validate = vi.fn(() => blocked);
+  center.registerProvider({ ...provider, validate });
+  const view = center.beginOnboarding({ provider: 'fake-onboard', name: 'Scan', agentPreset: 'restricted' });
+  const remove = vi.spyOn(center, 'removeConnect');
+  gate.resolve({ config: {} });
+  await vi.waitFor(() => expect(validate).toHaveBeenCalled());
+  center.cancelOnboarding(view.sessionId); release();
+  await vi.waitFor(() => expect(remove).toHaveBeenCalled());
+  await vi.waitFor(async () => expect(await center.listConnects()).toEqual([]));
+  expect(center.pollOnboarding(view.sessionId).state).toBe('cancelled');
+});

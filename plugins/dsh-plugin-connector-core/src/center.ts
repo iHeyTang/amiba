@@ -59,6 +59,7 @@ interface GrantPayload {
 }
 
 interface OnboardingSession {
+  input?: { id: string; label: string; resolve(value: string): void };
   readonly id: string;
   readonly provider: string;
   readonly controller: AbortController;
@@ -576,6 +577,17 @@ export class ConnectorCenter {
 
     const handle: OnboardHandle = {
       signal: controller.signal,
+      requestInput: (label, outerSignal) => {
+        const signal = outerSignal ? AbortSignal.any([controller.signal, outerSignal]) : controller.signal;
+        signal.throwIfAborted();
+        if (session.state !== "pending" || session.input) throw new Error("onboarding_input_unavailable");
+        return new Promise<string>((resolve, reject) => {
+          const cleanup = () => { session.input = undefined; signal.removeEventListener("abort", cancel); };
+          const cancel = () => { cleanup(); reject(new Error("onboarding_input_cancelled")); };
+          session.input = { id: randomUUID(), label, resolve: value => { cleanup(); resolve(value); } };
+          signal.addEventListener("abort", cancel, { once: true });
+        });
+      },
       emit: (update: OnboardUpdate) => {
         const current = this.onboardings.get(id);
         if (!current || current.state !== "pending") return;
@@ -624,7 +636,10 @@ export class ConnectorCenter {
           agentPreset,
         });
         const current = this.onboardings.get(id);
-        if (!current) return;
+        if (!current || current.state !== "pending" || controller.signal.aborted) {
+          await this.removeConnect(connect.id);
+          return;
+        }
         current.state = "completed";
         current.connect = connect;
         current.terminalAt = this.now();
@@ -638,6 +653,17 @@ export class ConnectorCenter {
     })();
     run.catch(() => undefined);
 
+    return this.toOnboardingView(session);
+  }
+
+  submitOnboardingInput(sessionId: string, inputId: string, value: string): OnboardingView {
+    this.sweepOnboardings();
+    const session = this.onboardings.get(sessionId);
+    if (!session || session.state !== "pending" || session.input?.id !== inputId)
+      throw new Error("onboarding_input_unavailable");
+    if (typeof value !== "string" || !value.trim() || value.length > 128)
+      throw new Error("onboarding_input_invalid");
+    session.input.resolve(value.trim());
     return this.toOnboardingView(session);
   }
 
@@ -710,6 +736,7 @@ export class ConnectorCenter {
   private toOnboardingView(session: OnboardingSession): OnboardingView {
     return {
       sessionId: session.id,
+      ...(session.input ? { input: { id: session.input.id, label: session.input.label } } : {}),
       state: session.state,
       ...(session.qrUrl !== undefined ? { qrUrl: session.qrUrl } : {}),
       ...(session.qrExpireIn !== undefined
