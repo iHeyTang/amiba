@@ -28,12 +28,15 @@ export function selectWorkbenchView(
     .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))[0];
 }
 export class WorkbenchViewBoundary extends Component<
-  { children: ReactNode; fallback: ReactNode },
+  { children: ReactNode; fallback: ReactNode; resetKey?: unknown },
   { failed: boolean }
 > {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
+  }
+  componentDidUpdate(previous: Readonly<{ resetKey?: unknown }>) {
+    if (this.state.failed && previous.resetKey !== this.props.resetKey) this.setState({ failed: false });
   }
   render() {
     return this.state.failed ? this.props.fallback : this.props.children;

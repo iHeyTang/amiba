@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 /** Commit a real normalized image and reference it in the owning Host session. */
-export function messageImageFixture(profile, canonicalProfile, toolImages = false) {
+export function messageImageFixture(profile, canonicalProfile, toolImages = false, nestedTools = false) {
   return `
     let imageSession:any, imageStarted=false;
     ctx.on('session/created',(s:any)=>{
@@ -21,6 +21,14 @@ export function messageImageFixture(profile, canonicalProfile, toolImages = fals
           imageSession.append('step/start',{turn:11,step:1});
           imageSession.append('tool/call',{turn:11,step:1,callId:'compat-tool-image',name:'read_image',arguments:JSON.stringify({file_path:'compat-tool-image.png'})});
           imageSession.append('tool/result',{turn:11,step:1,message:{id:'compat-tool-image-result',role:'user',source:{kind:'tool',callId:'compat-tool-image'},content:[{type:'tool-result',toolCallId:'compat-tool-image',isError:false,content:[{type:'text',text:'COMPAT_TOOL_IMAGE_META'},{type:'image',attachment},{type:'image',attachment:toolAttachment}]}]}},{surfaceOp:'append'});
+          ${nestedTools ? `imageSession.append('tool/call',{turn:11,step:1,callId:'compat-nested-parent',name:'run_code',arguments:JSON.stringify({code:'COMPAT_PARENT_CODE'})});
+          imageSession.append('tool/code-dispatch-start',{parentCallId:'compat-nested-parent',subCallId:'compat-nested-middle',name:'run_code',arguments:{code:'COMPAT_MIDDLE_CODE'}});
+          imageSession.append('tool/code-dispatch-start',{parentCallId:'compat-nested-middle',subCallId:'compat-nested-image',name:'read_image',arguments:{file_path:'compat-nested-image.png'}});
+          imageSession.append('tool/code-dispatch',{parentCallId:'compat-nested-middle',subCallId:'compat-nested-image',name:'read_image',arguments:{file_path:'compat-nested-image.png'},content:[{type:'image',attachment:toolAttachment}],isError:false});
+          imageSession.append('tool/code-dispatch',{parentCallId:'compat-nested-parent',subCallId:'compat-nested-middle',name:'run_code',arguments:{code:'COMPAT_MIDDLE_CODE'},content:[{type:'text',text:'COMPAT_MIDDLE_RESULT'}],isError:false});
+          imageSession.append('tool/code-dispatch-start',{parentCallId:'compat-nested-parent',subCallId:'compat-nested-probe',name:'compat_nested_probe',arguments:{path:'original.txt'}});
+          imageSession.append('tool/code-dispatch',{parentCallId:'compat-nested-parent',subCallId:'compat-nested-probe',name:'compat_nested_probe',arguments:{path:'original.txt'},content:[{type:'text',text:'COMPAT_NESTED_PROBE_RESULT'}],isError:false});
+          imageSession.append('tool/result',{turn:11,step:1,message:{id:'compat-nested-parent-result',role:'user',source:{kind:'tool',callId:'compat-nested-parent'},content:[{type:'tool-result',toolCallId:'compat-nested-parent',content:[{type:'text',text:'COMPAT_PARENT_RESULT'}]}]}},{surfaceOp:'append'});` : ''}
           imageSession.append('step/end',{turn:11,step:1});` : ''}
           imageSession.append('turn/end',{turn:11,reason:{kind:'completed'}});
           console.log('AMIBA_PROBE_IMAGE '+attachment.attachmentId);

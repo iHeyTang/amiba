@@ -5,6 +5,20 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：原工具详情内的嵌套视图分发（2026-09-13）
+
+原生 SemanticToolRow 与通用 ToolChipRow 在既有详情折叠区保留正文、代码、参数和图片，再呈现 block.subCalls 的逐调用树。所有层级继续通过同一个 tool.call.toolview 分发；子 owner 使用自己的 callId/name/block，继承真实 cwd/openFile/loadImage，不继承指向父调用的 inspect。shell 按子 ID 重新绑定可用的轨迹 inspect，并为每个子调用建立独立图片上下文。未知子工具直接读取 canonical block 的文本或结构，不构造假的 ToolProgress 起始时间、turn 或 step。
+
+树的外层负责递归；原生子行在这棵树内不再次递归，避免中间节点重复展示后代。插件子行拥有其原子视图；其更深后代仍由树分发，不因该插件未处理 subCalls 而丢失。父详情关闭或摘要模式不挂载整棵子树；无子调用或无宿主分发器时原 DOM 不变。单个子视图的错误由局部边界回退到原数据，其他后代和父证据继续存在，分发器改变后可恢复。工作台边界仅增加可选 resetKey，既有调用行为不变。
+
+导航补齐两层展开：过程摘要按真实调用树识别后代，父工具原详情按后代请求展开；对应子行再滚入视野。中间行自己的详情保持独立折叠，不因外层负责递归而重复展开。子行 keyed 身份在运行中→完成更新时保持，组件局部交互状态不丢失。
+
+验证：嵌套行 6 项、原消息 UI 55 项、工具图片 6 项、原工具插槽 7 项，共 74 项相关测试覆盖通过；UI 与 shell 类型检查、完整桌面构建通过。实际 --compat --message-images --tool-images --nested-tools --header-corner --child-continuation --approval-detail 退出 0。夹具经真实 Host 写入 run_code 及多层 code-dispatch 事件；实时与历史重开两次验证准确子 owner、单次分发、父代码/正文保留、插件交互、独立子图片解码、深层 reveal 展开以及卸载原生回退。图片授权/释放、审批、角标、子会话续聊/停止、设置、下载、目录、文件、Markdown 和 HMR 回归通过。已查看 /var/folders/w1/6rt3z_zs1395fn30txrlysvr0000gn/T/amiba-nested-tools.png。
+
+日志：/tmp/amiba-nested-tool-tests.log（初版嵌套 5 项及图片/工具插槽）、/tmp/amiba-nested-tool-tests-2.log（最终嵌套 6 项及消息 55 项）、/tmp/amiba-nested-tool-ui-types-final.log、/tmp/amiba-nested-tool-shell-types.log、/tmp/amiba-nested-tool-build.log、/tmp/amiba-nested-tool-smoke.log。
+
+范围仍未完成：任意第三方整棵树接管组件的专项适配、外部打开型工具、preview、轨迹图片、独立 Web/Quick Ask、跨窗口/重启队列与其余服务条目继续保留。此次嵌套图片引用的是已由普通工具单独引用的真实图片；只出现在 code-dispatch 的图片授权需再独立验证（实际 rc.2 imageInEvent 源码会遍历 data.content，但源码不是运行验证）。入口统计保持 33/10/21，全部目标未完成。
+
 ## 最新进展：工具单独引用的图片授权（2026-09-13）
 
 补齐上一轮共享图片夹具无法证明的授权场景：Host 另存不同字节、2×1 的有效 PNG，确认其 attachmentId 与用户消息的 1×1 PNG 不同。第二张图片只写入真实 tool/result，不写入用户消息；同一工具结果同时保留第一张共享图片，继续覆盖出现顺序与共享缓存。

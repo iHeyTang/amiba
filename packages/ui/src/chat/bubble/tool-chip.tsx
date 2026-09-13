@@ -1,3 +1,5 @@
+import { useNestedToolCalls, useNestedToolExpansion } from "./nested-tool-calls";
+import type { ToolCallOwnerProps } from "@amiba/extension-sdk";
 import { useToolImageEvidence } from "./tool-image-evidence";
 import type { ToolProgress } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
@@ -46,7 +48,7 @@ function ToolTarget({
  * {@link ToolChip}, so an unclaimed tool name renders exactly this and
  * nothing else.
  */
-function ToolChipRow({ event, mode }: { event: ToolProgress; mode?: "row" | "summary" }) {
+function ToolChipRow({ event, mode, owner }: { event: ToolProgress; mode?: "row" | "summary"; owner?: ToolCallOwnerProps }) {
   const { t } = useT();
   const workspacePane = useWorkspacePane();
   // Force a re-render every second while running so the duration ticks
@@ -65,6 +67,8 @@ function ToolChipRow({ event, mode }: { event: ToolProgress; mode?: "row" | "sum
   const hasDetail = hasToolDetail(event);
   const imageBlock = useMemo(() => toolCallBlockFromProgress(event), [event]);
   const images = useToolImageEvidence(event.toolCallId, imageBlock);
+  const nested = useNestedToolCalls(owner);
+  const expansion = useNestedToolExpansion(imageBlock);
   const opensInWorkspace = workspacePane.canOpenToolEvent(event);
 
   let durationMs: number | undefined;
@@ -76,6 +80,7 @@ function ToolChipRow({ event, mode }: { event: ToolProgress; mode?: "row" | "sum
 
   return (
     <ToolRowFrame
+      {...expansion}
       presentation={mode}
       icon={presentation.icon}
       action={presentation.action}
@@ -90,7 +95,7 @@ function ToolChipRow({ event, mode }: { event: ToolProgress; mode?: "row" | "sum
       ariaLabel={[presentation.action, presentation.target]
         .filter(Boolean)
         .join(" ")}
-      detail={hasDetail || images ? <>{hasDetail ? <ToolDetail event={event} t={t} /> : null}{images}</> : undefined}
+      detail={hasDetail || images || nested ? <>{hasDetail ? <ToolDetail event={event} t={t} /> : null}{images}{nested}</> : undefined}
       onOpen={
         opensInWorkspace ? () => workspacePane.openToolEvent(event) : undefined
       }
@@ -149,7 +154,7 @@ export function ToolChip({ event, mode = "row" }: { event: ToolProgress; mode?: 
     [block, event.toolCallId, openFile, seat?.cwd, mode, navigation, revealVersion],
   );
 
-  const fallback = <ToolChipRow event={event} mode={mode} />;
+  const fallback = <ToolChipRow event={event} mode={mode} owner={owner ?? undefined} />;
   const row = seat?.render && owner ? seat.render({ owner, fallback }) : fallback;
   if (mode === "summary") return <>{row}</>;
   return <div ref={ref}>{row}{seat?.activity?.({ callId: event.toolCallId })}</div>;

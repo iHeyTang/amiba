@@ -1,3 +1,5 @@
+import { toolCallTreeContains } from "./nested-tool-calls";
+import { toolCallBlockFromProgress } from "./tool-call-block";
 import { WorkbenchViewBoundary } from "../workbench-extensions";
 import { messageTextTimeline, joinTextSources, sliceTextSources, timelineTextSource, thinkingBodySource, type TextSourceRange } from "../text-source-ranges";
 import { WorkspaceMarkdown } from "../workspace-file-links";
@@ -845,7 +847,7 @@ function ExecutionDisclosure({
   const navigation = useToolCallSeat()?.navigation;
   const navigationRequest = useSyncExternalStore(navigation?.subscribe ?? noNavigationSubscribe, navigation?.getSnapshot ?? noNavigationRequest);
   const handledNavigation = useRef(0);
-  useEffect(()=>{if(navigationRequest.version !== handledNavigation.current && tools.some(tool=>tool.toolCallId === navigationRequest.callId)){handledNavigation.current=navigationRequest.version;setExpanded(true);}},[navigationRequest, tools]);
+  useEffect(()=>{if(navigationRequest.version !== handledNavigation.current && tools.some(tool=>{const block=toolCallBlockFromProgress(tool);return tool.toolCallId === navigationRequest.callId || (block && toolCallTreeContains(block,navigationRequest.callId));})){handledNavigation.current=navigationRequest.version;setExpanded(true);}},[navigationRequest, tools]);
 
   if (details.length === 0 && !latestProgress) return null;
 
