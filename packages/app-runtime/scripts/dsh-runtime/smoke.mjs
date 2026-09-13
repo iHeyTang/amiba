@@ -634,7 +634,7 @@ export function apply(ctx) {
     assert.ok(tools.every(tool => ["builtin", "user"].includes(tool.source.distribution)));
     const origin = name => tools.filter(tool => tool.name === name).map(tool => tool.source.distribution);
     assert.deepEqual(origin("amiba_smoke_download"), ["user"]);
-    for (const name of ["amiba_connect_add", "cron_create", "attachment_read_text", "memos_search", "bash"]) {
+    for (const name of ["amiba_connect_add", "cron_create", "attachment_read_text", "memos_search", process.platform === "win32" ? "pwsh" : "bash"]) {
       assert.ok(origin(name).length > 0, `missing ${name}`);
       assert.ok(origin(name).every(value => value === "builtin"), `${name} is not builtin`);
     }
