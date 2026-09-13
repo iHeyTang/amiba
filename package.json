@@ -18,7 +18,7 @@
     "runtime:info": "node apps/desktop/scripts/dev-desktop.mjs --runtime-info",
     "runtime:verify": "pnpm --dir packages/app-runtime runtime:verify",
     "runtime:smoke": "pnpm --dir packages/app-runtime runtime:smoke",
-    "verify:architecture": "node scripts/verify-dsh-architecture.mjs",
+    "verify:architecture": "node --test scripts/tool-dispatch-contract.test.mjs && node scripts/verify-dsh-architecture.mjs",
     "verify:pluginization": "node scripts/verify-pluginization.mjs",
     "build:desktop": "pnpm --dir apps/desktop build",
     "package:desktop": "pnpm --dir apps/desktop package",

@@ -2035,3 +2035,12 @@ pipelines retain mounted component state.
 原输入器增加已准备图片的接收路径：保留浏览器 File 和草稿 ID，采用原 Host 附件 ID，仅创建新的原生附件行 ID，不再次上传或解析会话。原上传路径和界面布局不变。
 
 当前验证：驻留图片与上传准备 7 项测试、原输入器及触发管线 32 项测试通过；UI 和插件类型检查通过。完整桌面构建和兼容回归通过。新增真实检查确认两次准备生成同一个 Host 文件，持有期间切回会话不提前交接，释放后原输入器接收真实 File/ID 且不增加文件，原生命令收到准确图片字节。日志为 `/tmp/amiba-prepared-staging-tests.log`、`/tmp/amiba-prepared-native-tests.log`、`/tmp/amiba-prepared-ui-types.log`、`/tmp/amiba-prepared-plugin-types.log`、`/tmp/amiba-prepared-build.log`、`/tmp/amiba-prepared-smoke.log`。标准离屏提交尚未接通，不能据此标记完整输入兼容。
+
+
+#### 架构检查与当前适配契约对齐
+
+更新旧工具视图检查：解析真实 TSX 语法，要求完整保留行 owner，只允许附加已审核的图片 loader 和对应 callId 的 inspector，并强制按 wire toolName 分派、保留官方语义和原生行两层回退。检查不接受注释中的伪匹配，也拒绝额外字段、重复选项或 spread 覆盖。新增 14 项真实源码及破坏性变体测试，纳入 verify:architecture。
+
+keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入口；不放开任意 keyed 声明。输入桥检查要求旧绑定失效保护；提交检查改为结构化 parts 经官方 codec 解析并传入本次取消信号，避免要求回退到重新解析普通文字。
+
+完整架构检查及上述 14 项检查器测试通过；另运行输入桥 26 项和原输入触发管线回归。本次仅修改验证脚本、测试和记录，未改产品能力或样式。完整扩展兼容仍未完成，独立 Web、跨窗口与重启队列等范围继续保留。

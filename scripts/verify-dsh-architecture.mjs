@@ -1,3 +1,4 @@
+import { verifyToolDispatchContract } from './tool-dispatch-contract.mjs';
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -1196,24 +1197,9 @@ if (translationCallSites < 700) {
   );
 }
 
-// The keyed tool-call dispatch. BOTH options are load-bearing and each is
-// pinned separately: without `entryKey` no keyed registration can ever match
-// (the seat becomes dead), and without `fallback` an unclaimed tool name would
-// render NOTHING instead of Amiba's own row — the visual-parity guarantee.
-// Whitespace-insensitive so a prettier reflow cannot break the pins.
+// Preserve wire identity, optional runtime capabilities and both fallback layers.
+verifyToolDispatchContract(productShellSource);
 for (const [dispatch, what] of [
-  [
-    /renderSlot\(\s*"tool\.call\.toolview",\s*request\.owner,\s*\{[\s\S]{0,200}?\}\s*\)/u,
-    "dispatch the official tool.call.toolview seat with the owner share the row computed",
-  ],
-  [
-    /renderSlot\(\s*"tool\.call\.toolview",[\s\S]{0,200}?entryKey:\s*request\.owner\.toolName/u,
-    "key that dispatch by the WIRE TOOL NAME (entryKey)",
-  ],
-  [
-    /renderSlot\(\s*"tool\.call\.toolview",[\s\S]{0,200}?fallback:\s*renderOfficialToolFallback\(request\.owner,\s*request\.fallback\)/u,
-    "pass the official semantic fallback with Amiba's own tool row as its fallback",
-  ],
   [
     /renderSlot\(\s*"amiba\.conversation\.question",\s*request\.owner,\s*\{\s*entryKey:\s*request\.owner\.request\.questions\[0\]\?\.id \?\? "",\s*fallback:\s*request\.fallback,?\s*\}\s*\)/u,
     "dispatch the amiba.conversation.question seat keyed by the question id with the banner as fallback",
@@ -1224,14 +1210,12 @@ for (const [dispatch, what] of [
   }
 }
 
-// Keyed dispatch is legal for exactly TWO named declarations: the official
-// `tool.call.toolview` (key domain = wire tool name) and Amiba's
-// `amiba.conversation.question` (key domain = question id, fallback = the
-// built-in ClarifyBanner). Everything else — Settings sections above all —
-// must keep using the list-slot ledger, so the exception is pinned BY NAME
-// rather than the word being banned outright, and a `kind: "keyed"` not
-// attached to a named child declaration still fails.
+// Explicitly reviewed keyed contracts only. Settings entries remain list slots;
+// new main/tool/command keys must not make arbitrary keyed settings legal.
 const KEYED_CHILD_DECLARATIONS = new Set([
+  "main",
+  "tool.view.cordis",
+  "conversation.chat.commandview",
   "amiba.conversation.notice",
   "tool.call.toolview",
   "amiba.conversation.question",
@@ -1354,6 +1338,9 @@ for (const entry of ["SLASH_MENU_ENTRY_ID", "COMMAND_POPUP_ENTRY_ID"]) {
 const triggerBridgeSource = await text(
   "plugins/dsh-plugin-ui-shell/src/client/input-trigger-bridge.ts",
 );
+if (!/const current = \(\) => editors\.get\(sessionId\) === binding;/u.test(code(triggerBridgeSource))) {
+  fail("input-trigger bridge must reject superseded editor bindings");
+}
 const bailListeners = [
   ["slash/input-begin-command", "ops.beginCommand(request.claim, request.span)"],
   [
@@ -1365,7 +1352,7 @@ const bailListeners = [
 ];
 for (const [event, call] of bailListeners) {
   const wiring = new RegExp(
-    String.raw`actx\.on\("${event}", \(request\) =>\s*${call
+    String.raw`actx\.on\("${event}", \(request\) =>\s*current\(\) && ${call
       .replace(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`)
       .replace(/\\\(/gu, String.raw`\(`)} \? true : undefined`,
     "u",
@@ -1420,7 +1407,7 @@ for (const [pattern, what] of [
   // string appears in the prose above it, and a prose-satisfiable check let
   // an earlier mutation slip past.
   [
-    /expandMentionsAsync\(\s*value,\s*providerRegistry\.all,\s*trigger\.resolver,/u,
+    /expandMentionPartsAsync\(\s*parts,\s*providerRegistry\.all,\s*trigger\.resolver,\s*attempt\.signal,/u,
     "reference serialization through the source codec at submit time",
   ],
   [/useComposerTriggers\(/u, "the composer trigger session"],
