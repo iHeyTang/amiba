@@ -91,3 +91,25 @@ test('Intel Mac pins a shipped native ONNX build without changing other targets'
   assert.ok(engines.length > 0);
   for (const [, engine] of engines) assert.equal(engine.version, '1.22.0');
 });
+
+
+test('published pet packages stay aligned in both distribution locks', () => {
+  const read = (relative) => JSON.parse(readFileSync(new URL(relative, import.meta.url), 'utf8'));
+  const pet = read('../../../../plugins/dsh-plugin-pets/package.json');
+  for (const target of ['', 'darwin-x64/']) {
+    const manifest = read(`../../runtime-deps/${target}package.json`);
+    const lock = read(`../../runtime-deps/${target}package-lock.json`);
+    for (const name of ['@mofli/core', '@mofli/grove', '@mofli/studio']) {
+      const version = pet.dependencies[name];
+      assert.match(version, /^\d+\.\d+\.\d+$/);
+      assert.equal(manifest.dependencies[name], version);
+      assert.equal(lock.packages[''].dependencies[name], version);
+      const entries = Object.entries(lock.packages).filter(([location]) => location.endsWith(`node_modules/${name}`));
+      assert.ok(entries.length > 0, `${target}${name} missing`);
+      for (const [, entry] of entries) {
+        assert.equal(entry.version, version);
+        assert.ok(entry.resolved.startsWith('https://registry.npmjs.org/'), entry.resolved);
+      }
+    }
+  }
+});

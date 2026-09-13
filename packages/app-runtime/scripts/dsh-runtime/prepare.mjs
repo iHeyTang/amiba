@@ -153,7 +153,7 @@ const managedPnpmVersion = "9.12.0";
 const markerPath = path.join(outputDir, "runtime-manifest.json");
 const args = new Set(process.argv.slice(2));
 const lockTarget = [...args].find(arg => arg.startsWith('--lock-target='))?.slice('--lock-target='.length);
-if (lockTarget && (!args.has('--update-lock') || lockTarget !== 'darwin-x64')) throw new Error('--lock-target=darwin-x64 is only for runtime:lock');
+if (lockTarget && (!(args.has('--update-lock') || args.has('--validate-only')) || lockTarget !== 'darwin-x64')) throw new Error('--lock-target=darwin-x64 requires --update-lock or --validate-only');
 const dependencyTarget = lockTarget || `${process.platform}-${process.arch}`;
 const verifyOnly = args.has("--verify");
 const force = args.has("--force");
@@ -310,6 +310,10 @@ if (args.has("--update-lock")) {
 }
 const dependencyLockContent = await fsp.readFile(dependencyLock, "utf8");
 validateDependencyLock(JSON.parse(appPackageJsonContent), JSON.parse(await fsp.readFile(dependencyManifest, "utf8")), JSON.parse(dependencyLockContent));
+if (args.has('--validate-only')) {
+  console.log(`Validated distributable plugin sources and runtime lock for ${dependencyTarget}`);
+  process.exit(0);
+}
 const dependencyLockHash = createHash("sha256").update(dependencyLockContent).digest("hex");
 const appTreeHash = createHash("sha256")
   .update(appPackageJsonContent)

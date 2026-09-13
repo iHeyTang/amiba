@@ -1,0 +1,41 @@
+name: Runtime Dependencies
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    name: Dependencies · ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macOS ARM
+            runner: macos-15
+          - target: macOS Intel
+            runner: macos-15-intel
+          - target: Windows x64
+            runner: windows-2022
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Check distributable sources and target runtime lock
+        run: node packages/app-runtime/scripts/dsh-runtime/prepare.mjs --validate-only
+      - name: Test runtime dependency validation
+        run: node --test packages/app-runtime/scripts/dsh-runtime/dependency-lock.test.mjs
