@@ -163,7 +163,7 @@ export function Guide({
     >
       <DialogContent
         hideDefaultClose
-        className={`flex max-h-[90vh] max-w-3xl flex-col gap-0 overflow-hidden p-0 ${started ? "h-[min(760px,90vh)]" : "h-[min(480px,90vh)]"}`}
+        className={`flex max-h-[90vh] max-w-3xl flex-col gap-0 overflow-hidden p-0 transition-none ${started ? "h-[min(760px,90vh)]" : "h-[min(480px,90vh)]"}`}
         onInteractOutside={(e) => e.preventDefault()}
       >
         <DialogTitle className="sr-only">{t("guide.settings")}</DialogTitle>
