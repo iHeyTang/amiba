@@ -1,5 +1,6 @@
-name: Desktop build and release
-run-name: "Desktop · ${{ inputs.mode || 'test' }} · ${{ inputs.target || 'all' }} · ${{ inputs.mode == 'verify' && format('reuse #{0}', inputs.run_id) || github.sha }}"
+name: Amiba Desktop
+run-name: >-
+  ${{ inputs.mode == 'verify' && 'Verify' || inputs.mode == 'release' && 'Release' || 'Build' }} · ${{ inputs.target == 'win32-x64' && 'Windows x64' || inputs.target == 'darwin-x64' && 'macOS Intel' || inputs.target == 'darwin-arm64' && 'macOS ARM' || 'All platforms' }}
 
 on:
   workflow_dispatch:
@@ -55,7 +56,8 @@ jobs:
         run: node scripts/release/ci-plan.mjs
 
   build:
-    name: ${{ needs.plan.outputs.mode }} · ${{ matrix.target }}
+    name: >-
+      ${{ needs.plan.outputs.mode == 'verify' && 'Verify' || needs.plan.outputs.mode == 'release' && 'Release' || 'Build' }} · ${{ matrix.target == 'win32-x64' && 'Windows x64' || matrix.target == 'darwin-x64' && 'macOS Intel' || 'macOS ARM' }}
     needs: plan
     strategy:
       fail-fast: false

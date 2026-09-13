@@ -76,7 +76,7 @@ macOS 自动更新必须签名；面向公开分发还需 Apple Developer ID 和
 
 工作流 `.github/workflows/desktop-release.yml` 使用三个原生托管环境：Windows x64 (`windows-2022`)、Mac Intel (`macos-15-intel`)、Mac ARM (`macos-15`)。不需要把当前 Mac 注册为 runner。Node 固定为 22.22.0，Python 固定为 3.11，以兼容现有原生模块工具链。
 
-在 Actions 的 **Desktop build and release → Run workflow** 中选择：
+在 Actions 的 **Amiba Desktop → Run workflow** 中选择：
 
 - `target=all`、`mode=test`：生成三个架构的未签名测试包，关闭客户端更新，产物保留在 Actions Artifacts 7 天。
 - `target=all`（或单个平台）、`mode=verify`、`run_id=<已有构建 ID>`：复用原安装包验证运行，不重新编译、不发布。Windows 静默安装 EXE，Mac 解压更新 ZIP 并检查 DMG。
@@ -177,7 +177,7 @@ GitHub 发布仓库已在线确认是公开的 `iHeyTang/amiba`，当前 CLI 身
 点击单个安装文件即可下载原始 DMG/EXE；不要选择下载全部 artifacts。
 Mac 更新 ZIP 同样直接上传，和 DMG 同名，仅后缀不同。blockmap、更新清单、构建 manifest 和体积清单保存在小型 `metadata-<version>-<target>` 中，供发布与复验使用。诊断信息写入作业日志，不再单独上传 reports。
 安装文件和更新 ZIP 只在该平台冒烟检查通过后上传；失败时保留 metadata 和日志供排查。
-运行标题显示模式、目标平台和复用来源，作业 Summary 只提供原始文件下载链接及测试包状态。
+工作流统一命名为 `Amiba Desktop`，运行标题使用 `Build / Verify / Release · All platforms`（单平台显示 `Windows x64`、`macOS Intel` 或 `macOS ARM`），作业 Summary 只提供原始文件下载链接及测试包状态。
 
 `mode=verify` 支持 `target=all`，可在同一次运行中复验原有三个平台的安装包，无需重建。
 同时兼容历史 artifact 布局；新的 DMG/EXE/ZIP 均保留原始文件名与内容，下载时禁止自动解压更新 ZIP；拆分文件在执行前按原始 manifest 校验 SHA-512。
