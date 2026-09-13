@@ -5,7 +5,17 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
-## 最新进展：会话头部角标（2026-09-13）
+## 最新进展：持久图片引用的数据链路（2026-09-13）
+
+重新核对实际安装包：rc.2 已有 ImageAttachmentRef、conversation.message.images 的历史图片 owner，以及 SessionFace.readAttachment / session.attachment 的按会话授权读取接口，不能把这些基础能力都误归为“必须新版”。新版增加 preview 分支、可选同步 peek、compact 等契约，仍要分别适配。
+
+消息转换此前只保留文字及 file-attachment 元数据，原生 image 块被丢弃。SDK 现从已安装官方 MessageImagesOwnerProps 派生 canonical ImageAttachmentRef 类型；产品消息携带只读持久引用数组。userMessageText 保留有效图片的出现顺序和完整引用元数据；历史加载、实时插件 relay 事件、ChatSurface 和 Host 消息合并共用同一数据链路。无效引用被忽略，不从暂存 ID、普通文字或旧内联字节编造持久引用。图片重复出现不被去重；消息身份去重仍沿用原 uiId。未改原文字、附件徽标、输入回显或任何展示和样式。
+
+验证：最终图片投影 13 项，事件桥 4 项，历史投影 15 项，界面 Host 消息合并 10 项，共 42 项覆盖；Runtime、UI、SDK（含 guard）、shell 类型检查通过。日志：/tmp/amiba-message-images-final-tests.log、/tmp/amiba-message-images-tests-2.log（其中图片为前一版 12 项，最终 13 项单独重跑）、/tmp/amiba-message-images-ui-tests.log、/tmp/amiba-message-images-types-2.log、/tmp/amiba-message-images-types-recheck-{0,1,2}.log。
+
+这是图片适配的必要数据基础，尚未完成渲染接入：三个图片插槽、授权读取/缓存/释放、本人发送回显与持久引用交接、工具/轨迹图片和独立 Web 仍需继续。此阶段未作完整构建或真实 Host 图片界面验证，不沿用前一里程碑证明图片支持；入口统计仍为 31/12/21。
+
+## 会话头部角标（2026-09-13）
 
 接入 c291e796 的 conversation.session.header.corner single/session 契约；owner 无业务字段，复用真实标准会话属性。角标放在现有右上角控件之后，保留标题、原控件顺序和样式。空渲染使用 empty:hidden，异常边界保留原界面。既有边缘控件 ResizeObserver 继续根据实际宽度预留空间。
 

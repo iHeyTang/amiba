@@ -51,7 +51,7 @@
 | 编号 | 扩展入口 | 需要解决什么 |
 | --- | --- | --- |
 | 10 | `conversation.details.tool` | 旧版工具详情入口需真实调用定位及详情生命周期；新版已移除此键。 |
-| 22 | `conversation.message.images` | 需要新版消息图片数据和资源读取接口，不是增加图片容器即可。 |
+| 22 | `conversation.message.images` | 已核对 rc.2 自带持久图片引用和按会话授权的读取接口；实时插件消息与历史投影现保留完整引用。仍需接入图片读取、生命周期及实际插槽渲染，尚未完成。 |
 | 27 | `conversation.session.header.lineage` | 需要真实会话派生关系数据和导航回调。 |
 | 29 | `conversation.trajectory.images` | 现已接入 rc.2 轨迹视图；仍需核对新版图片数据接口及该入口契约。 |
 | 41 | `settings.models.footer` | 可考虑附加到模型设置；需先核对新版模型服务和 owner。 |
@@ -61,7 +61,7 @@
 | 56 | `sidebar.right.tab.document` | 需要文档资源身份、读取及预览生命周期。 |
 | 57 | `sidebar.right.tab.guide` | 需要真实右侧栏上下文和 chain 的后续渲染语义。 |
 | 58 | `sidebar.right.tab.menu.item` | 需要真实右侧栏目标和菜单操作回调。 |
-| 62 | `tool.call.images` | 需要新版工具图片数据和资源解析接口。 |
+| 62 | `tool.call.images` | rc.2 已有按会话授权的图片读取接口；仍需关联工具结果中的图片引用，并接入新版图片插槽与资源生命周期。 |
 
 ## 3. 只能有条件适配：21 项
 

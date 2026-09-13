@@ -820,3 +820,6 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
     };
   }
 }
+
+/** Canonical durable image currency already present in the installed rc.2 API. */
+export type ImageAttachmentRef = import("@deepseek-ai/dsh-client-ui-conversation/client").MessageImagesOwnerProps["images"][number]["attachment"];

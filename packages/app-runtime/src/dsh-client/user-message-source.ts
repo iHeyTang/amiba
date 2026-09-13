@@ -1,4 +1,5 @@
 import type {
+  MessageImage,
   MessageNotice,
   PluginMessageOrigin,
 } from "@amiba/app-runtime/protocol"
@@ -129,6 +130,8 @@ export interface UserMessageText {
   text: string
   /** One badge per attachment the envelopes described, in wire order. */
   badges: AttachmentBadge[]
+  /** Valid durable image blocks in their original content order. */
+  images: MessageImage[]
 }
 
 /**
@@ -146,7 +149,8 @@ export interface UserMessageText {
  * the same live as it does after a reload — the bridge simply has nowhere to
  * put `badges` yet (`StreamEvent.userMessage` carries text only, and
  * attachments are a composer feature no plugin relay uses today), while the
- * durable projection renders them as chips.
+ * durable projection renders them as chips. Durable image references are
+ * carried separately through both paths, without turning staging IDs into refs.
  */
 export function userMessageText(content: unknown): UserMessageText {
   const parts =
@@ -167,7 +171,30 @@ export function userMessageText(content: unknown): UserMessageText {
     badges.push(...split.badges)
     if (split.text) texts.push(split.text)
   }
-  return { text: texts.join("\n"), badges }
+  const images = Array.isArray(content)
+    ? content.flatMap((part): MessageImage[] => {
+        const item = record(part)
+        if (item?.type !== "image" || !isImageReference(item.attachment)) return []
+        return [{ attachment: item.attachment }]
+      })
+    : []
+  return { text: texts.join("\n"), badges, images }
+}
+
+/** Reject malformed references without minting an identity for legacy inline bytes. */
+function isImageReference(value: unknown): value is MessageImage["attachment"] {
+  const ref = record(value)
+  const positive = (n: unknown) => typeof n === "number" && Number.isSafeInteger(n) && n > 0
+  if (!ref || typeof ref.attachmentId !== "string" || !ref.attachmentId
+    || typeof ref.mediaType !== "string"
+    || !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(ref.mediaType)
+    || !positive(ref.bytes) || !positive(ref.width) || !positive(ref.height)
+    || (ref.name !== undefined && typeof ref.name !== "string")) return false
+  if (ref.originalDimensions !== undefined) {
+    const dimensions = record(ref.originalDimensions)
+    if (!dimensions || !positive(dimensions.width) || !positive(dimensions.height)) return false
+  }
+  return true
 }
 
 /**

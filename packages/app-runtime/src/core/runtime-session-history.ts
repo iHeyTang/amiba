@@ -326,10 +326,11 @@ export function projectRuntimeSessionHistory(
       // Words and attachment envelopes are separated by the same shared
       // helper the live bridge uses, so a message reads identically whether
       // it arrived on the wire or was reloaded from the durable log.
-      const { text, badges } = userMessageText(message?.content);
+      const { text, badges, images } = userMessageText(message?.content);
       output.push({
         role: "user",
         content: text,
+        ...(images.length ? { images } : {}),
         ...(visible.origin ? { origin: visible.origin } : {}),
         ...(visible.notice ? { notice: visible.notice } : {}),
         ...(badges.length ? { attachmentBadges: badges } : {}),

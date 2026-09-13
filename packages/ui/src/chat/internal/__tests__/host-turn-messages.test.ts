@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ImageAttachmentRef } from "@amiba/extension-sdk";
 
 import {
   findSnapshotAssistant,
@@ -28,6 +29,18 @@ describe("withHostAssistantPlaceholder", () => {
 });
 
 describe("withHostUserMessage", () => {
+  it("retains image-only Host messages and deduplicates their durable identity", () => {
+    const images = [{ attachment: {
+      attachmentId: "durable-image" as ImageAttachmentRef["attachmentId"],
+      mediaType: "image/png" as const, bytes: 123, width: 12, height: 34,
+    } }];
+    const message = { uiId: "dsh:photo", content: "", images };
+    const next = withHostUserMessage([], message);
+    expect(next).toHaveLength(1);
+    expect(next[0]?.images).toBe(images);
+    expect(withHostUserMessage(next, message)).toBe(next);
+  });
+
   it("appends the message with its plugin attribution", () => {
     const next = withHostUserMessage([], {
       uiId: "dsh:m1",

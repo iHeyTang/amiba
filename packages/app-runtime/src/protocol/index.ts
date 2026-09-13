@@ -4,6 +4,10 @@
  * Runtime adapters translate their native event stream at this boundary.
  */
 
+import type { ImageAttachmentRef } from "@amiba/extension-sdk";
+
+export type MessageImage = { readonly attachment: ImageAttachmentRef };
+
 export type ChatRole = "system" | "user" | "assistant" | "tool";
 
 /**
@@ -68,6 +72,8 @@ export interface MessageNotice {
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  /** Durable Host image references in content order; never local staging IDs. */
+  images?: readonly MessageImage[];
   name?: string;
   /** Local-only id used by presentation surfaces. */
   uiId?: string;
@@ -489,6 +495,7 @@ export type StreamEvent =
       kind: "userMessage";
       uiId: string;
       content: string;
+      images?: ChatMessage["images"];
       /** Wall-clock time of the durable user-message event. */
       sentAt: number;
       origin?: ChatMessage["origin"];

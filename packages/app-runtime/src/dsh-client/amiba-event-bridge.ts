@@ -192,13 +192,15 @@ export class DshAmibaEventBridge {
       // and the reloaded one are one message.
       const visible = visibleUserMessage(data.source)
       if (!visible?.origin) return []
+      const { text, images } = userMessageText(data.content)
       return [
         {
           sessionId,
           event: {
             kind: "userMessage",
             uiId: userMessageUiId(data.id, source.seq),
-            content: userMessageText(data.content).text,
+            content: text,
+            ...(images.length ? { images } : {}),
             sentAt: source.time,
             origin: visible.origin,
             ...(visible.notice ? { notice: visible.notice } : {}),
