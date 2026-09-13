@@ -1,3 +1,4 @@
+import { defaultSeed } from './contract/seed.js'
 // Adapted from DeepSeek c291e796, MIT. See LICENSE.deepseek.
 /**
  * Stage one of tab-type registration: how the registry decides who opens an
@@ -28,6 +29,11 @@ function ranked(registry: SidebarRightTabRegistry, address: string): string[] {
 }
 
 describe('SidebarRightTabRegistry — recognition', () => {
+  it('rejects default-page resolution when the selected kind is not registered', () => {
+    expect(() => defaultSeed(new SidebarRightTabRegistry(new Context())))
+      .toThrow('default tab kind "guide" is not registered')
+  })
+
   it('matches a pattern containing ":" against the whole address', () => {
     const registry = new SidebarRightTabRegistry(new Context())
     registry.register(typeFor('guide', ['sidebar://guide']))

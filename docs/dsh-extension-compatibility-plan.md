@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：右侧栏会话状态、控制器与默认页（2026-09-13）
+
+迁移固定 c291e796 的 stores/service/defaultSeed 及 guide 元数据定义。状态动作使用已安装 rc.2 的真实 runtime/client.defineStore 与 EngineStoreHandle，保留官方 BoundActions 契约，未以本地仿制 store 替代。布局变更仍由纯规划器产生，整次操作记录一个历史条目；页面按 pane 去重，资源按 kind/contentId 揭示，替换/浮动/停靠/分栏/关闭/撤销重做遵循官方规则。控制器区分当前挂载席位与已采用的会话 store，标签自身动作始终指向原会话；过期的 binding/adoption 释放不清除新的所有者。
+
+guideDefinition 只迁移注册元数据，翻译参数限定为它实际调用的 tab.guide.title；尚未注册完整 sidebarRight 文案命名空间或渲染 guide 组件。pure navigation 类型与服务契约保持结构一致，尚未把 ctx.sidebarRight 暴露成没有真实席位的公共服务。
+
+235 项右侧栏测试通过（/tmp/amiba-sidebar-service-tests-3.log）：新增 23 项官方状态测试、31 项官方控制器测试，并恢复此前因未迁移 defaultSeed 而暂缺的 1 项注册表测试。测试执行完整已安装运行时 ModuleLoader factory，使用真实 Cordis 和 SlotCore；最初仅提取词法声明遗漏 Immer arrayTraps 初始化，导致 46 项失败（/tmp/amiba-sidebar-service-tests.log），修正测试加载方式后通过，未为测试修改生产状态逻辑。测试辅助放在 src/dev，排除出生产输出。
+
+类型检查通过（/tmp/amiba-sidebar-service-types-2.log），插件包构建退出 0（/tmp/amiba-sidebar-service-build.log）。控制器尚未连接现有桌面 pane、tabInfo/body/title/menu，因此没有把这些内部测试记为五项右侧栏 UI 已兼容；当前能力和样式未改动，39/5/20 统计不变。
+
 ## 进行中：右侧栏停靠模型与标签生命周期（2026-09-13）
 
 迁移固定 c291e796 的纯 Dockkit engine/contract：布局树、初始状态、操作及逆操作、序列历史、意图规划、控制器、约束和几何计算。未迁移 React surface 或样式，未替换现有右侧栏。10 个 engine/contract 文件已与固定源逐一比较，除 MIT 归属和 .ts→.js 导入后缀外完全一致；纯引擎入口不导出未迁移的 React 组件。141 项官方引擎测试原样语义迁移通过。
