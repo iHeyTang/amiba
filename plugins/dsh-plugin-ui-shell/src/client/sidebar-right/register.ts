@@ -39,7 +39,10 @@ export function registerSidebarRight(ctx: ClientContext, tabs: SidebarRightTabRe
     },
     inject: (sessionId: SessionId): SidebarRightInjected => {
       let room: ReadonlyMap<PaneId, HalvesFit> = new Map()
+      const dockHost = document.createElement('div')
+      dockHost.style.display = 'contents'
       return {
+      dockHost,
       reportRoom: fits => { room = fits },
       bindService: binding => controller.bind({ ...binding, canSplitPane: paneId => room.get(paneId)?.row !== false }),
       openTab: (kind, options) => controller.openTab(kind, options),

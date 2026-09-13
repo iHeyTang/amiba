@@ -30,6 +30,7 @@ it('opens from an unmounted body, retains floats when collapsed, and restores na
   function Probe() { useEffect(() => { mounts++ }, []); return <output>Retained body</output> }
   const panelInfo = createResourceSnapshotStore({ activePanelId: null as string | null })
   const common = {
+    dockHost: document.createElement('div'),
     usePanelInfo: bindSnapshotSelector(panelInfo),
     sessionId, useStore, actions: instance.actions, useTabTypes, useTabNavigation,
     t: (key: string) => key,
@@ -60,6 +61,12 @@ it('opens from an unmounted body, retains floats when collapsed, and restores na
   act(() => instance.actions.setMode(sessionId, 'fullscreen'))
   expect(screen.getByText('Retained body')).toBeTruthy()
   act(() => instance.actions.setMode(sessionId, 'push'))
+  expect(mounts).toBe(1)
+  act(() => controller.toggleExpanded())
+  expect(screen.getByText('Original preview')).toBeTruthy()
+  expect(screen.queryByText('Retained body')).toBeNull()
+  act(() => controller.toggleExpanded())
+  expect(screen.getByText('Retained body')).toBeTruthy()
   expect(mounts).toBe(1)
   const tab = Object.values(instance.getSnapshot().bySession[sessionId]!.layout.tabs)[0]!
   const occurrence = controller.tabDomain.occurrence(sessionId, tab)
@@ -105,6 +112,7 @@ it('restores the selected session without collapsing its store or retargeting ol
   const usePanelInfo = bindSnapshotSelector(panelInfo)
   const useTabTypes = bindSnapshotSelector({ subscribe: fn => tabs.subscribe(fn), getSnapshot: () => tabs.entries() })
   const faces = Object.fromEntries([a, b].map(sessionId => [sessionId, {
+    dockHost: document.createElement('div'),
     sessionId, usePanelInfo, useTabTypes, useStore: bindSnapshotSelector(stores[sessionId]!), actions: stores[sessionId]!.actions,
     useTabNavigation: keyedObservableHook(key => controller.tabDomain.occurrence(sessionId, { id: key as TabId }).navigation),
     occurrence: (tab: { id: TabId }) => controller.tabDomain.occurrence(sessionId, tab),

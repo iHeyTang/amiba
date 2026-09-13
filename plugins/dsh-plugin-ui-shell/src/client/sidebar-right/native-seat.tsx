@@ -20,6 +20,8 @@ import type { TabHookContext } from './tab-info.js'
 type Store = PropsStore<ReturnType<typeof createSidebarRightStore>>
 type Children = PropsRenderSlots<'sidebar.right.pane.tab' | 'sidebar.right.pane.tab.title' | 'sidebar.right.tab.menu.item'>
 export interface SidebarRightInjected {
+  /** Shared per-session destination; the tab owns its React tree while content places it. */
+  dockHost: HTMLDivElement
   reportRoom(fits: ReadonlyMap<PaneId, HalvesFit>): void
   bindService(binding: SidebarRightBinding): () => void
   openTab(kind: string, options?: SidebarRightOpenTabOptions): void
@@ -157,17 +159,14 @@ function SessionSidebarSeat(props: NativeSidebarSeatProps): ReactNode {
   const previous = useRef({ expanded, active, visible: false })
   const fullscreen = surface?.layout.mode === 'fullscreen'
   const anchor = useRef<HTMLDivElement>(null)
-  const portalHost = useRef<HTMLDivElement | null>(null)
-  if (portalHost.current === null) {
-    portalHost.current = document.createElement('div')
-    portalHost.current.style.display = 'contents'
-  }
+  const { dockHost } = props
   useLayoutEffect(() => {
     if (placement !== 'content') return
     const target = fullscreen && active ? document.body : anchor.current
-    if (target && portalHost.current) target.append(portalHost.current)
-  }, [conversationVisible, placement, fullscreen, active])
-  useLayoutEffect(() => () => { portalHost.current?.remove() }, [])
+    if (target) target.append(dockHost)
+    return () => { dockHost.remove() }
+  }, [conversationVisible, placement, fullscreen, active, dockHost])
+
 
   useEffect(() => {
     if (conversationVisible && placement === 'tab' && surface === undefined) actions.open(sessionId)
@@ -209,9 +208,9 @@ function SessionSidebarSeat(props: NativeSidebarSeatProps): ReactNode {
         onClick={() => actions.setMode(sessionId, fullscreen ? 'push' : 'fullscreen')}>{fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
         <button type="button" className={chromeButton} aria-label={t('chrome.collapse')} title={t('chrome.collapse')} onClick={() => actions.setExpanded(sessionId, false)}><PanelRightClose size={16} /></button></>} />
   </section>
-  if (placement === 'tab') return <>{tabButton}
+  if (placement === 'tab') return <>{tabButton}{createPortal(content, dockHost)}
     {surface.layout.floats.length > 0 && createPortal(<div data-sidebar-right-float-host style={{...panelTypography,position:'fixed',inset:0,pointerEvents:'none',zIndex:61}}>
       <FloatLayer state={surface.layout} canCloseTab={tabId => canCloseTab(surface, tabId)} intents={intents} labels={dockLabels(t)} renderTab={bodiesFor(panel)} renderTabTitle={titlesFor(panel)} />
     </div>, document.body)}</>
-  return <><div ref={anchor} className="h-full min-h-0" />{createPortal(content, portalHost.current)}</>
+  return <div ref={anchor} className="h-full min-h-0" />
 }

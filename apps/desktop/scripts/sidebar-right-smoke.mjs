@@ -23,8 +23,8 @@ export async function smokeSidebarRight({ evaluate, wait, screenshot, fileWorksp
       child.effect(()=>child.sidebarRightTabs.register({id:'compat/sidebar-page',kind:'compat-page',title:()=> 'Compat page'}));
       child.effect(()=>child.slots.register({name:'sidebar.right.pane.tab',key:'compat/sidebar-page'}, props=>{
         React.useEffect(()=>{window.__sidebarBodyMounts++},[]);
-        const info=props.useTabInfo();window.__sidebarInfo=info;const [bornSession]=React.useState(props.sessionId);
-        return h('output',{'data-sidebar-page':'','data-sidebar-session':props.sessionId,'data-sidebar-born-session':bornSession},info.tab.kind+':'+info.tab.visible+':'+info.tab.navigation.revision);
+        const info=props.useTabInfo();window.__sidebarInfo=info;const [bornSession]=React.useState(props.sessionId);const [draft,setDraft]=React.useState('');window.__sidebarSetDraft=setDraft;
+        return h('output',{'data-sidebar-page':'','data-sidebar-session':props.sessionId,'data-sidebar-born-session':bornSession,'data-sidebar-draft':draft},info.tab.kind+':'+info.tab.visible+':'+info.tab.navigation.revision);
       }));
       child.effect(()=>child.slots.register({name:'sidebar.right.pane.tab.title',key:'compat/sidebar-page'}, props=>{
         const info=props.useTabInfo();return h('span',{'data-sidebar-title':''},'Title '+info.tab.kind);
@@ -99,14 +99,19 @@ export async function smokeSidebarRight({ evaluate, wait, screenshot, fileWorksp
   await wait(() => evaluate("document.querySelector('[data-sidebar-guide-probe]')?.textContent==='guide'"));
   await evaluate("window.__sidebarService.openTab('compat-page')");
   await wait(() => evaluate("!!document.querySelector('[data-sidebar-page]')"));
+  await evaluate("window.__sidebarSetDraft('retained draft')");
+  await wait(() => evaluate("document.querySelector('[data-sidebar-page]')?.dataset.sidebarDraft==='retained draft'"));
+  const beforeCollapse = await evaluate('window.__sidebarBodyMounts');
   await evaluate("window.__sidebarService.toggleExpanded()");
   await wait(() => evaluate("!window.__sidebarService.isExpanded() && (!document.querySelector('[data-sidebar-right-native]') || document.querySelector('[data-sidebar-right-native]').hidden)"));
   assert.ok(await evaluate('!window.__sidebarInfo.tab.signal.aborted'));
   await evaluate("window.__sidebarService.toggleExpanded()");
   await wait(() => evaluate("window.__sidebarService.isExpanded() && document.querySelector('[data-sidebar-right-native]') && !document.querySelector('[data-sidebar-right-native]').hidden"));
+  assert.equal(await evaluate('window.__sidebarBodyMounts'),beforeCollapse);
+  assert.equal(await evaluate("document.querySelector('[data-sidebar-page]')?.dataset.sidebarDraft"),'retained draft');
   await evaluate("window.__sidebarFiber.dispose()");
   await wait(() => evaluate("!document.querySelector('[data-sidebar-page]') && !!document.querySelector('[data-sidebar-right-unavailable]')"));
   await evaluate("window.__sidebarService.toggleExpanded()");
   await wait(() => evaluate("(!document.querySelector('[data-sidebar-right-native]') || document.querySelector('[data-sidebar-right-native]').hidden)"));
-  console.log('Sidebar panel passed actual public service, framework session store, body/title hooks, guide chain and menu owner/dismissal, repeated navigation, fullscreen body retention, session switching/local-state isolation and original-session callbacks, global-page binding/float/fullscreen isolation and restoration, collapse retention, type unload fallback and native panel restoration.');
+  console.log('Sidebar panel passed actual public service, framework session store, body/title hooks, guide chain and menu owner/dismissal, repeated navigation, fullscreen body retention, session switching/local-state isolation and original-session callbacks, global-page binding/float/fullscreen isolation and restoration, collapse component/local-state retention, type unload fallback and native panel restoration.');
 }

@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：侧栏收起时保留正文组件（2026-09-13）
+
+固定源 ui-sidebar-right/src/client/shell/SidebarRight.tsx 明确要求收起时正文仍挂载。Amiba 原 WorkspacePane 在预览模式不渲染扩展 content，上一版只保留 store/occurrence，正文局部状态会丢失。
+
+现由持续挂载的 tab 席位持有 DockSurface React portal，每会话注入共享 dockHost；content 席位只把同一容器放进原内容区或手动全屏位置，卸载时移除容器但不卸载正文 React 树。重新展开复用同一树；整体会话席位卸载仍按既有规则清理。没有改变原 WorkspacePane 的条件渲染、文件预览、尺寸、标签或样式。
+
+组件测试确认收起恢复原预览、正文不在页面上、再次展开挂载次数不增加；327 项侧栏回归退出 0（/tmp/amiba-sidebar-retained-regression.log），类型检查退出 0（/tmp/amiba-sidebar-retained-types.log）。完整桌面构建退出 0（/tmp/amiba-sidebar-retained-build.log）；--compat --sidebar-right 退出 0（/tmp/amiba-sidebar-retained-smoke.log）：实际插件正文写入局部草稿，收起后恢复原预览，展开后草稿仍在且挂载计数不增加；既有会话隔离、全局 main、浮动/全屏、菜单、文件/目录、Markdown、配置及 HMR 回归通过。
+
+本轮补齐收起正文局部状态保留，不扩大为所有跨会话局部状态保留；整体会话视图卸载仍会卸载正文。原生工作区其他隐藏路径、窄屏自动全屏、文档正文、第三方完整插件与独立 Web 仍继续核对，43/1/20 统计不变，完整目标未完成。
+
 ## 进行中：右侧栏会话实例与原生工作区身份对齐（2026-09-13）
 
 NativeSidebarSeat 按 sessionId 隔离 React 实例，继续复用框架的会话 store 与 occurrence。组件回归先复现两个展开会话切换后被误判成关闭的问题，修复后验证会话恢复、快照不受另一会话修改、旧标签回调仍操作原会话及 signal 保留。
