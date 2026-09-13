@@ -35,3 +35,18 @@ test('installer names are versioned and automatic releases require the complete 
   assert.equal(installerName('1.2.3', 'darwin-x64'), 'Amiba-1.2.3-mac-x64.dmg');
   assert.throws(() => ciPlan({version:'1.2.3', inputs:{mode:'release', target:'win32-x64'}}), /all three/);
 });
+
+test('only the dedicated manual release entry point can request publication', async () => {
+  const { workflowInputs } = await import('./ci-plan.mjs');
+  for (const eventName of ['push', 'pull_request', 'schedule']) {
+    const inputs = workflowInputs({}, { GITHUB_EVENT_NAME: eventName });
+    assert.equal(ciPlan({ version: '1.2.3', inputs }).publish, false);
+    assert.throws(() => workflowInputs({}, { GITHUB_EVENT_NAME: eventName, AMIBA_CI_MODE: 'release' }), /manual workflow dispatch/);
+  }
+  assert.throws(() => workflowInputs({ inputs: { mode: 'release' } }, { GITHUB_EVENT_NAME: 'workflow_dispatch' }), /dedicated Desktop Release/);
+  const inputs = workflowInputs({ inputs: { mac_signing: 'signed' } }, { GITHUB_EVENT_NAME: 'workflow_dispatch', AMIBA_CI_MODE: 'release' });
+  assert.equal(ciPlan({ version: '1.2.3', inputs }).publish, true);
+  assert.equal(inputs.target, 'all');
+  assert.equal(inputs.mac_signing, 'signed');
+  assert.equal(workflowInputs({ inputs: { mode: 'verify', run_id: '123' } }, {}).run_id, '123');
+});

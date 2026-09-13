@@ -15,7 +15,7 @@ pnpm release:version major # 主版本加一，其余归零
 pnpm release:version:check
 ```
 
-版本 PR 合并后，在 **Actions → Amiba Desktop → Run workflow** 选择 `main`、`mode=release`、`target=all`，`mac_signing` 默认 `unsigned`，`run_id` 留空。流水线只读已合并的版本和源码，检查配置、并发构建三个平台、检查并回读全部附件、生成更新说明，最后公开 Release。不会创建版本提交或更新 main；当前版本已发布时，必须先通过新的版本 PR 升版。
+版本 PR 合并后，在 **Actions → Desktop Release → Run workflow** 选择 `main`，`mac_signing` 默认 `unsigned`。流水线只读已合并的版本和源码，检查配置、并发构建三个平台、检查并回读全部附件、生成更新说明，最后公开 Release。不会创建版本提交或更新 main；当前版本已发布时，必须先通过新的版本 PR 升版。
 
 Actions 软件包直接保留 `Amiba-<版本>-<系统>-<架构>.dmg/.zip/.exe` 文件名，内部校验文件放在 `metadata-<版本>-<平台架构>`。latest 更新清单保持固定名称，供客户端查询。历史 Artifacts 不会自动改名。
 
@@ -76,32 +76,33 @@ macOS 自动更新必须签名；面向公开分发还需 Apple Developer ID 和
 
 ## GitHub Actions 构建
 
-工作流 `.github/workflows/desktop-release.yml` 使用三个原生托管环境：Windows x64 (`windows-2022`)、Mac Intel (`macos-15-intel`)、Mac ARM (`macos-15`)。不需要把当前 Mac 注册为 runner。Node 固定为 22.22.0，Python 固定为 3.11，以兼容现有原生模块工具链。
+测试打包 `desktop-build.yml` 和正式发布 `desktop-release.yml` 使用三个原生托管环境：Windows x64 (`windows-2022`)、Mac Intel (`macos-15-intel`)、Mac ARM (`macos-15`)。不需要把当前 Mac 注册为 runner。Node 固定为 22.22.0，Python 固定为 3.11，以兼容现有原生模块工具链。
 
-在 Actions 的 **Amiba Desktop → Run workflow** 中选择：
+在 Actions 的 **Desktop Build → Run workflow** 中选择：
 
 - `target=all`、`mode=test`：生成三个架构的未签名测试包，关闭客户端更新，产物保留在 Actions Artifacts 7 天。
 - `target=all`（或单个平台）、`mode=verify`、`run_id=<已有构建 ID>`：复用原安装包验证运行，不重新编译、不发布。Windows 静默安装 EXE，Mac 解压更新 ZIP 并检查 DMG。
-- `target=all`、`mode=release`：使用已合并版本构建、校验、生成更新说明并公开 Release。`mac_signing=unsigned` 不需要 Apple 凭据；选择 `signed` 时必须先配置 Mac 签名与公证 secrets。
+
+正式发布使用独立的 **Desktop Release → Run workflow**，固定构建全部三个平台，先通过 CI 检查，再使用已合并版本构建、校验、生成更新说明并公开 Release。`mac_signing=unsigned` 不需要 Apple 凭据；选择 `signed` 时必须先配置 Mac 签名与公证 secrets。
 
 也可在本机触发云端三平台发布构建：
 
 ```sh
 gh workflow run desktop-release.yml --repo iHeyTang/amiba --ref main \
-  -f target=all -f mode=release -f mac_signing=unsigned
+  -f mac_signing=unsigned
 ```
 
 手动运行时选择 `main` 分支。首次运行不需要本机 Windows 虚拟机。
 
-仅 `main` 分支的 push 自动执行三个架构的 test 构建。其他分支和标签的 push 均不触发；手动选择非 `main` 引用时所有作业跳过。正式发版需在 `main` 手动选择 `mode=release`，版本号必须预先通过 PR 合并，流水线不会写入 main。`publish_draft` 已移除，草稿只作为上传过程的中间状态。
+PR 和合并到 `main` 后运行 `ci.yml`（保留必需检查名称 `PR checks`）以及 `runtime-dependencies.yml` 的三平台运行时集成验证，不生成安装包、不发布版本。测试安装包仅通过 `desktop-build.yml` 手动构建，目前不配置定时任务。正式发布仅通过 `desktop-release.yml` 手动触发，版本号必须预先通过 PR 合并，流水线不会写入 main。安装包构建和发布仅支持 main，其他分支和标签不会触发自动打包。
 
 构建后校验更新清单的版本、目标架构和 SHA-512，运行内置 Node 与 Electron 原生 PTY。Mac 额外校验 DMG 和 ZIP；Windows 在临时 CI 机器里静默安装 EXE 后检查安装结果。安装包检查通过后保存为独立 Artifacts；运行检查失败时保留 metadata 与日志便于排查；只有全部平台检查通过才允许上传 Release。上传 Release 时先验证所有目标文件，再顺序上传，草稿绑定实际构建提交。CI 上传后再次下载草稿资产，并按原构建记录检查 SHA-512。全部通过后使用 GitHub 自动生成更新说明，将草稿发布并设为 Latest。
 
 仓库 Variables 的 `AMIBA_UPDATE_URLS` 可指定 CDN 下载目录；GitHub 下载源作为兜底。选择 `mac_signing=signed` 时使用 Secrets：Mac 的 `CSC_LINK`、`CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`；Windows 可选 `WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD`。
 
-升版前检查下载源配置；仅 `mac_signing=signed` 要求五项 Mac Secrets 齐全，缺配置时停止。`unsigned` 可在没有 Apple 凭据时直接升版构建并发布。main 必须允许工作流以 `contents: write` 写入版本提交；分支保护禁止此操作时会失败，不强制绕过。构建和发布固定检出自动生成的版本提交，避免 main 后续变化混入产物。版本提交带 `[skip ci]`，不会重复触发测试构建。
+发版前检查下载源配置；仅 `mac_signing=signed` 要求五项 Mac Secrets 齐全，缺配置时停止。版本号通过 PR 提前更新；流水线不递增版本、不创建版本提交。构建和发布固定检出本次运行的提交 SHA，避免 main 后续变化混入产物。只有发布作业需要 `contents: write` 以创建 Release 和标签。
 
-失败后优先使用该次运行的 **Re-run failed jobs**。同一次尚未发布的运行完整重试时，若 main 仍是它生成的版本提交，会复用该提交；main 已有其他修改时停止，不覆盖新代码。点击新的 Run workflow 是新的一次发版，会尝试递增版本。发布作业在发布成功后因网络等原因重试时，只回读验证已有资产，不覆盖公开版本。
+失败后优先使用该次运行的 **Re-run failed jobs**，复用本次运行固定的源码提交和产物。如果重新执行 Prepare 时 main 已变化，会停止并要求从当前 main 新建发布运行。新运行仍使用已合并的版本，不自动升版，已发布版本会被预检拒绝。发布作业成功后因网络等原因重试时，只回读验证已有资产，不覆盖公开版本。
 
 ## GitHub 和国内 CDN
 
@@ -189,10 +190,10 @@ Mac 更新 ZIP 同样直接上传，和 DMG 同名，仅后缀不同。blockmap�
 例如：
 
 ```sh
-gh workflow run desktop-release.yml --ref main -f mode=verify -f target=all -f run_id=<原始构建运行ID>
+gh workflow run desktop-build.yml --ref main -f mode=verify -f target=all -f run_id=<原始构建运行ID>
 ```
 
-一键发版自动汇总同一构建的三个平台，要求 `mode=release,target=all`，使用已通过 PR 合并的版本。
+一键发版自动汇总同一构建的三个平台，通过独立 Desktop Release 工作流触发，使用已通过 PR 合并的版本。
 流水线会重新合并分开下载的安装文件和更新文件，验证三个平台的版本、源码提交、构建 ID 与文件哈希后，逐个上传为独立 Release assets，全部回读验证通过后自动生成更新说明并发布。
 测试/复验不会创建 Release。Mac 未签名发布允许手动分发；要启用 Mac 自动更新，需选择 `mac_signing=signed` 并配置签名与公证。
 
