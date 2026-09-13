@@ -26,7 +26,7 @@ export function useToolImageEvidence(callId: string, block: ToolCallBlock | null
   if (!source || source.callId !== callId || !block) return null;
   const images = toolCallResultImages(block);
   if (!images.length) return null;
-  return <WorkbenchViewBoundary key={callId} fallback={null}>
+  return <WorkbenchViewBoundary key={callId} fallback={null} resetKey={source.render}>
     <ImageEvidenceView images={images} render={source.render} />
   </WorkbenchViewBoundary>;
 }

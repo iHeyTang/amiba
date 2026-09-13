@@ -61,6 +61,26 @@ describe("tool image evidence within the native fold", () => {
       expect(screen.queryByText("original evidence")).toBeNull();
     } finally { errors.mockRestore(); }
   });
+  it("recovers a failed gallery replacement without resetting the native fold or evidence", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const failing = () => { throw new Error("gallery unavailable"); };
+      const native = <SemanticToolRow spec={{ icon: Eye, action: "inspect", evidence: () => <input aria-label="native evidence" defaultValue="original" /> }} tag="image" owner={owner} t={key => key} />;
+      const view = render(<ToolImageEvidenceProvider callId={owner.callId} render={failing}>{native}</ToolImageEvidenceProvider>);
+      fireEvent.click(screen.getByRole("button", { name: "inspect" }));
+      const input = screen.getByRole("textbox", { name: "native evidence" });
+      fireEvent.change(input, { target: { value: "retained edit" } });
+      const replacement = vi.fn(images => <div data-testid="recovered-gallery">{images[0].attachment.attachmentId}</div>);
+      view.rerender(<ToolImageEvidenceProvider callId={owner.callId} render={replacement}>{native}</ToolImageEvidenceProvider>);
+      expect(screen.getByTestId("recovered-gallery")).toHaveTextContent("host-image");
+      expect(screen.getByRole("textbox", { name: "native evidence" })).toBe(input);
+      expect(input).toHaveValue("retained edit");
+      expect(screen.getByRole("button", { name: "inspect" })).toHaveAttribute("aria-expanded", "true");
+      view.rerender(<ToolImageEvidenceProvider callId={owner.callId}>{native}</ToolImageEvidenceProvider>);
+      expect(screen.queryByTestId("recovered-gallery")).toBeNull();
+      expect(input).toHaveValue("retained edit");
+    } finally { errors.mockRestore(); }
+  });
   it("adds image evidence to an unclaimed tool without replacing its original result", () => {
     const event: ToolProgress = { toolCallId: owner.callId, tool: "custom_image_tool", status: "completed", result: { text: "original generic result" }, wire: {
       call: { argsRaw: "{}", turn: 1, step: 1, time: 100, callView: null },

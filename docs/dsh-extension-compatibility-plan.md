@@ -5,6 +5,12 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：工具图片扩展报错后的替换恢复（2026-09-13）
+
+发现 ToolImageEvidence 的本地 WorkbenchViewBoundary 仅按 callId 挂载，没有 resetKey：展开后图片 renderer 报错，即使替换 renderer，错误状态也一直保留。新增回归先在修复前失败（/tmp/amiba-gallery-recovery-red.log，1 失败/6 通过），再以 source.render 作为错误恢复条件，仅重试图片子区域。原详情控件保持同一 DOM 节点、未提交输入和展开状态；恢复后卸载图片仍保留原详情。工具图片及多层子工具 13 项测试通过（/tmp/amiba-gallery-recovery-green.log），UI 类型检查通过（/tmp/amiba-gallery-recovery-types.log）。本轮为组件层回归，没有重新声称完整桌面或第三方插件全部验证。
+
+同时复核实际 rc.2 的 ui-conversation contract/slots.d.ts：conversation.details.tool 是 single/session 的整个选中工具详情面板，owner 为真实冻结 ToolCallBlock 与可选 cwd，必须处理 running 和 settled 两种形式。不能直接把它当作按工具名分发的 tool.call.toolview 或卡片附加区。后续仍需真实选择状态及独立面板生命周期适配以保留原卡片；第 10 项继续列为未完成，统计保持 37/7/20，其他全部未完成范围不变。
+
 ## 最新进展：模型设置页脚与提供方卡片扩展（2026-09-13）
 
 settings.models.footer 与 settings.models.provider-card 已接到原模型设置页。前者在原新增按钮之后，后者附加于原卡片及配置弹窗，弹窗扩展放在 form 外以避免插件按钮提交原表单。原卡片、模型选择、认证判断及配置动作保留。SDK 补充固定 c291e796 的 list/root、keyed/root 契约及直接类型依赖，entryKey 使用真实 settingsNs。
