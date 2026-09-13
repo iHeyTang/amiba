@@ -271,14 +271,20 @@ export function useComposerAttachments(
           if (!mounted.current) return
         }
         const errors: string[] = []
-        const pending: Attachment[] = files.map((f) => ({
+        const pending: Attachment[] = files.map((f, i) => {
+          const prepared = supplied?.[i]?.prepared
+          if (prepared?.kind === "image" && prepared.attachmentId && !prepared.uploading && prepared.size === f.size) {
+            return { ...prepared, uiId: shortId("att"), uploading: false }
+          }
+          return {
           uiId: shortId("att"),
           name: f.name || "file",
           mime: f.type || "",
           size: f.size,
           kind: classify(f.name || "file", (f.type || "").toLowerCase()),
           uploading: true,
-        }))
+          }
+        })
         pendingUiIds.push(...pending.map((p) => p.uiId))
         for (let i = 0; i < pending.length; i += 1) {
           if (!mounted.current || pending[i].kind !== "image") continue
@@ -295,12 +301,13 @@ export function useComposerAttachments(
           }
         }
         setAttachments((prev) => [...prev, ...pending])
-        if (sessionId === undefined) sessionId = await opts.getSessionId()
+        if (sessionId === undefined && pending.some(item => item.uploading)) sessionId = await opts.getSessionId()
         if (!mounted.current) return
         for (let i = 0; i < files.length; i += 1) {
+          if (!pending[i].uploading) continue
           const f = files[i]
           const uiId = pending[i].uiId
-          const r = await readFileAsAttachment(f, { sessionId, uiId })
+          const r = await readFileAsAttachment(f, { sessionId: sessionId!, uiId })
           if (isAttachmentReadOk(r)) {
             setAttachments((prev) => {
               if (!prev.some((a) => a.uiId === uiId)) {

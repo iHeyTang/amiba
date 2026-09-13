@@ -604,8 +604,18 @@ try {
       assert.equal(await evaluate("window.__offscreenRegistry.draftImages(window.__offscreenPictures.map(image=>image.id)).length"), 1);
       assert.deepEqual(await evaluate(`window.__probeCtx.composerInputs.inputImagesFor(${JSON.stringify(otherId)})`), []);
       assert.equal(await evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)}).draft`), "");
+      const beforePreparedFiles = new Set((await readdir(profile, { recursive: true })).filter(file => file.endsWith('.bin')));
+      const preparedId = await evaluate("(async()=>{window.__residentPrepared=await window.__probeCtx.composerInputs.prepareInputImages(window.__compatSessionId);const retry=await window.__probeCtx.composerInputs.prepareInputImages(window.__compatSessionId);const same=retry.attachments[0].attachmentId===window.__residentPrepared.attachments[0].attachmentId;retry.release();if(!same)throw new Error('Resident retry uploaded a different file');return window.__residentPrepared.attachments[0].attachmentId})()");
+      const preparedFiles = (await readdir(profile, { recursive: true })).filter(file => file.endsWith('.bin') && !beforePreparedFiles.has(file));
+      assert.equal(preparedFiles.length, 1);
+      assert.ok(preparedFiles[0].endsWith('/' + preparedId + '.bin'));
       await evaluate(`window.__residentImageSeatOff=window.__probeCtx.slots.register({name:'conversation.input.attachments',id:'resident-image-seat',priority:-100},props=>{window.__residentImageSeat=props;return null});window.__probeCtx.sessions.open(${JSON.stringify(originalId)});void 0`);
+      await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)"));
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      assert.equal(await evaluate("window.__residentImageSeat?.attachments.some(image=>image.id===window.__offscreenPictures[0].id) ?? false"), false);
+      await evaluate("window.__residentPrepared.release();void 0");
       await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId) && window.__residentImageSeat?.attachments.some(image=>image.file===window.__offscreenFiles[0] && image.id===window.__offscreenPictures[0].id) && document.body.textContent.includes('resident-original.png')"));
+      assert.deepEqual((await readdir(profile, { recursive: true })).filter(file => file.endsWith('.bin') && !beforePreparedFiles.has(file)), preparedFiles);
       await evaluate(`window.__offscreenImageActions.setDraft('/resident-image verify');window.__residentImagePayloads=[];
         window.__residentImageClaim={token:'/resident-image ',images:true,submit:async(args,_ctx,images)=>{window.__residentImagePayloads.push({args,images});return {kind:'success',text:'RESIDENT_IMAGE_OK'}}};
         window.__residentImageClaimOff=window.__probeCtx.inputTriggers.registerSource({name:'resident-image-command',trigger:'/',order:-100,candidates:async()=>[],onPick:()=>({claim:window.__residentImageClaim}),matchEnter:(_ctx,line)=>line.startsWith('/resident-image ')?{claim:window.__residentImageClaim}:undefined});void 0`);
@@ -617,7 +627,7 @@ try {
       await wait(() => evaluate("window.__residentImagePayloads.length===1 && window.__offscreenRegistry.draftImages([window.__offscreenPictures[0].id]).length===0 && !document.body.textContent.includes('resident-original.png')"));
       assert.deepEqual(await evaluate("window.__residentImagePayloads[0]"), { args: 'verify', images: [{ mediaType: 'image/png', data: png, name: 'resident-original.png' }] });
       await evaluate("window.__residentImageSeatOff();window.__residentImageClaimOff();void 0");
-      console.log("Offscreen standard image add/remove/prune preserved original browser identity, left the current composer untouched, transferred through native upload on return and delivered exact command bytes before release");
+      console.log("Offscreen image preparation reused one Host file across retry, held native handoff until release, preserved original browser identity without reupload and delivered exact command bytes");
     }
     if (process.argv.includes("--input-state")) {
       await evaluate("window.__inputSource=window.__probeCtx.composerInputs.inputDraftSource(window.__compatSessionId);window.__inputObserved=[];window.__inputOff=window.__inputSource.subscribe(()=>{const s=window.__inputSource.getSnapshot();window.__inputObserved.push(s?{draft:s.draft,phase:s.phase}:null)});window.__initialInput=window.__inputSource.getSnapshot();void 0");

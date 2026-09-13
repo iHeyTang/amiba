@@ -1,4 +1,5 @@
 import { bindInputDraft, type InputDraftCursor } from "./input-draft-binding.js";
+import { createResidentImageStaging, type PreparedInputImages } from "./resident-image-staging.js";
 /**
  * Bridge between Amiba's composer (plain React, `@amiba/ui`) and the OFFICIAL
  * input-trigger pipeline (`ctx.inputTriggers`, `ctx.commandUi`) — the piece
@@ -117,6 +118,7 @@ export interface AmibaInputTriggerBridge extends ComposerTriggerRuntime {
   inputImagesSource(sessionId: string): InputImagesSource;
   pruneInputImages(sessionId: string, ids: readonly ComposerAttachment["id"][]): void;
   addInputImages(sessionId: string, ids: readonly ComposerAttachment["id"][]): boolean;
+  prepareInputImages(sessionId: string, signal?: AbortSignal): Promise<PreparedInputImages>;
   removeInputImage(sessionId: string, id: ComposerAttachment["id"]): void;
   submitInput(sessionId: string): boolean;
   /** Live editor projection; absent until that session has an attached editor. */
@@ -140,7 +142,8 @@ export function createInputTriggerBridge(
   const sessionListeners = new Set<() => void>();
   const notifyInputSessions = () => { for (const listener of sessionListeners) listener(); };
 
-  const imageBindings = new Map<string, { ops: ComposerImageOps }>();
+  const imageBindings = new Map<string, { ops: ComposerImageOps; transfer?(): void }>();
+  const imageStaging = createResidentImageStaging(id => imageBindings.get(id)?.transfer?.());
   // Only programmatic additions made without a mounted image owner reside here.
   // Existing native attachments still follow their original switch/unmount GC.
   const residentImages = new Map<string, readonly ComposerDraftImageRegistration[]>();
@@ -312,7 +315,7 @@ export function createInputTriggerBridge(
       return image ? retain(registry, image) : undefined;
     },
     bindImages(sessionId, ops) {
-      const binding = { ops };
+      const binding: { ops: ComposerImageOps; transfer?(): void } = { ops };
       imageBindings.set(sessionId, binding);
       let scheduled = false;
       const transfer = () => {
@@ -324,12 +327,14 @@ export function createInputTriggerBridge(
           scheduled = false;
           if (imageBindings.get(sessionId) !== binding || !canEditResidentImages(sessionId) || !ops.canAdd()) return;
           const images = residentImages.get(sessionId);
-          if (!images?.length) return;
+          if (!images?.length || images.some(image => imageStaging.busy(image))) return;
           residentImages.delete(sessionId);
+          for (const image of images) imageStaging.transfer(image);
           ops.addImages(images);
           notifyImages(sessionId);
         });
       };
+      binding.transfer = transfer;
       const off = ops.subscribeImages?.(() => {
         if (imageBindings.get(sessionId) === binding) { notifyImages(sessionId); transfer(); }
       });
@@ -350,6 +355,12 @@ export function createInputTriggerBridge(
     },
     inputImagesSource,
     inputImagesFor: sessionId => inputImagesSource(sessionId).getSnapshot(),
+    prepareInputImages(sessionId, signal) {
+      if (imageBindings.has(sessionId) || !canEditResidentImages(sessionId)) {
+        return Promise.reject(new Error("The resident input images are not available for preparation."));
+      }
+      return imageStaging.acquire(residentImages.get(sessionId) ?? [], signal);
+    },
     pruneInputImages(sessionId, ids) {
       imageBindings.get(sessionId)?.ops.pruneImages?.(ids);
       const available = new Set(ids);
@@ -366,7 +377,7 @@ export function createInputTriggerBridge(
       const registrations = images.map(image => retain(registry, image));
       if (binding) binding.ops.addImages(registrations);
       else {
-        residentImages.set(sessionId, [...(residentImages.get(sessionId) ?? []), ...registrations]);
+        residentImages.set(sessionId, [...(residentImages.get(sessionId) ?? []), ...registrations.map(image => imageStaging.wrap(sessionId, image))]);
         notifyImages(sessionId);
       }
       return true;

@@ -148,6 +148,8 @@ export interface TriggerEditorOps {
  */
 export interface ComposerDraftImageRegistration {
   image: ComposerAttachment;
+  /** Optional native upload already prepared for this exact browser image. */
+  readonly prepared?: import("@amiba/app-runtime/core").Attachment;
   release(): void;
 }
 

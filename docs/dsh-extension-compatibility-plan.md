@@ -1372,3 +1372,10 @@ pipelines retain mounted component state.
 - 记录：/tmp/amiba-addressed-preparation-tests.log、/tmp/amiba-addressed-preparation-ui-types.log、/tmp/amiba-addressed-preparation-plugin-types.log、/tmp/amiba-addressed-preparation-build.log、/tmp/amiba-addressed-preparation-smoke.log。
 
 后续仍须接通按目标会话准备消息/模型/工作目录的原引擎发送，并处理驻留草稿、命令、图片和接收结果的事务。已确认原生文件 serialize 只返回路径，搜索的会话地址现已固定；不得把当前会话的 pendingModelSelection、activeMessages 或工作区 UI 状态用于其他目标。Host 附件 ID 由 randomUUID 生成，不能假定重复上传会按内容去重；离屏图片发送还需要保存和交接已暂存附件，避免失败重试重复上传和遗留文件。
+# 离屏附件准备与原输入器交接：桌面验证通过
+
+驻留图片增加按原始注册实例缓存的上传准备与引用持有。并发准备和失败重试复用同一 Host 文件；取消调用不会丢弃仍属于草稿的已上传文件。删除草稿图片后，待进行中的上传和发送持有释放再清理文件。发送持有期间暂缓交给原输入器，交接后文件清理由原输入器和队列负责。
+
+原输入器增加已准备图片的接收路径：保留浏览器 File 和草稿 ID，采用原 Host 附件 ID，仅创建新的原生附件行 ID，不再次上传或解析会话。原上传路径和界面布局不变。
+
+当前验证：驻留图片与上传准备 7 项测试、原输入器及触发管线 32 项测试通过；UI 和插件类型检查通过。完整桌面构建和兼容回归通过。新增真实检查确认两次准备生成同一个 Host 文件，持有期间切回会话不提前交接，释放后原输入器接收真实 File/ID 且不增加文件，原生命令收到准确图片字节。日志为 `/tmp/amiba-prepared-staging-tests.log`、`/tmp/amiba-prepared-native-tests.log`、`/tmp/amiba-prepared-ui-types.log`、`/tmp/amiba-prepared-plugin-types.log`、`/tmp/amiba-prepared-build.log`、`/tmp/amiba-prepared-smoke.log`。标准离屏提交尚未接通，不能据此标记完整输入兼容。
