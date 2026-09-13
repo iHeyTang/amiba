@@ -91,3 +91,60 @@ it('opens from an unmounted body, retains floats when collapsed, and restores na
   controller.tabDomain.dispose()
   expect(occurrence.signal.aborted).toBe(true)
 })
+
+it('restores the selected session without collapsing its store or retargeting old tab callbacks', async () => {
+  const a = 'native-a' as SessionId, b = 'native-b' as SessionId
+  const tabs = new SidebarRightTabRegistry(new Context())
+  tabs.register(guideDefinition(key => key))
+  tabs.register({ id: 'test/notes', kind: 'notes', title: () => 'Notes' })
+  const { controller, adopt } = createSidebarRightController(tabs, vi.fn())
+  const owner = createSidebarRightSessionStore(() => ({ kind: 'guide', title: 'Guide' }), adopt)
+  const stores = { [a]: owner.store.create(a), [b]: owner.store.create(b) }
+  for (const id of [a, b]) stores[id]!.actions.setExpanded(id, true)
+  const panelInfo = createResourceSnapshotStore({ activePanelId: null as string | null })
+  const usePanelInfo = bindSnapshotSelector(panelInfo)
+  const useTabTypes = bindSnapshotSelector({ subscribe: fn => tabs.subscribe(fn), getSnapshot: () => tabs.entries() })
+  const faces = Object.fromEntries([a, b].map(sessionId => [sessionId, {
+    sessionId, usePanelInfo, useTabTypes, useStore: bindSnapshotSelector(stores[sessionId]!), actions: stores[sessionId]!.actions,
+    useTabNavigation: keyedObservableHook(key => controller.tabDomain.occurrence(sessionId, { id: key as TabId }).navigation),
+    occurrence: (tab: { id: TabId }) => controller.tabDomain.occurrence(sessionId, tab),
+    bindService: (binding: Parameters<typeof controller.bind>[0]) => controller.bind(binding),
+    openTab: controller.openTab.bind(controller), reportRoom: vi.fn(), t: (key: string) => key,
+    renderSlot: () => null,
+  }]))
+  let select: (id: SessionId) => void = () => {}
+  let selectRuntime: (id: SessionId) => void = () => {}
+  function Host() {
+    const [sessionId, setSessionId] = useState(a)
+    const [workbenchSessionId, setWorkbenchSessionId] = useState(a)
+    const [modes, setModes] = useState<Record<string, string | null>>({})
+    selectRuntime = setSessionId
+    select = id => { setSessionId(id); setWorkbenchSessionId(id) }
+    const props = { ...faces[sessionId], workbenchSessionId, placement: 'tab', activePanel: modes[sessionId] ?? null,
+      openPanel: (id: string) => setModes(previous => ({ ...previous, [sessionId]: id })),
+      closePanel: (id: string) => setModes(previous => previous[sessionId] === id ? { ...previous, [sessionId]: null } : previous),
+    } as unknown as NativeSidebarSeatProps
+    return <><NativeSidebarSeat {...props} /><output data-selected>{sessionId}:{modes[sessionId] ?? 'preview'}</output></>
+  }
+  render(<Host />)
+  const aTab = Object.values(stores[a]!.getSnapshot().bySession[a]!.layout.tabs)[0]!
+  const old = controller.tabDomain.occurrence(a, aTab)
+  const bBefore = stores[b]!.getSnapshot()
+  await act(async () => { selectRuntime(b) })
+  expect(controller.isExpanded()).toBe(false)
+  expect(() => controller.openTab('notes')).toThrow('no session surface is mounted')
+  expect(stores[b]!.getSnapshot()).toBe(bBefore)
+  await act(async () => { select(b) })
+  expect(document.querySelector('[data-selected]')?.textContent).toBe(`${b}:${SIDEBAR_PANEL}`)
+  expect(stores[b]!.getSnapshot()).toBe(bBefore)
+  act(() => old.tabActions.openTab('notes'))
+  expect(stores[b]!.getSnapshot()).toBe(bBefore)
+  expect(Object.values(stores[a]!.getSnapshot().bySession[a]!.layout.tabs).some(tab => tab.kind === 'notes')).toBe(true)
+  expect(old.signal.aborted).toBe(false)
+  await act(async () => { select(a) })
+  expect(document.querySelector('[data-selected]')?.textContent).toBe(`${a}:${SIDEBAR_PANEL}`)
+  expect(controller.isExpanded()).toBe(true)
+  cleanup()
+  owner.dispose()
+  controller.tabDomain.dispose()
+})

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
 
-export async function smokeSidebarRight({ evaluate, wait, screenshot }) {
+export async function smokeSidebarRight({ evaluate, wait, screenshot, fileWorkspace }) {
+  const otherWorkspace = path.join(fileWorkspace, '.cache', 'sidebar-session-other');
+  await mkdir(otherWorkspace, { recursive: true });
   await evaluate(`(async () => {
     const ctx=window.__probeCtx,h=window.__probeCreateElement,React=window.__probeRequire('react');
     window.__sidebarBodyMounts=0;window.__sidebarTrace=[];
@@ -8,7 +12,7 @@ export async function smokeSidebarRight({ evaluate, wait, screenshot }) {
       window.__sidebarService=child.sidebarRight;
       child.effect(()=>child.slots.register({name:'amiba.workbench.panel',id:'compat-sidebar-observer'}, props=>{
         const globalPanel=props.usePanelInfo(info=>info.activePanelId);
-        const trace=phase=>{window.__sidebarTrace.push({phase,placement:props.placement,active:props.activePanel,session:props.sessionId,globalPanel,expanded:child.sidebarRight.isExpanded()})};
+        const trace=phase=>{window.__sidebarTrace.push({phase,placement:props.placement,active:props.activePanel,session:props.sessionId,workbenchSession:props.workbenchSessionId,globalPanel,expanded:child.sidebarRight.isExpanded()})};
         React.useEffect(()=>{trace('mount');return()=>trace('unmount')},[]);
         React.useEffect(()=>{trace('commit')});
         return null;
@@ -19,8 +23,8 @@ export async function smokeSidebarRight({ evaluate, wait, screenshot }) {
       child.effect(()=>child.sidebarRightTabs.register({id:'compat/sidebar-page',kind:'compat-page',title:()=> 'Compat page'}));
       child.effect(()=>child.slots.register({name:'sidebar.right.pane.tab',key:'compat/sidebar-page'}, props=>{
         React.useEffect(()=>{window.__sidebarBodyMounts++},[]);
-        const info=props.useTabInfo();window.__sidebarInfo=info;
-        return h('output',{'data-sidebar-page':''},info.tab.kind+':'+info.tab.visible+':'+info.tab.navigation.revision);
+        const info=props.useTabInfo();window.__sidebarInfo=info;const [bornSession]=React.useState(props.sessionId);
+        return h('output',{'data-sidebar-page':'','data-sidebar-session':props.sessionId,'data-sidebar-born-session':bornSession},info.tab.kind+':'+info.tab.visible+':'+info.tab.navigation.revision);
       }));
       child.effect(()=>child.slots.register({name:'sidebar.right.pane.tab.title',key:'compat/sidebar-page'}, props=>{
         const info=props.useTabInfo();return h('span',{'data-sidebar-title':''},'Title '+info.tab.kind);
@@ -43,6 +47,30 @@ export async function smokeSidebarRight({ evaluate, wait, screenshot }) {
   await screenshot?.();
   await evaluate("window.__sidebarService.openTab('compat-page')");
   await wait(() => evaluate("document.querySelector('[data-sidebar-page]')?.textContent==='compat-page:true:2'"));
+  await evaluate(`(async()=>{
+    window.__sidebarSessionA=window.__probeCtx.sessions.list.getSnapshot().current;
+    window.__sidebarActionsA=window.__sidebarInfo.tab.actions;
+    window.__sidebarSignalA=window.__sidebarInfo.tab.signal;
+    window.__sidebarSessionB=await window.__probeCtx.sessions.create({cwd:${JSON.stringify(otherWorkspace)}});
+    window.__probeCtx.sessions.open(window.__sidebarSessionB);
+  })()`);
+  await wait(() => evaluate("window.__probeCtx.sessions.list.getSnapshot().current===window.__sidebarSessionB && window.__sidebarTrace.filter(item=>item.phase==='commit' && item.placement==='tab').at(-1)?.session===window.__sidebarSessionB && window.__sidebarTrace.filter(item=>item.phase==='commit' && item.placement==='tab').at(-1)?.workbenchSession===window.__sidebarSessionB && !window.__sidebarService.isExpanded()"));
+  await evaluate("window.__sidebarService.openTab('compat-page')");
+  await wait(() => evaluate("document.querySelector('[data-sidebar-page]')?.dataset.sidebarBornSession===window.__sidebarSessionB && document.querySelector('[data-sidebar-page]')?.textContent==='compat-page:true:1'"));
+  await evaluate("window.__sidebarSignalB=window.__sidebarInfo.tab.signal;window.__sidebarActionsA.openTab('guide')");
+  assert.ok(await evaluate("document.querySelector('[data-sidebar-page]')?.dataset.sidebarSession===window.__sidebarSessionB && window.__sidebarInfo.tab.signal===window.__sidebarSignalB && !window.__sidebarSignalA.aborted"));
+  await evaluate("window.__probeCtx.sessions.open(window.__sidebarSessionA)");
+  try {
+  await wait(() => evaluate("window.__probeCtx.sessions.list.getSnapshot().current===window.__sidebarSessionA && document.querySelector('[data-sidebar-guide-probe]')?.textContent==='guide'"));
+  } catch(error) { console.log('SIDEBAR_SESSION_TRACE',await evaluate("JSON.stringify({a:window.__sidebarSessionA,b:window.__sidebarSessionB,current:window.__probeCtx.sessions.list.getSnapshot().current,active:window.__sidebarService.active(),trace:window.__sidebarTrace,body:document.querySelector('[data-sidebar-page]')?.outerHTML})")); throw error; }
+  await evaluate("window.__sidebarService.openTab('compat-page')");
+  await wait(() => evaluate("document.querySelector('[data-sidebar-page]')?.dataset.sidebarBornSession===window.__sidebarSessionA"));
+  assert.ok(await evaluate("window.__sidebarInfo.tab.signal===window.__sidebarSignalA"));
+  await evaluate("window.__probeCtx.sessions.open(window.__sidebarSessionB)");
+  await wait(() => evaluate("document.querySelector('[data-sidebar-page]')?.dataset.sidebarBornSession===window.__sidebarSessionB && document.querySelector('[data-sidebar-page]')?.textContent==='compat-page:true:1'"));
+  assert.ok(await evaluate("window.__sidebarInfo.tab.signal===window.__sidebarSignalB"));
+  await evaluate("window.__probeCtx.sessions.open(window.__sidebarSessionA)");
+  await wait(() => evaluate("document.querySelector('[data-sidebar-page]')?.dataset.sidebarBornSession===window.__sidebarSessionA"));
   await evaluate("window.__sidebarService.float(window.__sidebarInfo.tab.id,{x:100,y:100,width:400,height:300})");
   await wait(() => evaluate("!!document.querySelector('[data-sidebar-right-float-host] [data-sidebar-page]')"));
   await evaluate("window.__sidebarSavedSignal=window.__sidebarInfo.tab.signal;window.__sidebarSavedId=window.__sidebarInfo.tab.id;window.__probeCtx.layout.selectPanel('compat-sidebar-global')");
@@ -80,5 +108,5 @@ export async function smokeSidebarRight({ evaluate, wait, screenshot }) {
   await wait(() => evaluate("!document.querySelector('[data-sidebar-page]') && !!document.querySelector('[data-sidebar-right-unavailable]')"));
   await evaluate("window.__sidebarService.toggleExpanded()");
   await wait(() => evaluate("(!document.querySelector('[data-sidebar-right-native]') || document.querySelector('[data-sidebar-right-native]').hidden)"));
-  console.log('Sidebar panel passed actual public service, framework session store, body/title hooks, guide chain and menu owner/dismissal, repeated navigation, fullscreen body retention, global-page binding/float/fullscreen isolation and restoration, collapse retention, type unload fallback and native panel restoration.');
+  console.log('Sidebar panel passed actual public service, framework session store, body/title hooks, guide chain and menu owner/dismissal, repeated navigation, fullscreen body retention, session switching/local-state isolation and original-session callbacks, global-page binding/float/fullscreen isolation and restoration, collapse retention, type unload fallback and native panel restoration.');
 }

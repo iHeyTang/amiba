@@ -4130,6 +4130,7 @@ export function WorkspacePane({
     previousPanelModes.current.delete(pane.sessionId);
   }, [pane.setMode, pane.sessionId, mode]);
   const panelOwner = {
+    workbenchSessionId: pane.sessionId,
     openResource: pane.openResource,
     activePanel: mode.startsWith("extension:") ? mode.slice(10) : null,
     openPanel,

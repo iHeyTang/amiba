@@ -141,6 +141,13 @@ function titlesFor(panel: PanelProps): TabRenderer {
 
 /** The tab occurrence binds the service; tab and content share the framework store. */
 export function NativeSidebarSeat(props: NativeSidebarSeatProps): ReactNode {
+  // The renderer can reuse an entry across session changes. Keep its React
+  // state and tab bodies scoped to the same session as the framework store.
+  if (props.workbenchSessionId !== undefined && props.workbenchSessionId !== props.sessionId) return null
+  return <SessionSidebarSeat key={props.sessionId} {...props} />
+}
+
+function SessionSidebarSeat(props: NativeSidebarSeatProps): ReactNode {
   const { sessionId, useStore, usePanelInfo, actions, t, renderSlot, bindService, openTab, useTabTypes, useTabNavigation, occurrence, reportRoom, placement, activePanel, openPanel, closePanel } = props
   const conversationVisible = usePanelInfo(info => info.activePanelId === null)
   const surfaces = useStore(state => state.bySession)

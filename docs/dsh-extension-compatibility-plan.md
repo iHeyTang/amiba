@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：右侧栏会话实例与原生工作区身份对齐（2026-09-13）
+
+NativeSidebarSeat 按 sessionId 隔离 React 实例，继续复用框架的会话 store 与 occurrence。组件回归先复现两个展开会话切换后被误判成关闭的问题，修复后验证会话恢复、快照不受另一会话修改、旧标签回调仍操作原会话及 signal 保留。
+
+真实桌面新增 A/B 会话测试：不同 cwd 避免触发原 Host fixture 的替换；正文记录首次挂载会话，检查 React 状态未串用。首次测试返回 A 超时；第二次挂载轨迹显示 A 曾出现后又返回 B，不能据此算作通过。进一步给工作区 owner 附加可选 workbenchSessionId，原生与官方会话选择尚未对齐时不挂载侧栏内部实例，避免将新 store 与旧工作区控制器组合。原工作区能力、状态结构与样式不变。
+
+组件测试 2 项退出 0（/tmp/amiba-sidebar-session-tests-4.log），包括身份不一致期间无服务绑定、拒绝公开写入、对齐后正常恢复；类型检查退出 0（/tmp/amiba-sidebar-session-types-2.log）。完整桌面构建退出 0（/tmp/amiba-sidebar-session-build-2.log）。第三次桌面测试确认过渡期间拒绝 openTab，测试等待条件改为同时等待原生工作区身份对齐。第四次运行在侧栏开始前的配置保存检查丢失页面测试引用，保留 /tmp/amiba-sidebar-session-smoke-4.log。第五次完整回归退出 0（/tmp/amiba-sidebar-session-smoke-5.log）：A/B 往返、正文首次挂载会话、原标签 signal、旧回调操作 A 而不改变 B、全局页面/浮动/全屏恢复、菜单及原文件、目录、Markdown、配置和 HMR 均通过。
+
+实际桌面会话往返已验收。原生工作区其他隐藏路径、收起正文局部状态保留、窄屏、文档正文与独立 Web 继续核对；43/1/20 统计保持不变，完整目标未完成。
+
 ## 进行中：官方 main 页面隔离及工作区重挂载恢复（2026-09-13）
 
 NativeSidebarSeat 读取公共 usePanelInfo，官方 main 页面选中时不绘制右侧栏正文、标签或浮动层，并在 layout effect 中释放当前会话控制器绑定。公共写操作因此遵循已有 no-session-surface 拒绝语义；adopted store 与 occurrence 不释放。返回时重新绑定并从已保存布局恢复面板，保留标签 id、signal、布局和手动全屏模式。未改动原工作区、文件预览或样式。
