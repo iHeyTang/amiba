@@ -5,6 +5,12 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：图片格式与动画实际验证（2026-09-14）
+
+新增自制的 32×32 色块编码 fixtures，覆盖 baseline JPG、progressive JPEG、GIF、lossless/lossy WebP、24 位 BMP，以及含 16/32 像素条目的 PNG/DIB ICO；另加无限循环双帧 GIF/WebP。fixture 以 base64 保存在测试模块，Pillow 只用于生成，运行测试无需该依赖。实际文件使用大写后缀，经过原文件授权/完整字节读取和 ImageBody 后检查解码像素及 intrinsic 尺寸；每个样本都验证损坏文件重载、恢复、替换/关闭 URL 不再可加载。动画检查实际 compositor 的图片区域截图，再读取截图像素，确认红蓝两帧均显示；不以 drawImage 的首帧或文件元数据代替动画验证。
+
+--compat --sidebar-right 最终退出 0（/tmp/amiba-image-formats-smoke-2.log），10 个新增样本全部通过；此前 SVG/PNG、Markdown 中英文脚注、HTML、代码、PDF 及原侧栏/会话回归亦通过。仅修改测试与文档，沿用 fce007ca 已完整构建的产品，无组件或样式改动。全部 8 个官方图片后缀已有桌面样本证据，但不声称覆盖每种编码变体或独立 Web。44/0/20 入口统计不变，复杂 PDF、完整服务和跨窗口/重启等工作仍在进行。
+
 ## 进行中：Markdown labels 与脚注本地化（2026-09-14）
 
 为实际 rc.2 MarkdownText 补入新版 MarkdownLabels 的 code/footnotes 参数，保留可选旧 codeLabels 及默认英文标题；新 labels 提供时优先使用。流式缓存同时考虑脚注文案变化，结束渲染使用同一文案。文档 MarkdownBody 传递其 locale，未修改 CSS 或原聊天调用方。

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { smokeImageDocuments } from './image-document-smoke.mjs';
 import { smokeHtmlDocument } from './html-document-smoke.mjs';
 import { smokeCodeDocument } from './code-document-smoke.mjs';
 import { smokePdfDocument } from './pdf-document-smoke.mjs';
-export async function smokeDocumentPreview({ evaluate, wait, fileWorkspace, screenshot }) {
+export async function smokeDocumentPreview({ evaluate, wait, fileWorkspace, screenshot, captureImage }) {
   const relative = '.cache/compat-document-preview.txt';
   const file = path.join(fileWorkspace, relative);
   const markdownFile = path.join(fileWorkspace, '.cache/compat-document-preview.md');
@@ -91,6 +92,7 @@ export async function smokeDocumentPreview({ evaluate, wait, fileWorkspace, scre
     await evaluate("window.__documentImageUrl=document.querySelector('[data-image-preview] img').src;window.__sidebarService.close(window.__sidebarService.active().id)");
     await wait(() => evaluate("!document.querySelector('[data-image-preview]')"));
     assert.ok(await evaluate("new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(false);image.onerror=()=>resolve(true);image.src=window.__documentImageUrl})"), 'Image Blob URL must be revoked after close');
+    await smokeImageDocuments({ evaluate, wait, fileWorkspace, captureImage });
     await smokeHtmlDocument({ evaluate, wait, fileWorkspace, screenshot });
     await smokeCodeDocument({ evaluate, wait, fileWorkspace, screenshot });
     await smokePdfDocument({ evaluate, wait, fileWorkspace, screenshot });
