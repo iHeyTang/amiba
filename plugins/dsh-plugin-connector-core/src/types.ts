@@ -126,6 +126,8 @@ export interface OnboardHandle {
    * stops); the provider's `onboard()` should observe this and unwind. */
   readonly signal: AbortSignal;
   emit(update: OnboardUpdate): void;
+  /** One transient challenge, never persisted with account credentials. */
+  requestInput?(label: string, signal?: AbortSignal): Promise<string>;
 }
 
 export interface OnboardResult {
@@ -191,6 +193,7 @@ export interface UpdateConnectInput {
 export type OnboardingState = "pending" | "completed" | "error" | "cancelled";
 
 export interface OnboardingView {
+  input?: { id: string; label: string };
   sessionId: string;
   state: OnboardingState;
   qrUrl?: string;
