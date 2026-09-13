@@ -5,6 +5,12 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：guide 默认视图、多入口和主题（2026-09-14）
+
+新增真实插件 guide 回归：全部 chain 贡献 decline 时显示 shipped fallback；优先贡献接管并获得真实 useTabInfo，卸载恢复默认内容；同一 kind 的多个入口按 order 与其他类型一起排序，动态注册/卸载即时更新；超过四个入口隐藏描述，恢复三个时描述回来。点击或原生 Enter 激活入口替换当前 guide，保持标签数量，多个同 kind 的入口均可用。
+
+首轮交互通过，但截图发现 upstream 颜色变量缺失，入口背景/边框和弱化图标未生效。仅在 GuideBody.module.css 内将颜色角色映射到现有 Amiba theme，未改布局或其他视图。完整桌面构建退出 0（/tmp/amiba-sidebar-guide-build.log）。最终 --compat --sidebar-right 退出 0（/tmp/amiba-sidebar-guide-smoke-3.log），浅深色实际背景、边框和文字层级均有 computed-style 断言，两个截图已查看。键盘测试补齐 Enter 字符事件并检查焦点，未用合成 click 替代键盘验证。文档/PDF 及原侧栏回归同时通过。44/0/20 统计不变；独立 Web、完整服务、跨窗口/重启等清单项仍在进行。
+
 ## 进行中：PDF 多页阅读位置恢复（2026-09-14）
 
 24 页真实 PDF 复现了返回标签后落回第 1 页的问题（/tmp/amiba-pdf-pages-smoke.log，期望 12、实际 1）。外层滚动恢复早于异步 PDF 页面生成，且原 IntersectionObserver 将预加载范围内的页码记成阅读页，disconnect 后向上滚动也不再更新。

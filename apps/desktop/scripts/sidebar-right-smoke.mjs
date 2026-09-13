@@ -1,8 +1,9 @@
+import { smokeSidebarGuide } from './sidebar-guide-smoke.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
-export async function smokeSidebarRight({ evaluate, wait, screenshot, fileWorkspace, setViewport }) {
+export async function smokeSidebarRight({ evaluate, wait, screenshot, fileWorkspace, setViewport, activateFocused }) {
   const otherWorkspace = path.join(fileWorkspace, '.cache', 'sidebar-session-other');
   await mkdir(otherWorkspace, { recursive: true });
   await evaluate(`(async () => {
@@ -126,5 +127,6 @@ export async function smokeSidebarRight({ evaluate, wait, screenshot, fileWorksp
   await wait(() => evaluate("!document.querySelector('[data-sidebar-page]') && !!document.querySelector('[data-sidebar-right-unavailable]')"));
   await evaluate("window.__sidebarService.toggleExpanded()");
   await wait(() => evaluate("(!document.querySelector('[data-sidebar-right-native]') || document.querySelector('[data-sidebar-right-native]').hidden)"));
+  await smokeSidebarGuide({ evaluate, wait, screenshot, activateFocused });
   console.log('Sidebar panel passed actual public service, framework session store, body/title hooks, guide chain and menu owner/dismissal, repeated navigation, fullscreen body retention, 767/768px automatic fullscreen/exit and mode restoration, session switching/local-state isolation and original-session callbacks, global-page binding/float/fullscreen isolation and restoration, collapse component/local-state retention, type unload fallback and native panel restoration.');
 }

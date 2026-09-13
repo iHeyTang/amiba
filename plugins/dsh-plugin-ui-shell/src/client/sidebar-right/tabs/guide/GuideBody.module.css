@@ -6,6 +6,16 @@
    above the body's middle by the spacer below. The minimum height centres a
    short guide while allowing a tall guide to grow into the pane's scroller. */
 .guide {
+  /* Resolve this new view's upstream roles against Amiba's active theme. */
+  --dsw-alias-label-primary: hsl(var(--foreground));
+  --dsw-alias-label-secondary: hsl(var(--muted-foreground));
+  --dsw-alias-label-tertiary: hsl(var(--muted-foreground));
+  --dsw-alias-label-caption: hsl(var(--muted-foreground));
+  --dsw-alias-bg-layer-1: hsl(var(--muted) / 0.4);
+  --dsw-alias-border-l4: hsl(var(--border));
+  --dsw-alias-interactive-bg-hover: hsl(var(--muted));
+  --dsw-static-neutral-200: hsl(var(--muted-foreground) / 0.35);
+  --dsw-static-neutral-700: hsl(var(--muted-foreground) / 0.35);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -82,7 +92,7 @@
 /* The capsule's placeholder cube on ink one step quieter than a registered
    glyph's, marking the unclaimed slot. */
 .placeholderInk {
-  color: var(--dsw-alias-label-tertiary);
+  color: hsl(var(--muted-foreground));
 }
 
 /* The capsule's words in one column beside the glyph: the title, and the
@@ -116,5 +126,5 @@
    draws on currentColor, so this ink is the chip rendering's own. */
 .titleIcon {
   flex: none;
-  color: var(--dsw-alias-label-tertiary);
+  color: hsl(var(--muted-foreground));
 }
