@@ -21,7 +21,7 @@ jobs:
           - target: Windows x64
             runner: windows-2022
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,4 +38,8 @@ jobs:
       - name: Check distributable sources and target runtime lock
         run: node packages/app-runtime/scripts/dsh-runtime/prepare.mjs --validate-only
       - name: Test runtime dependency validation
-        run: node --test packages/app-runtime/scripts/dsh-runtime/dependency-lock.test.mjs
+        run: node --test packages/app-runtime/scripts/dsh-runtime/dependency-lock.test.mjs packages/app-runtime/scripts/dsh-runtime/plugin-distribution.test.mjs
+      - name: Build isolated runtime
+        run: pnpm runtime:prepare
+      - name: Smoke test plugin composition
+        run: pnpm runtime:smoke

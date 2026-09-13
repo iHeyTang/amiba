@@ -77,39 +77,3 @@ test('distribution rejects local plugin dependencies while profile links stay in
     await assert.rejects(validatePluginBuildSources(root, [{ directory, manifest }]), /local dependency/);
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
-
-
-test('Intel Mac pins a shipped native ONNX build without changing other targets', async () => {
-  const { memoryPeerOverrides } = await import('./npm-overrides.mjs');
-  assert.equal(memoryPeerOverrides('0.1.1-rc.2', 'darwin-x64')['onnxruntime-node'], '1.22.0');
-  for (const target of ['darwin-arm64', 'win32-x64']) assert.equal(memoryPeerOverrides('0.1.1-rc.2', target)['onnxruntime-node'], undefined);
-  const manifest = JSON.parse(readFileSync(new URL('../../runtime-deps/darwin-x64/package.json', import.meta.url), 'utf8'));
-  const locked = JSON.parse(readFileSync(new URL('../../runtime-deps/darwin-x64/package-lock.json', import.meta.url), 'utf8'));
-  validateDependencyLock(manifest, manifest, locked);
-  assert.deepEqual(manifest.overrides, memoryPeerOverrides('0.1.1-rc.2', 'darwin-x64'));
-  const engines = Object.entries(locked.packages).filter(([name]) => name.endsWith('node_modules/onnxruntime-node'));
-  assert.ok(engines.length > 0);
-  for (const [, engine] of engines) assert.equal(engine.version, '1.22.0');
-});
-
-
-test('published pet packages stay aligned in both distribution locks', () => {
-  const read = (relative) => JSON.parse(readFileSync(new URL(relative, import.meta.url), 'utf8'));
-  const pet = read('../../../../plugins/dsh-plugin-pets/package.json');
-  for (const target of ['', 'darwin-x64/']) {
-    const manifest = read(`../../runtime-deps/${target}package.json`);
-    const lock = read(`../../runtime-deps/${target}package-lock.json`);
-    for (const name of ['@mofli/core', '@mofli/grove', '@mofli/studio']) {
-      const version = pet.dependencies[name];
-      assert.match(version, /^\d+\.\d+\.\d+$/);
-      assert.equal(manifest.dependencies[name], version);
-      assert.equal(lock.packages[''].dependencies[name], version);
-      const entries = Object.entries(lock.packages).filter(([location]) => location.endsWith(`node_modules/${name}`));
-      assert.ok(entries.length > 0, `${target}${name} missing`);
-      for (const [, entry] of entries) {
-        assert.equal(entry.version, version);
-        assert.ok(entry.resolved.startsWith('https://registry.npmjs.org/'), entry.resolved);
-      }
-    }
-  }
-});

@@ -1,4 +1,4 @@
-import { getPlatform } from "@amiba/app-runtime/platform";
+import { getPlatform } from "@amiba/dsh-plugin-ui-shell/client";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 // Type-only: SlotMap entries for `amiba.sessions.item.menu` /
 // `amiba.sessions.list.group`.

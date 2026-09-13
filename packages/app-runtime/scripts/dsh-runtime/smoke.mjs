@@ -861,6 +861,7 @@ export function apply(ctx) {
             "@deepseek-ai/dsh-client-runtime",
             "@deepseek-ai/dsh-api-remotes",
             "@amiba/dsh-plugin-ui-shell",
+            "@amiba/dsh-plugin-notification-hub",
           ],
         ],
         [
