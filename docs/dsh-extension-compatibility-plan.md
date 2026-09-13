@@ -1315,3 +1315,13 @@ pipelines retain mounted component state.
 - 完整 Desktop 构建通过（/tmp/amiba-host-file-refs-build.log）。新增 --host-file-refs 使用原 Electron DSH HTTP 通道调用真实 put、retainForSession、removeAttachment、readForPrompt，确认删除返回 false 且完整字节仍可读取。首轮误把该原生 HTTP 服务声明为 Client Cordis 服务 remote.amibaAttachments，导致探针等待不存在的服务；修正为实际原生通道后通过，未添加虚构客户端服务。
 - 最终组合回归 /tmp/amiba-host-file-refs-smoke2.log 退出 0，同时通过未登记队列图片最终清理、浏览器注册恢复、整页刷新、输入与命令、动态插件、轨迹、子会话及嵌套 Host 冷重启等原回归。Store 重建后的引用持久性由存储测试验证，不把组合中的 Host 冷重启等同于已专门复查该新增引用。
 - 范围：新登记引用在模型执行前写入，提交失败也保留文件，以免损坏已记录或可重试内容。当前没有旧历史迁移或 release-session 回收流程，尚不能声明长期存储生命周期完整。引擎收到提交前的 UI 准备阶段仍只有当前窗口临时保留；多 Host 进程同时写同一目录不在本轮验证范围。没有 JSX/CSS 改动。
+
+### 打开旧历史时补登记附件引用（2026-09-13）
+
+- loadMessages 已分页读取完整日志并通过既有 projectRuntimeSessionHistory 生成 attachmentBadges。本轮复用该结构化结果，仅对符合真实 Host att_32位十六进制格式的 ID 去重登记引用；不按文件名、缩略图、裸文本 ID 或内联图片 hash 推测归属。
+- 登记完成后返回原历史消息，消息正文、显示顺序和附件标记不变。历史文件可能已缺失，逐项登记失败只记录诊断，不阻止查看历史；无该可选平台接口的宿主保留原行为。
+- Host 提取公共元数据校验，retain 和 remove 检查 ID、对象类型/大小及引用字段时不读取完整文件字节。实际 read 仍读取字节并核对长度；原有符号链接与路径限制保持。避免重复打开旧历史时为幂等登记加载大图片。
+- 历史存储与投影共 24 项测试通过（/tmp/amiba-legacy-file-refs-tests.log），覆盖跨页去重、非 Host ID 排除、普通文字排除、缺失文件和原历史保留；Host 存储 5 项通过（/tmp/amiba-legacy-file-refs-store-tests.log）。Runtime 和附件插件类型检查通过（/tmp/amiba-legacy-file-refs-types.log、/tmp/amiba-legacy-file-refs-plugin-types.log）。
+- 完整 Desktop 构建通过（/tmp/amiba-legacy-file-refs-build.log）。新增 --legacy-file-refs 使用真实 Host 创建未登记文件，检查原元数据没有 retainedBy；测试 Host 插件直接写入旧格式的规范历史事件，不经过新发送逻辑。刷新 renderer 后打开该历史，检查元数据新增原会话 ID，再请求删除并逐字节读取验证文件保留。
+- 最终组合回归 /tmp/amiba-legacy-file-refs-smoke.log 退出 0，包含该迁移、原 Host 引用、队列/图片恢复及清理、输入/命令、动态插件、轨迹、子会话及嵌套 Host 冷重启。无 JSX/CSS 改动，原界面检查继续通过。
+- 回收边界核对：当前 Amiba 的移出列表操作是 workspace.archiveSession；sessions-store 明确保留日志且归档视图仍可打开。因此不把归档接为 release-session，也不在兼容任务中新增永久删除能力。按需迁移不等于全库扫描，未打开旧会话的引用尚未预登记；其他窗口在引擎收到提交前的准备阶段仍需继续核对。

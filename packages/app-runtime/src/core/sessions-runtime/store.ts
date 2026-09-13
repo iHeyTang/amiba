@@ -291,7 +291,24 @@ export async function loadMessages(id: string, subagent?: AgentSubagentAddress):
     if (nextBefore === beforeSeq) break;
     beforeSeq = nextBefore;
   }
-  return projectRuntimeSessionHistory(events);
+  const messages = projectRuntimeSessionHistory(events);
+  const attachments = getPlatform().agentAttachments;
+  if (attachments?.retainForSession) {
+    // Only IDs reconstructed from the existing attachment envelope projection.
+    // Bare text, filenames and inline image hashes are not ownership evidence.
+    const ids = new Set(messages.flatMap(message => message.attachmentBadges ?? [])
+      .map(badge => badge.attachmentId).filter((value): value is string =>
+        typeof value === "string" && /^att_[0-9a-f]{32}$/u.test(value)));
+    for (const attachmentId of ids) {
+      try {
+        await attachments.retainForSession(attachmentId, id);
+      } catch (error) {
+        // Old files can already be absent. Keep the original history readable.
+        console.warn("[agent-sessions] historical attachment retention failed", error);
+      }
+    }
+  }
+  return messages;
 }
 
 /** DSH persists the canonical event log; UI message snapshots are not written. */

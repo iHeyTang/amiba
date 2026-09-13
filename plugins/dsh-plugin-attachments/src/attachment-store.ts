@@ -103,37 +103,29 @@ export class AmibaAttachmentStore {
     }
   }
 
-  async read(attachmentId: string): Promise<AmibaStoredAttachment> {
+  private async readMetadata(attachmentId: string): Promise<AmibaAttachmentRecord> {
     const metadataTarget = this.metadataPath(attachmentId);
     const objectTarget = this.objectPath(attachmentId);
-    const [metadataInfo, objectInfo] = await Promise.all([
-      lstat(metadataTarget),
-      lstat(objectTarget),
-    ]);
-    if (
-      metadataInfo.isSymbolicLink() ||
-      objectInfo.isSymbolicLink() ||
-      !metadataInfo.isFile() ||
-      !objectInfo.isFile()
-    ) {
+    const [metadataInfo, objectInfo] = await Promise.all([lstat(metadataTarget), lstat(objectTarget)]);
+    if (metadataInfo.isSymbolicLink() || objectInfo.isSymbolicLink() || !metadataInfo.isFile() || !objectInfo.isFile()) {
       throw new Error("Attachment object is invalid.");
     }
     if (objectInfo.size <= 0 || objectInfo.size > MAX_ATTACHMENT_BYTES) {
       throw new Error("Attachment object has an invalid size.");
     }
-    const [metadataSource, data] = await Promise.all([
-      readFile(metadataTarget, "utf8"),
-      readFile(objectTarget),
-    ]);
-    const record = JSON.parse(metadataSource) as AmibaAttachmentRecord;
-    if (
-      record.attachmentId !== attachmentId ||
-      record.size !== data.byteLength ||
+    const record = JSON.parse(await readFile(metadataTarget, "utf8")) as AmibaAttachmentRecord;
+    if (record.attachmentId !== attachmentId || record.size !== objectInfo.size ||
       !["image", "text", "pdf"].includes(record.kind) ||
-      (record.retainedBy !== undefined && (!Array.isArray(record.retainedBy) || record.retainedBy.some(id => typeof id !== "string" || !id)))
-    ) {
+      (record.retainedBy !== undefined && (!Array.isArray(record.retainedBy) || record.retainedBy.some(id => typeof id !== "string" || !id)))) {
       throw new Error("Attachment metadata does not match its object.");
     }
+    return record;
+  }
+
+  async read(attachmentId: string): Promise<AmibaStoredAttachment> {
+    const record = await this.readMetadata(attachmentId);
+    const data = await readFile(this.objectPath(attachmentId));
+    if (record.size !== data.byteLength) throw new Error("Attachment metadata does not match its object.");
     return { ...record, data: new Uint8Array(data) };
   }
 
@@ -151,7 +143,7 @@ export class AmibaAttachmentStore {
   async retainForSession(attachmentId: string, sessionId: string): Promise<void> {
     if (!sessionId.trim() || sessionId.length > 512 || /[\x00-\x1f]/u.test(sessionId)) throw new Error("Invalid attachment session id.");
     return this.serial(attachmentId, async () => {
-      const { data: _data, ...record } = await this.read(attachmentId);
+      const record = await this.readMetadata(attachmentId);
       if (record.retainedBy?.includes(sessionId)) return;
       const next = { ...record, retainedBy: [...(record.retainedBy ?? []), sessionId] };
       const target = this.metadataPath(attachmentId);
@@ -168,7 +160,7 @@ export class AmibaAttachmentStore {
   async remove(attachmentId: string): Promise<{ attachmentId: string; deleted: boolean }> {
     return this.serial(attachmentId, async () => {
       try {
-        const record = await this.read(attachmentId);
+        const record = await this.readMetadata(attachmentId);
         if (record.retainedBy?.length) return { attachmentId, deleted: false };
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
