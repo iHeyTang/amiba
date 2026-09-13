@@ -57,7 +57,7 @@
 
 | 编号 | 扩展入口 | 需要解决什么 |
 | --- | --- | --- |
-| 53 | `sidebar.panellist` | 需匹配新版面板定义和导航生命周期，避免取代现有会话分组。 |
+| 53 | `sidebar.panellist` | 这是左侧全局面板图标入口；需接入匹配 id 的 main 面板、selectPanel 和 usePanelInfo，保留原会话分组。beginNavigation 取消机制已接入，面板本身未完成。 |
 | 54 | `sidebar.right.pane.tab` | 需要新版右侧栏的选中、关闭、会话归属等语义。 |
 | 55 | `sidebar.right.pane.tab.title` | 依赖真实右侧栏标签实例和标题更新生命周期。 |
 | 56 | `sidebar.right.tab.document` | 需要文档资源身份、读取及预览生命周期。 |

@@ -1,3 +1,4 @@
+import { LayoutNavigation } from "./layout-navigation.js";
 import { sessionComposerDraft, makeWorkspaceFilesProvider } from "@amiba/ui";
 import { sessionPendingQueue } from "@amiba/ui/composer-runtime";
 import { createInputActionsProvider } from "./input-actions-provider.js";
@@ -363,6 +364,8 @@ function AmibaRoot({
 }
 
 export interface AmibaLayoutService {
+  /** Supersede pending asynchronous navigation; aborted on the next navigation or root disposal. */
+  beginNavigation(): AbortSignal;
   toggleSidebar(): void;
   openDetails(): void;
   closeDetails(): void;
@@ -451,7 +454,20 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // resolves — the same runtime-less path Quick-Ask takes.
   const disposeMessageCatalog = installAmibaMessageCatalog();
   document.title = "Amiba";
+  const navigation = new LayoutNavigation();
+  ctx.effect(() => () => navigation.dispose());
+  // Use the same event boundary as native navigation, including actions from
+  // the desktop host rather than calls through this particular service object.
+  ctx.effect(() => {
+    const invalidate = (event: Event) => {
+      const action = (event as CustomEvent<{ action?: unknown }>).detail?.action;
+      if (action === "open-chat" || action === "open-new-chat" || action === "open-workspace" || action === "open-settings") navigation.commit();
+    };
+    window.addEventListener("amiba:dsh-layout-action", invalidate);
+    return () => window.removeEventListener("amiba:dsh-layout-action", invalidate);
+  });
   const layout: AmibaLayoutService = {
+    beginNavigation: () => navigation.beginNavigation(),
     toggleSidebar: () => dispatchLayoutAction("toggle-sidebar"),
     openDetails: () => dispatchLayoutAction("open-details"),
     closeDetails: () => dispatchLayoutAction("close-details"),

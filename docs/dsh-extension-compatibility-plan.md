@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：导航取消服务及全局面板依赖核对（2026-09-13）
+
+补齐 ctx.layout.beginNavigation：根拥有 LayoutNavigation，每个新请求取消前一个 AbortSignal；open-chat/open-new-chat/open-workspace/open-settings 经既有布局事件边界提交时取消待处理导航，来自桌面宿主的同名事件也走此边界。开关侧栏/详情或其他无关事件不取消。根卸载取消当前信号，卸载后的旧引用也不能重新创建有效请求。没有改变现有导航动作、资源或样式。
+
+3 项单元测试通过（/tmp/amiba-layout-navigation-tests.log）：请求替换、迟到异步回调不提交、根生命周期结束。shell 类型检查通过（/tmp/amiba-layout-navigation-types.log）；完整桌面构建通过（/tmp/amiba-layout-navigation-build.log）。实际 --compat --layout-navigation 退出 0（/tmp/amiba-layout-navigation-smoke.log）：真实 layout 服务的请求替换、openChat 取消、宿主事件取消、无关事件保留均通过；既有配置、会话、文件、Markdown、目录及 HMR 基础回归通过。
+
+澄清第 53 项：c291e796 的 sidebar.panellist 是左侧全局面板图标列表，owner 为 size/active，列表 id 对应 keyed/root main 的 key；并不是右侧标签列表。此前“右侧栏六项”的概括不准确，当前六项待接入入口包含这一左侧全局面板项和五项右侧栏入口，数量不变。需将 main/selectPanel/usePanelInfo 整体接到可选主区域，避免替换原会话分组。
+
+根级依赖的明确差异：当前 rc.2 ui-renderer 的 standardProps 根缓存只提供 useSessions/useWorkspaces；新版 ui-layout 通过 slots.provideRoot({hooks:{panelInfo}}) 发布全局状态。新版实际实现位于 ui-renderer/src/client/registry.ts 的 provideRoot/rebuildRootBinding，并有原子发布、重复 hook 拒绝及 fiber 卸载要求。后续要迁移真实根贡献与渲染订阅，不可只补 GlobalStandardProps 类型或伪造 owner。此处尚未实现，selectPanel/面板列表仍未完成；统计保持 38/6/20，完整目标及其他服务未完成范围不变。
+
 ## 最新进展：真实 Host 分步工具详情与嵌套图片回归（2026-09-13）
 
 新增 --legacy-tool-live（要求 --legacy-tool-details），仅在隔离 smoke profile 中按 marker 驱动真实 Host Session.append：父工具开始、子调用开始、子调用结束、父工具结束分为三个独立阶段。选择父/子调用时均先确认 running；子完成后所选正文自动变为 settled 并收到准确结果，此时父仍在 runningCalls；父完成后再次选择子调用，确认 owner.block 与官方父节点中子对象引用相同。没有在浏览器内伪造 ConversationSnapshot，也没有声称实际执行了这些工具程序。
