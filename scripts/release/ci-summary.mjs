@@ -14,7 +14,7 @@ const rows = [
   process.env.INSTALLER_URL ? `[${name}](${process.env.INSTALLER_URL})` : 'Build or verification failed; see job logs.',
   process.env.UPDATE_ZIP_URL ? `[${name.replace(/\.dmg$/, '.zip')}](${process.env.UPDATE_ZIP_URL})` : '',
   '',
-  manifest?.distributable ? 'Release candidate.' : 'Test package: automatic updates disabled.',
+  manifest?.distributable ? (manifest.autoUpdate === false ? 'Unsigned macOS release. Install updates manually.' : 'Release candidate.') : 'Test package: automatic updates disabled.',
   '',
 ];
 // Diagnostic details belong in the job log, not in the download list.

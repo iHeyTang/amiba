@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { sourceIdentity } from './provenance.mjs';
-import { prepareRelease } from './prepare-release.mjs';
+import { prepareRelease, checkReleaseConfiguration } from './prepare-release.mjs';
 import { publishRelease, checkReleaseAssets } from './publish-release.mjs';
 
 const base = 'a'.repeat(40), next = 'b'.repeat(40);
@@ -112,4 +112,12 @@ test('build identity pins the prepared commit rather than the dispatch commit', 
   const head = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
   assert.equal(sourceIdentity('test', { GITHUB_SHA: base, AMIBA_RELEASE_COMMIT: head }).sourceCommit, head);
   assert.throws(() => sourceIdentity('test', { GITHUB_SHA: head, AMIBA_RELEASE_COMMIT: base }), /Checkout does not match/);
+});
+
+
+test('unsigned release needs no Apple credentials, while signed release still requires them', () => {
+  const unsignedEnv = { GITHUB_REPOSITORY: 'owner/repo' };
+  assert.doesNotThrow(() => checkReleaseConfiguration(unsignedEnv, 'unsigned'));
+  assert.throws(() => checkReleaseConfiguration(unsignedEnv, 'signed'), /configuration missing/);
+  assert.throws(() => checkReleaseConfiguration(unsignedEnv, 'invalid'), /Invalid macOS/);
 });

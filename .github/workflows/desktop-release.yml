@@ -19,6 +19,11 @@ on:
         description: Existing artifact run ID for verification (supports all platforms)
         type: string
         required: false
+      mac_signing:
+        description: macOS signing (unsigned disables Mac automatic updates)
+        type: choice
+        options: [unsigned, signed]
+        default: unsigned
       bump:
         description: Version increment for Release (default patch)
         type: choice
@@ -114,8 +119,13 @@ jobs:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: pnpm release:build win32-x64 --allow-unsigned
+      - name: Build unsigned macOS release
+        if: needs.plan.outputs.mode == 'release' && startsWith(matrix.target, 'darwin-') && inputs.mac_signing != 'signed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm release:build ${{ matrix.target }} --allow-unsigned
       - name: Build signed macOS release
-        if: needs.plan.outputs.mode == 'release' && startsWith(matrix.target, 'darwin-')
+        if: needs.plan.outputs.mode == 'release' && startsWith(matrix.target, 'darwin-') && inputs.mac_signing == 'signed'
         env:
           GH_TOKEN: ${{ github.token }}
           CSC_LINK: ${{ secrets.CSC_LINK }}

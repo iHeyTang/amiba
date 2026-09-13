@@ -13,12 +13,13 @@ const desktop = path.join(root, 'apps/desktop');
 const target = process.argv[2] || `${process.platform}-${process.arch}`;
 const localOnly = process.argv.includes('--local-only');
 const allowUnsigned = process.argv.includes('--allow-unsigned');
-if (allowUnsigned && target !== 'win32-x64') throw new Error('--allow-unsigned is supported for Windows releases. macOS automatic installation requires signing; use --local-only for an unsigned test package.');
+const unsignedMac = target.startsWith('darwin') && allowUnsigned;
 if (!targets.includes(target)) throw new Error(`Unsupported target: ${target}`);
 if (localOnly && process.argv.includes('--upload')) throw new Error('Local test packages cannot be uploaded as releases');
 const settings = localOnly
   ? { sources: [], channel: `latest-${target.split('-')[1]}` }
   : releaseSettings(process.env, target);
+if (unsignedMac) settings.sources = [];
 if (target !== `${process.platform}-${process.arch}`) throw new Error(`Build ${target} using matching OS/Node architecture. Bundled Node and native modules require a matching host. On Apple Silicon use an isolated x64 checkout with Rosetta and x64 Node; for Windows use Windows x64 or a VM.`);
 const run = (args, cwd = root) => {
   const cli = process.env.npm_execpath;
@@ -28,7 +29,7 @@ const run = (args, cwd = root) => {
   if (result.status !== 0) throw new Error(`pnpm ${args.join(' ')} failed (${result.status})`);
 };
 const version = productVersion();
-const identity = sourceIdentity(localOnly ? 'test' : 'release');
+const identity = { ...sourceIdentity(localOnly ? 'test' : 'release'), autoUpdate: !localOnly && !unsignedMac, ...(target.startsWith('darwin') ? { macSigning: localOnly || unsignedMac ? 'unsigned' : 'signed' } : {}) };
 if (!localOnly) preflightRelease(settings.repo, version, identity.sourceCommit);
 run(['--dir', 'apps/desktop', 'build']);
 const marker = JSON.parse(fs.readFileSync(path.join(root, 'packages/app-runtime/resources/dsh-runtime/runtime-manifest.json')));
@@ -51,7 +52,7 @@ const config = {
   extraResources: [...pkg.build.extraResources.map(resource => resource.to === 'resources/dsh-runtime' ? { ...resource, from: stagedRuntime } : resource), { from: sourceFile, to: 'release-config.json' }],
   // Reserved URL only enables metadata generation for local QA. Embedded sources stay empty.
   publish: [{ provider: 'generic', url: settings.sources[0] || 'https://local-test.invalid/', channel: settings.channel }],
-  mac: { ...pkg.build.mac, target: ['dmg', 'zip'], hardenedRuntime: !localOnly, ...(localOnly ? { identity: null } : {}) },
+  mac: { ...pkg.build.mac, target: ['dmg', 'zip'], hardenedRuntime: !localOnly && !unsignedMac, ...(localOnly || unsignedMac ? { identity: null, notarize: false } : {}) },
   win: { ...pkg.build.win, target: ['nsis'] },
 };
 const configFile = path.join(output, 'builder.json');

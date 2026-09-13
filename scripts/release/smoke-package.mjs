@@ -63,6 +63,11 @@ if (process.platform === 'win32') {
   run('hdiutil', ['verify', path.join(output, `Amiba-${version}-mac-${process.arch}.dmg`)]);
   run('unzip', ['-tq', path.join(output, `Amiba-${version}-mac-${process.arch}.zip`)], process.env, 300000);
 }
+if (packageManifest.macSigning === 'unsigned' && packageManifest.distributable) {
+  assert.equal(packageManifest.autoUpdate, false);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(resources, 'release-config.json'))).sources, []);
+  console.log('Verified unsigned macOS release: automatic updates disabled');
+}
 // Older artifacts can still be installed in verify mode; new packages must satisfy pruning checks.
 if (fs.existsSync(path.join(output, 'package-footprint.json'))) verifyPackageContents(resources, target);
 const runtime = path.join(resources, 'resources/dsh-runtime');

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { recordArtifacts as record, verifiedArtifacts } from './artifacts.mjs';
+import { recordArtifacts as record, verifiedArtifacts, publicArtifactNames } from './artifacts.mjs';
 const identity = { sourceCommit: 'a'.repeat(40), buildId: '123-1', mode: 'release', dirty: false };
 const recordArtifacts = (dir, target, version, distributable = true) => record(dir, target, version, distributable, identity);
 test('upload validation rejects changed, missing and stale artifacts', () => {
@@ -34,4 +34,12 @@ test('upload validation rejects changed, missing and stale artifacts', () => {
     fs.unlinkSync(path.join(dir, 'latest-x64.yml'));
     assert.throws(() => recordArtifacts(dir, 'win32-x64', '1.0.0'));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+
+test('unsigned Mac releases publish original packages without advertising automatic updates', () => {
+  const files = ['Amiba-1.0.0-mac-arm64.dmg', 'Amiba-1.0.0-mac-arm64.zip', 'Amiba-1.0.0-mac-arm64.zip.blockmap', 'latest-arm64-mac.yml'];
+  assert.deepEqual(publicArtifactNames({ macSigning: 'unsigned', autoUpdate: false }, files), files.slice(0, 2));
+  assert.deepEqual(publicArtifactNames({ macSigning: 'signed', autoUpdate: true }, files), files);
+  assert.throws(() => publicArtifactNames({ macSigning: 'unsigned', autoUpdate: true }, files), /must disable/);
 });

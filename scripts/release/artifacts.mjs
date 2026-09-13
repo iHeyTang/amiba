@@ -9,6 +9,18 @@ export function metadataName(target) {
 function digest(file) {
   return createHash('sha512').update(fs.readFileSync(file)).digest('base64');
 }
+export function publicArtifactNames(manifest, files) {
+  // Unsigned Mac builds are downloadable releases, not Squirrel update targets.
+  if (manifest.macSigning === 'unsigned' && manifest.autoUpdate !== false) throw new Error('Unsigned macOS release must disable automatic updates');
+  return manifest.autoUpdate === false ? files.filter(name => /\.(dmg|zip|exe)$/.test(name)) : files;
+}
+export function restoreInternalMetadata(source, destination, manifest, publicNames) {
+  // Keep non-public integrity inputs available while checking downloaded files.
+  for (const { name } of manifest.files) {
+    if (typeof name !== 'string' || name !== path.basename(name) || name.includes('\\')) throw new Error('Invalid artifact path');
+    if (!publicNames.includes(name)) fs.copyFileSync(path.join(source, name), path.join(destination, name));
+  }
+}
 export function validateMetadata(dir, target, version) {
   const info = parse(fs.readFileSync(path.join(dir, metadataName(target)), 'utf8'));
   if (info?.version !== version || !Array.isArray(info.files) || !info.files.length) throw new Error('Update metadata version/files mismatch');

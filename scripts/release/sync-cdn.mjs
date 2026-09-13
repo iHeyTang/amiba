@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { verifiedArtifacts, metadataName } from './artifacts.mjs';
+import { verifiedArtifacts, metadataName, publicArtifactNames } from './artifacts.mjs';
 import { releaseSettings } from './config.mjs';
 import { postArtifact } from './post-upload.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -12,10 +12,11 @@ if (!endpoint) throw new Error('CDN POST endpoint is not configured. Set AMIBA_C
 const dir = path.join(root, 'apps/desktop/dist', target);
 const version = JSON.parse(fs.readFileSync(path.join(root, 'apps/desktop/package.json'))).version;
 const metadata = metadataName(target);
-const files = verifiedArtifacts(dir, target, version).filter(name => name !== metadata);
 const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'release-manifest.json')));
+const names = publicArtifactNames(manifest, verifiedArtifacts(dir, target, version));
+const files = names.filter(name => name !== metadata);
 // Commit discovery metadata last, after every referenced package is available.
-for (const name of [...files, metadata]) {
+for (const name of [...files, ...(names.includes(metadata) ? [metadata] : [])]) {
   await postArtifact({
     endpoint, token: process.env.AMIBA_CDN_UPLOAD_TOKEN,
     file: path.join(dir, name), name, version, target,
