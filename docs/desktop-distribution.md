@@ -210,7 +210,7 @@ gh workflow run desktop-release.yml --ref main -f mode=verify -f target=all -f r
 
 发布工具 21 项测试通过；使用模拟 GitHub CLI/API 和小型三平台文件执行实际 ci-upload/upload 脚本，验证上传、回读哈希、自动更新说明、公开发布、发布作业幂等重试，以及损坏文件在远端修改前被拒绝。
 
-[真实 Release 配置预检](https://github.com/iHeyTang/amiba/actions/runs/34743078625) 在 Prepare 阶段按预期报告缺少五项 Mac Secrets，main 未发生自动版本提交，版本保持 0.1.0，也没有创建或发布新 Release。真实签名、公证和最终公开发布尚未执行，需要先补齐凭据。
+[真实 Release 配置预检](https://github.com/iHeyTang/amiba/actions/runs/34743078625) 在 Prepare 阶段按预期报告缺少五项 Mac Secrets，main 未发生自动版本提交，版本保持 0.1.0，也没有创建或发布新 Release。该次预检未执行真实签名、公证或公开发布；后续未签名发布结果见下文。
 
 
 ### 未签名发布
@@ -218,3 +218,16 @@ gh workflow run desktop-release.yml --ref main -f mode=verify -f target=all -f r
 当前默认允许未签名发布。Mac 使用无需账号、证书和网络的 ad-hoc 本地签名封装完整应用，不提供 Apple Developer ID 身份认证，也不进行公证。运行时命令链接转换为包内相对路径；构建和成品检查执行 codesign 严格校验。Mac 包的 `release-config.json` 更新源为空，运行检查会验证这一点；公开 Release 只提供 Mac DMG/ZIP，不提供 Mac 自动更新清单。Windows 保留 EXE、blockmap 和更新清单。Release 说明自动提示 Mac 安装限制。
 
 用户从网络下载 Mac 包后，系统可能拦截启动；可根据 [Apple 官方说明](https://support.apple.com/102445) 在“系统设置 → 隐私与安全性”中手动允许该应用。后续 Mac 版本暂时需要手动下载安装，切换到签名版时也需要安排一次手动安装。
+
+
+### 首次公开发布验证（2026-09-13）
+
+[Release v0.1.2](https://github.com/iHeyTang/amiba/releases/tag/v0.1.2) 已公开并设为 Latest；[完整流水线](https://github.com/iHeyTang/amiba/actions/runs/34744099935) 全部成功。采用 `mode=release,target=all,mac_signing=unsigned,bump=patch`，自动提交统一版本、构建三平台、上传回读校验、生成说明并发布。tag 与安装包源码均为 `26c3dbe99d76ad97d506fd85cfd7427c5f2983e4`。
+
+- macOS ARM DMG：382,926,734 字节；Intel DMG：387,194,022 字节；Windows EXE：327,434,008 字节。
+- 公开附件共七个：两组 Mac DMG/ZIP、Windows EXE/blockmap/latest-x64.yml；无 Mac 自动更新清单。
+- 三平台均通过安装文件完整性、包内 Node、原生 ONNX CPU 推理、Transformers/MemOS 加载及 Electron 原生 PTY 检查。Mac 另通过 ad-hoc 严格校验和更新源为空检查；Windows 实际执行静默安装。
+- 发布作业重新下载三平台公开附件并按构建 manifest 验证哈希后才公开；发布后再次确认 Latest、tag 源码与无需认证即可下载的 Windows 更新清单。
+- 发布工具本地 24 项测试通过。Apple Developer ID 签名、公证和跨版本自动升级仍未实测；当前 Mac 使用手动安装更新，Windows 保留自动更新配置。
+
+0.1.1 的首次运行在公开前主动取消，用于修复 Mac 本地封装签名和运行时绝对链接；没有发布该版本，重新执行流水线正常递增至 0.1.2。CDN POST 接口仍待配置，本次通过 GitHub 分发。
