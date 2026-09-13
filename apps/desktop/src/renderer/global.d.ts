@@ -107,6 +107,7 @@ interface AmibaBridgeApi {
     stat(sessionId: string, path: string): Promise<WorkspaceFileStat>;
     observe(sessionId: string, path: string, changed: () => void): WorkspaceFileObservation;
     readBytes(sessionId: string, path: string): Promise<WorkspaceFileBytes>;
+    readDocument(sessionId: string, path: string, request: import("@amiba/app-runtime/platform").WorkspaceDocumentReadRequest): import("@amiba/app-runtime/platform").WorkspaceDocumentRead;
     reveal(sessionId: string, path: string): Promise<void>;
     openExternal(sessionId: string, path: string): Promise<void>;
     watch(

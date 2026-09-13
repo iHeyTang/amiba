@@ -508,6 +508,21 @@ export interface WorkspaceFileStat {
   readonly bytes?: number;
 }
 
+/** Exact document windows, independent of the original preview API. */
+export type WorkspaceDocumentReadRequest =
+  | { kind: "text"; offset?: number; limit?: number }
+  | { kind: "bytes"; offset?: number; length?: number }
+  | { kind: "all" };
+export type WorkspaceDocumentContent = WorkspaceFileStat & ({ offset: number; text: string; lines: number; eof: boolean } | { offset: number; data: string; eof: boolean });
+/** Explicit envelope: Electron does not preserve custom properties on thrown errors. */
+export type WorkspaceDocumentReadResult =
+  | { ok: true; value: WorkspaceDocumentContent }
+  | { ok: false; error: { name: string; code: string; message: string; details: Readonly<Record<string, unknown>> } };
+export interface WorkspaceDocumentRead {
+  readonly result: Promise<WorkspaceDocumentReadResult>;
+  dispose(): void;
+}
+
 export interface WorkspaceFileDocument {
   /** Canonical absolute path after main-process workspace validation. */
   path: string;
@@ -638,6 +653,7 @@ export interface WorkspaceFilesAdapter {
   stat?(sessionId: string, path: string): Promise<WorkspaceFileStat>;
   observe?(sessionId: string, path: string, changed: () => void): WorkspaceFileObservation;
   readBytes?(sessionId: string, path: string): Promise<WorkspaceFileBytes>;
+  readDocument?(sessionId: string, path: string, request: WorkspaceDocumentReadRequest): WorkspaceDocumentRead;
   reveal(sessionId: string, path: string): Promise<void>;
   openExternal(sessionId: string, path: string): Promise<void>;
   watch(

@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：文档读取会话授权与桌面 IPC（2026-09-13）
+
+新增 files:read-document/files:cancel-document，通过原 workspaceManager.resolveFileForSession 校验并规范化会话路径后调用读取核心。显式 ok/value 或 ok/error 对象跨 Electron 传递 code/details，避免 throw Error 的自定义字段丢失；原文件预览 read/readBytes/stat 不替换。平台新增可选 readDocument，preload 返回 result/dispose 操作，Electron adapter 与桥接声明已接通。
+
+每个请求归属发起 WebContents 的当前文档；重复 id 拒绝，其他窗口不能取消，主文档导航/销毁中止等待授权或正在读取的请求，最后一个请求结束移除监听。IPC 输入检查不合法操作与缺失身份；范围仍由读取核心严格验证。授权阶段 ENOENT 与原工作区越界拒绝映射到对应文档错误码，未知错误保留为失败而不伪造缺失文件。
+
+11 项核心/IPC/原预览测试通过（/tmp/amiba-document-ipc-tests-2.log，额外断言其他 sender 取消不影响活动 signal）；主进程类型检查退出 0（/tmp/amiba-document-ipc-types-2.log），补齐 global.d.ts 桥接声明后渲染端类型检查退出 0（/tmp/amiba-document-ipc-renderer-types-2.log）。完整桌面构建退出 0（/tmp/amiba-document-ipc-build.log）；--compat --sidebar-right 退出 0（/tmp/amiba-document-ipc-smoke.log）。真实 preload/IPC 验证文本页、字节窗口、完整二进制内容、规范化 metadata/version、缺失/非法范围/二进制/超限错误码、实际工作区及 symlink 越界拒绝、立即取消及重复 dispose。既有侧栏、文件/目录、Markdown、配置和 HMR 回归通过。
+
+文档 owner 与 #56 renderer 仍未接入；通信入口通过不等于完整文档插件可用。继续实现预览状态、分页及各正文类型，统计 43/1/20 不变，完整目标未完成。
+
 ## 进行中：文档完整读取与分页读取核心（2026-09-13）
 
 核对固定源 api/workspace-files 的 read/readBytes/readAll 与 fs-local.streamWholeText：文本按 1-based LF 行分页，末尾 LF 不增加空行；严格 UTF-8 解码，开头 8192 字节与返回页拒绝 NUL；默认每页 2 MiB/5000 行，完整读取 32 MiB，超限拒绝而不截断。分页可以读取大于完整文件上限的文件。官方新版部分读取允许工作区外路径，与 Amiba 当前会话授权不同，后续适配保持现有授权边界。

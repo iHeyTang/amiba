@@ -1,3 +1,5 @@
+import { registerDocumentFileIpc } from "./document-file-ipc";
+import { readDocumentFile } from "./document-file-reader";
 import { observeWorkspaceFile } from "./workspace-file-observer";
 import { registerFileResourceIpc } from "./file-resource-ipc";
 import { readPreviewFile, statWorkspaceFile } from "./file-preview";
@@ -83,6 +85,7 @@ function broadcastWorkspaceChange(change: WorkspaceChange) {
 }
 
 export function registerIpcHandlers() {
+  registerDocumentFileIpc(ipcMain, (sessionId, path) => workspaceManager.resolveFileForSession(sessionId, path), readDocumentFile);
   registerFileResourceIpc(ipcMain, sessionId => workspaceManager.getForSession(sessionId), observeWorkspaceFile, listener => workspaceManager.onChange(listener));
   const dshProfilePlugins = new DshProfilePluginManager({
     paths: managedDshPaths(),

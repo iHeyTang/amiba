@@ -4,10 +4,7 @@ import { open, type FileHandle } from 'node:fs/promises';
 /** Callers must authorize and canonicalize the session path before reading. */
 export interface DocumentReadLimits { maxBytes: number; maxFileBytes: number; maxLines: number }
 export const DOCUMENT_READ_LIMITS: Readonly<DocumentReadLimits> = { maxBytes: 2 * 1024 * 1024, maxFileBytes: 32 * 1024 * 1024, maxLines: 5000 };
-export type DocumentReadRequest =
-  | { kind: 'text'; offset?: number; limit?: number }
-  | { kind: 'bytes'; offset?: number; length?: number }
-  | { kind: 'all' };
+import type { WorkspaceDocumentReadRequest as DocumentReadRequest } from '@amiba/app-runtime/platform';
 export class DocumentReadError extends Error {
   readonly code: string;
   readonly details: Readonly<Record<string, unknown>>;

@@ -1,3 +1,4 @@
+import type { WorkspaceDocumentReadRequest, WorkspaceDocumentReadResult } from '@amiba/app-runtime/platform';
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { randomUUID } from "node:crypto";
 import { getWindowChrome } from "../shared/window-chrome";
@@ -204,6 +205,16 @@ const api = {
     },
     stat: (sessionId: string, path: string) =>
       ipcRenderer.invoke("files:stat", { sessionId, path }),
+    readDocument: (sessionId: string, path: string, request: WorkspaceDocumentReadRequest) => {
+      const id = randomUUID();
+      const result: Promise<WorkspaceDocumentReadResult> = ipcRenderer.invoke("files:read-document", { id, sessionId, path, request });
+      let disposed = false;
+      return { result, dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        void ipcRenderer.invoke("files:cancel-document", id).catch(() => {});
+      } };
+    },
     readBytes: (sessionId: string, path: string) =>
       ipcRenderer.invoke("files:read-bytes", { sessionId, path }),
     reveal: (sessionId: string, path: string): Promise<void> =>
