@@ -20,7 +20,7 @@ export function clientInputs({ workspaceDir = defaultWorkspaceDir } = {}) {
       manifest = JSON.parse(readFileSync(path.join(config.root, "package.json"), "utf8"));
     },
     generateBundle(_options, bundle) {
-      if (manifest.name !== '@amiba/dsh-plugin-ui-shell' && [...this.getModuleIds()].some(file => file.replaceAll('\\', '/').endsWith('/packages/app-runtime/src/platform/index.ts'))) {
+      if (manifest.name !== '@amiba/dsh-plugin-ui-shell' && Object.values(bundle).some(chunk => chunk.type === 'chunk' && Object.entries(chunk.modules).some(([file, info]) => info.renderedLength > 0 && file.replaceAll('\\', '/').endsWith('/packages/app-runtime/src/platform/index.ts')))) {
         this.error(`${manifest.name}: import the platform interface from @amiba/dsh-plugin-ui-shell/client; do not bundle the host singleton`);
       }
       const normalize = value => value.replace(/\/client$/, "");
