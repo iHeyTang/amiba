@@ -7,7 +7,10 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "exports": {
-    ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
     "./client": {
       "types": "./lib/client/index.d.ts",
       "default": "./lib/client.js"
@@ -29,7 +32,9 @@
       "platform": "web"
     }
   },
-  "files": ["lib"],
+  "files": [
+    "lib"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && vite build",
     "typecheck": "tsc --noEmit",
@@ -41,7 +46,6 @@
     "@amiba/ui": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "catalog:",
     "@deepseek-ai/schemastery": "catalog:",
-    "lucide-react": "^0.460.0",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
@@ -76,6 +80,7 @@
     "react-dom": "18.3.1",
     "typescript": "5.6.3",
     "vite": "^5.4.11",
-    "vitest": "^2.1.4"
+    "vitest": "^2.1.4",
+    "lucide-react": "^0.460.0"
   }
 }

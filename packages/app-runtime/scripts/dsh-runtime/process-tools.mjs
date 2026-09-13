@@ -32,3 +32,13 @@ export function applyRuntimePatch(packageDir, patchFile) {
     if (reverse.error || reverse.status !== 0) throw new Error(`Cannot apply or verify runtime patch: ${check.stderr}`);
   }
 }
+
+/** Idempotent shutdown: signal-terminated children have null exitCode. */
+export async function stopChildProcess(child) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise((resolve) => {
+    const force = setTimeout(() => child.kill('SIGKILL'), 5_000);
+    child.once('exit', () => { clearTimeout(force); resolve(); });
+    child.kill('SIGTERM');
+  });
+}

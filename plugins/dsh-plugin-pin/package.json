@@ -2,16 +2,25 @@
   "name": "@amiba/dsh-plugin-pin",
   "version": "0.1.0",
   "private": true,
-  "description": "Amiba pin: sidebar session pinning owned by a plugin — a row-menu toggle and a 置顶 group",
+  "description": "Amiba pin: sidebar session pinning owned by a plugin \u2014 a row-menu toggle and a \u7f6e\u9876 group",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "exports": {
-    ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" },
-    "./client": { "types": "./lib/client/index.d.ts", "default": "./lib/client.js" },
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
     "./package.json": "./package.json"
   },
-  "files": ["lib", "README.md"],
+  "files": [
+    "lib",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && vite build",
     "typecheck": "tsc --noEmit",
@@ -19,7 +28,9 @@
   },
   "dsh": {
     "client": {
-      "external": [],
+      "external": [
+        "@amiba/dsh-plugin-ui-shell/client"
+      ],
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-api-remotes",

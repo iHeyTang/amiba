@@ -1,0 +1,26 @@
+name: Pull Request Checks
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  checks:
+    name: PR checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+      - name: Install release test dependency
+        run: |
+          npm install --prefix "$RUNNER_TEMP/amiba-pr-deps" --ignore-scripts --no-audit --no-fund yaml@2.8.1 electron-builder@25.1.8
+          ln -s "$RUNNER_TEMP/amiba-pr-deps/node_modules" node_modules
+          ln -s "$RUNNER_TEMP/amiba-pr-deps/node_modules" apps/desktop/node_modules
+      - run: node scripts/release/version.mjs --check
+      - run: node --test scripts/release/*.test.mjs
+      - run: git diff --check HEAD^ HEAD

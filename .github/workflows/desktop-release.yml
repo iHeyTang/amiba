@@ -106,7 +106,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Verify release tooling
-        run: node --experimental-strip-types --test scripts/release/*.test.mjs apps/desktop/src/main/__tests__/app-updates.test.mjs packages/app-runtime/scripts/dsh-runtime/process-tools.test.mjs packages/app-runtime/scripts/dsh-runtime/dependency-lock.test.mjs
+        run: node --experimental-strip-types --test scripts/release/*.test.mjs apps/desktop/src/main/__tests__/app-updates.test.mjs packages/app-runtime/scripts/dsh-runtime/process-tools.test.mjs packages/app-runtime/scripts/dsh-runtime/dependency-lock.test.mjs packages/app-runtime/scripts/dsh-runtime/plugin-distribution.test.mjs
       - name: Verify UI product version and update menu
         run: pnpm --dir packages/ui exec vitest run src/profile/ProfileMenu.test.tsx
       - name: Build test installers

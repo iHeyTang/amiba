@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { packageCommand, applyRuntimePatch } from './process-tools.mjs';
+import { packageCommand, applyRuntimePatch, stopChildProcess } from './process-tools.mjs';
 test('Windows package managers are invoked through Node without shell splitting', () => {
   const node = 'C:\\Program Files\\nodejs\\node.exe';
   const pnpm = 'C:\\Users\\Test User\\pnpm.cjs';
@@ -22,4 +22,16 @@ test('patches apply outside a Git checkout, verify reuse, and reject drift', () 
     fs.writeFileSync(path.join(dir, 'value.txt'), 'drift\n');
     assert.throws(() => applyRuntimePatch(dir, patch));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('shutdown may be repeated after a child exits by signal', { timeout: 1000 }, async () => {
+  const { spawn } = await import('node:child_process');
+  const { once } = await import('node:events');
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {stdio:'ignore'});
+  try {
+    await once(child, 'spawn');
+    await stopChildProcess(child);
+    assert.ok(child.exitCode !== null || child.signalCode !== null);
+    await stopChildProcess(child);
+  } finally { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); }
 });
