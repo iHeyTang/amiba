@@ -1,3 +1,4 @@
+import { smokeLegacyToolDetails } from "./legacy-tool-details-smoke.mjs";
 import { smokeModelSettingsSlots } from "./model-settings-slots-smoke.mjs";
 import { lineageLoaderFixture } from "./lineage-loader-fixture.mjs";
 import { messageImageFixture } from "./message-image-fixture.mjs";
@@ -44,6 +45,7 @@ if (process.argv.includes("--tool-images") && !process.argv.includes("--message-
 if (process.argv.includes("--nested-tools") && !process.argv.includes("--tool-images")) throw new Error("--nested-tools requires --tool-images");
 if (process.argv.includes("--trajectory-images") && !["--message-images", "--tool-images", "--trajectory-loader", "--cordis-business"].every(flag=>process.argv.includes(flag))) throw new Error("--trajectory-images requires --message-images --tool-images --trajectory-loader --cordis-business");
 if (process.argv.includes("--model-settings-slots") && !process.argv.includes("--compat")) throw new Error("--model-settings-slots requires --compat");
+if (process.argv.includes("--legacy-tool-details") && !process.argv.includes("--compat")) throw new Error("--legacy-tool-details requires --compat");
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const profile = await mkdtemp(path.join(tmpdir(), "amiba-plugin-app-"));
 async function port() {
@@ -1684,6 +1686,7 @@ try {
     const openedDirectory = (await readFile(nativeEvents,"utf8")).split("\n").find(line=>line.startsWith("turn-open-directory ")).slice("turn-open-directory ".length);
     assert.equal(await realpath(openedDirectory), await realpath(profile), "folder action must use the existing validated session-workspace opener");
     console.log("Official produced-files row passed actual tool-view derivation, file contents and validated directory IPC (OS folder opener stubbed).");
+    if (process.argv.includes("--legacy-tool-details")) await smokeLegacyToolDetails({ evaluate, wait, call });
     if (process.argv.includes("--reopen-prose")) {
       const reopenedId = await evaluate("window.__compatSessionId");
       await evaluate("window.__beforeProseReload=true;void 0");

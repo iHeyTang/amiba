@@ -772,6 +772,8 @@ export interface WorkbenchPanelOwner {
   placement: "tab" | "content";
   activePanel: string | null;
   openPanel(id: string): void;
+  /** Close only this extension panel, restoring the previously selected view. */
+  closePanel?(id: string): void;
   inspectToolCall(callId: string): boolean;
   renderMarkdown(text: string): ReturnType<typeof import("@amiba/markdown").ChatMarkdown>;
 }
@@ -872,3 +874,5 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
     "settings.models.provider-card": { kind: "keyed"; scope: "root"; owner: ProviderCardExtrasOwnerProps };
   }
 }
+
+export type { DetailsToolOwnerProps } from "@deepseek-ai/dsh-client-ui-conversation/client";

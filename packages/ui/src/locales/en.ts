@@ -441,6 +441,7 @@ export const en = {
   "sidepanel.trace.workedForSeconds": "Worked for {seconds}s",
   "sidepanel.trace.workedForMinutes": "Worked for {minutes}m {seconds}s",
   "sidepanel.trace.thinking": "Thinking…",
+  "sidepanel.trace.selectTool": "Select a tool call",
   "sidepanel.trace.toolDetails": "Tool-call details",
   "sidepanel.trace.executionDetails": "Execution details",
   "sidepanel.trace.toolCount": "{count} tool calls",

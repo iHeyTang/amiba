@@ -271,6 +271,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
     conversationViews: ContributionsSource<ConversationViewEntry>;
     cordisPackages: import("./cordis-business.js").CordisPackages;
+    legacyToolDetailsAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
     toolImagesAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
     lineageAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
     commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
@@ -309,6 +310,7 @@ function AmibaRoot({
   conversationViews,
   cordisPackages,
   commandRowKeys,
+  legacyToolDetailsAvailable,
   toolImagesAvailable,
   lineageAvailable,
   conversationSource,
@@ -337,6 +339,7 @@ function AmibaRoot({
       renderSlotChain={renderSlotChain}
       cordisPackages={cordisPackages}
       commandRowKeys={commandRowKeys}
+      legacyToolDetailsAvailable={legacyToolDetailsAvailable}
       toolImagesAvailable={toolImagesAvailable}
       lineageAvailable={lineageAvailable}
       conversationSource={conversationSource}
@@ -684,6 +687,10 @@ export async function apply(ctx: ClientContext): Promise<void> {
               },
             };
           })(),
+          legacyToolDetailsAvailable: {
+            getSnapshot: () => ctx.slots.entriesOfSlot("conversation.details.tool").length > 0,
+            subscribe: (listener: () => void) => ctx.slots.subscribe("conversation.details.tool", listener),
+          },
           toolImagesAvailable: {
             getSnapshot: () => ctx.slots.entriesOfSlot("tool.call.images").length > 0,
             subscribe: (listener: () => void) => ctx.slots.subscribe("tool.call.images", listener),
@@ -848,6 +855,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "tool.call.images": { kind: "single", scope: "session" },
           "conversation.approval.detail": { kind: "single", scope: "session" },
           "conversation.chat.assistant-actions": { kind: "list", scope: "session" },
+          "conversation.details.tool": { kind: "single", scope: "session" },
           "tool.call.toolview": { kind: "keyed", scope: "session" },
           // Amiba's keyed question seat: one entry per question id (a
           // plugin-owned question kind claims exactly its own id), `fallback`

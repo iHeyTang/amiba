@@ -403,6 +403,7 @@ export const zhCN: UiMessages = {
   "sidepanel.trace.workedForSeconds": "工作了 {seconds} 秒",
   "sidepanel.trace.workedForMinutes": "工作了 {minutes} 分 {seconds} 秒",
   "sidepanel.trace.thinking": "正在思考…",
+  "sidepanel.trace.selectTool": "选择工具调用",
   "sidepanel.trace.toolDetails": "工具调用详情",
   "sidepanel.trace.executionDetails": "执行详情",
   "sidepanel.trace.toolCount": "{count} 次工具调用",

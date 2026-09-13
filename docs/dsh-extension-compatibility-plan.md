@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：旧版工具详情可选面板（2026-09-13）
+
+conversation.details.tool 以实际 rc.2 已有 single/session 契约声明并导出其 canonical owner。只在存在插件贡献时提供现有工作台内的可选页签，不覆盖原工具卡片、工具外部打开及轨迹 inspect。面板从当前会话官方 nodes/runningCalls 取真实对象，递归包括子调用；选择由会话 id 与 callId 保存，失去窗口中的调用时不偷偷切换其他调用，不用另一会话快照渲染。选中运行调用完成后，订阅用新官方 settled slice 更新。错误边界仅隔离插件正文，选择控件保留，renderer 替换可恢复。
+
+WorkbenchPanelOwner 新增可选 closePanel(id)。原 openPanel 记录该会话之前的模式，closePanel 只在指定面板仍被选中时恢复，避免卸载插件留下空面板；其他打开/查看操作保持原有路径。中英文选择提示随现有字典提供。
+
+验证：新增面板 6 项加既有轨迹 2 项，共 8 项通过（/tmp/amiba-legacy-details-tests-final.log）；工作台会话隔离/响应式 15 项通过（/tmp/amiba-legacy-workbench-tests.log）。UI、SDK（含 guard）、shell 类型检查与完整桌面构建通过（/tmp/amiba-legacy-details-build.log）。--compat --legacy-tool-details 最终退出 0（/tmp/amiba-legacy-details-smoke-2.log）：真实工具对象引用相同、准确 session、原聊天标题保留、插件卸载后原文件内容恢复。此前一轮错误地在文件异步读取完成前比较 Opening file…，该轮不作通过证据。已查看 amiba-legacy-tool-details.png：原聊天与工具区域保留；标签条保持原水平滚动位置，截图中的新页签部分在左边界之外，后续继续验证主动选择后的可见性与键盘导航。
+
+入口基础统计更新为 38/6/20，不代表完整插件兼容率。完整官方详情插件依赖、实际运行中调用更新/跨会话交互及独立 Web 仍需专项验证；新版右侧栏六项和全部队列/服务未完成范围继续保留。未完成整体目标。
+
 ## 最新进展：工具图片扩展报错后的替换恢复（2026-09-13）
 
 发现 ToolImageEvidence 的本地 WorkbenchViewBoundary 仅按 callId 挂载，没有 resetKey：展开后图片 renderer 报错，即使替换 renderer，错误状态也一直保留。新增回归先在修复前失败（/tmp/amiba-gallery-recovery-red.log，1 失败/6 通过），再以 source.render 作为错误恢复条件，仅重试图片子区域。原详情控件保持同一 DOM 节点、未提交输入和展开状态；恢复后卸载图片仍保留原详情。工具图片及多层子工具 13 项测试通过（/tmp/amiba-gallery-recovery-green.log），UI 类型检查通过（/tmp/amiba-gallery-recovery-types.log）。本轮为组件层回归，没有重新声称完整桌面或第三方插件全部验证。

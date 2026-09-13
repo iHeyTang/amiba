@@ -4105,17 +4105,25 @@ export function WorkspacePane({
   // to show a PREVIEW (a browser tab, a diff, a file the agent touched), and a
   // directory tree unfolding beside it on every open reads as clutter.
   const { mode, setMode, fileTreeOpen, setFileTreeOpen } = pane;
+  const previousPanelModes = useRef(new Map<string, WorkbenchMode>());
   const openPanel = useCallback(
     (id: string) => {
+      if (mode !== `extension:${id}`) previousPanelModes.current.set(pane.sessionId, mode);
       pane.setMode(`extension:${id}`);
       pane.setOpen(true);
     },
-    [pane.setMode, pane.setOpen],
+    [pane.setMode, pane.setOpen, pane.sessionId, mode],
   );
+  const closePanel = useCallback((id: string) => {
+    if (mode !== `extension:${id}`) return;
+    pane.setMode(previousPanelModes.current.get(pane.sessionId) ?? "preview");
+    previousPanelModes.current.delete(pane.sessionId);
+  }, [pane.setMode, pane.sessionId, mode]);
   const panelOwner = {
     openResource: pane.openResource,
     activePanel: mode.startsWith("extension:") ? mode.slice(10) : null,
     openPanel,
+    closePanel,
     inspectToolCall,
     renderMarkdown: (text: string) => <ChatMarkdown>{text}</ChatMarkdown>,
   };

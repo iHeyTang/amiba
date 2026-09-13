@@ -1,3 +1,4 @@
+import { LegacyToolDetails } from "./legacy-tool-details.js";
 import { sessionLineage, equalSessionLineage } from "./session-lineage.js";
 import { useSessionImageLoader } from "./session-image-loader.js";
 import { useTrajectoryInspection } from "./trajectory-inspection.js";
@@ -86,6 +87,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   Fragment,
   useSyncExternalStore,
   type ReactElement,
@@ -179,6 +181,7 @@ export type AmibaShellSlot =
   | "conversation.message.images"
   | "conversation.approval.detail"
   | "conversation.chat.assistant-actions"
+  | "conversation.details.tool"
   | "tool.call.toolview"
   | "tool.call.images";
 
@@ -357,6 +360,7 @@ function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string)
 interface ProductShellProps {
   renderSlotChain: PropsRenderSlots<AmibaShellSlot>["renderSlotChain"];
   cordisPackages: CordisPackages;
+  legacyToolDetailsAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
   toolImagesAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
   commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
   conversationSource: (sessionId: string) => import("@deepseek-ai/dsh-client-runtime/client").SessionFace | undefined;
@@ -417,6 +421,7 @@ function ProductShellInner({
   renderSlotChain,
   cordisPackages,
   commandRowKeys,
+  legacyToolDetailsAvailable,
   toolImagesAvailable,
   conversationSource,
   fileMentions,
@@ -441,6 +446,8 @@ function ProductShellInner({
 }: ProductShellProps): ReactElement {
   const { t } = useT();
   const hasLineage = useSyncExternalStore(lineageAvailable.subscribe, lineageAvailable.getSnapshot, lineageAvailable.getSnapshot);
+  const hasLegacyDetails = useSyncExternalStore(legacyToolDetailsAvailable.subscribe, legacyToolDetailsAvailable.getSnapshot, legacyToolDetailsAvailable.getSnapshot);
+  const [legacySelections, setLegacySelections] = useState<Record<string, string>>({});
   const hasToolImages = useSyncExternalStore(toolImagesAvailable.subscribe, toolImagesAvailable.getSnapshot, toolImagesAvailable.getSnapshot);
   const platform = getPlatform();
   const desktop = platform.kind === "desktop";
@@ -508,6 +515,7 @@ function ProductShellInner({
   });
   const { open: settingsOpen, close: closeSettings } = settings;
   const sessions = useSessions();
+  const detailsCwd = useOfficialSessions(list => sessions.activeId ? Object.values(list.byId).find(row => row.id === sessions.activeId)?.cwd : undefined);
   const lineage = useOfficialSessions(list => sessionLineage(list, sessions.activeId), equalSessionLineage);
   const childAddressSource = useRef<(id: string) => AgentSubagentAddress | undefined>(() => undefined);
   childAddressSource.current = (id) => sessions.sessions.find((session) => session.id === id)?.subagentAddress
@@ -860,8 +868,16 @@ function ProductShellInner({
                 toolAnnotation: (owner) =>
                   renderSlot("amiba.tool.activity", owner),
                 progress: () => renderSlot("amiba.conversation.progress", {}),
-                workbenchPanel: (owner) =>
-                  renderSlot("amiba.workbench.panel", owner),
+                workbenchPanel: (owner) => <>
+                  {renderSlot("amiba.workbench.panel", owner)}
+                  {sessions.activeId ? <LegacyToolDetails enabled={hasLegacyDetails}
+                    source={conversationSource(sessions.activeId)} sessionId={sessions.activeId} cwd={detailsCwd}
+                    panel={owner} selectedCallId={legacySelections[sessions.activeId] ?? null}
+                    onSelect={callId => setLegacySelections(current => ({ ...current, [sessions.activeId!]: callId }))}
+                    render={details => renderSlot("conversation.details.tool", details)}
+                    label={t("sidepanel.trace.toolDetails")} emptyLabel={t("sidepanel.trace.selectTool")}
+                  /> : null}
+                </>,
                 // The official composer overlay anchor. The seat declares NO owner
                 // share, so `{}` is the faithful dispatch — anything else would be
                 // a fabricated owner. Session-scoped: the renderer resolves the
