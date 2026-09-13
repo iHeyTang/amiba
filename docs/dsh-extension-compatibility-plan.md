@@ -5,6 +5,14 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：文件资源原生事件监听基础（2026-09-13）
+
+新增 workspace-file-observer：待监听文件尚不存在时，从最近存在的祖先 realpath 起检查工作区边界，允许缺失后缀，但拒绝指向外部的祖先和悬空符号链接；该校验仅用于监听，后续文件读取仍须重新授权。Chokidar 仅沿目标的祖先目录链递进，忽略其他子树及目标变成目录后的后代；返回前等待 ready，AbortSignal 和幂等 disposer 负责关闭 watcher。
+
+首次真实事件测试失败（/tmp/amiba-file-observer-tests.log），第二次仍失败（/tmp/amiba-file-observer-tests-2.log）：逐步核实缺失多层父目录需要沿目录链发现，而 macOS Chokidar fsevents-handler 的 opts.persistent 分支才启动持续监听。已启用 persistent 并保留确定关闭生命周期。修复后真实文件测试通过；扩展父目录删除重建与无关路径隔离后仍通过（/tmp/amiba-file-observer-tests-4.log）。校验测试同时覆盖绝对/相对/符号链接越界、悬空链接、目录拒绝及工作区内链接的规范路径。
+
+主进程类型检查通过（/tmp/amiba-file-observer-types-2.log）。本阶段只完成主进程监听组件及真实文件事件验证，尚未连接 IPC/preload/provider；产品仍使用上一阶段元数据校验。下一步接入订阅就绪、事件转发、窗口销毁和资源取消，不将该组件单独记为事件流或右侧栏完成。
+
 ## 进行中：真实 file 资源提供器与状态恢复（2026-09-13）
 
 在具备真实 WorkspaceFilesAdapter.stat 的平台注册 file provider，通过现有 ResourceRegistry / useResource 接入文件元数据。按地址原样传 sessionId/path 给主进程，不从会话摘要推断路径；无 Session 的 absolute 地址返回 unknown-workspace，非法地址返回 unsupported-address。未实现 stat 的平台不注册伪提供器。
