@@ -40,6 +40,7 @@
     "@amiba/dsh-plugin-media": "workspace:*",
     "@amiba/dsh-plugin-media-minimax": "workspace:*",
     "@amiba/dsh-plugin-pets": "workspace:*",
-    "@amiba/dsh-plugin-conversation-notifications": "workspace:*"
+    "@amiba/dsh-plugin-conversation-notifications": "workspace:*",
+    "@amiba/dsh-plugin-onboarding": "workspace:*"
   }
 }

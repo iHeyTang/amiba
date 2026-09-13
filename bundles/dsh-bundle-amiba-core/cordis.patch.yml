@@ -55,6 +55,9 @@
     - id: llm-tokendance
       name: "@amiba/dsh-plugin-provider-tokendance"
 
+    - id: amiba-onboarding
+      name: "@amiba/dsh-plugin-onboarding"
+
     - id: amiba-model-plane
       name: "@amiba/dsh-plugin-model-plane"
       config:
