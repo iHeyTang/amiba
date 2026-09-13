@@ -13,7 +13,7 @@ import { createSidebarRightSessionStore } from './session-store.js'
 import { guideDefinition } from './tabs/guide/definition.js'
 import type { TabId } from './dockkit/index.js'
 
-afterEach(cleanup)
+afterEach(() => { cleanup(); Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 }) })
 vi.mock('@deepseek-ai/dsh-client-runtime/client', async () => await import('../../dev/runtime-store.js'))
 
 it('opens from an unmounted body, retains floats when collapsed, and restores native preview on removal', async () => {
@@ -67,6 +67,28 @@ it('opens from an unmounted body, retains floats when collapsed, and restores na
   expect(screen.queryByText('Retained body')).toBeNull()
   act(() => controller.toggleExpanded())
   expect(screen.getByText('Retained body')).toBeTruthy()
+  expect(mounts).toBe(1)
+  const resize = (width: number) => act(() => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: width })
+    window.dispatchEvent(new Event('resize'))
+  })
+  resize(767)
+  expect((document.querySelector('[data-sidebar-right-native]') as HTMLElement).style.position).toBe('fixed')
+  expect(instance.getSnapshot().bySession[sessionId]!.layout.mode).toBe('push')
+  resize(768)
+  expect((document.querySelector('[data-sidebar-right-native]') as HTMLElement).style.position).toBe('')
+  act(() => instance.actions.setMode(sessionId, 'fullscreen'))
+  resize(767)
+  resize(1024)
+  expect(instance.getSnapshot().bySession[sessionId]!.layout.mode).toBe('fullscreen')
+  resize(767)
+  act(() => (document.querySelector('[data-sidebar-right-mode=push]') as HTMLButtonElement).click())
+  expect(controller.isExpanded()).toBe(false)
+  expect(instance.getSnapshot().bySession[sessionId]!.layout.mode).toBe('push')
+  expect(screen.getByText('Original preview')).toBeTruthy()
+  act(() => controller.toggleExpanded())
+  expect((document.querySelector('[data-sidebar-right-native]') as HTMLElement).style.position).toBe('fixed')
+  resize(1024)
   expect(mounts).toBe(1)
   const tab = Object.values(instance.getSnapshot().bySession[sessionId]!.layout.tabs)[0]!
   const occurrence = controller.tabDomain.occurrence(sessionId, tab)

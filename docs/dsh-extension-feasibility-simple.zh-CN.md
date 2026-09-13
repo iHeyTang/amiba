@@ -47,7 +47,7 @@
 | 48 | `shell.overlay` | 已接入，依赖另核对；具体未完成项见详细表。 |
 | 52 | `sidebar.footer.action` | 可以适配，已验证；具体未完成项见详细表。 |
 | 53 | `sidebar.panellist` | 已接到原侧栏导航行，按 order/label 显示，传递真实 size/active，并关联 main/selectPanel/panelInfo；键盘与鼠标切换、延迟注册、卸载返回和原侧栏/会话保留通过桌面验证。main 保留键、完整第三方组件与独立 Web 另核对。 |
-| 54 | `sidebar.right.pane.tab` | 已接入可选工作区面板，真实会话 store、tabInfo、重复导航、收起及类型卸载回退已通过桌面验证；官方 main 隔离、浮动/全屏恢复和实际会话往返已实测；会话身份对齐后绑定，旧标签回调仍操作原会话。收起/展开保留正文组件及局部草稿已实测；原生工作区其他隐藏路径、窄屏、完整第三方插件与 Web 仍待验证。 |
+| 54 | `sidebar.right.pane.tab` | 已接入可选工作区面板，真实会话 store、tabInfo、重复导航、收起及类型卸载回退已通过桌面验证；官方 main 隔离、浮动/全屏恢复和实际会话往返已实测；会话身份对齐后绑定，旧标签回调仍操作原会话。收起保留正文局部草稿、767/768px 自动全屏及退出恢复已实测；原生工作区其他隐藏路径、完整第三方插件与 Web 仍待验证。 |
 | 55 | `sidebar.right.pane.tab.title` | 标题插槽已按真实标签类型分发，tabInfo 与动态标题通过桌面验证；复用原工作区标签样式，完整第三方插件及 Web 仍待验证。 |
 | 57 | `sidebar.right.tab.guide` | guide 类型、正文及替换链已接入；真实插件 select/useTabInfo 替换通过桌面验证，完整 fallback/多入口交互与 Web 仍待验证。 |
 | 58 | `sidebar.right.tab.menu.item` | 已接到真实标签菜单，插件获得对应 tab 和 dismiss；点击及关闭菜单通过桌面验证，跨会话与 Web 仍待验证。 |

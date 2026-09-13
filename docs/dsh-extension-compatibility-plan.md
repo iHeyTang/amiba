@@ -5,6 +5,14 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：侧栏窄屏自动全屏（2026-09-13）
+
+按固定源 SidebarRight.tsx 的 viewportWidth < 768 规则派生自动全屏，使用 resize 外部快照读取当前视口，不修改已保存 layout.mode；变宽后自动回到手动模式。窄屏点击退出全屏与固定源一致：收起并设置 push。仅影响新增侧栏展示，原工作区轨道、文件预览、尺寸和样式不改写。
+
+组件测试通过 767/768px 边界、自动模式不写入 store、手动全屏跨尺寸保留、窄屏退出恢复原预览、重新打开自动全屏及正文挂载计数不变；测试和类型检查退出 0（/tmp/amiba-sidebar-narrow-tests.log、/tmp/amiba-sidebar-narrow-types.log）。完整桌面构建退出 0（/tmp/amiba-sidebar-narrow-build.log）；--compat --sidebar-right 退出 0（/tmp/amiba-sidebar-narrow-smoke.log）。实际 CDP 视口覆盖确认 767px 全宽及 tabInfo.fullscreen=true，768px 恢复普通面板及 false；窄屏退出收起、重新打开全屏、恢复原视口后回到普通模式，正文挂载计数不增加。既有会话切换、收起草稿保留、全局 main、浮动/手动全屏、菜单、原文件/目录、Markdown 和 HMR 回归均通过。
+
+原生工作区其他隐藏路径、文档正文、完整第三方插件与独立 Web 继续核对；43/1/20 统计不变，完整目标未完成。
+
 ## 进行中：侧栏收起时保留正文组件（2026-09-13）
 
 固定源 ui-sidebar-right/src/client/shell/SidebarRight.tsx 明确要求收起时正文仍挂载。Amiba 原 WorkspacePane 在预览模式不渲染扩展 content，上一版只保留 store/occurrence，正文局部状态会丢失。

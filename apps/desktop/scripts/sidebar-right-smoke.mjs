@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
-export async function smokeSidebarRight({ evaluate, wait, screenshot, fileWorkspace }) {
+export async function smokeSidebarRight({ evaluate, wait, screenshot, fileWorkspace, setViewport }) {
   const otherWorkspace = path.join(fileWorkspace, '.cache', 'sidebar-session-other');
   await mkdir(otherWorkspace, { recursive: true });
   await evaluate(`(async () => {
@@ -43,6 +43,19 @@ export async function smokeSidebarRight({ evaluate, wait, screenshot, fileWorksp
   await wait(() => evaluate("Math.abs(document.querySelector('[data-sidebar-right-native]').getBoundingClientRect().width-innerWidth)<1"));
   await evaluate("document.querySelector('[data-sidebar-right-mode=push]').click()");
   await wait(() => evaluate("document.querySelector('[data-sidebar-right-native]').getBoundingClientRect().width<innerWidth-100"));
+  assert.equal(await evaluate('window.__sidebarBodyMounts'), mounts);
+  await setViewport(767);
+  await wait(() => evaluate("innerWidth===767 && window.__sidebarInfo.sidebar.fullscreen && Math.abs(document.querySelector('[data-sidebar-right-native]').getBoundingClientRect().width-innerWidth)<1"));
+  await setViewport(768);
+  await wait(() => evaluate("innerWidth===768 && !window.__sidebarInfo.sidebar.fullscreen && document.querySelector('[data-sidebar-right-native]').getBoundingClientRect().width<innerWidth-100"));
+  await setViewport(767);
+  await wait(() => evaluate("!!document.querySelector('[data-sidebar-right-mode=push]')"));
+  await evaluate("document.querySelector('[data-sidebar-right-mode=push]').click()");
+  await wait(() => evaluate("!window.__sidebarService.isExpanded() && !document.querySelector('[data-sidebar-right-native]')"));
+  await evaluate("window.__sidebarService.toggleExpanded()");
+  await wait(() => evaluate("window.__sidebarInfo.sidebar.fullscreen && Math.abs(document.querySelector('[data-sidebar-right-native]').getBoundingClientRect().width-innerWidth)<1"));
+  await setViewport();
+  await wait(() => evaluate("!window.__sidebarInfo.sidebar.fullscreen && document.querySelector('[data-sidebar-right-native]').getBoundingClientRect().width<innerWidth-100"));
   assert.equal(await evaluate('window.__sidebarBodyMounts'), mounts);
   await screenshot?.();
   await evaluate("window.__sidebarService.openTab('compat-page')");
@@ -113,5 +126,5 @@ export async function smokeSidebarRight({ evaluate, wait, screenshot, fileWorksp
   await wait(() => evaluate("!document.querySelector('[data-sidebar-page]') && !!document.querySelector('[data-sidebar-right-unavailable]')"));
   await evaluate("window.__sidebarService.toggleExpanded()");
   await wait(() => evaluate("(!document.querySelector('[data-sidebar-right-native]') || document.querySelector('[data-sidebar-right-native]').hidden)"));
-  console.log('Sidebar panel passed actual public service, framework session store, body/title hooks, guide chain and menu owner/dismissal, repeated navigation, fullscreen body retention, session switching/local-state isolation and original-session callbacks, global-page binding/float/fullscreen isolation and restoration, collapse component/local-state retention, type unload fallback and native panel restoration.');
+  console.log('Sidebar panel passed actual public service, framework session store, body/title hooks, guide chain and menu owner/dismissal, repeated navigation, fullscreen body retention, 767/768px automatic fullscreen/exit and mode restoration, session switching/local-state isolation and original-session callbacks, global-page binding/float/fullscreen isolation and restoration, collapse component/local-state retention, type unload fallback and native panel restoration.');
 }

@@ -1,5 +1,5 @@
 // Adapted from DeepSeek c291e796, MIT. See LICENSE.deepseek.
-import { useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
 import { Maximize2, Minimize2, PanelRightClose } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import type { HostObservable, InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
@@ -141,6 +141,13 @@ function titlesFor(panel: PanelProps): TabRenderer {
 }
 
 
+/** The official automatic presentation boundary does not mutate the saved mode. */
+function subscribeViewport(listener: () => void): () => void {
+  window.addEventListener('resize', listener)
+  return () => window.removeEventListener('resize', listener)
+}
+function isNarrowViewport(): boolean { return window.innerWidth < 768 }
+
 /** The tab occurrence binds the service; tab and content share the framework store. */
 export function NativeSidebarSeat(props: NativeSidebarSeatProps): ReactNode {
   // The renderer can reuse an entry across session changes. Keep its React
@@ -157,7 +164,8 @@ function SessionSidebarSeat(props: NativeSidebarSeatProps): ReactNode {
   const active = activePanel === SIDEBAR_PANEL
   const expanded = surface?.layout.expanded ?? false
   const previous = useRef({ expanded, active, visible: false })
-  const fullscreen = surface?.layout.mode === 'fullscreen'
+  const autoFullscreen = useSyncExternalStore(subscribeViewport, isNarrowViewport)
+  const fullscreen = autoFullscreen || surface?.layout.mode === 'fullscreen'
   const anchor = useRef<HTMLDivElement>(null)
   const { dockHost } = props
   useLayoutEffect(() => {
@@ -197,7 +205,7 @@ function SessionSidebarSeat(props: NativeSidebarSeatProps): ReactNode {
     className="shrink-0 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted/45 hover:text-foreground aria-selected:bg-muted aria-selected:text-foreground"
     onClick={() => { actions.setExpanded(sessionId, true); openPanel(SIDEBAR_PANEL) }}>{t('chrome.expand')}</button>
   if (surface === undefined) return placement === 'tab' ? tabButton : null
-  const panel: PanelProps = { sessionId, surface, actions, t, renderSlot, openTab, useTabTypes, useTabNavigation, useStore, occurrence, fullscreen, autoFullscreen: false, reportRoom }
+  const panel: PanelProps = { sessionId, surface, actions, t, renderSlot, openTab, useTabTypes, useTabNavigation, useStore, occurrence, fullscreen, autoFullscreen, reportRoom }
   const intents = intentsFor(sessionId, actions, openTab)
   const content = <section data-sidebar-right-native hidden={!active} className="flex h-full min-h-0 min-w-0 flex-col bg-background text-foreground" style={fullscreen ? { ...panelTypography, position: 'fixed', inset: 0, zIndex: 60 } : panelTypography}>
     <DockSurface state={surface.layout} canSplit={canSplit(surface.layout)} dropZones="horizontal" minPaneFraction={0.2}
@@ -205,7 +213,10 @@ function SessionSidebarSeat(props: NativeSidebarSeatProps): ReactNode {
       intents={intents} labels={dockLabels(t)} renderTab={bodiesFor(panel)} renderTabTitle={titlesFor(panel)}
       renderTabMenuItems={(tab, dismiss) => renderSlot('sidebar.right.tab.menu.item', { tab, dismiss })} onRoom={reportRoom}
       chrome={<><button type="button" className={chromeButton} data-sidebar-right-mode={fullscreen ? 'push' : 'fullscreen'} aria-label={t(fullscreen ? 'chrome.exitFullscreen' : 'chrome.toFullscreen')} title={t(fullscreen ? 'chrome.exitFullscreen' : 'chrome.toFullscreen')}
-        onClick={() => actions.setMode(sessionId, fullscreen ? 'push' : 'fullscreen')}>{fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
+        onClick={() => {
+          if (fullscreen && autoFullscreen) actions.setExpanded(sessionId, false)
+          actions.setMode(sessionId, fullscreen ? 'push' : 'fullscreen')
+        }}>{fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
         <button type="button" className={chromeButton} aria-label={t('chrome.collapse')} title={t('chrome.collapse')} onClick={() => actions.setExpanded(sessionId, false)}><PanelRightClose size={16} /></button></>} />
   </section>
   if (placement === 'tab') return <>{tabButton}{createPortal(content, dockHost)}
