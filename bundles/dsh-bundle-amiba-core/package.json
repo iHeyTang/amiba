@@ -41,6 +41,7 @@
     "@amiba/dsh-plugin-media-minimax": "workspace:*",
     "@amiba/dsh-plugin-pets": "workspace:*",
     "@amiba/dsh-plugin-conversation-notifications": "workspace:*",
-    "@amiba/dsh-plugin-onboarding": "workspace:*"
+    "@amiba/dsh-plugin-onboarding": "workspace:*",
+    "@amiba/dsh-plugin-connector-weixin": "workspace:*"
   }
 }

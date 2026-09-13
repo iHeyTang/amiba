@@ -157,6 +157,7 @@ const onboardingStateSchema = z.enum([
 // once completed, which itself carries no secret material either (see
 // connectViewSchema above). This schema must never grow one.
 const onboardingViewSchema = z.object({
+  input: z.object({ id: z.string(), label: z.string() }).optional(),
   sessionId: z.string(),
   state: onboardingStateSchema,
   qrUrl: z.string().optional(),
@@ -215,6 +216,7 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
       beginOnboarding(
         input: BeginOnboardingInput,
       ): Promise<RemoteResult<OnboardingView>>;
+      submitOnboardingInput(sessionId: string, inputId: string, value: string): Promise<RemoteResult<OnboardingView>>;
       pollOnboarding(sessionId: string): Promise<RemoteResult<OnboardingView>>;
       cancelOnboarding(
         sessionId: string,
@@ -259,6 +261,7 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
     "amibaConnectors/beginOnboarding": (
       input: BeginOnboardingInput,
     ) => Promise<RemoteResult<OnboardingView>>;
+    "amibaConnectors/submitOnboardingInput": (sessionId: string, inputId: string, value: string) => Promise<RemoteResult<OnboardingView>>;
     "amibaConnectors/pollOnboarding": (
       sessionId: string,
     ) => Promise<RemoteResult<OnboardingView>>;
@@ -405,6 +408,15 @@ export const AMIBA_CONNECTORS_REMOTE: TypertRemoteContribution = {
             "@amiba/connectors#begin-onboarding-input",
           ),
         },
+      ],
+      codec(onboardingViewSchema, "@amiba/connectors#onboarding"),
+    ),
+    descriptor(
+      "submitOnboardingInput",
+      [
+        { name: "sessionId", wire: "sessionId", source: "json", codec: stringCodec },
+        { name: "inputId", wire: "inputId", source: "json", codec: stringCodec },
+        { name: "value", wire: "value", source: "json", codec: stringCodec },
       ],
       codec(onboardingViewSchema, "@amiba/connectors#onboarding"),
     ),

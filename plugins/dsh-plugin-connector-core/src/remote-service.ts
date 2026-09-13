@@ -116,6 +116,11 @@ export class AmibaConnectorsRemoteService extends TypertRemoteService {
   }
 
   @Remote
+  async submitOnboardingInput(sessionId: string, inputId: string, value: string) {
+    return this.center.submitOnboardingInput(sessionId, inputId, value);
+  }
+
+  @Remote
   async pollOnboarding(sessionId: string) {
     return this.center.pollOnboarding(sessionId);
   }
