@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
 import { clientInputs } from "../../scripts/dsh-client-inputs.mjs";
 import { defineConfig } from "vite";
+
+const DEEPSEEK_LICENSE = readFileSync(new URL("./LICENSE.deepseek", import.meta.url), "utf8");
 
 const PLUGIN_ID = "@amiba/dsh-plugin-ui-shell";
 
@@ -43,7 +46,7 @@ export default defineConfig({
       output: {
         inlineDynamicImports: true,
         exports: "named",
-        banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PLUGIN_ID)}, factory: (require) => {`,
+        banner: `/*!\n${DEEPSEEK_LICENSE}\n*/\nwindow.__ModuleLoader__.load({ id: ${JSON.stringify(PLUGIN_ID)}, factory: (require) => {`,
         intro: "var module = { exports: {} }; var exports = module.exports;",
         footer: "return module.exports; } });",
       },

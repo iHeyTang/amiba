@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：右侧栏标签类型注册与资源路由规则（2026-09-13）
+
+迁移固定 c291e796 的 SidebarRightTabRegistry，并通过真实 ctx.reflect.provide 暴露 sidebarRightTabs。此服务只负责类型注册与选择：按地址 glob/canOpen、extension/builtin/fallback 优先级、匹配长度和注册次序选取查看器；允许一个 extension 临时接管 builtin，同 band、重复 id 与 fallback 同 kind 冲突均拒绝；卸载恢复原定义和 guide 元数据。阶段二的标签 body/title 分发、资源读取和生命周期还未接入，不能把这个注册服务算作五项右侧栏完成。
+
+源文件与 26 项相关上游测试按 MIT 迁移（排除尚未迁移 defaultSeed 的一项）；仅替换旧版不存在的 notifySubscribers 小辅助及图标 props 类型依赖，匹配库使用固定 picomatch/posix 4.0.4。LICENSE.deepseek 随 npm 文件列表发布，完整版权许可也通过 Vite banner 写入客户端生成文件，覆盖 managed runtime 只复制 lib 的分发路径。
+
+26 项测试通过（/tmp/amiba-right-tabs-tests.log），shell 类型检查通过（/tmp/amiba-right-tabs-types.log）。首次构建被运行时依赖锁检查拒绝：picomatch 最初误放生产 dependencies；其代码实际由 Vite 打包且不在 external 中，已移到开发依赖，保留原运行时依赖锁。修正后的完整构建退出 0（/tmp/amiba-right-tabs-build-2.log），managed runtime 的实际 client.js 也已确认带完整许可。--compat --right-tab-registry 退出 0（/tmp/amiba-right-tabs-smoke.log）：实际服务注入、地址选择、扩展接管、冲突拒绝后快照保留、调用方 effect 随 fiber 卸载恢复原定义、最后移除贡献均通过；既有设置、会话、文件、Markdown 和 HMR 基础回归通过。
+
+新的服务范围核对：新版 sidebarRight 不只是开关面板；还包含分栏、浮动、停靠、每会话 Tab occurrence、资源 pin、导航 revision 和跨会话稳定 tabActions。必须迁移真实状态和资源模型并接到当前工作台，不能用空实现或假 TabRecord 填入 owner。完整目标与 39/5/20 统计保持不变。
+
 ## 最新进展：左侧全局面板图标列表（2026-09-13）
 
 第 53 项 sidebar.panellist 已接入原侧栏：metadata source 使用真实 SlotCore 的入口版本、order、label 与 main 注册状态；列表和 main 的迟到注册/卸载均触发更新，不调用图标的 inject 工厂。沿用 NavigationRow 的布局和样式，展开态向图标传 size=16 和实际 active。缺少匹配 main 时按钮禁用，避免把无效导航错误抛到点击处理；目标注册后自动启用。全局面板显示期间，原生工作区导航的 activeView/visibleSessionId 不再指向其背后被隐藏的工作区。

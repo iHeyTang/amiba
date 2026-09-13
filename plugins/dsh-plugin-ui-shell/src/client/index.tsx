@@ -1,3 +1,5 @@
+import { SidebarRightTabRegistry } from "./sidebar-right/tab-registry.js";
+export type { SidebarRightTabDefinition, SidebarRightTabPriority, SidebarRightTabClaim } from "./sidebar-right/tab-registry.js";
 import { createMainPanelListSource, type MainPanelRow } from "./main-panel-list.js";
 import { MainPanelNavigation } from "./main-panel-navigation.js";
 import { LayoutNavigation } from "./layout-navigation.js";
@@ -416,6 +418,7 @@ function resolveSectionNavIcon(
 declare module "@deepseek-ai/cordis" {
   interface Context {
     layout: AmibaLayoutService;
+    sidebarRightTabs: SidebarRightTabRegistry;
     composerImages: ReturnType<typeof createDraftImageRegistry>;
     composerInputs: AmibaInputTriggerBridge;
     amibaSessionVisibility: AmibaSessionVisibility;
@@ -566,6 +569,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
         ctx.slots.subscribe("settings.onboarding", listener),
     };
     const disposeLayout = ctx.reflect.provide("layout", layout);
+    const disposeRightTabRegistry = ctx.reflect.provide("sidebarRightTabs", new SidebarRightTabRegistry(ctx));
     const visibility = createSessionVisibility();
     const disposeVisibility = ctx.reflect.provide(
       "amibaSessionVisibility",
@@ -1060,6 +1064,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       if (mainPanels === panelNavigation) mainPanels = undefined;
       disposeRoot();
       sessionsBridge.dispose();
+      void disposeRightTabRegistry();
       void disposeLayout();
       void disposeVisibility();
     };
