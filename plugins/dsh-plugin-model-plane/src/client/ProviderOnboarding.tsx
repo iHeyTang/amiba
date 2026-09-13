@@ -19,6 +19,7 @@ export function ProviderOnboarding({
   openSection,
   renderActions,
   renderProgress,
+  react,
   backToWelcome,
 }: GuideStepOwner & { adapter: ProviderSettingsController }) {
   const { t } = usePluginT(providerOnboardingI18n);
@@ -139,6 +140,7 @@ export function ProviderOnboarding({
             }),
           );
         }
+        react?.("next");
         setPage("key");
       } else if (page === "key") {
         const latest = await load();
@@ -162,6 +164,7 @@ export function ProviderOnboarding({
           setKey("");
         } else if (!latest.credentials[field.ref]?.configured)
           throw new Error("Credential missing");
+        react?.("next");
         setPage("model");
       } else {
         if (!chosen) return;
@@ -172,6 +175,7 @@ export function ProviderOnboarding({
           ),
         );
         await complete();
+        react?.("next");
       }
     });
   }
@@ -452,7 +456,10 @@ export function ProviderOnboarding({
               disabled={pending}
               onClick={() => {
                 if (page === "choose") backToWelcome?.();
-                else setPage(page === "model" ? "key" : "choose");
+                else {
+                  react?.("back");
+                  setPage(page === "model" ? "key" : "choose");
+                }
                 setFailed(false);
               }}
             >

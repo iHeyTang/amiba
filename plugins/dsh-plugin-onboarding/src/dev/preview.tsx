@@ -104,12 +104,13 @@ const adapter = {
 const config = makeConfig({ name: "Mofli", skinId: grovePack.skins[0].id });
 const renderSlot: GuideProps["renderSlot"] = ((
   name: string,
-  props: GuideStepOwner & { mood: GuideMood },
+  props: GuideStepOwner & { mood: GuideMood; reactionId?: number },
 ) =>
   name === "amiba.onboarding.companion" ? (
     <PetView
       config={config}
       name="Mofli"
+      key={props.reactionId}
       previewScene={props.mood}
       className="h-28 w-28"
     />

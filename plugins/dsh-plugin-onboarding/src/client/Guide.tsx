@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -62,6 +63,22 @@ export function Guide({
     const timeout = window.setTimeout(() => setExpanding(false), 240);
     return () => window.clearTimeout(timeout);
   }, [expanding]);
+  const reactionId = useRef(0);
+  const [reaction, setReaction] = useState<{
+    kind: "next" | "back";
+    id: number;
+  }>();
+  const react = useCallback((kind: "next" | "back") => {
+    setReaction({ kind, id: ++reactionId.current });
+  }, []);
+  useEffect(() => {
+    if (!reaction) return;
+    const timeout = window.setTimeout(
+      () => setReaction(undefined),
+      reaction.kind === "next" ? 1800 : 2200,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [reaction]);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -143,13 +160,17 @@ export function Guide({
   const currentDialogue =
     dialogue?.stepId === active?.id ? dialogue : undefined;
   const working = busy || currentDialogue?.mood === "loading";
-  const mood = error
-    ? "failed"
-    : busy
-      ? "loading"
-      : ready
-        ? "completed"
-        : (currentDialogue?.mood ?? "idle");
+  const mood: GuideMood = reaction
+    ? reaction.kind === "next"
+      ? "cheering"
+      : "impatient"
+    : error
+      ? "failed"
+      : busy
+        ? "loading"
+        : ready
+          ? "completed"
+          : (currentDialogue?.mood ?? "idle");
   const message = error
     ? t("guide.error")
     : ready
@@ -196,8 +217,16 @@ export function Guide({
           <div
             className={`flex gap-4 ${started ? "items-center pt-5" : "min-h-0 flex-1 flex-col items-center justify-center py-6 text-center"}`}
           >
-            <div className="flex h-28 w-28 shrink-0 items-center justify-center">
-              {renderSlot("amiba.onboarding.companion", { mood })}
+            <div
+              data-guide-reaction={
+                reaction?.kind ?? (!started ? "welcome" : "idle")
+              }
+              className="flex h-28 w-28 shrink-0 items-center justify-center"
+            >
+              {renderSlot("amiba.onboarding.companion", {
+                mood: !started && !reaction ? "welcome" : mood,
+                reactionId: reaction?.id,
+              })}
             </div>
             <p
               role={error ? "alert" : "status"}
@@ -259,7 +288,9 @@ export function Guide({
                     openSection,
                     renderActions,
                     renderProgress,
+                    react,
                     backToWelcome: () => {
+                      react("back");
                       setDialogue(undefined);
                       setExpanding(false);
                       setStarted(false);
@@ -298,6 +329,7 @@ export function Guide({
               ) : !started ? (
                 <Button
                   onClick={() => {
+                    react("next");
                     setExpanding(true);
                     setStarted(true);
                   }}

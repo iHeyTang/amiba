@@ -1,7 +1,7 @@
 # Amiba Pets
 
-A DSH plugin integrating the published `@mofli/core`, `@mofli/grove` and
-`@mofli/studio` packages (pinned to 0.1.1). Amiba core has no Mofli dependency.
+A DSH plugin integrating the `@mofli/core` and `@mofli/grove` 0.2.0 offline packages
+(see [vendor provenance](vendor/README.md)) and published `@mofli/studio` 0.1.1. Amiba core has no Mofli dependency.
 
 Open **Settings → Pets** to create, name, preview and save
 multiple pets. Select a skin and accessories, test activity states and rig

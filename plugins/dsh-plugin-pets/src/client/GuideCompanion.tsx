@@ -7,9 +7,11 @@ import { PetView } from "./PetView.js";
 export function GuideCompanion({
   library,
   mood,
+  reactionId,
 }: {
   library: PetLibraryClient;
   mood: GuideMood;
+  reactionId?: number;
 }) {
   const { library: state } = useSyncExternalStore(
     library.subscribe,
@@ -28,6 +30,7 @@ export function GuideCompanion({
   );
   return config ? (
     <PetView
+      key={reactionId}
       config={config}
       name={active?.name ?? "Mofli"}
       previewScene={mood}

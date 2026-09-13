@@ -49,8 +49,8 @@
     "@deepseek-ai/schemastery": "catalog:",
     "lucide-react": "^0.460.0",
     "zod": "^4.4.3",
-    "@mofli/core": "0.1.1",
-    "@mofli/grove": "0.1.1",
+    "@mofli/core": "file:vendor/mofli-core-0.2.0.tgz",
+    "@mofli/grove": "file:vendor/mofli-grove-0.2.0.tgz",
     "@mofli/studio": "0.1.1",
     "@amiba/dsh-plugin-notification-hub": "workspace:*"
   },
