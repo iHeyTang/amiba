@@ -141,6 +141,9 @@ export function createInputTriggerBridge(
   const notifyInputSessions = () => { for (const listener of sessionListeners) listener(); };
 
   const imageBindings = new Map<string, { ops: ComposerImageOps }>();
+  // Only programmatic additions made without a mounted image owner reside here.
+  // Existing native attachments still follow their original switch/unmount GC.
+  const residentImages = new Map<string, readonly ComposerDraftImageRegistration[]>();
   const imageSources = new Map<string, InputImagesSource>();
   const imageListeners = new Map<string, Set<() => void>>();
   const notifyImages = (id: string) => { for (const listener of imageListeners.get(id) ?? []) listener(); };
@@ -150,10 +153,11 @@ export function createInputTriggerBridge(
       let snapshot: readonly ComposerAttachment[] | undefined;
       source = {
         getSnapshot() {
-          // The native composer releases its browser images on session switch
-          // and unmount. A bound resident document therefore has no draft images
-          // until the original image owner mounts (including queued restoration).
-          const images = imageBindings.get(id)?.ops.getImages() ?? (residentInputs.has(id) ? [] : undefined);
+          // Native images follow the original switch/unmount release policy.
+          // Explicit offscreen additions remain separate until native admission.
+          const native = imageBindings.get(id)?.ops.getImages() ?? (residentInputs.has(id) ? [] : undefined);
+          const pending = residentImages.get(id);
+          const images = pending?.length ? [...(native ?? []), ...pending.map(item => item.image)] : native;
           if (!images) return snapshot = undefined;
           if (!snapshot || snapshot.length !== images.length || images.some((image, i) => image !== snapshot![i])) {
             snapshot = Object.freeze([...images]);
@@ -211,6 +215,22 @@ export function createInputTriggerBridge(
     resident.draft ??= bindInputDraft({ readInputDraft: resident.source.readInputDraft } as TriggerEditorOps, cursorFor(id));
     return resident.draft.read();
   };
+  const canEditResidentImages = (id: string) => {
+    const session = inputSessions.get(id)?.session;
+    const phase = editors.get(id)?.draft.read()?.phase;
+    return !!session && residentInputs.has(id) && session.getSnapshot().subagent?.address.mode !== "one-shot" &&
+      phase !== "adjudicating" && phase !== "submitting";
+  };
+  const filterResidentImages = (id: string, keep: (image: ComposerAttachment) => boolean) => {
+    const images = residentImages.get(id);
+    if (!images) return;
+    const retained = images.filter(item => keep(item.image));
+    if (retained.length === images.length) return;
+    if (retained.length) residentImages.set(id, retained);
+    else residentImages.delete(id);
+    for (const item of images) if (!retained.includes(item)) item.release();
+    notifyImages(id);
+  };
   const draftListeners = new Map<string, Set<() => void>>();
   const draftSourcesBySession = new Map<string, InputDraftSource>();
   const notifyDraft = (id: string) => { for (const listener of draftListeners.get(id) ?? []) listener(); };
@@ -263,6 +283,7 @@ export function createInputTriggerBridge(
         if (inputSessions.get(sessionId) !== binding) return;
         inputSessions.delete(sessionId);
         residentInputs.delete(sessionId);
+        filterResidentImages(sessionId, () => false);
         notifyInputSessions();
         notifyDraft(sessionId);
         notifyImages(sessionId);
@@ -293,15 +314,34 @@ export function createInputTriggerBridge(
     bindImages(sessionId, ops) {
       const binding = { ops };
       imageBindings.set(sessionId, binding);
+      let scheduled = false;
+      const transfer = () => {
+        if (scheduled || !residentImages.get(sessionId)?.length) return;
+        scheduled = true;
+        // Native parent effects first clear the outgoing session's attachments.
+        // Transfer after that commit, through the original upload path.
+        queueMicrotask(() => {
+          scheduled = false;
+          if (imageBindings.get(sessionId) !== binding || !canEditResidentImages(sessionId) || !ops.canAdd()) return;
+          const images = residentImages.get(sessionId);
+          if (!images?.length) return;
+          residentImages.delete(sessionId);
+          ops.addImages(images);
+          notifyImages(sessionId);
+        });
+      };
       const off = ops.subscribeImages?.(() => {
-        if (imageBindings.get(sessionId) === binding) notifyImages(sessionId);
+        if (imageBindings.get(sessionId) === binding) { notifyImages(sessionId); transfer(); }
       });
+      const offAvailability = ops.subscribeAvailability?.(transfer);
       notifyImages(sessionId);
+      transfer();
       let active = true;
       return () => {
         if (!active) return;
         active = false;
         off?.();
+        offAvailability?.();
         if (imageBindings.get(sessionId) === binding) {
           imageBindings.delete(sessionId);
           notifyImages(sessionId);
@@ -310,19 +350,31 @@ export function createInputTriggerBridge(
     },
     inputImagesSource,
     inputImagesFor: sessionId => inputImagesSource(sessionId).getSnapshot(),
-    pruneInputImages: (sessionId, ids) => imageBindings.get(sessionId)?.ops.pruneImages?.(ids),
+    pruneInputImages(sessionId, ids) {
+      imageBindings.get(sessionId)?.ops.pruneImages?.(ids);
+      const available = new Set(ids);
+      filterResidentImages(sessionId, image => available.has(image.id));
+    },
     addInputImages(sessionId, ids) {
       const binding = imageBindings.get(sessionId);
-      if (!binding?.ops.canAdd()) return false;
+      if (binding ? !binding.ops.canAdd() : !canEditResidentImages(sessionId)) return false;
       if (ids.length === 0) return true;
       const registry = imageRegistry(deps.images?.());
       if (!registry?.draftImages) return false;
       const images = registry.draftImages(ids);
       if (images.length !== ids.length || images.some((image, i) => image.id !== ids[i])) return false;
-      binding.ops.addImages(images.map(image => retain(registry, image)));
+      const registrations = images.map(image => retain(registry, image));
+      if (binding) binding.ops.addImages(registrations);
+      else {
+        residentImages.set(sessionId, [...(residentImages.get(sessionId) ?? []), ...registrations]);
+        notifyImages(sessionId);
+      }
       return true;
     },
-    removeInputImage: (sessionId, id) => imageBindings.get(sessionId)?.ops.removeImage(id),
+    removeInputImage(sessionId, id) {
+      imageBindings.get(sessionId)?.ops.removeImage(id);
+      if (canEditResidentImages(sessionId)) filterResidentImages(sessionId, image => image.id !== id);
+    },
     bindSubmit(sessionId, submit) {
       const binding = { submit };
       submitters.set(sessionId, binding);

@@ -154,6 +154,8 @@ export interface ComposerDraftImageRegistration {
 export interface ComposerImageOps {
   getImages(): readonly ComposerAttachment[];
   subscribeImages?(listener: () => void): () => void;
+  /** Admission may change without any image-list mutation (e.g. upload settles). */
+  subscribeAvailability?(listener: () => void): () => void;
   pruneImages?(ids: readonly ComposerAttachment["id"][]): void;
   canAdd(): boolean;
   addImages(images: readonly ComposerDraftImageRegistration[]): void;

@@ -584,6 +584,41 @@ try {
       await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===''") );
       console.log("Native session drafts and full reference identity survived switching and renderer reload; explicit clears stayed cleared");
     }
+    if (process.argv.includes("--offscreen-images")) {
+      const originalId = await evaluate("window.__compatSessionId");
+      const otherCwd = path.join(profile, "offscreen-images-other");
+      await mkdir(otherCwd, { recursive: true });
+      const otherId = await evaluate(`window.__probeCtx.sessions.create({cwd:${JSON.stringify(otherCwd)}})`);
+      const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJ1sAAAAASUVORK5CYII=";
+      await evaluate("window.__offscreenImageActions=window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions;void 0");
+      await evaluate(`window.__probeCtx.sessions.open(${JSON.stringify(otherId)});void 0`);
+      await wait(() => evaluate(`!!window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)}) && !window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(originalId)})`));
+      await evaluate(`(() => {
+        window.__offscreenRegistry=window.__probeCtx.get('composerImages');
+        window.__offscreenFiles=['resident-original.png','resident-remove.png','resident-prune.png'].map(name=>new File([Uint8Array.from(atob(${JSON.stringify(png)}),c=>c.charCodeAt(0))],name,{type:'image/png'}));
+        window.__offscreenPictures=window.__offscreenRegistry.createDraftImages(window.__offscreenFiles);
+      })()`);
+      assert.equal(await evaluate("window.__offscreenImageActions.addImages(window.__offscreenPictures.map(image=>image.id))"), true);
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId)[0].file===window.__offscreenFiles[0]"), true);
+      await evaluate("window.__offscreenImageActions.removeImage(window.__offscreenPictures[1].id);window.__offscreenImageActions.pruneImages([window.__offscreenPictures[0].id]);void 0");
+      assert.equal(await evaluate("window.__offscreenRegistry.draftImages(window.__offscreenPictures.map(image=>image.id)).length"), 1);
+      assert.deepEqual(await evaluate(`window.__probeCtx.composerInputs.inputImagesFor(${JSON.stringify(otherId)})`), []);
+      assert.equal(await evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)}).draft`), "");
+      await evaluate(`window.__residentImageSeatOff=window.__probeCtx.slots.register({name:'conversation.input.attachments',id:'resident-image-seat',priority:-100},props=>{window.__residentImageSeat=props;return null});window.__probeCtx.sessions.open(${JSON.stringify(originalId)});void 0`);
+      await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId) && window.__residentImageSeat?.attachments.some(image=>image.file===window.__offscreenFiles[0] && image.id===window.__offscreenPictures[0].id) && document.body.textContent.includes('resident-original.png')"));
+      await evaluate(`window.__offscreenImageActions.setDraft('/resident-image verify');window.__residentImagePayloads=[];
+        window.__residentImageClaim={token:'/resident-image ',images:true,submit:async(args,_ctx,images)=>{window.__residentImagePayloads.push({args,images});return {kind:'success',text:'RESIDENT_IMAGE_OK'}}};
+        window.__residentImageClaimOff=window.__probeCtx.inputTriggers.registerSource({name:'resident-image-command',trigger:'/',order:-100,candidates:async()=>[],onPick:()=>({claim:window.__residentImageClaim}),matchEnter:(_ctx,line)=>line.startsWith('/resident-image ')?{claim:window.__residentImageClaim}:undefined});void 0`);
+      await wait(() => evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).some(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')&&!n.disabled)"));
+      await evaluate("window.__offscreenImageActions.submit();void 0");
+      await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).phase==='claimed'"));
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      await evaluate("window.__offscreenImageActions.submit();void 0");
+      await wait(() => evaluate("window.__residentImagePayloads.length===1 && window.__offscreenRegistry.draftImages([window.__offscreenPictures[0].id]).length===0 && !document.body.textContent.includes('resident-original.png')"));
+      assert.deepEqual(await evaluate("window.__residentImagePayloads[0]"), { args: 'verify', images: [{ mediaType: 'image/png', data: png, name: 'resident-original.png' }] });
+      await evaluate("window.__residentImageSeatOff();window.__residentImageClaimOff();void 0");
+      console.log("Offscreen standard image add/remove/prune preserved original browser identity, left the current composer untouched, transferred through native upload on return and delivered exact command bytes before release");
+    }
     if (process.argv.includes("--input-state")) {
       await evaluate("window.__inputSource=window.__probeCtx.composerInputs.inputDraftSource(window.__compatSessionId);window.__inputObserved=[];window.__inputOff=window.__inputSource.subscribe(()=>{const s=window.__inputSource.getSnapshot();window.__inputObserved.push(s?{draft:s.draft,phase:s.phase}:null)});window.__initialInput=window.__inputSource.getSnapshot();void 0");
       assert.equal(await evaluate("window.__initialInput.phase"), "plain");

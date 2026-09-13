@@ -1337,3 +1337,13 @@ pipelines retain mounted component state.
 - 范围仍未全部完成：离屏图片修改和提交、跨挂载公共引用 ID 连续性、引用外观/失效/粘贴语义、原生队列与 Host inbox 的完整行为对齐仍需继续处理。
 
 验证记录：`/tmp/amiba-resident-input-tests.log`、`/tmp/amiba-resident-input-ui-tests.log`、`/tmp/amiba-resident-input-hydration-tests.log`、`/tmp/amiba-resident-input-ui-types.log`、`/tmp/amiba-resident-input-build2.log`、`/tmp/amiba-resident-input-smoke3.log`。完整组合桌面回归退出码为 0，包含队列/图片刷新、Host 附件引用、旧历史附件迁移、Cordis、轨迹加载、命令展示、running 恢复及两级子会话冷重启。
+
+
+### 离屏官方图片操作与原生交接（2026-09-13）
+
+- 已绑定的离屏会话可通过标准 inputActions.addImages/removeImage/pruneImages 操作真实浏览器图片。整批 ID 校验成功后才取得注册表引用；保留原始 File、图片 ID 和预览地址，不把 Host 文件 ID 冒充浏览器 ID。
+- 仅显式离屏新增图片驻留；原生上传附件仍遵循已有的会话切换/卸载清理。回到目标会话后，在父级切换清理完成的 microtask 中，且原编辑器允许接收时，交给原 addDraftImages 上传路径。上传结束、只读等可用性变化有独立通知，不依赖图片列表发生变化才能重试交接。
+- 挂载编辑器拒绝接收时不另建驻留副本。过期绑定不能接管图片；未交接图片在实际 Session owner 解绑时释放。共享图片按现有租约计数，交接不重新创建 File，不释放已交给原生上传器的租约。
+- 41 项桥接测试、39 项真实 Composer/命令图片测试、插件及 UI 类型检查、完整桌面构建通过。新增 --offscreen-images 桌面验证标准接口的添加/移除/裁剪、其他会话隔离、原附件条接管、原命令路径的确切 PNG 字节和最终注册释放；完整组合回归退出码为 0，原输入卡片样式尺寸及队列、附件引用、Cordis、轨迹、子会话冷恢复均通过。
+- 日志：/tmp/amiba-offscreen-images-tests.log、/tmp/amiba-offscreen-images-ui-tests.log、/tmp/amiba-offscreen-images-types.log、/tmp/amiba-offscreen-images-ui-types.log、/tmp/amiba-offscreen-images-build.log、/tmp/amiba-offscreen-images-smoke.log。
+- 边界：驻留的是本次浏览器运行中的图片注册，不跨浏览器重启持久化；离屏直接提交仍未接入。完整输入、引用和新版插槽/服务兼容目标继续保留。

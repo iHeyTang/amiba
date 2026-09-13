@@ -62,8 +62,8 @@ import type {} from "@deepseek-ai/dsh-client-ui-settings/client";
 // waits in ctx.slots.inject with no render site — authoring implication,
 // not a hazard. The shell provides standard `useInput` and `inputActions`
 // from the original editor and its resident native draft. Offscreen text
-// reads/writes remain available; image mutation and submission still require
-// their mounted native owners. The framework members
+// reads/writes remain available; offscreen image additions retain browser
+// registrations until native admission. Submission still requires its mounted owner. The framework members
 // (`sessionId`/`useSession`/`useProjection`) ARE live — dsh-client-runtime
 // itself binds those once a session is current.
 import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";

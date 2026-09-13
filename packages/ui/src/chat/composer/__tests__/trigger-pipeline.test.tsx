@@ -720,9 +720,14 @@ it("guards image additions for disabled, busy, and stale session bindings", asyn
   const { rerender } = render(<ControlledComposer {...props} sessionId="s1"/>);
   await waitFor(() => expect(bindings.has("s1")).toBe(true));
   expect(bindings.get("s1")!.canAdd()).toBe(true);
+  const availability: boolean[] = [];
+  const offAvailability = bindings.get("s1")!.subscribeAvailability!(() => availability.push(bindings.get("s1")!.canAdd()));
   act(() => attachmentsRef.current!.setAttachmentBusy(true));
   expect(bindings.get("s1")!.canAdd()).toBe(false);
   act(() => attachmentsRef.current!.setAttachmentBusy(false));
+  expect(availability).toContain(false);
+  expect(availability.at(-1)).toBe(true);
+  offAvailability();
   rerender(<ControlledComposer {...props} sessionId="s1" submitOptions={{ disabled: true }}/>);
   expect(bindings.get("s1")!.canAdd()).toBe(false);
   rerender(<ControlledComposer {...props} sessionId="s2"/>);

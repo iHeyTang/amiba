@@ -699,7 +699,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     );
 
     const imageBindingRef = useRef({ sessionId: permissionSessionId, attachments, disabled });
+    const imageAvailabilityListeners = useRef(new Set<() => void>());
     imageBindingRef.current = { sessionId: permissionSessionId, attachments, disabled };
+    useEffect(() => {
+      for (const listener of imageAvailabilityListeners.current) listener();
+    });
     useEffect(() => {
       if (!permissionSessionId || !triggerRuntime?.bindImages || !attachments) return;
       const current = () => imageBindingRef.current.sessionId === permissionSessionId ? imageBindingRef.current : undefined;
@@ -710,6 +714,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       return triggerRuntime.bindImages(permissionSessionId, {
         getImages: () => current()?.attachments?.getDraftImages?.() ?? current()?.attachments?.draftImages ?? [],
         subscribeImages: listener => current()?.attachments?.subscribeDraftImages?.(listener) ?? (() => {}),
+        subscribeAvailability: listener => {
+          imageAvailabilityListeners.current.add(listener);
+          return () => { imageAvailabilityListeners.current.delete(listener); };
+        },
         pruneImages: ids => current()?.attachments?.pruneDraftImages?.(ids),
         canAdd: () => writable() && !current()?.attachments?.attachmentBusy &&
           !current()?.attachments?.attachmentUploading && !!current()?.attachments?.canAddDraftImages?.(),
