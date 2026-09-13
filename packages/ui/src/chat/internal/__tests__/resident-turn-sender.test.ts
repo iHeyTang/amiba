@@ -1,7 +1,10 @@
+import { createResidentInputTransaction } from "../resident-input-transaction";
+import { createComposerDraftSource } from "../../composer-draft-store";
+import { CommandClaimStore } from "../../composer/triggers/claim";
 import { expect, it, vi } from "vitest";
 import type { SessionMeta } from "@amiba/app-runtime/core";
 import type { ResidentTurnRequest } from "../../composer/triggers/contracts";
-import { createResidentTurnSender, type ResidentTurnSenderDeps } from "../resident-turn-sender";
+import { createResidentTurnSender, waitForResidentReady, type ResidentTurnSenderDeps } from "../resident-turn-sender";
 
 const request: ResidentTurnRequest = { sessionId: "source", text: "resolved reference and literal text", attachments: [] };
 function fixture() {
@@ -87,4 +90,76 @@ it("reports the authoritative target at dispatch and does not announce rejected 
   vi.mocked(deps.prepare).mockRejectedValueOnce(new Error("owner unavailable"));
   expect((await send({ ...request, onDispatch })).kind).toBe("rejected");
   expect(onDispatch).not.toHaveBeenCalled();
+});
+
+
+it("exposes both preparation locks for standard queue admission and releases them on rejection", async () => {
+  const { deps, send } = fixture();
+  let finishPrepare!: (target: string) => void;
+  let rejectRead!: (error: Error) => void;
+  vi.mocked(deps.prepare).mockImplementationOnce(() => new Promise(resolve => { finishPrepare = resolve; }));
+  vi.mocked(deps.read).mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectRead = reject; }));
+  const sending = send(request);
+  expect(send.isBusy("source")).toBe(true);
+  expect(send.isBusy("target")).toBe(false);
+  expect(send.isBusy("unrelated")).toBe(false);
+  finishPrepare("target");
+  await vi.waitFor(() => expect(deps.read).toHaveBeenCalledOnce());
+  expect(send.isBusy("source")).toBe(true);
+  expect(send.isBusy("target")).toBe(true);
+  rejectRead(new Error("history unavailable"));
+  expect((await sending).kind).toBe("rejected");
+  expect(send.isBusy("source")).toBe(false);
+  expect(send.isBusy("target")).toBe(false);
+});
+
+
+it.each(["source", "target"])("standard input for %s queues while the actual sender holds redirected preparation", async sessionId => {
+  const { deps, send } = fixture();
+  let rejectRead!: (error: Error) => void;
+  vi.mocked(deps.read).mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectRead = reject; }));
+  const preparing = send(request);
+  await vi.waitFor(() => expect(deps.read).toHaveBeenCalledOnce());
+  const source = createComposerDraftSource(); source.setDisplayText("next input");
+  const enqueue = vi.fn(async () => ({ queueId: "admitted" }));
+  const transaction = createResidentInputTransaction({
+    sessionId, source, claims: new CommandClaimStore(), available: () => true,
+    controller: () => undefined, providers: () => [], images: () => [],
+    prepare: async () => ({ attachments: [], release() {} }),
+    consume() {}, changed() {}, busy: () => send.isBusy(sessionId), send, enqueue,
+    submitClaim: async () => ({ kind: "success" }),
+  });
+  transaction.submit();
+  await vi.waitFor(() => expect(transaction.getSnapshot().pending).toBe(false));
+  expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ sessionId, text: "next input" }), []);
+  expect(source.getSnapshot()).toBe("");
+  expect(transaction.getSnapshot().notice).toBeNull();
+  expect(deps.dispatch).not.toHaveBeenCalled();
+  rejectRead(new Error("preparation cancelled")); await preparing;
+});
+
+
+it.each(["idle", "stop", "foreground"])("waits for a rotated destination and handles %s without leaking subscriptions", async outcome => {
+  const { deps, send } = fixture();
+  let busy = true, unavailable = false;
+  const listeners = new Set<() => void>();
+  const controller = new AbortController();
+  deps.waitUntilReady = (id, signal) => {
+    expect(id).toBe("target");
+    return waitForResidentReady({ unavailable: () => unavailable, busy: () => busy,
+      watch: changed => { listeners.add(changed); return () => { listeners.delete(changed); }; },
+    }, signal);
+  };
+  const sending = send({ ...request, signal: controller.signal });
+  await vi.waitFor(() => expect(listeners.size).toBe(1));
+  expect(deps.read).not.toHaveBeenCalled();
+  if (outcome === "stop") controller.abort();
+  else {
+    if (outcome === "idle") busy = false; else unavailable = true;
+    for (const changed of [...listeners]) changed();
+  }
+  expect((await sending).kind).toBe(outcome === "idle" ? "accepted" : "rejected");
+  expect(deps.dispatch).toHaveBeenCalledTimes(outcome === "idle" ? 1 : 0);
+  expect(listeners.size).toBe(0);
+  expect(send.isBusy("source")).toBe(false);
 });

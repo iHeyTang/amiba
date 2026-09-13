@@ -42,6 +42,8 @@ export function createMainPlatformAdapter(): PlatformAdapter {
     workspaces: {
       getDefaultRoot: () => Promise.resolve(workspaceManager.getDefaultRoot()),
       bind: (sessionId, path) => workspaceManager.bind(sessionId, path),
+      bindIfUnbound: (sessionId, path) => workspaceManager.bindIfUnbound(sessionId, path),
+      resolveRuntimeCwd: (sessionId, cwd) => workspaceManager.resolveRuntimeCwd(sessionId, cwd),
       unbind: (sessionId) => workspaceManager.unbind(sessionId),
       getCurrent: (sessionId) =>
         Promise.resolve(workspaceManager.getForSession(sessionId)),

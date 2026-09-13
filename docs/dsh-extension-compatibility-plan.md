@@ -5,7 +5,19 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
-## 最新进展：重定向发送的完成归属（2026-09-13）
+## 最新进展：真实 Host 重定向与目标目录恢复（2026-09-13）
+
+后台发送准备锁现同时暴露原会话和准备后的目标，标准输入可据此进入原队列。重定向目标正在结束旧回合时等待其真实空闲；停止、切回前台、组件关闭会取消等待并释放订阅。既有工作器按实际目标完成事件推进原队列。
+
+真实 Host 用例发现，插件创建的目标可能有独立 cwd，但未有本地目录绑定。新增共用 ensureSessionWorkspace，在没有绑定时恢复 Host 目录；主进程 bindIfUnbound 与用户 bind/unbind 顺序执行，已有选择不被恢复操作覆盖。文件、检查点与发送因此使用同一个根目录。主窗口和 Quick Ask 共用 resolveSessionCreationWorkspace：已有会话在真实目录相同的情况下保留 Host 的原 cwd 写法，避免 workspace 注册规范化 /var 与 /private/var 等路径别名后造成身份冲突；真正不同的显式目录继续交由原 Host 校验。新任务仍沿用原 workspace 注册及默认目录规则。
+
+验证：发送器、输入事务及队列工作器 41 项测试；目录解析和真实目录管理器 13 项测试，共 54 项通过。完整桌面构建及完整真实 Host 兼容回归通过。新增 --redirect-queue 通过真实 ConversationLifecycle 归属 handler，将原队列两条消息各派发一次到另一个同来源目标，源模型不接收这两条，前台草稿不变；目标 cwd 恢复且后续自动绑定请求不覆盖它。原后台出队、Stop/Edit/Delete/Send now、图片及历史文件、目录插件、子会话、冷重启和 HMR 用例全部通过。临时测试窗口关闭动画帧后台节流以稳定流式显示断言，产品窗口策略未改。
+
+日志：/tmp/amiba-redirect-ready-tests.log、/tmp/amiba-shared-cwd-tests.log、/tmp/amiba-shared-cwd-build.log、/tmp/amiba-shared-cwd-smoke.log；类型检查记录使用 /tmp/amiba-shared-cwd-*-types.log（主进程最近检查为 /tmp/amiba-host-cwd-alias-node-types.log）。
+
+范围仍有限：此重定向用例覆盖源和目标均在后台、目标没有独立待发队列的情况。切到新目标后的原生队列展示和交接、新旧目标均有队列时的顺序、标准离屏直接发送的重定向关联、跨窗口/重启协调及完整 Host inbox 仍需继续适配；全部 64 个扩展入口及服务目标保持不变。
+
+## 重定向发送的完成归属（2026-09-13）
 
 ConversationLifecycle 的实际插件 handler 可将提交转到同来源的新会话段。发送派发回调现传出准备后的目标 ID（f72cb95）；后台工作器按该 ID 关联原队列，仅目标完成可以推进它，旧源会话的完成事件不重复派发。目标停止或被原生 Send now 打断时保留并暂停原队列；回执延迟及完成先于回执时也遵守 Stop。
 

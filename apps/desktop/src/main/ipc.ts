@@ -185,6 +185,12 @@ export function registerIpcHandlers() {
     (_e, args: { sessionId: string; path: string }) =>
       workspaceManager.bind(args.sessionId, args.path),
   );
+  ipcMain.handle("workspace:bind-if-unbound", (_e, args: { sessionId: string; path: string }) =>
+    workspaceManager.bindIfUnbound(args.sessionId, args.path),
+  );
+  ipcMain.handle("workspace:resolve-runtime-cwd", (_e, args: { sessionId: string; cwd: string }) =>
+    workspaceManager.resolveRuntimeCwd(args.sessionId, args.cwd),
+  );
   ipcMain.handle("workspace:unbind", (_e, sessionId: string) =>
     workspaceManager.unbind(sessionId),
   );

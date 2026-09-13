@@ -54,6 +54,8 @@ export function createElectronAdapter(
         bridge.workspaces.chooseDirectory(defaultPath),
       getDefaultRoot: () => bridge.workspaces.getDefaultRoot(),
       bind: (sessionId, p) => bridge.workspaces.bind(sessionId, p),
+      bindIfUnbound: (sessionId, p) => bridge.workspaces.bindIfUnbound(sessionId, p),
+      resolveRuntimeCwd: (sessionId, cwd) => bridge.workspaces.resolveRuntimeCwd(sessionId, cwd),
       unbind: (sessionId) => bridge.workspaces.unbind(sessionId),
       getCurrent: (sessionId) => bridge.workspaces.getCurrent(sessionId),
       listBindings: () => bridge.workspaces.listBindings(),

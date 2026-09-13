@@ -3,7 +3,7 @@ import path from 'node:path';
 
 // Test-only model adapter. Real DSH agents, inboxes, subagent ownership and
 // event transports remain in use; no external model request is necessary.
-export function continuableChildFixture(root, profile) {
+export function continuableChildFixture(root, profile, redirectQueue = false) {
   const adapterUrl = pathToFileURL(path.join(root, 'packages/app-runtime/resources/dsh-runtime/app/node_modules/@deepseek-ai/dsh-llm/lib/index.js')).href;
   return `
     const adapterUrl = ${JSON.stringify(adapterUrl)};
@@ -54,6 +54,8 @@ export function continuableChildFixture(root, profile) {
     }
     const registration=ctx.llm.registerAdapter(['compat-local'],new FixtureAdapter());
     ctx.effect(()=>()=>registration());
+    ${redirectQueue ? `ctx.effect(()=>ctx.amibaConversations.registerSubmitHandler('compat-rotation',async (_origin:any,sessionId:string)=>
+      sessionId==='compat-continuable-child' && existsSync(${JSON.stringify(path.join(profile, 'queue-redirect'))}) ? 'compat-continuable-parent' : sessionId));` : ''}
     let started=false;
     let nestedCreated=false;
     ctx.effect(()=>{
@@ -68,6 +70,9 @@ export function continuableChildFixture(root, profile) {
             request:{parent:parent.agent,prompt:[{type:'text',text:'COMPAT_INITIAL_CHILD'}],agentOptions:{provider:'compat-local',model:'fixture'}},
             signal:new AbortController().signal,
           });
+          ${redirectQueue ? `const origin={plugin:'compat-rotation',entry:'queue-test',scope:'fixture'};
+          await ctx.amibaConversations.adopt(origin,'compat-continuable-parent',Date.now());
+          await ctx.amibaConversations.adopt(origin,'compat-continuable-child',Date.now());` : ''}
           console.log('AMIBA_PROBE_CONTINUABLE '+JSON.stringify(accepted));
         })().catch(error=>console.error('AMIBA_PROBE_CONTINUABLE_ERROR',error));
       });

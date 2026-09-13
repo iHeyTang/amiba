@@ -12,6 +12,7 @@ export interface ResidentTurnPlan {
 export interface ResidentTurnSenderDeps {
   unavailable(id: string): boolean;
   prepare(id: string): Promise<string>;
+  waitUntilReady?(id: string, signal?: AbortSignal): Promise<void>;
   read(id: string): Promise<{ session: SessionMeta; messages: SessionMessage[] }>;
   workspace(id: string): Promise<string | undefined>;
   checkpoint(id: string, turnIndex: number): Promise<void>;
@@ -22,7 +23,7 @@ export interface ResidentTurnSenderDeps {
 /** Target-addressed backend only. Input adjudication and consumption belong to its caller. */
 export function createResidentTurnSender(deps: ResidentTurnSenderDeps) {
   const preparing = new Set<string>();
-  return async (request: ResidentTurnRequest): Promise<SubmitReceipt> => {
+  const send = async (request: ResidentTurnRequest): Promise<SubmitReceipt> => {
     request = { ...request, attachments: request.attachments.map(item => ({ ...item })) };
     let dispatched = false;
     const held = new Set<string>();
@@ -42,6 +43,8 @@ export function createResidentTurnSender(deps: ResidentTurnSenderDeps) {
       if (request.attachments.some(item => item.uploading || !item.attachmentId)) throw new Error("Input attachments are not ready.");
       return await withSendingAttachments([...request.attachments], async () => {
         const target = await deps.prepare(request.sessionId);
+        check(request.sessionId);
+        if (target !== request.sessionId) await deps.waitUntilReady?.(target, request.signal);
         check(request.sessionId); hold(target);
         const { session, messages } = await deps.read(target);
         check(target);
@@ -75,4 +78,29 @@ export function createResidentTurnSender(deps: ResidentTurnSenderDeps) {
       for (const id of held) preparing.delete(id);
     }
   };
+  return Object.assign(send, { isBusy: (id: string) => preparing.has(id) });
+}
+
+
+/** A rotated destination may still be settling its previous Host turn. */
+export function waitForResidentReady(deps: {
+  unavailable(): boolean;
+  busy(): boolean;
+  watch(changed: () => void): () => void;
+}, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false, off = () => {};
+    const check = () => {
+      if (settled) return;
+      const error = signal?.aborted ? new DOMException("Submission cancelled", "AbortError")
+        : deps.unavailable() ? new Error("The target conversation is no longer available for background submission.") : undefined;
+      if (!error && deps.busy()) return;
+      settled = true;
+      off(); signal?.removeEventListener("abort", check);
+      if (error) reject(error); else resolve();
+    };
+    signal?.addEventListener("abort", check, { once: true });
+    off = deps.watch(check);
+    if (settled) off(); else check();
+  });
 }

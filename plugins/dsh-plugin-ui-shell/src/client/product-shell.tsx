@@ -20,6 +20,7 @@ import {
 } from "@amiba/app-runtime/dsh-client";
 import {
   getPlatform,
+  resolveSessionCreationWorkspace,
   type AgentModelSelection,
   type AgentSubagentAddress,
 } from "@amiba/app-runtime/platform";
@@ -335,20 +336,7 @@ function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string)
     resolveSubagent,
     sessionActivity,
     attachments: getPlatform().agentAttachments,
-    resolveSession: async (payload) => {
-      const platform = getPlatform();
-      const cwd = await platform.workspaces?.getCurrent(payload.sessionId);
-      if (!cwd) return {};
-      const explicitlyBound = Object.hasOwn(
-        (await platform.workspaces?.listBindings()) ?? {},
-        payload.sessionId,
-      );
-      if (explicitlyBound && platform.agentWorkspaces) {
-        const { workspace } = await platform.agentWorkspaces.create(cwd);
-        return { workspaceId: workspace.workspaceId };
-      }
-      return { cwd };
-    },
+    resolveSession: payload => resolveSessionCreationWorkspace(payload.sessionId),
     selectModel: async (sessionId, selection, signal) => {
       if (signal.aborted) throw signal.reason;
       const models = getPlatform().agentModels;

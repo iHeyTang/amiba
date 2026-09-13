@@ -1,7 +1,8 @@
+import { ensureSessionWorkspace } from "@amiba/app-runtime/platform";
 import { deleteUnretainedAttachments, withSendingAttachments } from "./internal/attachment-ownership";
 import { useSessionComposerDraft } from "./use-session-composer-draft";
 import { useConversationSubmitHandoff } from "./useConversationSubmitHandoff";
-import { createResidentTurnSender, type ResidentTurnSenderDeps } from "./internal/resident-turn-sender";
+import { createResidentTurnSender, waitForResidentReady, type ResidentTurnSenderDeps } from "./internal/resident-turn-sender";
 import { createResidentQueueDrainer, type ResidentQueueDrainerDeps } from "./internal/resident-queue-drainer";
 import { sessionPendingQueue } from "./internal/pending-queue-store";
 import { usePrepareConversationSubmit } from "./conversation-submit";
@@ -1580,9 +1581,12 @@ export default function ChatSurface({
   const prepareMarkdownTurn = usePrepareMarkdownTurn();
   const prepareConversationSubmit = usePrepareConversationSubmit();
   const residentTurnDeps = useRef<ResidentTurnSenderDeps>(null!);
+  const residentReadyListeners = useRef(new Set<() => void>());
+  useEffect(() => { for (const changed of [...residentReadyListeners.current]) changed(); });
   const residentTurnSender = useMemo(() => createResidentTurnSender({
     unavailable: id => residentTurnDeps.current.unavailable(id),
     prepare: id => residentTurnDeps.current.prepare(id),
+    waitUntilReady: (id, signal) => residentTurnDeps.current.waitUntilReady!(id, signal),
     read: id => residentTurnDeps.current.read(id),
     workspace: id => residentTurnDeps.current.workspace(id),
     checkpoint: (id, index) => residentTurnDeps.current.checkpoint(id, index),
@@ -1592,11 +1596,23 @@ export default function ChatSurface({
   const residentTurnMounted = useRef(true);
   useEffect(() => {
     residentTurnMounted.current = true;
-    return () => { residentTurnMounted.current = false; };
+    return () => {
+      residentTurnMounted.current = false;
+      for (const changed of [...residentReadyListeners.current]) changed();
+    };
   }, []);
   residentTurnDeps.current = {
     unavailable: id => !residentTurnMounted.current || sessions.getSnapshot().activeId === id || inFlightTurnByIdRef.current.has(id) || triggerRuntime?.isSessionRunning?.(id) === true,
     prepare: prepareConversationSubmit,
+    waitUntilReady: (id, signal) => waitForResidentReady({
+      unavailable: () => !residentTurnMounted.current || sessions.getSnapshot().activeId === id,
+      busy: () => inFlightTurnByIdRef.current.has(id) || triggerRuntime?.isSessionRunning?.(id) === true,
+      watch: changed => {
+        residentReadyListeners.current.add(changed);
+        const off = triggerRuntime?.inputStateSource?.(id).subscribe(changed);
+        return () => { off?.(); residentReadyListeners.current.delete(changed); };
+      },
+    }, signal),
     read: async id => {
       const known = sessions.getSnapshot().sessions.find(item => item.id === id);
       const session = await loadSessionMeta(id, known?.subagentAddress);
@@ -1605,7 +1621,7 @@ export default function ChatSurface({
     },
     workspace: async id => {
       const workspaces = getPlatform().workspaces;
-      const path = await workspaces?.getCurrent(id);
+      const path = await ensureSessionWorkspace(id);
       if (workspaces && !path) throw new Error("The target workspace root is unavailable.");
       return path ?? undefined;
     },
@@ -1628,7 +1644,7 @@ export default function ChatSurface({
       return receipt;
     },
   };
-  useEffect(() => triggerRuntime?.bindResidentTurnSender?.(residentTurnSender, id => inFlightTurnByIdRef.current.has(id)), [triggerRuntime, residentTurnSender]);
+  useEffect(() => triggerRuntime?.bindResidentTurnSender?.(residentTurnSender, id => residentTurnSender.isBusy(id) || inFlightTurnByIdRef.current.has(id)), [triggerRuntime, residentTurnSender]);
   const residentQueueDeps = useRef<ResidentQueueDrainerDeps>(null!);
   const residentQueueDrainer = useMemo(() => createResidentQueueDrainer({
     queue: id => sessionPendingQueue(getPlatform().storage, id),

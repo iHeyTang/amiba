@@ -149,6 +149,10 @@ const api = {
       ipcRenderer.invoke("workspace:get-default-root"),
     bind: (sessionId: string, p: string): Promise<void> =>
       ipcRenderer.invoke("workspace:bind", { sessionId, path: p }),
+    bindIfUnbound: (sessionId: string, p: string): Promise<string | null> =>
+      ipcRenderer.invoke("workspace:bind-if-unbound", { sessionId, path: p }),
+    resolveRuntimeCwd: (sessionId: string, cwd: string): Promise<string> =>
+      ipcRenderer.invoke("workspace:resolve-runtime-cwd", { sessionId, cwd }),
     unbind: (sessionId: string): Promise<void> =>
       ipcRenderer.invoke("workspace:unbind", sessionId),
     getCurrent: (sessionId: string): Promise<string | null> =>

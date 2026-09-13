@@ -489,6 +489,10 @@ export interface WorkspaceAdapter {
   /** Product-level root used when a session has no explicit binding. */
   getDefaultRoot(): Promise<string>;
   bind(sessionId: string, path: string): Promise<void>;
+  /** Restore a Host-owned root only if no local binding exists at mutation time. */
+  bindIfUnbound?(sessionId: string, path: string): Promise<string | null>;
+  /** Keep the immutable Host cwd spelling only when it resolves to the selected root. */
+  resolveRuntimeCwd?(sessionId: string, hostCwd: string): Promise<string>;
   unbind(sessionId: string): Promise<void>;
   getCurrent(sessionId: string): Promise<string | null>;
   /** Snapshot every persisted session binding for workspace-grouped history. */
@@ -786,4 +790,35 @@ export function getPlatform(): PlatformAdapter {
 
 export function hasPlatform(): boolean {
   return readPlatform() !== null;
+}
+
+
+/** Align desktop file/checkpoint access with an existing Host session before sending. */
+export async function ensureSessionWorkspace(sessionId: string, platform = getPlatform()): Promise<string | undefined> {
+  const workspaces = platform.workspaces;
+  if (!workspaces) return undefined;
+  const bound = (await workspaces.listBindings())[sessionId];
+  if (bound) return bound;
+  const existing = (await platform.agentSessions?.list())?.find(session => session.sessionId === sessionId);
+  if (existing?.cwd && workspaces.bindIfUnbound) {
+    return (await workspaces.bindIfUnbound(sessionId, existing.cwd)) ?? undefined;
+  }
+  return (await workspaces.getCurrent(sessionId)) ?? undefined;
+}
+
+
+/** Shared session.create directory policy for the main shell and Quick Ask. */
+export async function resolveSessionCreationWorkspace(sessionId: string, platform = getPlatform()): Promise<{ cwd?: string; workspaceId?: string }> {
+  const cwd = await ensureSessionWorkspace(sessionId, platform);
+  if (!cwd) return {};
+  const existing = (await platform.agentSessions?.list())?.find(session => session.sessionId === sessionId);
+  if (existing?.cwd && platform.workspaces?.resolveRuntimeCwd) {
+    return { cwd: await platform.workspaces.resolveRuntimeCwd(sessionId, existing.cwd) };
+  }
+  const explicitlyBound = Object.hasOwn((await platform.workspaces?.listBindings()) ?? {}, sessionId);
+  if (explicitlyBound && platform.agentWorkspaces) {
+    const { workspace } = await platform.agentWorkspaces.create(cwd);
+    return { workspaceId: workspace.workspaceId };
+  }
+  return { cwd };
 }

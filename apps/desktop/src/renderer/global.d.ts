@@ -86,6 +86,8 @@ interface AmibaBridgeApi {
     chooseDirectory(defaultPath?: string): Promise<string | null>;
     getDefaultRoot(): Promise<string>;
     bind(sessionId: string, path: string): Promise<void>;
+    bindIfUnbound(sessionId: string, path: string): Promise<string | null>;
+    resolveRuntimeCwd(sessionId: string, cwd: string): Promise<string>;
     unbind(sessionId: string): Promise<void>;
     getCurrent(sessionId: string): Promise<string | null>;
     listBindings(): Promise<Record<string, string>>;
