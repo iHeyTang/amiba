@@ -1,3 +1,4 @@
+import { sessionLineage, equalSessionLineage } from "./session-lineage.js";
 import { useSessionImageLoader } from "./session-image-loader.js";
 import { useTrajectoryInspection } from "./trajectory-inspection.js";
 import { CordisBusiness, type CordisPackages } from "./cordis-business.js";
@@ -85,6 +86,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  Fragment,
   useSyncExternalStore,
   type ReactElement,
   type ReactNode,
@@ -153,6 +155,7 @@ export type AmibaShellSlot =
   | "settings.onboarding"
   | "settings.general.item"
   | "shell.overlay"
+  | "conversation.session.header.lineage"
   | "conversation.session.header.corner"
   | "conversation.session.header.utilities"
   | "conversation.session.header.actions"
@@ -389,6 +392,8 @@ interface ProductShellProps {
    * adoption forbids.
    */
   useOfficialSessions: SnapshotSelectorHook<SessionListState>;
+  lineageAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
+  openLineageSession: (sessionId: import("@deepseek-ai/dsh-client-runtime/client").SessionId) => void;
   /**
    * The framework's `useWorkspaces` standard hook, from the same
    * `GlobalStandardProps` kit. The archive set is workspace-registry state,
@@ -430,9 +435,12 @@ function ProductShellInner({
   messageSources,
   surfaces,
   useOfficialSessions,
+  openLineageSession,
+  lineageAvailable,
   useOfficialWorkspaces,
 }: ProductShellProps): ReactElement {
   const { t } = useT();
+  const hasLineage = useSyncExternalStore(lineageAvailable.subscribe, lineageAvailable.getSnapshot, lineageAvailable.getSnapshot);
   const hasToolImages = useSyncExternalStore(toolImagesAvailable.subscribe, toolImagesAvailable.getSnapshot, toolImagesAvailable.getSnapshot);
   const platform = getPlatform();
   const desktop = platform.kind === "desktop";
@@ -500,6 +508,7 @@ function ProductShellInner({
   });
   const { open: settingsOpen, close: closeSettings } = settings;
   const sessions = useSessions();
+  const lineage = useOfficialSessions(list => sessionLineage(list, sessions.activeId), equalSessionLineage);
   const childAddressSource = useRef<(id: string) => AgentSubagentAddress | undefined>(() => undefined);
   childAddressSource.current = (id) => sessions.sessions.find((session) => session.id === id)?.subagentAddress
     ?? conversationSource(id)?.getSnapshot().subagent?.address;
@@ -905,6 +914,15 @@ function ProductShellInner({
                 // from the official ctx.sessions current (kept in step by the R1
                 // bridge) and renders null while none is current, so the strip is
                 // empty on the home view and on a not-yet-materialized draft.
+                headerLineage: hasLineage ? lineage.map(entry => (
+                  <Fragment key={entry.id}>
+                    {renderSlot("conversation.session.header.lineage", {
+                      lineageSessionId: entry.id,
+                      displayTitle: entry.displayTitle,
+                      ...entry.current ? {} : { openTitle: () => openLineageSession(entry.id) },
+                    })}
+                  </Fragment>
+                )) : undefined,
                 headerCorner: renderSlot("conversation.session.header.corner", {}),
                 headerAfter: renderSlot(
                   "conversation.session.header.utilities",

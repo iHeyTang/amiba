@@ -852,3 +852,6 @@ declare module "@deepseek-ai/dsh-client-ui-conversation/client" {
     loadImage?: ToolImageLoader;
   }
 }
+
+/** Keep the installed official lineage owner, including its branded session ID. */
+export type { ConversationHeaderLineageOwnerProps } from "@deepseek-ai/dsh-client-ui-conversation/client";

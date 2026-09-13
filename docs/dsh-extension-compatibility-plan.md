@@ -5,6 +5,22 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：父子会话标题导航接入（2026-09-13）
+
+conversation.session.header.lineage 已接入主 shell，复用实际 rc.2 已有的官方 owner 类型及 branded SessionId，不补造重复接口。sessionLineage 只从真实官方 byId/current 派生：当前标题及 origin=subagent 的祖先按上游顺序分发；普通 fork 不视为子 Agent，缺失祖先和循环止步，不编造名称；Amiba 与官方当前会话尚未一致时不泄露旧会话导航。祖先 openTitle 通过 ctx.sessions.open 和既有选择桥打开真实目标，祖先的 owner 与标准 sessionId 保持各自语义。
+
+导航是原可编辑标题旁的附加区域，原重命名、标题 DOM、编辑器及右侧控件保留。官方组合标题型插件可能在附加导航中重复显示当前标题，这是保留原重命名控件的取舍，不宣称原样替换官方标题布局。可用性订阅官方注册表，未注册或错误退选后不留下空错误节点占据标题间距；本地错误边界在贡献替换后可恢复。
+
+验证：祖先派生 5 项、原 FullScreenChatView 25 项（含导航挂载后重命名与错误恢复）、插槽和选择桥 25 项，共 55 项通过；UI、shell、SDK 含 guard 类型检查通过。最终完整桌面构建 /tmp/amiba-lineage-build-visual.log 退出 0。实际 --compat --child-continuation --child-navigation --header-corner --header-lineage 退出 0（/tmp/amiba-lineage-smoke-visual.log）：真实 Host 创建多层子会话，插件收到准确当前/祖先 owner，点击祖先返回父会话；安装产物中的官方 ui-subagent 组件通过真实 ClientContext 加载后，目录可键盘展开并选择子会话。原续聊、停止、只读子会话、角标、设置、目录、文件、Markdown、turn-tail 与 HMR 回归通过。
+
+首轮功能冒烟 /tmp/amiba-lineage-smoke.log 虽退出 0，截图发现官方 portal 菜单缺少主题别名导致透明，未据此完成视觉验收。新增 official-lineage.css 仅作用于导航区和固定 rc.2 官方菜单根 .ZKlsPq_menu[role=tree]，从 Amiba 现有主题映射颜色、滚动条与阴影，未向页面根传播变量。最终实际断言菜单不透明、有阴影、fixed 定位、浅深色背景变化且全局别名为空，已查看 amiba-header-lineage-official.png 和 amiba-header-lineage-official-dark.png。后续版本类名需重新验证；常规 Host 插件图配置启用、窄窗口和独立 Web 尚未覆盖，仍保留为后续工作。
+
+其余日志：/tmp/amiba-lineage-tests.log、/tmp/amiba-lineage-ui-tests.log、/tmp/amiba-lineage-slot-bridge-tests.log、/tmp/amiba-lineage-ui-types.log、/tmp/amiba-lineage-sdk-types.log、/tmp/amiba-lineage-shell-types-final.log。首次 shell 类型检查发现已存在官方 lineage 定义，已移除重复声明并直接导出官方类型，后续检查通过。
+
+评估纠正：第 42 项 settings.models.provider-card 在固定 c291e796 的 slot-contract.ts/ModelsSection.tsx 与 README 中明确是卡片内部附加区域，而非整卡替换。将其从有条件组移到待适配组；需要真实 provider 目录行、settingsNs、configured 与 keyConfigured，以及保存/首次配置/添加草稿的正确状态。footer 则是空 owner 的 root/list 底部附加区域。没有技术证据支持以现有样式冲突拒绝这两个入口。
+
+统计更新为 35/9/20（已有基础/待验证/有条件），不是完整兼容率。全部 64 项及服务目标仍未完成；跨窗口/重启队列、图片 preview/本人回显、正常插件图及 Web/Quick Ask、右侧栏、模型服务、私有组件和全区域接管条件等全部继续保留。
+
 ## 最新进展：嵌套图片释放的真实解码验证（2026-09-13）
 
 复用已验证构建，运行加强后的 --compat --message-images --tool-images --nested-tools，终态退出 0，日志 /tmp/amiba-nested-image-decode-revocation-smoke.log。仅由 code-dispatch 引用的第三张图片在切换前解码成功，切换到未引用会话后新建 Image 读取旧 URL 失败；Host 跨会话明确拒绝；历史重开用新的授权 URL 解码宽度 3。消息、根工具与嵌套工具均已用图片解码验证释放，不再依赖被 CSP 阻止的 fetch。多层实时/历史分发、父内容保留、深层定位和卸载回退继续通过。此轮只有验证和记录，无新产品变更。

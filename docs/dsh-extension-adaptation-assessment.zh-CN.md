@@ -47,7 +47,7 @@
 | 24 | `conversation.session.header` | 只能按组件分别适配 | 这是已有界面的替换入口。可复用服务或增加可选展示，但默认能力和样式必须保留。 |
 | 25 | `conversation.session.header.actions` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 26 | `conversation.session.header.corner` | 桌面接入已验证 | 按新版 single/session 与空 owner 契约接入最右角，保留原标题和控件顺序；空内容不占宽度。真实插件已验证会话及注入身份、操作、会话切换、无当前会话隐藏、草稿保留、报错隔离和卸载尺寸恢复。依赖新版右侧栏服务的插件及独立 Web 另核对。 |
-| 27 | `conversation.session.header.lineage` | 新版契约，待验证 | 需要真实会话派生关系数据和导航回调。 |
+| 27 | `conversation.session.header.lineage` | 入口已接入，桌面验证通过 | 复用 rc.2 已有 lineage 类型和真实 sessions 列表，按官方规则为当前及子会话祖先传入 lineageSessionId/displayTitle/openTitle；祖先 owner 保留当前查看会话的标准上下文。导航附加在原可编辑标题旁，原重命名/编辑器不替换。实际多层 Host 会话、祖先回跳、已安装官方目录组件的键盘展开和子会话选择、空/失败插件、浅深色弹层通过；常规 Host 插件图启用、窄窗口、后续新版及独立 Web 仍待验证。 |
 | 28 | `conversation.session.header.utilities` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 29 | `conversation.trajectory.images` | 入口已接入，桌面验证通过 | 固定 rc.2 可复现补丁保留原持久引用，在 trajectory 的 conversation.view 子声明 single/session 图片槽，并复用 shell 会话授权 loader。实际 Host 图激活与卸载、两张真实图片解码、准确 session/loader、空插件、抛错后恢复元数据以及原选中行/表头/编辑器草稿均验证通过。混合 inline/持久图片顺序与 compact 预览/详情有组件测试；完整新版图片插件依赖及独立 Web 仍待验证。 |
 | 30 | `conversation.view` | 可以适配，已验证 | 增加插件视图标签；保留原对话及草稿。依赖完整输入服务的视图另算。 |
@@ -62,7 +62,7 @@
 | 39 | `settings.general.item` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 40 | `settings.header` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 41 | `settings.models.footer` | 新版契约，待验证 | 可考虑附加到模型设置；需先核对新版模型服务和 owner。 |
-| 42 | `settings.models.provider-card` | 新版契约，待验证 | 涉及现有模型卡片替换；需对应新版 provider 数据与操作。 |
+| 42 | `settings.models.provider-card` | 可适配，需核对 provider 数据 | 固定 c291e796 源码将其定义为模型卡片内部的附加区域，并非整卡替换。按 settingsNs keyed 分发，owner 要求 provider 目录行及 configured/keyConfigured；已保存、首次配置和有目录行的添加草稿均需对应真实状态，不能以样式冲突判为仅能有条件支持。 |
 | 43 | `settings.onboarding` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 44 | `settings.plugin.item` | 可以适配，卡片已验证 | 真实 rc.2 是按 Host namespace 分派的 keyed 槽；官方三种配置表单已接入，并通过真实 Host 保存及恢复继承检查。 |
 | 45 | `settings.plugins.tab` | 可以适配，已验证 | 真实标签页及内容面板；卸载回到原插件清单，保留筛选。 |

@@ -259,6 +259,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     settingsOnboardingSteps: SettingsOnboardingStepsSource;
     openSettingsSection: (sectionId: string) => void;
     sessionsBridge: AmibaSessionsBridge;
+    openLineageSession: (sessionId: import("@deepseek-ai/dsh-client-runtime/client").SessionId) => void;
     triggerRuntime: AmibaInputTriggerBridge;
     hiddenSessionIds: HiddenSessionsSource;
     sessionListGroups: ContributionsSource<SessionGroupRow>;
@@ -271,6 +272,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     conversationViews: ContributionsSource<ConversationViewEntry>;
     cordisPackages: import("./cordis-business.js").CordisPackages;
     toolImagesAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
+    lineageAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
     commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
     conversationSource: (sessionId: string) => import("@deepseek-ai/dsh-client-runtime/client").SessionFace | undefined;
     fileMentions: import("@deepseek-ai/dsh-client-ui-conversation/client").ChatFileMentions["forClosing"];
@@ -308,6 +310,7 @@ function AmibaRoot({
   cordisPackages,
   commandRowKeys,
   toolImagesAvailable,
+  lineageAvailable,
   conversationSource,
   fileMentions,
   surfaces,
@@ -315,6 +318,7 @@ function AmibaRoot({
   prepareConversation,
   renderSlotChain,
   useSessions,
+  openLineageSession,
   useWorkspaces,
 }: AmibaRootProps): ReactNode {
   const workbench = useSyncExternalStore(workbenchSource.subscribe, workbenchSource.getSnapshot, workbenchSource.getSnapshot);
@@ -334,9 +338,11 @@ function AmibaRoot({
       cordisPackages={cordisPackages}
       commandRowKeys={commandRowKeys}
       toolImagesAvailable={toolImagesAvailable}
+      lineageAvailable={lineageAvailable}
       conversationSource={conversationSource}
       fileMentions={fileMentions}
       sessionsBridge={sessionsBridge}
+      openLineageSession={openLineageSession}
       settingsSections={settingsSections}
       settingsOnboardingSteps={settingsOnboardingSteps}
       triggerRuntime={triggerRuntime}
@@ -698,6 +704,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
               subscribe: (listener: () => void) => ctx.slots.subscribe("conversation.chat.commandview", listener),
             };
           })(),
+          lineageAvailable: {
+            getSnapshot: () => ctx.slots.entriesOfSlot("conversation.session.header.lineage").length > 0,
+            subscribe: (listener: () => void) => ctx.slots.subscribe("conversation.session.header.lineage", listener),
+          },
+          openLineageSession: (sessionId: import("@deepseek-ai/dsh-client-runtime/client").SessionId) => ctx.sessions.open(sessionId),
           conversationSource: (sessionId: string) => ctx.get("sessions")?.binding(sessionId as import("@deepseek-ai/dsh-client-runtime/client").SessionId)?.session,
           surfaces,
           reportMarkdown,
@@ -757,6 +768,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // components receive, and the renderer's StrictSessionEntry
           // renders null while no official session is current, so the home
           // view is unaffected.
+          "conversation.session.header.lineage": { kind: "single", scope: "session" },
           "conversation.session.header.corner": { kind: "single", scope: "session" },
           "conversation.session.header.utilities": {
             kind: "list",

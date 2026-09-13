@@ -1,0 +1,18 @@
+/* rc.2 subagent navigation. Its menu portals to body, so it cannot inherit
+ * aliases from the header. Keep aliases on this plugin's roots only. */
+[data-content-header-lineage],
+.ZKlsPq_menu[role="tree"] {
+  --dsw-specific-menu: hsl(var(--popover));
+  --dsw-alias-bg-layer-1: hsl(var(--popover));
+  --dsw-alias-label-primary: hsl(var(--popover-foreground));
+  --dsw-alias-label-secondary: hsl(var(--muted-foreground));
+  --dsw-alias-label-tertiary: hsl(var(--muted-foreground));
+  --dsw-alias-label-caption: hsl(var(--muted-foreground) / 0.65);
+  --dsw-alias-label-dimmed: hsl(var(--muted-foreground) / 0.5);
+  --dsw-alias-border-l2: hsl(var(--border));
+  --dsw-alias-interactive-bg-hover: hsl(var(--accent));
+  --dsw-alias-state-error-primary: hsl(var(--destructive));
+  --dsw-alias-scrollbar-bg-l2: hsl(var(--muted-foreground) / 0.25);
+  --dsw-alias-scrollbar-hover-l2: hsl(var(--muted-foreground) / 0.45);
+  --dsw-shadow-lv3: 0 10px 30px hsl(var(--foreground) / 0.12), 0 0 0 1px hsl(var(--border));
+}

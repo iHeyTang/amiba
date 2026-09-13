@@ -31,6 +31,7 @@ if (process.argv.includes("--redirect-queue") && !process.argv.includes("--backg
 if (process.argv.includes("--approval-detail") && !["--compat", "--child-continuation"].every(flag => process.argv.includes(flag))) {
   throw new Error("--approval-detail requires --compat --child-continuation");
 }
+if (process.argv.includes("--header-lineage") && !["--compat", "--child-continuation"].every(flag=>process.argv.includes(flag))) throw new Error("--header-lineage requires --compat --child-continuation");
 if (process.argv.includes("--header-corner") && !process.argv.includes("--compat")) {
   throw new Error("--header-corner requires --compat");
 }
@@ -1005,6 +1006,55 @@ try {
           if (mode !== "absent") await evaluate("window.__approvalDetailOff();delete window.__approvalDetailOff;void 0");
         }
         console.log("Real Host approvals retained four native decisions with correlated, absent and failed plugin details");
+      }
+      if (process.argv.includes("--header-lineage")) {
+        await evaluate("window.__lineageOwners={};window.__lineageTitle=document.querySelector('[data-content-header-title]');window.__lineageEditor=Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0);window.__lineageTitleBefore=window.__lineageTitle.outerHTML;window.__lineageOff=window.__probeCtx.slots.register({name:'conversation.session.header.lineage',id:'compat-lineage',priority:-100},owner=>{window.__lineageOwners[owner.lineageSessionId]=owner;return window.__probeCreateElement('button',{'data-compat-lineage':owner.lineageSessionId,onClick:owner.openTitle},owner.displayTitle)});void 0");
+        await wait(()=>evaluate("!!document.querySelector('[data-compat-lineage=compat-continuable-child]')"));
+        assert.equal(await evaluate("window.__lineageOwners['compat-continuable-child'].sessionId"),'compat-continuable-child');
+        assert.equal(await evaluate("typeof window.__lineageOwners['compat-continuable-child'].openTitle"),'undefined');
+        assert.equal(await evaluate("window.__lineageTitle===document.querySelector('[data-content-header-title]')&&window.__lineageTitle.outerHTML===window.__lineageTitleBefore&&window.__lineageEditor.isConnected"),true);
+        await evaluate("window.__probeCtx.composerInputs.setInputDraft('compat-continuable-child','COMPAT_NESTED_CREATE');window.__probeCtx.composerInputs.submitInput('compat-continuable-child');void 0");
+        await wait(async()=> (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_NESTED_CREATED'})")).entries.length>0);
+        await wait(()=>evaluate("(async()=>{await window.__probeCtx.sessions.refreshSubagents('compat-continuable-child');return window.__probeCtx.sessions.list.getSnapshot().subagentsByParent['compat-continuable-child']?.entries.some(e=>e.kind==='child'&&e.id==='compat-nested-child')})()"));
+        await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-child',childSessionId:'compat-nested-child',mode:'continuable'});void 0");
+        await wait(()=>evaluate("document.body.textContent.includes('COMPAT_NESTED_REPLY COMPAT_NESTED_INITIAL')&&!!document.querySelector('[data-compat-lineage=compat-nested-child]')&&typeof window.__lineageOwners['compat-continuable-child']?.openTitle==='function'"));
+        assert.deepEqual(await evaluate("Array.from(document.querySelectorAll('[data-compat-lineage]')).map(n=>n.dataset.compatLineage)"),['compat-continuable-child','compat-nested-child']);
+        assert.equal(await evaluate("window.__lineageOwners['compat-continuable-child'].sessionId"),'compat-nested-child','ancestor owner keeps the viewed session standard context');
+        assert.equal(await evaluate("window.__lineageOwners['compat-nested-child'].displayTitle===window.__probeCtx.sessions.list.getSnapshot().byId['compat-nested-child'].displayTitle"),true);
+        await writeFile(path.join(tmpdir(),'amiba-header-lineage.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+        await evaluate("document.querySelector('[data-compat-lineage=compat-continuable-child]').click();void 0");
+        await wait(()=>evaluate("window.__probeCtx.sessions.list.getSnapshot().current==='compat-continuable-child'&&!document.querySelector('[data-compat-lineage=compat-nested-child]')&&document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_NATIVE_FOLLOWUP')"));
+        await evaluate("window.__lineageOff();window.__lineageOff=window.__probeCtx.slots.register({name:'conversation.session.header.lineage',id:'compat-lineage-null',priority:-100},()=>null);void 0");
+        await wait(()=>evaluate("document.querySelector('[data-content-header-lineage]').getBoundingClientRect().width===0"));
+        await evaluate("window.__lineageOff();window.__lineageOff=window.__probeCtx.slots.register({name:'conversation.session.header.lineage',id:'compat-lineage-error',priority:-100},()=>{window.__lineageError=true;throw new Error('COMPAT_LINEAGE_ERROR')});void 0");
+        await wait(()=>evaluate("window.__lineageError&&!!document.querySelector('[data-content-header-title]')&&!document.querySelector('[data-content-header-lineage] [data-slot-error]')&&(window.__probeCtx.slots.entriesOfSlot('conversation.session.header.lineage').length>0||!document.querySelector('[data-content-header-lineage]'))"));
+        await evaluate("window.__lineageOff();void 0");
+        await wait(()=>evaluate("!document.querySelector('[data-compat-lineage]')"));
+        assert.equal(await evaluate("!!Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0)"),true);
+        if (await evaluate("window.__probeCtx.slots.entriesOfSlot('conversation.session.header.lineage').length===0")) {
+          await evaluate(await readFile(path.join(root,"packages/app-runtime/resources/dsh-runtime/app/node_modules/@deepseek-ai/dsh-client-ui-subagent/lib/client.js"),"utf8"));
+          await evaluate("window.__lineageOfficialFiber=window.__probeCtx.plugin(window.__probeRequire('@deepseek-ai/dsh-client-ui-subagent'));void 0");
+        }
+        await evaluate("window.__probeCtx.sessions.open('compat-continuable-parent');void 0");
+        await wait(()=>evaluate("window.__probeCtx.sessions.list.getSnapshot().current==='compat-continuable-parent'&&!!document.querySelector('[data-content-header-lineage] button[aria-haspopup=tree]')"));
+        await evaluate("document.querySelector('[data-content-header-lineage] button[aria-haspopup=tree]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));void 0");
+        await wait(()=>evaluate("Array.from(document.querySelectorAll('[role=treeitem]')).some(n=>n.textContent.includes('Continuable compatibility child'))"));
+        const lineageMenuStyle = await evaluate("(()=>{const menu=document.querySelector('[role=tree]');const style=getComputedStyle(menu);return {background:style.backgroundColor,shadow:style.boxShadow,position:style.position}})()");
+        assert.notEqual(lineageMenuStyle.background,'rgba(0, 0, 0, 0)','official portal must have an opaque menu surface');
+        assert.notEqual(lineageMenuStyle.shadow,'none');
+        assert.equal(lineageMenuStyle.position,'fixed');
+        await writeFile(path.join(tmpdir(),'amiba-header-lineage-official.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+        const lineageThemeColors = await evaluate("(()=>{const root=document.documentElement;window.__lineageOriginalTheme=root.className;const menu=document.querySelector('[role=tree]');root.classList.remove('dark');root.classList.add('light');const light=getComputedStyle(menu).backgroundColor;root.classList.remove('light');root.classList.add('dark');return {light,dark:getComputedStyle(menu).backgroundColor,globalMenuAlias:getComputedStyle(root).getPropertyValue('--dsw-specific-menu')}})()");
+        assert.notEqual(lineageThemeColors.light,lineageThemeColors.dark);
+        assert.notEqual(lineageThemeColors.dark,'rgba(0, 0, 0, 0)');
+        assert.equal(lineageThemeColors.globalMenuAlias,'','lineage aliases must not leak to the shell root');
+        await writeFile(path.join(tmpdir(),'amiba-header-lineage-official-dark.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+        await evaluate("document.documentElement.className=window.__lineageOriginalTheme;void 0");
+
+        await evaluate("Array.from(document.querySelectorAll('[role=treeitem]')).find(n=>n.textContent.includes('Continuable compatibility child')).click();void 0");
+        await wait(()=>evaluate("window.__probeCtx.sessions.list.getSnapshot().current==='compat-continuable-child'&&document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_NATIVE_FOLLOWUP')&&!document.querySelector('[role=tree]')"));
+        console.log("Lineage passed actual multi-level Host sessions, current and ancestor owners, parent navigation, native title/editor preservation, empty/error plugins, and installed official catalog keyboard opening and child navigation");
+
       }
       const literal = 'COMPAT_LITERAL_ @[dsh.reference:unregistered-example|id|label|clip]';
       await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0).focus();void 0");

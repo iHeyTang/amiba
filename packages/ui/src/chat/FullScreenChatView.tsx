@@ -197,6 +197,8 @@ export interface FullScreenChatViewProps {
      * contributes.
      */
     headerActions?: ReactNode;
+    /** Optional ancestry controls; the original editable title remains mounted. */
+    headerLineage?: ReactNode;
     conversationViews?: readonly ConversationViewEntry[];
     conversationView?: (id: string) => ReactNode;
     conversationViewSelection?: { sessionId: string; id: string } | null;
@@ -973,6 +975,7 @@ function FullScreenChatViewInner({
                 title={chatTopBarPlaceholder}
                 icon={<Folder className="h-4 w-4" />}
                 actions={slots?.headerActions}
+                lineage={slots?.headerLineage}
                 onRenameTitle={
                   canRenameActiveChatTitle ? renameActiveChatTitle : undefined
                 }
@@ -1207,6 +1210,7 @@ interface ContentHeaderProps {
    * unoccupied seat costs neither a box nor a flex gap.
    */
   actions?: ReactNode;
+  lineage?: ReactNode;
   onRenameTitle?: (title: string) => void;
   sidebarCollapsed: boolean;
   showExpandControl?: boolean;
@@ -1222,6 +1226,7 @@ function ContentHeader({
   title,
   icon,
   actions,
+  lineage,
   onRenameTitle,
   sidebarCollapsed,
   showExpandControl = sidebarCollapsed,
@@ -1298,6 +1303,16 @@ function ContentHeader({
               onEditingChange={setTitleEditing}
             />
           )}
+          {lineage ? (
+            <div
+              data-content-header-lineage
+              className="app-no-drag flex min-w-0 shrink-0 items-center gap-0.5 empty:hidden"
+            >
+              <WorkbenchViewBoundary fallback={null} resetKey={lineage}>
+                {lineage}
+              </WorkbenchViewBoundary>
+            </div>
+          ) : null}
           {/* Title-adjacent action row. `empty:hidden` is load-bearing: an
               unoccupied seat renders no DOM inside this wrapper, and a
               zero-child flex item would still spend one parent gap. Hidden
