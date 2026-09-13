@@ -317,38 +317,6 @@ export function ProviderOnboarding({
         </>
       ) : page === "key" ? (
         <>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            {t("setup.keyExplain")}
-          </p>
-          <ol className="list-decimal space-y-2 pl-5 text-sm leading-relaxed">
-            <li>
-              <a
-                href={PROVIDER_KEY_PAGES[selected]}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium text-primary underline underline-offset-4"
-              >
-                {t(
-                  selected === "tokendance"
-                    ? "setup.token.open"
-                    : "setup.deepseek.open",
-                )}{" "}
-                ↗
-              </a>
-              {t("setup.login")}
-            </li>
-            <li>
-              {t(
-                selected === "tokendance"
-                  ? "setup.token.create"
-                  : "setup.deepseek.create",
-              )}
-            </li>
-            <li>{t("setup.copy")}</li>
-          </ol>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {t("setup.billing")}
-          </p>
           <form
             id="onboarding-provider-key"
             onSubmit={(e) => {
@@ -377,6 +345,38 @@ export function ProviderOnboarding({
               {t(stored ? "setup.stored" : "setup.keyPrivacy")}
             </p>
           </form>
+          <div className="space-y-3 text-xs text-muted-foreground">
+            <p className="leading-relaxed">{t("setup.keyExplain")}</p>
+            <ol className="list-decimal space-y-2 pl-4 leading-relaxed">
+              <li>
+                <a
+                  href={PROVIDER_KEY_PAGES[selected]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-4 hover:text-primary"
+                >
+                  {t(
+                    selected === "tokendance"
+                      ? "setup.token.open"
+                      : "setup.deepseek.open",
+                  )}{" "}
+                  ↗
+                </a>
+                {t("setup.login")}
+              </li>
+              <li>
+                {t(
+                  selected === "tokendance"
+                    ? "setup.token.create"
+                    : "setup.deepseek.create",
+                )}
+              </li>
+              <li>{t("setup.copy")}</li>
+            </ol>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {t("setup.billing")}
+            </p>
+          </div>
         </>
       ) : (
         <>
