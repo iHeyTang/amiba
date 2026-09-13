@@ -1,3 +1,5 @@
+import { createBrowserView } from "../../../../../plugins/dsh-plugin-browser-provider-electron/src/client/index";
+import { WorkbenchExtensionsProvider } from "../workbench-extensions";
 import {
   act,
   fireEvent,
@@ -41,6 +43,10 @@ vi.mock("@amiba/app-runtime/core", () => ({
 
 vi.mock("@amiba/i18n", () => ({
   useT: () => ({ t: (key: string) => key }),
+}));
+
+vi.mock("@amiba/i18n/plugin", () => ({
+  usePluginT: () => ({ t: (key: string) => key }),
 }));
 
 vi.mock("@amiba/app-runtime/platform", () => ({
@@ -568,6 +574,7 @@ describe("FullScreenChatView new-chat home", () => {
     };
 
     render(
+      <WorkbenchExtensionsProvider extensions={[createBrowserView(mocks.embeddedBrowser as never)]}>
       <FullScreenChatView
         client={makeClient() as never}
         capabilities={
@@ -578,7 +585,8 @@ describe("FullScreenChatView new-chat home", () => {
         openSettings={() => {}}
         openAgentDestination={() => {}}
         restoreSidebarViewOnMount={false}
-      />,
+      />
+      </WorkbenchExtensionsProvider>,
     );
 
     const browserToggle = screen.getByRole("button", {
@@ -609,7 +617,7 @@ describe("FullScreenChatView new-chat home", () => {
       document.querySelector("[data-embedded-browser-workspace]"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("tab", { name: "embeddedBrowser.newTab" }),
+      screen.getByRole("tab", { name: "New tab" }),
     ).toBeInTheDocument();
     expect(screen.getByText("embeddedBrowser.emptyTitle")).toBeInTheDocument();
 
@@ -669,7 +677,7 @@ describe("FullScreenChatView new-chat home", () => {
       screen.getByRole("button", { name: "workspacePane.collapse" }),
     ).toHaveAttribute("aria-pressed", "true");
     expect(
-      screen.getAllByRole("tab", { name: "embeddedBrowser.newTab" }),
+      screen.getAllByRole("tab", { name: "New tab" }),
     ).toHaveLength(1);
   });
 
@@ -1123,5 +1131,61 @@ describe("FullScreenChatView session-header action seat", () => {
     expect(mocks.storageSet).toHaveBeenCalledWith({
       "settings.chat.sidebarView": "chats",
     });
+  });
+});
+
+describe("FullScreenChatView session header corner", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.embeddedBrowser = null;
+    mocks.storageGet.mockResolvedValue({});
+    mocks.storageSet.mockResolvedValue(undefined);
+    mocks.useSessions.mockReturnValue(makeSessions());
+  });
+  function view(headerCorner?: React.ReactNode) {
+    return <FullScreenChatView
+      client={makeClient() as never}
+      openSettings={() => {}}
+      openAgentDestination={() => {}}
+      restoreSidebarViewOnMount={false}
+      slots={{ headerCorner }}
+    />;
+  }
+  it("adds no corner box without a contribution and collapses empty renderers", () => {
+    const result = render(view());
+    expect(result.container.querySelector("[data-conversation-header-corner]")).toBeNull();
+    const Empty = () => null;
+    result.rerender(view(<Empty />));
+    const corner = result.container.querySelector("[data-conversation-header-corner]");
+    expect(corner).toHaveClass("empty:hidden");
+    expect(corner?.childNodes).toHaveLength(0);
+  });
+  it("places the control after the existing controls and preserves the title", () => {
+    const clicked = vi.fn();
+    const result = render(view());
+    const row = result.container.querySelector("[data-workspace-edge-toggle]")!;
+    const nativeControls = Array.from(row.children);
+    const title = result.container.querySelector("[data-content-header-title]")!;
+    const originalTitle = title.outerHTML;
+    result.rerender(view(<button onClick={clicked}>Corner control</button>));
+    const corner = result.container.querySelector("[data-conversation-header-corner]")!;
+    expect(row.lastElementChild).toBe(corner);
+    nativeControls.forEach((control, index) => expect(row.children[index]).toBe(control));
+    expect(title.outerHTML).toBe(originalTitle);
+    fireEvent.click(screen.getByRole("button", { name: "Corner control" }));
+    expect(clicked).toHaveBeenCalledTimes(1);
+    result.rerender(view());
+    expect(row.children).toHaveLength(nativeControls.length);
+    expect(title.outerHTML).toBe(originalTitle);
+  });
+  it("contains an extension error without losing the native header", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const Broken = (): never => { throw new Error("corner failed"); };
+      const result = render(view(<Broken />));
+      expect(result.container.querySelector("[data-content-header-title]")).toHaveTextContent("Existing conversation");
+      expect(result.container.querySelector("[data-workspace-edge-toggle] button")).toBeInTheDocument();
+      expect(result.container.querySelector("[data-conversation-header-corner]")?.childNodes).toHaveLength(0);
+    } finally { errors.mockRestore(); }
   });
 });

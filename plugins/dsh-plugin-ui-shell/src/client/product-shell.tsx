@@ -152,6 +152,7 @@ export type AmibaShellSlot =
   | "settings.onboarding"
   | "settings.general.item"
   | "shell.overlay"
+  | "conversation.session.header.corner"
   | "conversation.session.header.utilities"
   | "conversation.session.header.actions"
   | "conversation.input.model"
@@ -890,6 +891,7 @@ function ProductShellInner({
                 // from the official ctx.sessions current (kept in step by the R1
                 // bridge) and renders null while none is current, so the strip is
                 // empty on the home view and on a not-yet-materialized draft.
+                headerCorner: renderSlot("conversation.session.header.corner", {}),
                 headerAfter: renderSlot(
                   "conversation.session.header.utilities",
                   {},

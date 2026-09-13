@@ -806,3 +806,17 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
     };
   }
 }
+
+/** Official c291e796 corner owner: state comes from the standard session kit. */
+export interface ConversationHeaderCornerOwnerProps {
+  children?: never;
+}
+declare module "@deepseek-ai/dsh-client-ui-slots" {
+  interface SlotMap {
+    "conversation.session.header.corner": {
+      kind: "single";
+      scope: "session";
+      owner: ConversationHeaderCornerOwnerProps;
+    };
+  }
+}

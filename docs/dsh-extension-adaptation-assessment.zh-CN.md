@@ -46,7 +46,7 @@
 | 23 | `conversation.session` | 不能同时原样接管 | 完整接管该区域可能替换现有界面或创建第二套控制器。需拆出附加能力；不能宣称完整兼容。 |
 | 24 | `conversation.session.header` | 只能按组件分别适配 | 这是已有界面的替换入口。可复用服务或增加可选展示，但默认能力和样式必须保留。 |
 | 25 | `conversation.session.header.actions` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
-| 26 | `conversation.session.header.corner` | 新版契约，待验证 | 需要核对新版头部区域及其 owner；可考虑附加位置。 |
+| 26 | `conversation.session.header.corner` | 桌面接入已验证 | 按新版 single/session 与空 owner 契约接入最右角，保留原标题和控件顺序；空内容不占宽度。真实插件已验证会话及注入身份、操作、会话切换、无当前会话隐藏、草稿保留、报错隔离和卸载尺寸恢复。依赖新版右侧栏服务的插件及独立 Web 另核对。 |
 | 27 | `conversation.session.header.lineage` | 新版契约，待验证 | 需要真实会话派生关系数据和导航回调。 |
 | 28 | `conversation.session.header.utilities` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 29 | `conversation.trajectory.images` | 新版契约，待验证 | 现已接入 rc.2 轨迹视图；仍需核对新版图片数据接口及该入口契约。 |

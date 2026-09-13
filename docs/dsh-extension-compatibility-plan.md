@@ -5,7 +5,19 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
-## 最新进展：审批详情扩展（2026-09-13）
+## 最新进展：会话头部角标（2026-09-13）
+
+接入 c291e796 的 conversation.session.header.corner single/session 契约；owner 无业务字段，复用真实标准会话属性。角标放在现有右上角控件之后，保留标题、原控件顺序和样式。空渲染使用 empty:hidden，异常边界保留原界面。既有边缘控件 ResizeObserver 继续根据实际宽度预留空间。
+
+验证：完整 FullScreenChatView 的 23 项测试通过，含新角标的空内容、位置、卸载、标题保留和异常隔离。旧浏览器按钮测试在 HEAD 基线也失败，原因是测试未加载已迁移到插件的浏览器；现使用真实 createBrowserView 和插件文案测试配置，原浏览器开关、工作区宽度及 webview 安全属性断言全部保留并通过。UI、SDK（含 guard）、shell 类型检查和完整桌面构建通过。
+
+实际 --compat --header-corner --child-continuation --approval-detail 回归通过：真实插件注册、sessionId/inject 身份、点击、切换到另一真实会话、clear 隐藏、原草稿恢复、空内容/错误/卸载后宽度等于基线。原控件节点及标题 DOM 保留；已查看真实截图。审批、续聊、停止、表单、下载、目录、文件、Markdown、插件卸载和 HMR 仍通过。
+
+日志：/tmp/amiba-header-corner-tests-4.log、/tmp/amiba-header-corner-baseline-test.log（旧测试失败证据）、/tmp/amiba-header-corner-types-{0,1,2}.log、/tmp/amiba-header-corner-ui-types-2.log、/tmp/amiba-header-corner-build.log、/tmp/amiba-header-corner-smoke.log。
+
+入口统计为 31 项已有基础、12 项待验证、21 项有条件，仍不是完整插件兼容率。新版右侧栏服务、lineage 的实际祖先导航与标题语义、独立 Web，以及既有队列/服务缺口继续保留。lineage 官方 owner 为 lineageSessionId/displayTitle/openTitle，子会话占位会替换 breadcrumb 标题，不能只塞一个无真实导航的数据对象就宣布支持。
+
+## 审批详情扩展（2026-09-13）
 
 接入固定新版 c291e796 的 conversation.approval.detail single/session 契约。SDK owner 复用已安装工具调用 ID 类型；主 shell 的真实会话作用域将审批事件 callId 送入可选详情，FullScreenChatView 和 ChatSurface 透传到现有 ApprovalBanner。没有调用关联或没有插件时不增加 DOM；独立错误边界保护原审批按钮，并在审批身份变化后恢复详情。未修改四种决定、请求回传、代码、倒计时、布局类名或样式。
 

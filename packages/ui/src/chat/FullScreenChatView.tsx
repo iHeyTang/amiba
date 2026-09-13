@@ -74,6 +74,7 @@ import {
   useWorkspacePane,
 } from "./WorkspacePane";
 import {
+  WorkbenchViewBoundary,
   WorkbenchExtensionHosts,
   WorkbenchExtensionToolbar,
 } from "./workbench-extensions";
@@ -202,6 +203,8 @@ export interface FullScreenChatViewProps {
     onConversationViewSelect?: (id: string | null) => void;
     /** Additive controls in the active chat header action cluster. */
     headerAfter?: ReactNode;
+    /** Optional session corner control after the existing right-edge controls. */
+    headerCorner?: ReactNode;
     /** Frame-wide overlay for chat modules; entries opt into pointer events. */
     contentOverlay?: ReactNode;
     /**
@@ -1045,6 +1048,16 @@ function FullScreenChatViewInner({
               showUnavailable
             />
             <WorkspacePaneToggle showUnavailable />
+            {slots?.headerCorner && (
+              <div
+                data-conversation-header-corner=""
+                className="flex shrink-0 items-center empty:hidden"
+              >
+                <WorkbenchViewBoundary key={sessions.activeId} fallback={null}>
+                  {slots.headerCorner}
+                </WorkbenchViewBoundary>
+              </div>
+            )}
           </div>
         )}
         {slots?.contentOverlay ? (

@@ -30,6 +30,9 @@ if (process.argv.includes("--redirect-queue") && !process.argv.includes("--backg
 if (process.argv.includes("--approval-detail") && !["--compat", "--child-continuation"].every(flag => process.argv.includes(flag))) {
   throw new Error("--approval-detail requires --compat --child-continuation");
 }
+if (process.argv.includes("--header-corner") && !process.argv.includes("--compat")) {
+  throw new Error("--header-corner requires --compat");
+}
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const profile = await mkdtemp(path.join(tmpdir(), "amiba-plugin-app-"));
 async function port() {
@@ -383,6 +386,30 @@ try {
     await wait(() => evaluate("Boolean(document.querySelector('[role=dialog]'))"));
     await evaluate("Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).find(n=>n.textContent==='Close'||n.textContent==='关闭').click()");
     await wait(() => evaluate("!document.querySelector('[role=dialog]')"));
+    if (process.argv.includes("--header-corner")) {
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>{const row=document.querySelector('[data-workspace-edge-toggle]');window.__cornerBaseline={width:row.getBoundingClientRect().width,controls:Array.from(row.querySelectorAll('button')),title:document.querySelector('[data-content-header-title]').outerHTML};resolve()}))");
+      await evaluate("window.__cornerOff=window.__probeCtx.slots.register({name:'conversation.session.header.corner',id:'compat-corner',inject:id=>({injectedSessionId:id})},props=>{window.__cornerProps=props;return window.__probeCreateElement('button',{'data-compat-corner':props.sessionId,'data-injected-session':props.injectedSessionId,onClick:()=>window.__cornerClicked=props.sessionId},'Corner')});void 0");
+      await wait(()=>evaluate("document.querySelector('[data-compat-corner]')?.dataset.compatCorner===window.__compatSessionId"));
+      assert.ok(await evaluate("(()=>{const row=document.querySelector('[data-workspace-edge-toggle]');const corner=document.querySelector('[data-conversation-header-corner]');return corner===row.lastElementChild&&window.__cornerBaseline.controls.every((button,i)=>row.querySelectorAll('button')[i]===button)&&document.querySelector('[data-content-header-title]').outerHTML===window.__cornerBaseline.title&&document.querySelector('[data-compat-corner]').dataset.injectedSession===window.__compatSessionId})()"));
+      await evaluate("document.querySelector('[data-compat-corner]').click();window.__cornerProps.inputActions.setDraft('CORNER_PRESERVED_DRAFT');void 0");
+      assert.equal(await evaluate("window.__cornerClicked"),await evaluate("window.__compatSessionId"));
+      await mkdir(path.join(profile, 'header-corner'), {recursive:true});
+      await evaluate(`(async()=>{const id=await window.__probeCtx.sessions.create({cwd:${JSON.stringify(path.join(profile,'header-corner'))}});window.__cornerOtherSession=id;window.__probeCtx.sessions.open(id)})()`);
+      await wait(()=>evaluate("document.querySelector('[data-compat-corner]')?.dataset.compatCorner===window.__cornerOtherSession"));
+      await evaluate("window.__probeCtx.sessions.clear();void 0");
+      await wait(()=>evaluate("!document.querySelector('[data-compat-corner]')"));
+      await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+      await wait(()=>evaluate("document.querySelector('[data-compat-corner]')?.dataset.compatCorner===window.__compatSessionId&&Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).some(n=>n.textContent==='CORNER_PRESERVED_DRAFT')"));
+      await writeFile(path.join(tmpdir(), 'amiba-header-corner.png'), Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+      await evaluate("window.__cornerProps.inputActions.setDraft('');window.__cornerOff();window.__cornerOff=window.__probeCtx.slots.register({name:'conversation.session.header.corner',id:'compat-empty-corner'},()=>null);void 0");
+      await wait(()=>evaluate("!document.querySelector('[data-compat-corner]')&&document.querySelector('[data-conversation-header-corner]').getBoundingClientRect().width===0"));
+      assert.equal(await evaluate("document.querySelector('[data-workspace-edge-toggle]').getBoundingClientRect().width"),await evaluate("window.__cornerBaseline.width"));
+      await evaluate("window.__cornerOff();window.__cornerOff=window.__probeCtx.slots.register({name:'conversation.session.header.corner',id:'compat-broken-corner'},()=>{throw new Error('COMPAT_CORNER_FAILURE')});void 0");
+      await wait(()=>evaluate("document.querySelector('[data-conversation-header-corner]').getBoundingClientRect().width===0&&!!document.querySelector('[data-content-header-title]')"));
+      await evaluate("window.__cornerOff();delete window.__cornerOff;void 0");
+      assert.equal(await evaluate("document.querySelector('[data-workspace-edge-toggle]').getBoundingClientRect().width"),await evaluate("window.__cornerBaseline.width"));
+      console.log('Header corner passed actual session scope, inject, action, preserved native controls/draft, empty width, error isolation and unload recovery');
+    }
     await evaluate(`(() => {
       window.__compatViewOff = window.__probeCtx.slots.register({
         name:'conversation.view', id:'compat-view', label:'Compatibility view',

@@ -750,6 +750,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // components receive, and the renderer's StrictSessionEntry
           // renders null while no official session is current, so the home
           // view is unaffected.
+          "conversation.session.header.corner": { kind: "single", scope: "session" },
           "conversation.session.header.utilities": {
             kind: "list",
             scope: "session",
