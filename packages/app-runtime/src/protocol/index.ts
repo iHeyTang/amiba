@@ -324,6 +324,11 @@ export interface SubmitPayload {
   modelSelection?: RuntimeModelSelection;
 }
 
+/** Host admission, distinct from the eventual model/command outcome. */
+export type SubmitReceipt =
+  | { kind: "accepted"; command?: { kind: "success" | "error"; text?: string } }
+  | { kind: "rejected" | "unconfirmed"; error: string };
+
 /** Presentation evidence from DSH's compaction lifecycle, scoped to one session. */
 export interface CompactionProgress {
   compactionId: string;
@@ -504,6 +509,8 @@ export interface ChatEngineClient {
   subscribe(sessionId: string): void;
   requestSnapshot(sessionId: string): void;
   submit(payload: SubmitPayload): void;
+  /** Optional for older transports. Unconfirmed admission must not imply safe retry. */
+  submitWithReceipt?(payload: SubmitPayload): Promise<SubmitReceipt>;
   abort(sessionId: string): void;
   clear(sessionId: string): void;
   clearApproval(sessionId: string, approvalId: string): void;

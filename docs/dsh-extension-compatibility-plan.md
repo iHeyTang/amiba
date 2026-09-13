@@ -1347,3 +1347,16 @@ pipelines retain mounted component state.
 - 41 项桥接测试、39 项真实 Composer/命令图片测试、插件及 UI 类型检查、完整桌面构建通过。新增 --offscreen-images 桌面验证标准接口的添加/移除/裁剪、其他会话隔离、原附件条接管、原命令路径的确切 PNG 字节和最终注册释放；完整组合回归退出码为 0，原输入卡片样式尺寸及队列、附件引用、Cordis、轨迹、子会话冷恢复均通过。
 - 日志：/tmp/amiba-offscreen-images-tests.log、/tmp/amiba-offscreen-images-ui-tests.log、/tmp/amiba-offscreen-images-types.log、/tmp/amiba-offscreen-images-ui-types.log、/tmp/amiba-offscreen-images-build.log、/tmp/amiba-offscreen-images-smoke.log。
 - 边界：驻留的是本次浏览器运行中的图片注册，不跨浏览器重启持久化；离屏直接提交仍未接入。完整输入、引用和新版插槽/服务兼容目标继续保留。
+
+
+### 离屏提交的引擎接收确认（2026-09-13）
+
+原 ChatEngineClient.submit 返回 void，begin 又发生在准备和 Host 请求之前，不能作为离屏清空草稿的依据。本轮给真实 DshChatEngineClient 增加可选 submitWithReceipt，保留旧 submit 事件入口，共用实际准备、模型选择、附件引用/读取、事件订阅和 prompt 路径。
+
+- accepted 来自实际 session.prompt 的 accepted 标志，或 subagent.prompt 的非空 messageId；Host 命令的 success/error 结果独立保留，不等同于模型任务完成。
+- 准备前失败和明确 RPC 拒绝返回 rejected；请求发出后网络错误、取消或无效确认返回 unconfirmed，不能据此认定没有投递。回执只结算一次；后续流结束或中断不改写已经确认的接收结果。
+- 新接口的重复提交拒绝只返回给该调用方，不发送会结束原回合的错误事件。引擎销毁会结算待确认请求，销毁后不再启动新提交。准备期间取消后，即使不响应 AbortSignal 的适配器随后返回，也不会继续发出 prompt。
+- 36 项引擎测试通过，包括原发送路径、确认前等待、命令结果、两路子会话独立确认、重复提交、明确 RPC/不确定网络结果、异步准备取消、同步 begin 回调取消，以及确认失败不等待延迟的连接清理。运行时类型检查通过。
+- 尚未将标准 inputActions.submit 接到离屏发送。原 ChatSurface.runChatTurn 同时依赖当前会话的工作目录、消息、检查点和交接闭包；后续必须使这些步骤按目标会话执行，并衔接驻留草稿/图片/命令事务。不能用直接调用 session.prompt、切换用户当前页面或创建另一套隐藏 ChatSurface 代替。
+
+验证记录：/tmp/amiba-submission-receipt-tests.log、/tmp/amiba-submission-receipt-types.log、/tmp/amiba-submission-receipt-build.log、/tmp/amiba-submission-receipt-smoke.log。完整桌面构建及包含离屏图片、队列恢复、附件引用、Cordis、轨迹和子会话冷恢复的组合回归均通过，退出码 0；桌面回归验证原 submit 路径，新增接收确认的分支语义由引擎测试覆盖，尚未声称离屏标准提交已完成。

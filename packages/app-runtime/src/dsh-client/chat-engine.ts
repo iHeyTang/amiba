@@ -11,6 +11,7 @@ import type {
   SnapshotFrame,
   StreamEvent,
   SubmitPayload,
+  SubmitReceipt,
   UserQuestionAnswerItem,
   UserQuestionRequest,
 } from "../protocol/index.js";
@@ -18,6 +19,7 @@ import type { AgentAttachmentsAdapter, AgentSubagentAddress } from "../platform/
 import { shortId } from "../utils/index.js";
 
 import { DshAmibaEventBridge } from "./amiba-event-bridge.js";
+import { DshRpcError } from "./index.js";
 import type {
   DshApiClient,
   DshImageMediaType,
@@ -35,6 +37,12 @@ interface SessionState extends ChatRuntimeState {
    * the composer takes the session back.
    */
   passive?: boolean;
+}
+
+interface SubmissionObserver {
+  dispatch(): void;
+  accept(receipt: SubmitReceipt): void;
+  fail(error: unknown): void;
 }
 
 export interface DshSessionActivitySource {
@@ -494,20 +502,23 @@ export class DshChatEngineClient implements ChatEngineClient {
     state.updatedAt = Date.now();
   }
 
-  private async run(payload: SubmitPayload, controller: AbortController): Promise<void> {
+  private async run(payload: SubmitPayload, controller: AbortController, admission?: SubmissionObserver): Promise<void> {
     const { client } = this.options;
     const sessionId = payload.sessionId;
     try {
       const suppliedAddress = this.options.resolveSubagent?.(sessionId);
       const address = suppliedAddress ? { ...suppliedAddress } : undefined;
+      controller.signal.throwIfAborted();
       if (address && address.childSessionId !== sessionId) throw new Error("Subagent address does not match the requested session");
       if (address?.mode === "one-shot") throw new Error("One-shot subagent conversations are read-only");
       for (const attachmentId of new Set(payload.attachments?.map(item => item.attachmentId) ?? [])) {
         await this.options.attachments?.retainForSession?.(attachmentId, sessionId);
+        controller.signal.throwIfAborted();
       }
 
       if (!address) {
         const resolved = (await this.options.resolveSession?.(payload, controller.signal)) ?? {};
+        controller.signal.throwIfAborted();
         await client.createSession(
           {
             sessionId,
@@ -559,11 +570,17 @@ export class DshChatEngineClient implements ChatEngineClient {
             : []),
           { type: "text" as const, text: lastUserText(payload) },
         ];
+        if (address && imageParts.length) throw new Error("Image input is unavailable for subagent continuations");
+        // Cancellation during preparation must not dispatch a later prompt,
+        // even when an attachment/storage adapter did not observe the signal.
+        controller.signal.throwIfAborted();
+        admission?.dispatch();
+        let childMessageId: string | undefined;
         const response = address
-          ? (await client.subagentPrompt({ ...address, mode: "continuable" }, [...textParts, ...imageParts], {
+          ? (childMessageId = (await client.subagentPrompt({ ...address, mode: "continuable" }, [...textParts, ...imageParts], {
               clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
               signal: controller.signal,
-            }), { command: undefined })
+            })).messageId, { accepted: true as const, command: undefined })
           : await client.prompt(
           sessionId,
           [...textParts, ...imageParts],
@@ -573,6 +590,9 @@ export class DshChatEngineClient implements ChatEngineClient {
             signal: controller.signal,
           },
         );
+        admission?.accept((address ? typeof childMessageId === "string" && childMessageId.length > 0 : response.accepted === true)
+          ? { kind: "accepted", ...(response.command ? { command: response.command } : {}) }
+          : { kind: "unconfirmed", error: "DSH returned no valid prompt acceptance receipt." });
         if (response.command) {
           if (response.command.text) {
             this.emit(sessionId, { kind: "chunk", text: response.command.text });
@@ -595,10 +615,15 @@ export class DshChatEngineClient implements ChatEngineClient {
           }
           if (terminal) return;
         }
+      } catch (error) {
+        // Report admission before socket cleanup, which may itself be delayed.
+        admission?.fail(error);
+        throw error;
       } finally {
         await iterator.return?.(undefined);
       }
     } catch (error) {
+      admission?.fail(error);
       if (controller.signal.aborted) {
         this.emit(sessionId, { kind: "aborted" });
       } else {
@@ -627,11 +652,27 @@ export class DshChatEngineClient implements ChatEngineClient {
   }
 
   submit(payload: SubmitPayload): void {
+    this.startSubmission(payload);
+  }
+
+  submitWithReceipt(payload: SubmitPayload): Promise<SubmitReceipt> {
+    return new Promise(resolve => this.startSubmission(payload, resolve));
+  }
+
+  private startSubmission(payload: SubmitPayload, receipt?: (value: SubmitReceipt) => void): void {
+    if (this.disposed) {
+      receipt?.({ kind: "rejected", error: "The chat engine has been disposed." });
+      return;
+    }
     const current = this.states.get(payload.sessionId);
     // A PASSIVE run is not this window's to guard: the person typing has
     // taken the session back, and DSH queues the prompt behind whatever the
     // host is running. Only a local run in flight refuses a second submit.
     if (current?.streaming && !current.passive) {
+      if (receipt) {
+        receipt({ kind: "rejected", error: "A stream is already in progress for this session." });
+        return;
+      }
       this.emit(payload.sessionId, {
         kind: "error",
         message: "A stream is already in progress for this session.",
@@ -661,6 +702,19 @@ export class DshChatEngineClient implements ChatEngineClient {
       this.states.delete(payload.sessionId);
     }
     const controller = new AbortController();
+    let dispatched = false, settled = false;
+    const settle = (value: SubmitReceipt) => {
+      if (settled) return;
+      settled = true;
+      controller.signal.removeEventListener("abort", onAbort);
+      receipt?.(value);
+    };
+    const fail = (error: unknown) => settle({
+      kind: !dispatched || error instanceof DshRpcError ? "rejected" : "unconfirmed",
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const onAbort = () => fail(new Error("Submission interrupted before acceptance confirmation."));
+    if (receipt) controller.signal.addEventListener("abort", onAbort, { once: true });
     const state = initialState(payload.sessionId, payload.assistantUiId);
     state.controller = controller;
     this.states.set(payload.sessionId, state);
@@ -668,7 +722,9 @@ export class DshChatEngineClient implements ChatEngineClient {
       kind: "begin",
       assistantUiId: payload.assistantUiId,
     });
-    void this.run(payload, controller);
+    void this.run(payload, controller, receipt ? {
+      dispatch: () => { dispatched = true; }, accept: settle, fail,
+    } : undefined);
   }
 
   abort(sessionId: string): void {
