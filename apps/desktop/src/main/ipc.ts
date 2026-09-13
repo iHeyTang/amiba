@@ -83,7 +83,7 @@ function broadcastWorkspaceChange(change: WorkspaceChange) {
 }
 
 export function registerIpcHandlers() {
-  registerFileResourceIpc(ipcMain, sessionId => workspaceManager.getForSession(sessionId), observeWorkspaceFile);
+  registerFileResourceIpc(ipcMain, sessionId => workspaceManager.getForSession(sessionId), observeWorkspaceFile, listener => workspaceManager.onChange(listener));
   const dshProfilePlugins = new DshProfilePluginManager({
     paths: managedDshPaths(),
     runtime: dshRuntime,

@@ -5,6 +5,14 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：文件监听跟随会话工作区重绑定（2026-09-13）
+
+files:observe-resource 订阅对应会话的 WorkspaceChange；每次重绑定先取消旧原生观察，读取当前根目录并建立新一代观察，变化通知受代际与取消状态约束。初次订阅尚未 ready 时发生目录切换，必须等待最新代完成；旧设置迟到失败不会取消新代。首次成功后的重绑定设置失败保留工作区变化订阅，之后可从有效绑定恢复。资源解除持有或文档结束时也清理 WorkspaceChange 订阅。
+
+原生路径/事件及 IPC 生命周期共 4 项测试通过（/tmp/amiba-file-rebind-tests.log）；新增测试覆盖无关会话不重启、旧代取消、最新代就绪、迟到通知隔离、重绑定失败后恢复和订阅清理。主进程类型检查通过（/tmp/amiba-file-rebind-types.log）。
+
+完整桌面构建退出 0（/tmp/amiba-file-rebind-build.log），--compat --resources 退出 0（/tmp/amiba-file-rebind-smoke.log）：在两个真实工作区间切换同一会话，元数据 canonicalPath 和原生事件均跟随新目录，修改旧目录不触发观察回调，随后恢复原工作区；ready/提前取消/越界拒绝、缺失恢复和原文件/会话/配置/Markdown/HMR 回归通过。仍保留元数据周期校验用于事件遗漏恢复；官方错误契约、文档正文及右侧栏尚需继续，39/5/20 统计不变。
+
 ## 进行中：文件事件接入 IPC 与资源提供器（2026-09-13）
 
 新增 files:observe-resource/unobserve-resource 及 preload 的 WorkspaceFilesAdapter.observe，返回 ready/dispose。先在 preload 安装事件接收，再发起主进程订阅；初始 ready 等待实际 Chokidar 发现完成，允许 ready 前取消；注册失败自动移除接收器。主进程按发送窗口及订阅 id 隔离，最后订阅释放后移除窗口监听；窗口销毁或主文档导航会取消该文档的全部订阅，页内导航保留。

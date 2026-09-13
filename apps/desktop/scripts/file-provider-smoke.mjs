@@ -1,11 +1,14 @@
+import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import assert from 'node:assert/strict';
-import { mkdir, writeFile, rm, realpath } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile, rm, realpath } from 'node:fs/promises';
 import path from 'node:path';
 
 export async function smokeFileProvider({ evaluate, wait, fileWorkspace }) {
   const folder = path.join(fileWorkspace, '.cache', 'compat-resource-probe');
   const file = path.join(folder, 'a #?.txt');
+  const secondWorkspace = await mkdtemp(path.join(tmpdir(), 'amiba-resource-rebind-'));
+  let rebound = false;
   await mkdir(folder, { recursive: true });
   try {
     await evaluate(`(async()=>{
@@ -45,6 +48,27 @@ export async function smokeFileProvider({ evaluate, wait, fileWorkspace }) {
     await wait(() => evaluate("document.querySelector('[data-file-resource-probe]')?.textContent==='failed:15'"));
     await writeFile(file, 'back');
     await wait(() => evaluate("document.querySelector('[data-file-resource-probe]')?.textContent==='live:4'"));
+    const secondFile = path.join(secondWorkspace, '.cache', 'compat-resource-probe', 'a #?.txt');
+    await mkdir(path.dirname(secondFile), { recursive: true });
+    await writeFile(secondFile, 'second workspace');
+    await evaluate(`window.amiba.workspaces.bind(window.__compatSessionId, ${JSON.stringify(secondWorkspace)})`);
+    rebound = true;
+    const secondCanonical = await realpath(secondFile);
+    await wait(() => evaluate(`window.__fileResourceSource.getSnapshot().value?.absolutePath===${JSON.stringify(secondCanonical)}`));
+    const rebindEvents = await evaluate('window.__fileNativeEvents');
+    await writeFile(secondFile, 'changed in new workspace');
+    await wait(() => evaluate(`window.__fileNativeEvents>${rebindEvents}`));
+    await wait(() => evaluate("document.querySelector('[data-file-resource-probe]')?.textContent==='live:24'"));
+    await delay(200);
+    const eventsAfterNewWrite = await evaluate('window.__fileNativeEvents');
+    await writeFile(file, 'old workspace must stay detached');
+    await delay(200);
+    assert.equal(await evaluate('window.__fileNativeEvents'), eventsAfterNewWrite);
+    await evaluate(`window.amiba.workspaces.bind(window.__compatSessionId, ${JSON.stringify(fileWorkspace)})`);
+    rebound = false;
+    const originalCanonical = await realpath(file);
+    await wait(() => evaluate(`window.__fileResourceSource.getSnapshot().value?.absolutePath===${JSON.stringify(originalCanonical)}`));
+    console.log('File observations followed actual session workspace rebinding and stopped reporting old workspace writes.');
     await evaluate("window.__fileResourceOff();window.__fileResourceOff=undefined");
     await wait(() => evaluate("window.__fileResourceSource.getSnapshot().value===undefined && !document.querySelector('[data-file-resource-probe]')"));
     await evaluate('window.__fileNativeObservation.dispose()');
@@ -56,6 +80,8 @@ export async function smokeFileProvider({ evaluate, wait, fileWorkspace }) {
     console.log('Real file resource hook recovered missing/create/update/delete/recreate in tree-ignored .cache; failure retained last value and final unmount cleared state.');
   } finally {
     await evaluate("window.__fileNativeObservation?.dispose();window.__fileResourceOff?.();window.__fileResourceFiber?.dispose()");
+    if (rebound) await evaluate(`window.amiba.workspaces.bind(window.__compatSessionId, ${JSON.stringify(fileWorkspace)})`);
+    await rm(secondWorkspace, { recursive: true, force: true });
     await rm(folder, { recursive: true, force: true });
   }
 }

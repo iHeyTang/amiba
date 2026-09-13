@@ -7,6 +7,7 @@ export function registerFileResourceIpc(
   ipcMain: Pick<IpcMain, 'handle'>,
   rootForSession: (sessionId: string) => string | null,
   observeWorkspaceFile: typeof import('./workspace-file-observer').observeWorkspaceFile,
+  onWorkspaceChange: (changed: (event: { sessionId: string }) => void) => () => void = () => () => {},
 ) {
   const owners = new Map<number, {
     subscriptions: Map<string, AbortController>;
@@ -43,14 +44,49 @@ export function registerFileResourceIpc(
     if (owner.subscriptions.has(args.id)) throw new Error('Duplicate resource observation.');
     const controller = new AbortController();
     owner.subscriptions.set(args.id, controller);
+    let current: AbortController | undefined;
+    let setup: Promise<void>;
+    const notify = () => {
+      if (!controller.signal.aborted && !event.sender.isDestroyed()) {
+        event.sender.send('files:resource-changed', args.id);
+      }
+    };
+    const begin = (): Promise<void> => {
+      current?.abort();
+      const generation = new AbortController();
+      current = generation;
+      const pending = (async () => {
+        const root = rootForSession(args.sessionId);
+        if (!root) throw new Error('No workspace is bound to this conversation.');
+        await observeWorkspaceFile(root, args.path, () => {
+          if (current === generation && !generation.signal.aborted) notify();
+        }, generation.signal);
+      })();
+      // Later rebind failures invalidate metadata but keep the workspace change
+      // subscription, so a subsequent valid binding can establish observation.
+      void pending.catch(() => {
+        if (current === generation && !generation.signal.aborted) notify();
+      });
+      return pending;
+    };
+    const offWorkspace = onWorkspaceChange(change => {
+      if (change.sessionId !== args.sessionId || controller.signal.aborted) return;
+      setup = begin();
+      notify();
+    });
+    const stop = () => { current?.abort(); offWorkspace(); };
+    controller.signal.addEventListener('abort', stop, { once: true });
     try {
-      const root = rootForSession(args.sessionId);
-      if (!root) throw new Error('No workspace is bound to this conversation.');
-      await observeWorkspaceFile(root, args.path, () => {
-        if (!controller.signal.aborted && !event.sender.isDestroyed()) {
-          event.sender.send('files:resource-changed', args.id);
+      setup = begin();
+      // Binding may change while initial native discovery is in flight. Only
+      // the latest generation's completion can resolve the caller's readiness.
+      for (;;) {
+        const pending = setup;
+        try { await pending; } catch (error) {
+          if (pending === setup) throw error;
         }
-      }, controller.signal);
+        if (pending === setup || controller.signal.aborted) break;
+      }
     } catch (error) {
       controller.abort();
       owner.subscriptions.delete(args.id);
