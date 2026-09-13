@@ -9,7 +9,7 @@ const target = process.env.ARTIFACT_TARGET || 'win32-x64';
 if (!targets.includes(target)) throw new Error('Invalid verification target');
 const version = productVersion();
 const pages = JSON.parse(gh(['api', '--paginate', '--slurp', `repos/${repo}/actions/runs/${runId}/artifacts?per_page=100`]));
-const candidates = pages.flatMap(page => page.artifacts).filter(a => !a.expired && (a.name.startsWith(`amiba-${version}-${target}-`) || a.name === `amiba-${target}`));
+const candidates = pages.flatMap(page => page.artifacts).filter(a => !a.expired && (a.name === `metadata-${version}-${target}` || a.name.startsWith(`amiba-${version}-${target}-`) || a.name === `amiba-${target}`));
 if (candidates.length !== 1) throw new Error('Expected exactly one matching target artifact; choose an unambiguous run');
 const dir = path.resolve('apps/desktop/dist', target);
 fs.mkdirSync(dir, { recursive: true });

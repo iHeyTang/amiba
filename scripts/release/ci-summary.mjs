@@ -7,18 +7,18 @@ const target = process.env.PACKAGE_TARGET;
 const version = productVersion();
 const file = path.resolve('apps/desktop/dist', target, 'release-manifest.json');
 const manifest = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file)) : null;
+const name = installerName(version, target);
 const rows = [
-  `### Amiba ${version} · ${target} · ${process.env.PACKAGE_MODE}`,
+  `### Amiba ${version} · ${target}`,
   '',
-  process.env.INSTALLER_URL
-    ? `[Download ${installerName(version, target)}](${process.env.INSTALLER_URL}) — direct installer, no outer ZIP.`
-    : 'Installer was not uploaded: see the failed build or verification step.',
+  process.env.INSTALLER_URL ? `[${name}](${process.env.INSTALLER_URL})` : 'Build or verification failed; see job logs.',
+  process.env.UPDATE_ZIP_URL ? `[${name.replace(/\.dmg$/, '.zip')}](${process.env.UPDATE_ZIP_URL})` : '',
   '',
   manifest?.distributable ? 'Release candidate.' : 'Test package: automatic updates disabled.',
-  manifest ? `Built from: \`${manifest.sourceCommit}\` · original build: \`${manifest.buildId}\`.` : '',
-  '',
-  process.env.UPDATES_URL ? `[Update files and integrity manifest](${process.env.UPDATES_URL}) (for CI/updater use).` : '',
-  process.env.REPORTS_URL ? `[Diagnostic reports](${process.env.REPORTS_URL}).` : '',
   '',
 ];
-fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, rows.join('\n'));
+// Diagnostic details belong in the job log, not in the download list.
+console.log(JSON.stringify({ sourceCommit: manifest?.sourceCommit, buildId: manifest?.buildId }));
+const footprint = path.resolve('apps/desktop/dist', target, 'package-footprint.json');
+if (fs.existsSync(footprint)) console.log(fs.readFileSync(footprint, 'utf8'));
+fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, rows.filter(row => row !== undefined).join('\n'));

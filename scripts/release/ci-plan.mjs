@@ -20,7 +20,7 @@ export function ciPlan({ ref = '', inputs = {}, version }) {
   if (!['test', 'release', 'verify'].includes(mode)) throw new Error('Invalid build mode');
   const target = inputs.target || 'all';
   if (mode === 'verify' && !/^[0-9]+$/.test(inputs.run_id || '')) throw new Error('Verify mode requires an artifact run ID');
-  const include = runnerTargets.filter(row => target === 'all' || row.target === target).map(row => ({ ...row, installer: installerName(version, row.target) }));
+  const include = runnerTargets.filter(row => target === 'all' || row.target === target).map(row => ({ ...row, installer: installerName(version, row.target), packagePrefix: installerName(version, row.target).replace(/\.(dmg|exe)$/, '') }));
   if (!include.length) throw new Error('Invalid build target');
   const publish = inputs.publish_draft === true || inputs.publish_draft === 'true';
   if (publish && mode !== 'release') throw new Error('Test packages cannot be published as release updates');

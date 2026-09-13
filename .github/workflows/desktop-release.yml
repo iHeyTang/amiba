@@ -119,7 +119,8 @@ jobs:
         if: needs.plan.outputs.mode == 'verify'
         uses: actions/download-artifact@v8
         with:
-          pattern: ${{ matrix.installer }}
+          pattern: ${{ matrix.packagePrefix }}.*
+          skip-decompress: true
           path: apps/desktop/dist/${{ matrix.target }}
           run-id: ${{ inputs.run_id }}
           github-token: ${{ github.token }}
@@ -133,38 +134,34 @@ jobs:
           archive: false
           retention-days: 7
           if-no-files-found: error
-      - name: Save update files and build manifest
-        id: updates
+      - name: Save macOS update ZIP
+        id: update_zip
+        if: startsWith(matrix.target, 'darwin-')
+        uses: actions/upload-artifact@v7
+        with:
+          path: apps/desktop/dist/${{ matrix.target }}/${{ matrix.packagePrefix }}.zip
+          archive: false
+          retention-days: 7
+          if-no-files-found: error
+      - name: Save release metadata
+        id: metadata
         if: always() && hashFiles('apps/desktop/dist/**/release-manifest.json') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: amiba-${{ needs.plan.outputs.version }}-${{ matrix.target }}-${{ needs.plan.outputs.mode }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: metadata-${{ needs.plan.outputs.version }}-${{ matrix.target }}
           compression-level: 0
           retention-days: 7
           if-no-files-found: error
           path: |
-            apps/desktop/dist/${{ matrix.target }}/Amiba-*.zip
             apps/desktop/dist/${{ matrix.target }}/Amiba-*.blockmap
             apps/desktop/dist/${{ matrix.target }}/latest-*.yml
             apps/desktop/dist/${{ matrix.target }}/release-manifest.json
-            apps/desktop/dist/${{ matrix.target }}/package-footprint.json
-      - name: Save diagnostic reports
-        id: reports
-        if: always() && hashFiles('apps/desktop/dist/**/package-footprint.json') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: reports-${{ needs.plan.outputs.version }}-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
-          retention-days: 7
-          if-no-files-found: error
-          path: |
-            apps/desktop/dist/${{ matrix.target }}/installer-*
             apps/desktop/dist/${{ matrix.target }}/package-footprint.json
       - name: Write download summary
         if: always()
         env:
           INSTALLER_URL: ${{ steps.installer.outputs.artifact-url }}
-          UPDATES_URL: ${{ steps.updates.outputs.artifact-url }}
-          REPORTS_URL: ${{ steps.reports.outputs.artifact-url }}
+          UPDATE_ZIP_URL: ${{ steps.update_zip.outputs.artifact-url }}
           PACKAGE_TARGET: ${{ matrix.target }}
           PACKAGE_MODE: ${{ needs.plan.outputs.mode }}
         run: node scripts/release/ci-summary.mjs
@@ -197,11 +194,12 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - uses: actions/download-artifact@v4
         with:
-          pattern: amiba-*
+          pattern: metadata-*
           path: release-downloads
       - uses: actions/download-artifact@v8
         with:
           pattern: Amiba-*
+          skip-decompress: true
           merge-multiple: true
           path: release-installers
       - name: Validate all artifacts and upload sequentially

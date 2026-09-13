@@ -175,12 +175,12 @@ GitHub 发布仓库已在线确认是公开的 `iHeyTang/amiba`，当前 CLI 身
 每个平台通过 `upload-artifact@v7` 的 `archive: false` 单独上传带版本号的安装文件：
 `Amiba-<version>-mac-arm64.dmg`、`Amiba-<version>-mac-x64.dmg`、`Amiba-<version>-win-x64.exe`。
 点击单个安装文件即可下载原始 DMG/EXE；不要选择下载全部 artifacts。
-更新 ZIP、blockmap、更新清单和构建 manifest 保存在 `amiba-<version>-<target>-<mode>-<run>-<attempt>` 中；诊断报告保存在 `reports-*` 中。
-安装文件只在该平台冒烟检查通过后上传；失败时可以保留更新文件和报告供排查。
-运行标题显示模式、目标平台和复用来源，作业 Summary 提供安装文件入口、构建来源及测试包状态。
+Mac 更新 ZIP 同样直接上传，和 DMG 同名，仅后缀不同。blockmap、更新清单、构建 manifest 和体积清单保存在小型 `metadata-<version>-<target>` 中，供发布与复验使用。诊断信息写入作业日志，不再单独上传 reports。
+安装文件和更新 ZIP 只在该平台冒烟检查通过后上传；失败时保留 metadata 和日志供排查。
+运行标题显示模式、目标平台和复用来源，作业 Summary 只提供原始文件下载链接及测试包状态。
 
 `mode=verify` 支持 `target=all`，可在同一次运行中复验原有三个平台的安装包，无需重建。
-同时兼容旧的完整 ZIP artifact 和新的安装文件/更新文件拆分布局；拆分文件在执行前按原始 manifest 校验 SHA-512。
+同时兼容历史 artifact 布局；新的 DMG/EXE/ZIP 均保留原始文件名与内容，下载时禁止自动解压更新 ZIP；拆分文件在执行前按原始 manifest 校验 SHA-512。
 例如：
 
 ```sh
