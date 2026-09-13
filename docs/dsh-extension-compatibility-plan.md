@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：右侧栏停靠模型与标签生命周期（2026-09-13）
+
+迁移固定 c291e796 的纯 Dockkit engine/contract：布局树、初始状态、操作及逆操作、序列历史、意图规划、控制器、约束和几何计算。未迁移 React surface 或样式，未替换现有右侧栏。10 个 engine/contract 文件已与固定源逐一比较，除 MIT 归属和 .ts→.js 导入后缀外完全一致；纯引擎入口不导出未迁移的 React 组件。141 项官方引擎测试原样语义迁移通过。
+
+迁移 TabDomain 与导航参数/placement/actions 的纯类型契约：按会话和标签 id 保存 occurrence，布局提交时 pin 资源，标签消失才 abort，折叠或隐藏不释放；撤销关闭创建新 occurrence；动作始终传原会话与标签当前所在 pane。navigation 使用已验证的完整快照存储，未引入新版 store 的 Immer draft/persist 或开发态深冻结。尚未声明/注册右侧栏 UI 插槽，不把纯模型迁移算作五项入口接入。
+
+右侧栏目录 180 项测试通过（/tmp/amiba-tab-resources-tests.log）：141 项引擎、26 项已有注册表、12 项官方 TabDomain、1 项真实 ResourceRegistry + DockController + TabDomain 联合测试。联合测试验证提交后自动 pin、复制标签共用资源流、折叠保留、最后关闭释放、撤销重新获取和稳定 source 引用。品牌及 Session 类型显式依赖固定 rc.2，仅加入 devDependencies，pnpm 锁只增加两个依赖入口；无运行时依赖升级。首次类型/构建发现缺少 Session 类型依赖，补齐后类型检查通过（/tmp/amiba-tab-domain-types-2.log）。测试夹具目录已排除出生产声明/代码输出。插件包构建退出 0（/tmp/amiba-tab-domain-build-2.log）；本轮未改动桌面运行入口或挂载组件，因此没有把包构建当作桌面右侧栏验证。
+
+后续必须接会话 store adoption、公开 sidebarRight 控制器、真实 pane 席位及 tabInfo/body/title/menu；本阶段组件尚未挂载，未宣称真实桌面右侧栏兼容，39/5/20 统计不变。
+
 ## 进行中：文件监听跟随会话工作区重绑定（2026-09-13）
 
 files:observe-resource 订阅对应会话的 WorkspaceChange；每次重绑定先取消旧原生观察，读取当前根目录并建立新一代观察，变化通知受代际与取消状态约束。初次订阅尚未 ready 时发生目录切换，必须等待最新代完成；旧设置迟到失败不会取消新代。首次成功后的重绑定设置失败保留工作区变化订阅，之后可从有效绑定恢复。资源解除持有或文档结束时也清理 WorkspaceChange 订阅。

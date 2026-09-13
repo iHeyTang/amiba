@@ -14,6 +14,7 @@
   "exclude": [
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
-    "src/dev/**"
+    "src/dev/**",
+    "src/client/sidebar-right/dockkit/tests/**"
   ]
 }
