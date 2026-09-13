@@ -190,3 +190,12 @@ gh workflow run desktop-release.yml --ref main -f mode=verify -f target=all -f r
 Release 草稿自动汇总同一构建的三个平台，要求 `mode=release,target=all,publish_draft=true`。
 流水线会重新合并分开下载的安装文件和更新文件，验证三个平台的版本、源码提交、构建 ID 与文件哈希后，逐个上传为独立 Release assets。
 测试/复验不会创建正式更新 Release；Mac 正式发布仍需签名与公证配置。
+
+
+2026-09-13 验证记录：
+
+- [首次三平台拆分上传](https://github.com/iHeyTang/amiba/actions/runs/34740759104)：三个平台成功。
+- [读取拆分产物再次复验](https://github.com/iHeyTang/amiba/actions/runs/34741097285)：三个平台成功，包含原始安装文件下载、manifest 完整性校验及原生运行检查。
+- 独立安装文件大小：ARM DMG 379,388,623 字节；Intel DMG 382,063,658 字节；Windows EXE 327,434,217 字节。下载响应为原始文件名，没有 ZIP 外壳。
+- 这两轮复用了原始构建 `34736708616` 的 0.1.0 测试包；manifest 保留原始源码提交及构建 ID，不将复验提交冒充安装包来源。
+- 本地发布工具 15 项测试通过；另验证三平台拆分文件合并，以及最后一个平台文件被篡改时整批上传前拒绝（上传命令使用替身，未修改 GitHub Release）。
