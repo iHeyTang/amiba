@@ -184,6 +184,24 @@ const api = {
       ipcRenderer.invoke("files:search", { sessionId, query }),
     read: (sessionId: string, path: string) =>
       ipcRenderer.invoke("files:read", { sessionId, path }),
+    observe: (sessionId: string, path: string, changed: () => void) => {
+      const id = randomUUID();
+      let disposed = false;
+      const handler = (_event: unknown, observed: string) => {
+        if (!disposed && observed === id) changed();
+      };
+      ipcRenderer.on("files:resource-changed", handler);
+      const ready: Promise<void> = ipcRenderer.invoke("files:observe-resource", { id, sessionId, path });
+      const dispose = () => {
+        if (disposed) return;
+        disposed = true;
+        ipcRenderer.removeListener("files:resource-changed", handler);
+        void ipcRenderer.invoke("files:unobserve-resource", id).catch(() => {});
+      };
+      // Observe registration failures even if a caller disposes before awaiting ready.
+      void ready.catch(dispose);
+      return { ready, dispose };
+    },
     stat: (sessionId: string, path: string) =>
       ipcRenderer.invoke("files:stat", { sessionId, path }),
     readBytes: (sessionId: string, path: string) =>

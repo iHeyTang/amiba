@@ -1,3 +1,5 @@
+import { observeWorkspaceFile } from "./workspace-file-observer";
+import { registerFileResourceIpc } from "./file-resource-ipc";
 import { readPreviewFile, statWorkspaceFile } from "./file-preview";
 import { resolve as resolvePath } from "node:path";
 
@@ -81,6 +83,7 @@ function broadcastWorkspaceChange(change: WorkspaceChange) {
 }
 
 export function registerIpcHandlers() {
+  registerFileResourceIpc(ipcMain, sessionId => workspaceManager.getForSession(sessionId), observeWorkspaceFile);
   const dshProfilePlugins = new DshProfilePluginManager({
     paths: managedDshPaths(),
     runtime: dshRuntime,

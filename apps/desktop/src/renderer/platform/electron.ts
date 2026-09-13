@@ -66,6 +66,7 @@ export function createElectronAdapter(
       list: (sessionId, path) => bridge.files.tree(sessionId, path),
       search: (sessionId, query) => bridge.files.search(sessionId, query),
       read: (sessionId, path) => bridge.files.read(sessionId, path),
+      observe: (sessionId, path, changed) => bridge.files.observe(sessionId, path, changed),
       stat: (sessionId, path) => bridge.files.stat(sessionId, path),
       readBytes: (sessionId, path) => bridge.files.readBytes(sessionId, path),
       reveal: (sessionId, path) => bridge.files.reveal(sessionId, path),

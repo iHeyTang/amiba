@@ -10,6 +10,7 @@ import type {
   WorkspaceFileDocument,
   WorkspaceFileBytes,
   WorkspaceFileStat,
+  WorkspaceFileObservation,
   WorkspaceDevelopmentAdapter,
   WorkspaceTreeEntry,
 } from "@amiba/app-runtime/platform";
@@ -104,6 +105,7 @@ interface AmibaBridgeApi {
     search(sessionId: string, query: string): Promise<WorkspaceTreeEntry[]>;
     read(sessionId: string, path: string): Promise<WorkspaceFileDocument>;
     stat(sessionId: string, path: string): Promise<WorkspaceFileStat>;
+    observe(sessionId: string, path: string, changed: () => void): WorkspaceFileObservation;
     readBytes(sessionId: string, path: string): Promise<WorkspaceFileBytes>;
     reveal(sessionId: string, path: string): Promise<void>;
     openExternal(sessionId: string, path: string): Promise<void>;

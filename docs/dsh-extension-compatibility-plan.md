@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：文件事件接入 IPC 与资源提供器（2026-09-13）
+
+新增 files:observe-resource/unobserve-resource 及 preload 的 WorkspaceFilesAdapter.observe，返回 ready/dispose。先在 preload 安装事件接收，再发起主进程订阅；初始 ready 等待实际 Chokidar 发现完成，允许 ready 前取消；注册失败自动移除接收器。主进程按发送窗口及订阅 id 隔离，最后订阅释放后移除窗口监听；窗口销毁或主文档导航会取消该文档的全部订阅，页内导航保留。
+
+file provider 在观察就绪后执行初始 stat；通知计数避免丢掉等待读取期间到达的事件，并唤醒正在等待的资源，最后持有者取消时关闭观察。保留每秒元数据校验，以覆盖操作系统丢通知、无法建立监听和工作区绑定变化。工作区重绑定后重新绑定原生观察、上游完整 RemoteFailure 类型与独立 Web 仍待完善；本阶段没有承诺捕获所有中间写入或完整复制官方 change-feed。
+
+原生文件/IPC 所有权 3 项测试通过（/tmp/amiba-file-events-native-tests.log），包括旧页面设置未完成时导航、新页面已订阅后旧设置失败、跨窗口取消隔离和销毁取消。资源目录 78 项测试通过（/tmp/amiba-file-events-tests-3.log）：新增就绪前不 stat、读取中通知触发立即重读、等待中通知唤醒及取消释放；早期回归发现无观察平台 await undefined 改变旧时序，改为仅观察存在时等待 ready 后恢复通过。主进程和渲染端类型检查通过（/tmp/amiba-file-events-main-types-2.log、/tmp/amiba-file-events-renderer-types.log）。
+
+完整桌面构建退出 0（/tmp/amiba-file-events-build.log），--compat --resources 退出 0（/tmp/amiba-file-events-smoke.log）：真实 Electron observe.ready、初次缺失文件的创建通知、就绪前取消、越界观察拒绝及 dispose 后停止回调通过；实际 useResource 的缺失/创建/更新/删除/重建与卸载清空、资源共享生命周期和原配置/会话/文件/Markdown/HMR 回归通过。窗口导航/销毁清理由上述 IPC 所有权测试验证，此次桌面没有另做真实窗口销毁用例。构建结束后仅移除提供器文件末尾多余空行，不改变运行逻辑。
+
 ## 进行中：文件资源原生事件监听基础（2026-09-13）
 
 新增 workspace-file-observer：待监听文件尚不存在时，从最近存在的祖先 realpath 起检查工作区边界，允许缺失后缀，但拒绝指向外部的祖先和悬空符号链接；该校验仅用于监听，后续文件读取仍须重新授权。Chokidar 仅沿目标的祖先目录链递进，忽略其他子树及目标变成目录后的后代；返回前等待 ready，AbortSignal 和幂等 disposer 负责关闭 watcher。

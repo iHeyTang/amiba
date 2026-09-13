@@ -625,11 +625,18 @@ export interface WorkspaceTerminalSnapshot {
  * path hint; main resolves it against that session's bound workspace and
  * rejects traversal / symlink escapes before touching the file.
  */
+export interface WorkspaceFileObservation {
+  /** Initial native discovery has completed; notifications may arrive before this resolves. */
+  readonly ready: Promise<void>;
+  dispose(): void;
+}
+
 export interface WorkspaceFilesAdapter {
   list(sessionId: string, path?: string): Promise<WorkspaceTreeEntry[]>;
   search(sessionId: string, query: string): Promise<WorkspaceTreeEntry[]>;
   read(sessionId: string, path: string): Promise<WorkspaceFileDocument>;
   stat?(sessionId: string, path: string): Promise<WorkspaceFileStat>;
+  observe?(sessionId: string, path: string, changed: () => void): WorkspaceFileObservation;
   readBytes?(sessionId: string, path: string): Promise<WorkspaceFileBytes>;
   reveal(sessionId: string, path: string): Promise<void>;
   openExternal(sessionId: string, path: string): Promise<void>;
