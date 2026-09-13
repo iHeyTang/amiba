@@ -184,6 +184,7 @@ export interface ComposerTriggerRuntime {
   inputSubmissionSource?(sessionId: string): ObservableSnapshot<ResidentInputSubmissionState>;
   clearInputSubmissionNotice?(sessionId: string): void;
   isSessionRunning?(sessionId: string): boolean;
+  resolveResidentDraft?(sessionId: string, draft: import("../../composer-draft-document").ComposerDraftDocument, signal: AbortSignal): Promise<string>;
   bindResidentTurnSender?(send: (request: ResidentTurnRequest) => Promise<import("@amiba/app-runtime/protocol").SubmitReceipt>, isBusy?: (sessionId: string) => boolean): () => void;
   inputStateSource?(sessionId: string): ObservableSnapshot<ConversationInputState | undefined>;
   bindImages?(sessionId: string, ops: ComposerImageOps): () => void;

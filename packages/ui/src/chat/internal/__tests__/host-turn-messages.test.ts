@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  findSnapshotAssistant,
   settleStreamingMessage,
   withHostAssistantPlaceholder,
   withHostUserMessage,
@@ -70,5 +71,28 @@ describe("settleStreamingMessage", () => {
     expect(settleStreamingMessage(existing, "host_missing")).toBe(existing);
     const settled = settleStreamingMessage(existing, "host_1");
     expect(settleStreamingMessage(settled, "host_1")).toBe(settled);
+  });
+});
+
+
+describe("snapshot assistant identity", () => {
+  it("recognizes a durable row for the same runtime turn, including turn zero", () => {
+    expect(findSnapshotAssistant([
+      { uiId: "user", role: "user", content: "hello" },
+      { uiId: "dsh:turn:7", role: "assistant", content: "partial", runtimeTurn: 0 },
+    ], { assistantUiId: "ephemeral", runtimeTurn: 0 })).toBe(1);
+  });
+  it("does not confuse repeated text or missing identities with the current turn", () => {
+    const rows: UiMessage[] = [{ uiId: "old", role: "assistant", content: "same", runtimeTurn: 3 }];
+    expect(findSnapshotAssistant(rows, { assistantUiId: "new", runtimeTurn: 4 })).toBe(-1);
+    expect(findSnapshotAssistant(rows, { assistantUiId: "new" })).toBe(-1);
+  });
+  it("recognizes a stable message ID and prefers an existing engine row", () => {
+    const rows: UiMessage[] = [
+      { uiId: "durable", role: "assistant", content: "partial", assistantMessageId: "host-id" },
+      { uiId: "engine", role: "assistant", content: "live" },
+    ];
+    expect(findSnapshotAssistant(rows, { assistantUiId: "new", assistantMessageId: "host-id" })).toBe(0);
+    expect(findSnapshotAssistant(rows, { assistantUiId: "engine", assistantMessageId: "host-id" })).toBe(1);
   });
 });

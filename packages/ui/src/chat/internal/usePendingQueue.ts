@@ -82,6 +82,8 @@ export interface UsePendingQueueArgs {
 
   // Stream-side dependencies (from useStreamBuffer + local state).
   busy: boolean;
+  /** Whether the displaced turn has a local runChatTurn finally to suppress. */
+  hasNativeTurn?: (sessionId: string) => boolean;
   markCurrentAssistantStopped: () => void;
   rejectPendingTurn: (sessionId: string, err: Error) => void;
 
@@ -142,6 +144,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     attachmentUploading,
     setPendingSourceApp,
     busy,
+    hasNativeTurn,
     markCurrentAssistantStopped,
     rejectPendingTurn,
     runChatTurn,
@@ -320,7 +323,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
           //   4. Fire abort to DSH — best-effort cleanup; the echoed
           //      `aborted` event hits `ignoreAbortForSessionRef` and
           //      no-ops.
-          suppressFinallyDrainRef.current = true;
+          suppressFinallyDrainRef.current = hasNativeTurn?.(sid) ?? true;
           ignoreAbortForSessionRef.current = sid;
           markCurrentAssistantStopped();
           rejectPendingTurn(sid, new DOMException("aborted", "AbortError"));
@@ -356,6 +359,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       sessions,
       client,
       busy,
+      hasNativeTurn,
       markCurrentAssistantStopped,
       rejectPendingTurn,
       runChatTurn,

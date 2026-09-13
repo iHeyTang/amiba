@@ -5,7 +5,21 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
-## 最新进展：按会话保留队列暂停状态（2026-09-13）
+## 最新进展：后台自动出队及前后台交接（2026-09-13）
+
+实际成功结束事件可推动同一 sessionPendingQueue 的后台 FIFO。工作器等待目标真正空闲，检查暂停和队首身份；已解析记录不重复运行 codec，暂存草稿使用目标会话真实引用服务解析。读取持久化记录、解除暂停本身不会触发发送。没有增加隐藏编辑器或更换原界面。
+
+派发边界移除队首并保留附件发送租约；拒绝、结果未确认及命令错误恢复原记录、暂停队列并通过已有输入提示显示原因，不自动重试。准备中删除、编辑、切回前台或停止会取消旧准备；取消后按当前草稿和剩余队列重新核对附件所有权。后台发送切回前台后使用原生队列操作；Send now 仅抑制真正存在的旧原生 finally，旧后台回执不重复推动新队列。实时快照按 Host 回合编号或消息 ID 复用历史助手行，避免重复用户/回复组。
+
+另修复同一数据源自身写入期间启动刷新、旧读取在写入结束后覆盖新入队记录的竞态。沿用原存储键和数组格式。
+
+验证：队列、原生发送、工作器与消息身份共 63 项测试，输入提供者及图片 21 项测试通过；UI 类型检查、完整桌面构建及完整真实 Host 兼容回归通过。新增桌面用例验证后台两条 FIFO 各发送一次且引用只解析一次、前台编辑器和草稿不变、切回不重复气泡、Send now 后剩余三条各发送一次、Stop 经导航及无关完成事件仍保留、显式提交恢复队列、子会话图片拒绝保留原记录和完整字节并支持原 Delete 清理。原刷新、图片、命令、子会话、冷重启和热更新用例均通过。
+
+日志：/tmp/amiba-queue-handoff-fixes-tests2.log、/tmp/amiba-background-queue-bridge-tests.log、/tmp/amiba-queue-handoff-fixes-types3.log、/tmp/amiba-background-queue-build3.log、/tmp/amiba-background-queue-smoke2.log。
+
+仍未完成：跨窗口原子认领、跨重启派发日志及恢复、完整 Host inbox 对齐、准备操作重定向到其他会话后的队列归属，以及其他官方扩展契约。下文是历史阶段记录，当前后台出队能力以本节为准；本里程碑不代表全部 64 个入口及服务已完全兼容。
+
+## 按会话保留队列暂停状态（2026-09-13）
 
 暂停标记从当前面板移到已有 sessionPendingQueue 数据源，仍保留原队列数组与存储格式。Stop 在调用引擎 abort 前同步发布暂停状态及原 queuePausedRef；Edit、解析失败和显式恢复发送也使用同一状态。会话切换不再把旧暂停清空，面板重新挂载读取目标会话的暂停值；旧会话回调不会修改新会话的标记。New chat 中断旧会话时将旧队列停住，再清空面板投影。
 

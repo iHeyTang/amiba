@@ -1,6 +1,6 @@
 import { bindInputDraft, type InputDraftCursor } from "./input-draft-binding.js";
 import { createResidentImageStaging, type PreparedInputImages } from "./resident-image-staging.js";
-import { CommandClaimStore, createResidentInputTransaction } from "@amiba/ui/composer-runtime";
+import { CommandClaimStore, createResidentInputTransaction, expandMentionPartsAsync } from "@amiba/ui/composer-runtime";
 import { shortId } from "@amiba/app-runtime/utils";
 /**
  * Bridge between Amiba's composer (plain React, `@amiba/ui`) and the OFFICIAL
@@ -331,16 +331,38 @@ export function createInputTriggerBridge(
     return transaction;
   };
   const bridge: AmibaInputTriggerBridge = {
+    resolveResidentDraft(id, draft, signal) {
+      signal.throwIfAborted();
+      if (!inputSessions.has(id)) return Promise.reject(new Error("The queued conversation input scope is unavailable."));
+      const resolver = bridge.controllerFor(id) ?? { serializeReference: async () => { throw new Error("The queued reference runtime is unavailable."); } };
+      return expandMentionPartsAsync(draft.parts, deps.mentionProviders?.(id) ?? [], resolver, signal);
+    },
     commandClaimsFor: claimsFor,
     inputSubmissionSource(id) {
       let source = submissionSources.get(id);
       if (!source) {
-        source = { getSnapshot: () => transactions.get(id)?.getSnapshot() ?? emptySubmission, subscribe: listener => inputDraftSource(id).subscribe(listener) };
+        let previous: ReturnType<ReturnType<typeof createResidentInputTransaction>["getSnapshot"]> = emptySubmission;
+        source = {
+          getSnapshot: () => {
+            const base = transactions.get(id)?.getSnapshot() ?? emptySubmission;
+            const notice = base.notice ?? deps.pendingQueue?.(id).getNotice() ?? null;
+            if (previous.pending !== base.pending || previous.notice !== notice) previous = Object.freeze({ pending: base.pending, notice });
+            return previous;
+          },
+          subscribe: listener => {
+            const offDraft = inputDraftSource(id).subscribe(listener);
+            const offQueue = deps.pendingQueue?.(id).subscribe(listener);
+            return () => { offDraft(); offQueue?.(); };
+          },
+        };
         submissionSources.set(id, source);
       }
       return source;
     },
-    clearInputSubmissionNotice: id => transactions.get(id)?.clearNotice(),
+    clearInputSubmissionNotice(id) {
+      transactions.get(id)?.clearNotice();
+      deps.pendingQueue?.(id).setNotice(null);
+    },
     isSessionRunning: id => (inputSessions.get(id)?.session ?? deps.sessionFor?.(id))?.getSnapshot().running === true,
     bindInputSession(sessionId, session) {
       const binding = { session };

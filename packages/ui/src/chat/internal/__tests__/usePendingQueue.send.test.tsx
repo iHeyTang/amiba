@@ -442,3 +442,21 @@ it("deleting a duplicate queue row preserves files held by the dispatched turn",
   await act(async()=>{finish();await active;});
   expect(attachmentFiles.remove).not.toHaveBeenCalled();
 });
+
+
+it.each([true, false])("Send now suppresses only an existing native finalizer: %s", async native => {
+  const args = makeArgs({ busy: true, hasNativeTurn: vi.fn(() => native) });
+  const { result } = renderHook(() => usePendingQueue(args));
+  await act(async () => { await sessionPendingQueue(queueStorage, "s1").ready(); });
+  act(() => result.current.setQueue([
+    { queueId: "first", text: "send first", attachments: [] },
+    { queueId: "next", text: "keep next", attachments: [] },
+  ]));
+  await act(async () => result.current.sendNow("first"));
+  expect(args.hasNativeTurn).toHaveBeenCalledWith("s1");
+  expect(result.current.suppressFinallyDrainRef.current).toBe(native);
+  expect(args.rejectPendingTurn).toHaveBeenCalledWith("s1", expect.any(DOMException));
+  expect(args.client.abort).toHaveBeenCalledWith("s1");
+  expect(args.runChatTurn).toHaveBeenCalledWith({ text: "send first", attachments: [] });
+  expect(result.current.queue.map(row => row.queueId)).toEqual(["next"]);
+});

@@ -2,6 +2,8 @@ import { deleteUnretainedAttachments, withSendingAttachments } from "./internal/
 import { useSessionComposerDraft } from "./use-session-composer-draft";
 import { useConversationSubmitHandoff } from "./useConversationSubmitHandoff";
 import { createResidentTurnSender, type ResidentTurnSenderDeps } from "./internal/resident-turn-sender";
+import { createResidentQueueDrainer, type ResidentQueueDrainerDeps } from "./internal/resident-queue-drainer";
+import { sessionPendingQueue } from "./internal/pending-queue-store";
 import { usePrepareConversationSubmit } from "./conversation-submit";
 import { createSurfaceActivity } from "../primitives/surface-activity";
 import { InteractionRegion } from "../primitives/interaction-region";
@@ -122,6 +124,7 @@ import {
   type UiMessage,
 } from "./internal/types";
 import {
+  findSnapshotAssistant,
   settleStreamingMessage,
   withHostAssistantPlaceholder,
   withHostUserMessage,
@@ -645,7 +648,7 @@ export default function ChatSurface({
    * in-flight sessions don't trample each other.
    */
   const inFlightTurnByIdRef = useRef<
-    Map<string, { user: UiMessage; assistantUiId: string }>
+    Map<string, { user: UiMessage; assistantUiId: string; owner?: "resident" }>
   >(new Map());
   const agentBySessionRef = useRef<Map<string, AgentExecutionContext>>(
     new Map(),
@@ -835,6 +838,10 @@ export default function ChatSurface({
     attachmentUploading,
     setPendingSourceApp,
     busy,
+    hasNativeTurn: id => {
+      const turn = inFlightTurnByIdRef.current.get(id);
+      return !!turn && turn.owner !== "resident";
+    },
     markCurrentAssistantStopped: () => markCurrentAssistantStopped(),
     rejectPendingTurn: (sid, err) => rejectPendingTurn(sid, err),
     runChatTurn: (args: RunChatTurnArgs) => runChatTurn(args),
@@ -1093,10 +1100,11 @@ export default function ChatSurface({
             }
           : {}),
       };
-      const idx = arr.findIndex((m) => m.uiId === state.assistantUiId);
+      const idx = findSnapshotAssistant(arr, state);
       if (idx >= 0) {
         const next = arr.slice();
-        next[idx] = { ...next[idx], ...merged };
+        // Keep the durable row and metadata, but let subsequent engine flushes find it.
+        next[idx] = { ...next[idx], ...merged, uiId: state.assistantUiId! };
         return next;
       }
       // Cold-open mid-stream OR switch-back-during-stream: the panel
@@ -1175,6 +1183,7 @@ export default function ChatSurface({
     if (sessionId !== sessions.activeId) {
       inFlightTurnByIdRef.current.delete(sessionId);
       resolvePendingTurn(sessionId);
+      residentQueueDrainer.completed(sessionId);
       return;
     }
     stream.cancelStreamChunkFlush();
@@ -1206,6 +1215,7 @@ export default function ChatSurface({
     setBusy(false);
     inFlightTurnByIdRef.current.delete(sessionId);
     resolvePendingTurn(sessionId);
+    residentQueueDrainer.completed(sessionId);
   }
 
   /**
@@ -1260,6 +1270,7 @@ export default function ChatSurface({
       sessionId === sessions.activeId &&
       assistantUiId !== stream.getCurrentAssistantUiId()
     ) {
+      residentQueueDrainer.displaced(sessionId);
       sessions.setActiveMessages((prev) =>
         settleStreamingMessage(prev as UiMessage[], assistantUiId),
       );
@@ -1272,6 +1283,7 @@ export default function ChatSurface({
     // wrong bubble. So bail completely on the echoed abort.
     if (ignoreAbortForSessionRef.current === sessionId) {
       ignoreAbortForSessionRef.current = null;
+      residentQueueDrainer.displaced(sessionId);
       return;
     }
     if (sessionId !== sessions.activeId) {
@@ -1281,16 +1293,19 @@ export default function ChatSurface({
       // user bubble for a turn that's already over.
       inFlightTurnByIdRef.current.delete(sessionId);
       rejectPendingTurn(sessionId, new DOMException("aborted", "AbortError"));
+      residentQueueDrainer.interrupted(sessionId);
       return;
     }
     markCurrentAssistantStopped();
     rejectPendingTurn(sessionId, new DOMException("aborted", "AbortError"));
+    residentQueueDrainer.interrupted(sessionId);
   }
 
   function handleStreamError(
     sessionId: string,
     event: Extract<StreamEvent, { kind: "error" }>,
   ): void {
+    residentQueueDrainer.interrupted(sessionId);
     if (sessionId !== sessions.activeId) {
       inFlightTurnByIdRef.current.delete(sessionId);
       rejectPendingTurn(sessionId, new Error(event.message));
@@ -1600,7 +1615,7 @@ export default function ChatSurface({
       if (!client.submitWithReceipt) return { kind: "rejected", error: "The chat transport does not provide submission receipts." };
       const user: UiMessage = { uiId: shortId("u"), role: "user", content: payload.history[payload.history.length - 1].content,
         sentAt: Date.now(), ...(workspacePath ? { workspacePath } : {}) };
-      const cached = { user, assistantUiId: payload.assistantUiId };
+      const cached = { user, assistantUiId: payload.assistantUiId, owner: "resident" as const };
       inFlightTurnByIdRef.current.set(payload.sessionId, cached);
       agentBySessionRef.current.set(payload.sessionId, payload.agent!);
       const receipt = await client.submitWithReceipt(payload);
@@ -1614,6 +1629,35 @@ export default function ChatSurface({
     },
   };
   useEffect(() => triggerRuntime?.bindResidentTurnSender?.(residentTurnSender, id => inFlightTurnByIdRef.current.has(id)), [triggerRuntime, residentTurnSender]);
+  const residentQueueDeps = useRef<ResidentQueueDrainerDeps>(null!);
+  const residentQueueDrainer = useMemo(() => createResidentQueueDrainer({
+    queue: id => sessionPendingQueue(getPlatform().storage, id),
+    offscreen: id => residentQueueDeps.current.offscreen(id),
+    busy: id => residentQueueDeps.current.busy(id),
+    watchReadiness: (id, changed) => residentQueueDeps.current.watchReadiness(id, changed),
+    resolve: (id, draft, signal) => residentQueueDeps.current.resolve(id, draft, signal),
+    send: request => residentQueueDeps.current.send(request),
+    drainNative: id => residentQueueDeps.current.drainNative(id),
+    retainedAttachments: () => residentQueueDeps.current.retainedAttachments(),
+  }), []);
+  residentQueueDeps.current = {
+    queue: id => sessionPendingQueue(getPlatform().storage, id),
+    offscreen: id => residentTurnMounted.current && !!triggerRuntime && sessions.getSnapshot().activeId !== id,
+    busy: id => inFlightTurnByIdRef.current.has(id) || triggerRuntime?.isSessionRunning?.(id) === true,
+    watchReadiness: (id, changed) => triggerRuntime?.inputStateSource?.(id).subscribe(changed) ?? (() => {}),
+    resolve: (id, draft, signal) => triggerRuntime?.resolveResidentDraft?.(id, draft, signal) ?? Promise.reject(new Error("The queued draft resolver is unavailable.")),
+    send: residentTurnSender,
+    retainedAttachments: () => attachments,
+    drainNative: id => {
+      const current = queueDrainRef.current;
+      if (current.sessionId === id && !sessionPendingQueue(getPlatform().storage, id).isPaused()) current.drain();
+    },
+  };
+  useEffect(() => {
+    residentQueueDrainer.setEnabled(true);
+    return () => residentQueueDrainer.setEnabled(false);
+  }, [residentQueueDrainer]);
+  useEffect(() => residentQueueDrainer.enteredForeground(sessions.activeId), [residentQueueDrainer, sessions.activeId]);
   const handoffConversationSubmit = useConversationSubmitHandoff({
     activeId: sessions.activeId,
     prepare: prepareConversationSubmit,

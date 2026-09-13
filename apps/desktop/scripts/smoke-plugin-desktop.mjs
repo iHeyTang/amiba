@@ -21,6 +21,9 @@ if (process.argv.includes("--child-nested-restart") && !process.argv.includes("-
 if (process.argv.includes("--resident-queue") && !["--compat", "--child-continuation"].every(flag => process.argv.includes(flag))) {
   throw new Error("--resident-queue requires --compat --child-continuation");
 }
+if (process.argv.includes("--background-queue") && !["--compat", "--child-continuation"].every(flag => process.argv.includes(flag))) {
+  throw new Error("--background-queue requires --compat --child-continuation");
+}
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const profile = await mkdtemp(path.join(tmpdir(), "amiba-plugin-app-"));
 async function port() {
@@ -90,6 +93,15 @@ async function call(method, params = {}) {
   });
 }
 async function evaluate(expression) {
+  // Chromium suspends animation frames in an occluded test window. Make the
+  // existing probe window visible before waiting for a real editor frame.
+  if (process.argv.includes("--compat") && expression.includes("requestAnimationFrame")) {
+    await call("Runtime.evaluate", {
+      expression: "(async()=>{if(document.hidden)await window.amiba.nativeExtensions.call(await window.amiba.nativeExtensions.connect('dsh-plugin-probe'),'show-main')})()",
+      awaitPromise: true,
+      returnByValue: true,
+    });
+  }
   const response = await call("Runtime.evaluate", {
     expression,
     awaitPromise: true,
@@ -913,6 +925,104 @@ try {
         await wait(() => evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]') && !document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]')"));
         await evaluate("window.__residentQueueRefOff();void 0");
         console.log("Standard busy offscreen submissions entered the native queue once, retained real reference and image ownership, preserved foreground input, and restored original Stop/Edit/Delete/Send now behavior");
+      }
+      if (process.argv.includes("--background-queue")) {
+        const readQueue = () => evaluate("(async()=>{const values=await window.amiba.storage.get('pendingQueue:compat-continuable-child');return values['pendingQueue:compat-continuable-child']??[]})()");
+        const modelCount = async text => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT',limit:500})")).entries.filter(entry => entry.message.includes('compat-continuable-child '+JSON.stringify(text))).length;
+        const openChild = async () => {
+          await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-parent',childSessionId:'compat-continuable-child',mode:'continuable'});void 0");
+          await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')"));
+        };
+        const openRoot = async () => {
+          await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+          await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId) && !window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')"));
+          await evaluate("window.__backgroundQueueEditor=Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).find(n=>n.getClientRects().length);window.__backgroundQueueDraft=window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft;void 0");
+        };
+        const foregroundUnchanged = () => evaluate("window.__backgroundQueueEditor.isConnected && window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===window.__backgroundQueueDraft");
+        await evaluate("window.__backgroundActions=window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions;window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_HOLD');window.__backgroundActions.submit();void 0");
+        await wait(() => evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child') && !!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        await evaluate("window.__backgroundCodecCalls=0;window.__backgroundRefOff=window.__probeCtx.inputTriggers.registerSource({name:'background-ref',trigger:'@',candidates:async()=>[],onPick:()=>({}),matchSpace:(_s,token)=>token==='@background'?{insert:{source:'background-ref',ref:'id',label:'后台引用',clipboardText:'background clip'}}:undefined,codec:{serialize:async ref=>{window.__backgroundCodecCalls++;return '<background:'+ref+'>'}}});window.__backgroundActions.setDraft('@background');void 0");
+        await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor('compat-continuable-child').onSpace()"), true);
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.occurrences.length===1"));
+        await evaluate("window.__backgroundActions.setDraft(window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft+' literal @[dsh.reference:unknown|id|label|clip]');void 0");
+        await evaluate("window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_FIRST '+window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft);window.__backgroundActions.submit();void 0");
+        await wait(async () => (await readQueue()).length===1);
+        const first = (await readQueue())[0];
+        assert.ok(first.text.includes('<background:id>')); assert.equal(first.draft.parts.filter(part=>part.kind==='mention').length, 1);
+        await openRoot();
+        await evaluate("window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_SECOND');window.__backgroundActions.submit();void 0");
+        await wait(async () => (await readQueue()).length===2);
+        await writeFile(path.join(profile, 'background-release'), 'release');
+        await wait(async () => await modelCount(first.text)===1 && await modelCount('COMPAT_LITERAL_BACKGROUND_SECOND')===1 && (await readQueue()).length===0);
+        await wait(() => evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"));
+        assert.equal(await evaluate("window.__backgroundCodecCalls"), 1);
+        assert.equal(await foregroundUnchanged(), true);
+        await openChild();
+        await wait(() => evaluate("document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_LITERAL_BACKGROUND_SECOND') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        console.log("Successful background completion drained the original mixed-reference row and standard offscreen row in FIFO order, once each, without changing the foreground composer");
+
+        await rm(path.join(profile,'background-release'));
+        await evaluate("window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_HOLD');window.__backgroundActions.submit();void 0");
+        await wait(() => evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"));
+        const preempted='COMPAT_LITERAL_BACKGROUND_PREEMPT_COMPAT_WAIT_FOR_STOP';
+        const replacements=['COMPAT_LITERAL_BACKGROUND_NATIVE_FIRST','COMPAT_LITERAL_BACKGROUND_NATIVE_SECOND','COMPAT_LITERAL_BACKGROUND_NATIVE_THIRD'];
+        for(const [index,text] of [preempted,...replacements].entries()) {
+          await evaluate(`window.__backgroundActions.setDraft(${JSON.stringify(text)});window.__backgroundActions.submit();void 0`);
+          await wait(async () => (await readQueue()).length===index+1);
+        }
+        await openRoot(); await writeFile(path.join(profile,'background-release'),'release');
+        await wait(async () => await modelCount(preempted)===1 && (await readQueue()).length===3);
+        await openChild();
+        await wait(() => evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]') && document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length===3"));
+        const liveTurnCount = () => evaluate(`Array.from(document.querySelectorAll('[data-conversation-user-turn]')).filter(node=>node.textContent.includes(${JSON.stringify(preempted)})).length`);
+        await wait(async () => (await liveTurnCount()) > 0);
+        assert.equal(await liveTurnCount(), 1, "Returning to a live background turn must not duplicate its user/assistant group");
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=\"Send now\"]').click();void 0");
+        await wait(async () => (await Promise.all(replacements.map(modelCount))).every(count=>count===1) && (await readQueue()).length===0);
+        await wait(() => evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        console.log("Native Send now preempted a background-drained turn after navigation; each remaining native queue row reached the model exactly once");
+
+        await evaluate("window.__backgroundActions.setDraft('COMPAT_WAIT_FOR_STOP');window.__backgroundActions.submit();void 0");
+        await wait(() => evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child') && !!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        await evaluate("window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_PAUSED');window.__backgroundActions.submit();void 0");
+        await wait(async () => (await readQueue()).length===1);
+        await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]').click();void 0");
+        await wait(() => evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        await openRoot();
+        assert.equal((await evaluate("window.__probeCtx.composerInputs.sendResidentTurn({sessionId:'compat-continuable-child',text:'COMPAT_LITERAL_BACKGROUND_UNRELATED',attachments:[]})")).kind, 'accepted');
+        await wait(async () => await modelCount('COMPAT_LITERAL_BACKGROUND_UNRELATED')===1);
+        await wait(() => evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"));
+        assert.equal(await modelCount('COMPAT_LITERAL_BACKGROUND_PAUSED'), 0); assert.equal((await readQueue()).length, 1);
+        await evaluate("window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_RESUME');window.__backgroundActions.submit();void 0");
+        await wait(async () => await modelCount('COMPAT_LITERAL_BACKGROUND_RESUME')===1 && await modelCount('COMPAT_LITERAL_BACKGROUND_PAUSED')===1 && (await readQueue()).length===0);
+        await wait(() => evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"));
+        assert.equal(await foregroundUnchanged(), true);
+        console.log("Stop survived navigation and an unrelated background completion; explicit standard submission resumed the retained queue");
+
+        await openChild();
+        await rm(path.join(profile, 'background-release'));
+        await evaluate("window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_HOLD');window.__backgroundActions.submit();void 0");
+        await wait(() => evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"));
+        await openRoot();
+        const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJ1sAAAAASUVORK5CYII=";
+        await evaluate(`window.__backgroundImages=window.__probeCtx.get('composerImages').createDraftImages([new File([Uint8Array.from(atob(${JSON.stringify(png)}),c=>c.charCodeAt(0))],'background-queue.png',{type:'image/png'})]);window.__backgroundActions.addImages(window.__backgroundImages.map(image=>image.id));window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_IMAGE');window.__backgroundActions.submit();void 0`);
+        await wait(async () => (await readQueue()).length===1);
+        const imageRow = (await readQueue())[0];
+        const imageFiles = (await readdir(profile,{recursive:true})).filter(file=>file.endsWith('/'+imageRow.attachments[0].attachmentId+'.bin'));
+        assert.equal(imageFiles.length,1);
+        const imagePath=path.join(profile,imageFiles[0]);
+        await writeFile(path.join(profile,'background-release'),'release');
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputSubmissionSource('compat-continuable-child').getSnapshot().notice?.includes('installed DSH client does not support images in child conversation continuations')"));
+        assert.equal(await foregroundUnchanged(),true);
+        await openChild();
+        await wait(() => evaluate("document.body.textContent.includes('installed DSH client does not support images in child conversation continuations')"));
+        assert.equal((await readQueue())[0].queueId,imageRow.queueId);
+        assert.equal((await readFile(imagePath)).toString('base64'),png);
+        assert.equal(await modelCount('COMPAT_LITERAL_BACKGROUND_IMAGE'),0);
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Delete]').click();window.__backgroundRefOff();void 0");
+        await wait(async () => (await readQueue()).length===0 && await readFile(imagePath).then(()=>false,error=>error.code==='ENOENT'));
+        console.log("Unsupported background child-image preparation retained the original queued row and exact file, surfaced its real failure in the existing composer, and allowed original queue deletion");
       }
       if (process.argv.includes("--queue-draft")) {
         await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_WAIT_FOR_STOP');window.__probeCtx.composerInputs.submitInput('compat-continuable-child');void 0");

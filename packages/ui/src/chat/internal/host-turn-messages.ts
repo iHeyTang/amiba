@@ -91,3 +91,18 @@ export function withHostUserMessage(
     },
   ];
 }
+
+/** Locate the same assistant across durable history IDs and transient engine IDs.
+ * Content is deliberately not an identity: consecutive turns may be identical.
+ */
+export function findSnapshotAssistant(
+  messages: readonly UiMessage[],
+  snapshot: { assistantUiId?: string | null; assistantMessageId?: string; runtimeTurn?: number },
+): number {
+  const exact = messages.findIndex(message => message.role === "assistant" && message.uiId === snapshot.assistantUiId);
+  if (exact >= 0) return exact;
+  return messages.findIndex(message => message.role === "assistant" && (
+    (!!snapshot.assistantMessageId && message.assistantMessageId === snapshot.assistantMessageId) ||
+    (Number.isSafeInteger(snapshot.runtimeTurn) && snapshot.runtimeTurn! >= 0 && message.runtimeTurn === snapshot.runtimeTurn)
+  ));
+}

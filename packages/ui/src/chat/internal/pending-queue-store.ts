@@ -20,6 +20,7 @@ export function createPendingQueueSource(storage: StorageAdapter, sessionId: str
   // Runtime control belongs to the session too. It is deliberately separate
   // from the persisted row format and does not arm a queue after a restart.
   let paused = false;
+  let notice: string | null = null;
   let loaded = false, revision = 0, generation = 0, pendingWrites = 0;
   let loading: Promise<void> | undefined;
   let writes = Promise.resolve();
@@ -56,7 +57,8 @@ export function createPendingQueueSource(storage: StorageAdapter, sessionId: str
   };
   const load = (refresh = false): Promise<void> => {
     if (loading) return loading;
-    if (loaded && !refresh) return Promise.resolve();
+    // A refresh started during our write can return old data after the write settles.
+    if (loaded && (!refresh || pendingWrites > 0)) return Promise.resolve();
     const token = ++generation, before = revision;
     const wasLoaded = loaded;
     loading = storage.get(key).then(values => {
@@ -74,9 +76,16 @@ export function createPendingQueueSource(storage: StorageAdapter, sessionId: str
   return {
     getSnapshot: () => snapshot,
     isPaused: () => paused,
+    getNotice: () => notice,
+    setNotice(value: string | null) {
+      if (notice === value) return;
+      notice = value;
+      notify();
+    },
     setPaused(value: boolean) {
-      if (paused === value) return;
+      if (paused === value && (value || notice === null)) return;
       paused = value;
+      if (!value) notice = null;
       notify();
     },
     ready: () => load(),

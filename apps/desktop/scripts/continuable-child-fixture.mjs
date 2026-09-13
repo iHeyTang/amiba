@@ -29,6 +29,17 @@ export function continuableChildFixture(root, profile) {
         if(literal) console.log('AMIBA_PROBE_LITERAL_INPUT '+options.sessionId+' '+JSON.stringify(literal));
         yield {type:'block-start',index:0,blockType:'text'};
         yield {type:'text-delta',index:0,text};
+        if(input==='COMPAT_LITERAL_BACKGROUND_HOLD' && options.sessionId==='compat-continuable-child') {
+          await new Promise<void>(resolve=>{
+            const releasePath=${JSON.stringify(path.join(profile, 'background-release'))};
+            const watcher=watch(${JSON.stringify(profile)},()=>{if(existsSync(releasePath))finish();});
+            const finish=()=>{watcher.close();options.signal?.removeEventListener('abort',finish);resolve();};
+            options.signal?.addEventListener('abort',finish,{once:true});
+            if(options.signal?.aborted || existsSync(releasePath))finish();
+          });
+          options.signal?.throwIfAborted();
+          console.log('AMIBA_PROBE_BACKGROUND_RELEASE');
+        }
         if((input.includes('COMPAT_WAIT_FOR_STOP') || input.includes('COMPAT_NESTED_PARENT_WAKE')) && options.sessionId==='compat-continuable-child') {
           await new Promise<void>((resolve)=>{
             if(options.signal?.aborted) return resolve();

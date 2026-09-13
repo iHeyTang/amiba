@@ -105,3 +105,24 @@ it("persists an admitted item and notifies other views even when one observer th
     expect(warning).toHaveBeenCalledWith("[pending-queue] observer failed", expect.any(Error));
   } finally { offBroken(); offHealthy(); warning.mockRestore(); }
 });
+
+it("keeps an admitted queue when a subscription refresh overlaps its own pending write", async () => {
+  const { storage, values } = storageFixture();
+  const source = createPendingQueueSource(storage, "a");
+  await source.ready();
+  let finishWrite!: () => void;
+  let finishRead: ((value: Record<string, unknown>) => void) | undefined;
+  vi.mocked(storage.set).mockImplementationOnce(patch => new Promise(resolve => {
+    finishWrite = () => { Object.assign(values, patch); resolve(); };
+  }));
+  source.update([row("admitted")]);
+  await vi.waitFor(() => expect(storage.set).toHaveBeenCalledOnce());
+  vi.mocked(storage.get).mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+  const off = source.subscribe(() => {});
+  finishWrite();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  finishRead?.({ "pendingQueue:a": [] });
+  await source.flush();
+  expect(source.getSnapshot()).toEqual([row("admitted")]);
+  off();
+});

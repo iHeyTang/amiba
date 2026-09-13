@@ -37,6 +37,38 @@ function fixture(residentDraft?: InputTriggerBridgeDeps["residentDraft"], pendin
 }
 
 describe("official input action provider", () => {
+  it("resolves queued original nodes for their actual scope without changing the live draft", async () => {
+    const source = createComposerDraftSource();
+    source.set("@[dsh.reference:fixture|id|Label|clip]");
+    source.setParts([...source.getDocument().parts, { kind: "text", text: " literal @[dsh.reference:unknown|id|Label|clip]" }]);
+    const queued = source.getDocument();
+    source.setDisplayText("live newer draft");
+    const { bridge, actions } = fixture(() => source);
+    actions("target");
+    const serialize = vi.fn(async () => "<resolved>");
+    const controller = vi.spyOn(bridge, "controllerFor").mockReturnValue({ serializeReference: serialize } as never);
+    const signal = new AbortController().signal;
+    expect(await bridge.resolveResidentDraft!("target", queued, signal)).toBe("<resolved> literal @[dsh.reference:unknown|id|Label|clip]");
+    expect(controller).toHaveBeenCalledWith("target"); expect(serialize).toHaveBeenCalledOnce();
+    expect(source.getSnapshot()).toBe("live newer draft");
+    await expect(bridge.resolveResidentDraft!("unowned", queued, signal)).rejects.toThrow("scope is unavailable");
+  });
+  it("projects a background queue failure through the existing stable input notice source", async () => {
+    const storage = { get: async () => ({}), set: async () => {}, remove: async () => {}, watch: () => () => {} };
+    const queue = sessionPendingQueue(storage, "a");
+    const source = createComposerDraftSource();
+    const { bridge, actions } = fixture(() => source, () => queue); actions("a");
+    const state = bridge.inputSubmissionSource!("a"), changed = vi.fn();
+    const off = state.subscribe(changed); await queue.ready();
+    queue.setPaused(true); queue.setNotice("Background preparation failed");
+    const before = state.getSnapshot();
+    expect(before).toEqual({ pending: false, notice: "Background preparation failed" });
+    expect(state.getSnapshot()).toBe(before); expect(changed).toHaveBeenCalled();
+    bridge.clearInputSubmissionNotice!("a");
+    expect(state.getSnapshot()).toEqual({ pending: false, notice: null });
+    expect(queue.isPaused()).toBe(true);
+    off();
+  });
   it("uses the existing native queue after hydration when local turn preparation is busy", async () => {
     let finish!: (values: Record<string, unknown>) => void;
     const storage = {
