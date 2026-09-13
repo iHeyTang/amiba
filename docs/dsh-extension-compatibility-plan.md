@@ -5,7 +5,19 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
-## 最新进展：持久图片引用的数据链路（2026-09-13）
+## 最新进展：消息图片授权读取与渲染（2026-09-13）
+
+主 shell 接入 conversation.message.images：从当前真实 SessionFace 读取持久图片，经 FullScreenChatView/ChatSurface/MessageTurns/UserStickyBubble 传入原用户消息。原文字、附件徽标和控件保持不变；插件为空时不增 DOM，渲染异常由局部边界隔离。暂未扩展到本人发送过程中的本地 preview 回显、工具图片或轨迹图片。
+
+session-image-loader 为每个会话 face 独立缓存 pending 及 URL，只有 SessionFace.readAttachment 授权成功后才创建 Blob URL，并提供同步 peek。不同会话不共享缓存；拒绝与连接失败不缓存为成功，后续可重试。会话切换和 shell 卸载释放已创建 URL，迟到响应不创建 URL。effect 拥有实例并按 face 检查可见身份，避免 React StrictMode 重放复用已释放实例。
+
+验证：消息 UI 55 项、读取器与 StrictMode/切换测试 6 项通过；UI/shell 类型检查和完整桌面构建通过。真实 --compat --message-images --header-corner --child-continuation --approval-detail 通过：Host attachments.saveImage 实际验证并保存 PNG，拥有者会话真实日志引用后，插件读取解码出图片；并发调用共享 Promise，peek 在授权完成后可读；另一真实会话明确返回 Image is not referenced by this session；切换后旧 Blob URL 不可读取，返回历史消息产生新 URL 并正常解码。插件卸载保留原文和原对话。角标、审批、续聊、停止、表单、目录、文件、下载和 HMR 回归通过，已查看截图。测试中首次 PNG 被严格解码拒绝，修复了测试数据，未修改产品校验。
+
+日志：/tmp/amiba-image-loader-tests-2.log、/tmp/amiba-image-seat-tests-2.log、/tmp/amiba-image-loader-types-0.log、/tmp/amiba-image-loader-shell-types-2.log、/tmp/amiba-message-image-build.log、/tmp/amiba-message-image-smoke-2.log。
+
+入口统计现为 32/11/21（已有基础/待验证/有条件），不代表完整插件兼容率。本人发送的回显和持久引用交接、新版 preview 分支及 compact 行为、工具/轨迹图片、独立 Web 与 Quick Ask 等非主 shell 界面仍需继续；原全部扩展和队列/服务目标不变。
+
+## 持久图片引用的数据链路（2026-09-13）
 
 重新核对实际安装包：rc.2 已有 ImageAttachmentRef、conversation.message.images 的历史图片 owner，以及 SessionFace.readAttachment / session.attachment 的按会话授权读取接口，不能把这些基础能力都误归为“必须新版”。新版增加 preview 分支、可选同步 peek、compact 等契约，仍要分别适配。
 

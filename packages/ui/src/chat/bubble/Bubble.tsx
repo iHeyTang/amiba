@@ -1,3 +1,4 @@
+import { WorkbenchViewBoundary } from "../workbench-extensions";
 import { messageTextTimeline, joinTextSources, sliceTextSources, timelineTextSource, thinkingBodySource, type TextSourceRange } from "../text-source-ranges";
 import { WorkspaceMarkdown } from "../workspace-file-links";
 import { CompactionRow } from "./CompactionRow";
@@ -208,6 +209,7 @@ function MessageNoticeRow({
 
 export interface BubbleProps {
   m: UiMessage;
+  messageImages?: (images: NonNullable<UiMessage["images"]>) => ReactNode;
   /** Turn-level renderers use this after moving execution details into one summary. */
   suppressTrace?: boolean;
   /** MessageTurns renders terminal run state after the whole execution segment. */
@@ -244,6 +246,7 @@ function hasInterleavedAssistantTimeline(message: UiMessage): boolean {
  */
 export function Bubble({
   m,
+  messageImages,
   suppressTrace = false,
   suppressRunBoundary = false,
   onOpenAgentDestination,
@@ -314,6 +317,11 @@ export function Bubble({
         {hasContent && (
           <div className="whitespace-pre-wrap break-words"><ReferenceText text={bodyText} /></div>
         )}
+        {m.images?.length && messageImages ? (
+          <WorkbenchViewBoundary key={m.uiId} fallback={null}>
+            <MessageImages images={m.images} render={messageImages} />
+          </WorkbenchViewBoundary>
+        ) : null}
       </div>
     );
   }
@@ -1532,6 +1540,7 @@ function InterleavedAssistantFlow({
  */
 export function UserStickyBubble({
   m,
+  messageImages,
   onOpenAgentDestination,
   userOrdinal,
   onBranch,
@@ -1540,6 +1549,7 @@ export function UserStickyBubble({
   timeLocale,
 }: {
   m: UiMessage;
+  messageImages?: BubbleProps["messageImages"];
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
   userOrdinal: number;
   onBranch?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
@@ -1600,7 +1610,7 @@ export function UserStickyBubble({
               )}
             >
               <div ref={innerRef}>
-                <Bubble m={m} onOpenAgentDestination={onOpenAgentDestination} />
+                <Bubble m={m} messageImages={messageImages} onOpenAgentDestination={onOpenAgentDestination} />
               </div>
             </div>
             {isClipping && (
@@ -1698,6 +1708,7 @@ export function MessageTurns({
   turnTailAnchors,
   openTurnFile,
   assistantActions,
+  messageImages,
   messages,
   sessionId,
   onOpenAgentDestination,
@@ -1707,6 +1718,7 @@ export function MessageTurns({
   restorableTurnOrdinals,
 }: {
   messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
+  messageImages?: BubbleProps["messageImages"];
   assistantActions?: (messageId: string) => ReactNode;
   turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
   timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[];
@@ -1836,6 +1848,7 @@ export function MessageTurns({
           >
             {turn.user && (
               <UserStickyBubble
+                messageImages={messageImages}
                 m={turn.user}
                 onOpenAgentDestination={onOpenAgentDestination}
                 userOrdinal={turn.userOrdinal}
@@ -1867,12 +1880,14 @@ export function MessageTurns({
                 <Fragment key={item.id}>{item.message.role === "assistant" && messageText && openTurnFile
                   ? messageText(item.message.runtimeTurn, <Bubble
                   m={item.message}
+                  messageImages={messageImages}
                   suppressTrace={item.suppressTrace}
                   suppressRunBoundary={item.suppressRunBoundary}
                   onOpenAgentDestination={onOpenAgentDestination}
                 />, openTurnFile, messageTextTimeline(item.message))
                   : <Bubble
                   m={item.message}
+                  messageImages={messageImages}
                   suppressTrace={item.suppressTrace}
                   suppressRunBoundary={item.suppressRunBoundary}
                   onOpenAgentDestination={onOpenAgentDestination}
@@ -2040,3 +2055,8 @@ function UserActionButton({
     </Tooltip>
   );
 }
+
+function MessageImages({ images, render }: {
+  images: NonNullable<UiMessage["images"]>;
+  render: NonNullable<BubbleProps["messageImages"]>;
+}) { return render(images); }

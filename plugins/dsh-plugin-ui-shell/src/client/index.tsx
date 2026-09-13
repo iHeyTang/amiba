@@ -825,6 +825,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // same pattern the adopted conversation.* seats use; only the
           // declaration site differs, never the key/kind/scope/owner.
           "conversation.view": { kind: "list", scope: "session" },
+          "conversation.message.images": { kind: "single", scope: "session" },
           "conversation.approval.detail": { kind: "single", scope: "session" },
           "conversation.chat.assistant-actions": { kind: "list", scope: "session" },
           "tool.call.toolview": { kind: "keyed", scope: "session" },

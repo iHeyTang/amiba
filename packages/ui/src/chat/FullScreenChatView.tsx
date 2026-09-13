@@ -238,6 +238,7 @@ export interface FullScreenChatViewProps {
      * conversation. Omit it (Quick-Ask, any host outside a DSH plugin
      * runtime) and every row renders Amiba's own tool chip.
      */
+    messageImages?: (images: NonNullable<import("@amiba/app-runtime/protocol").ChatMessage["images"]>) => ReactNode;
     approvalDetail?: (callId: string) => ReactNode;
     assistantActions?: (messageId: string) => ReactNode;
     turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;

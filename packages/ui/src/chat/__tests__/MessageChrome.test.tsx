@@ -1659,3 +1659,38 @@ it("upgrades one durable command result and restores it when the plugin unregist
   rerender(<MessageTurns messages={messages} />);
   expect(container.innerHTML).toBe(baseline);
 });
+
+
+describe("durable image extension rendering", () => {
+  const image = { attachment: {
+    attachmentId: "image" as import("@amiba/extension-sdk").ImageAttachmentRef["attachmentId"],
+    mediaType: "image/png" as const, bytes: 3, width: 1, height: 1,
+  } };
+  const message: UiMessage = { uiId: "photo", role: "user", content: "Original text", images: [image],
+    attachmentBadges: [{ uiId: "file", kind: "text", name: "notes.txt", mime: "text/plain", size: 12 }] };
+  it("passes durable references from MessageTurns while retaining original text and badges", () => {
+    const renderImages = vi.fn(() => <div>Plugin image gallery</div>);
+    const view = render(<MessageTurns messages={[message]} messageImages={renderImages} />);
+    expect(renderImages).toHaveBeenCalledWith([image]);
+    expect(screen.getByText("Original text")).toBeInTheDocument();
+    expect(screen.getByText("notes.txt")).toBeInTheDocument();
+    expect(screen.getByText("Plugin image gallery")).toBeInTheDocument();
+    view.rerender(<MessageTurns messages={[message]} />);
+    expect(screen.queryByText("Plugin image gallery")).not.toBeInTheDocument();
+    expect(screen.getByText("Original text")).toBeInTheDocument();
+    expect(screen.getByText("notes.txt")).toBeInTheDocument();
+  });
+  it("leaves the original message DOM unchanged when the image seat returns nothing", () => {
+    const view = render(<Bubble m={message} />); const before = view.container.innerHTML;
+    view.rerender(<Bubble m={message} messageImages={() => null} />);
+    expect(view.container.innerHTML).toBe(before);
+  });
+  it("isolates synchronous image plugin failures from native message content", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(<Bubble m={message} messageImages={() => { throw new Error("broken image plugin"); }} />);
+      expect(screen.getByText("Original text")).toBeInTheDocument();
+      expect(screen.getByText("notes.txt")).toBeInTheDocument();
+    } finally { errors.mockRestore(); }
+  });
+});

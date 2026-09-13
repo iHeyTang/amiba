@@ -335,6 +335,7 @@ export interface ChatSurfaceProps {
      * Amiba's own `ToolSpec`-driven chip, which is also the `fallback` of
      * every unclaimed tool name.
      */
+    messageImages?: (images: NonNullable<import("@amiba/app-runtime/protocol").ChatMessage["images"]>) => ReactNode;
     approvalDetail?: (callId: string) => ReactNode;
     assistantActions?: (messageId: string) => ReactNode;
     turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
@@ -2400,6 +2401,7 @@ export default function ChatSurface({
                         }
                       >
                         <MessageTurns
+                          messageImages={slots?.messageImages}
                           assistantActions={slots?.assistantActions}
                           messageText={slots?.messageText}
                           turnTail={slots?.turnTail}
