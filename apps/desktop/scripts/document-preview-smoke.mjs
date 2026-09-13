@@ -3,6 +3,7 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { smokeHtmlDocument } from './html-document-smoke.mjs';
 import { smokeCodeDocument } from './code-document-smoke.mjs';
+import { smokePdfDocument } from './pdf-document-smoke.mjs';
 export async function smokeDocumentPreview({ evaluate, wait, fileWorkspace, screenshot }) {
   const relative = '.cache/compat-document-preview.txt';
   const file = path.join(fileWorkspace, relative);
@@ -81,6 +82,7 @@ export async function smokeDocumentPreview({ evaluate, wait, fileWorkspace, scre
     assert.ok(await evaluate("new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(false);image.onerror=()=>resolve(true);image.src=window.__documentImageUrl})"), 'Image Blob URL must be revoked after close');
     await smokeHtmlDocument({ evaluate, wait, fileWorkspace, screenshot });
     await smokeCodeDocument({ evaluate, wait, fileWorkspace, screenshot });
+    await smokePdfDocument({ evaluate, wait, fileWorkspace, screenshot });
     await evaluate("if(window.__sidebarService.isExpanded())window.__sidebarService.toggleExpanded()");
     console.log('Image document passed real SVG and PNG decoding, intrinsic dimensions, changed-file reload failure, and Blob URL release on replacement and close.');
     console.log('Document preview passed actual resource opening, 5000-line paging/navigation, metadata change/reload, measured body, third-party byte renderer owner/hooks, unload-to-plain fallback, tab cancellation and actual Markdown heading/table/link/code rendering.');

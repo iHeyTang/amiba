@@ -5,6 +5,16 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：PDF 文档视图（2026-09-13）
+
+迁移固定源 PDF 正文、页状态、Worker runtime、canvas 渲染、资源工厂及 locale。使用 PDF.js 6.1.200，真实 module Worker 经 ready 握手后创建 PDFWorker bridge；解析和页渲染有独立取消/清理，失败不回退主线程解析。输入字节复制后传递，保留文档 owner 原缓冲区。CMap、标准字体、WASM 与 worker 同版本内联，并将相关许可证写入发布 client banner。采用原文档 bytes-complete 读取；tab 状态使用实际 rc.2 runtime store，正文关闭销毁 Worker，tab 结束忘记页状态。
+
+169 项文档测试通过（/tmp/amiba-document-pdf-tests-2.log），新增 33 项 PDF runtime/资源/渲染/正文/store 测试；实际 runtime store factory 用于页状态，jsdom 缺少 AbortSignal.any 时采用 Node 原生 signal。修正旧版 runtime 导出路径为 /client 后插件类型检查通过。
+
+首次真实桌面解析报 a.toHex is not a function：当前 Electron 缺少新 Uint8Array API；改用 PDF.js 同版本 legacy 主模块与 worker，沿用库自带兼容层。初次压缩包检查还发现普通注释许可证被 minifier 删除，改为保留的 /*! 注释块。最终 PDF 专项 33 项和类型检查通过（/tmp/amiba-document-pdf-tests-3.log、/tmp/amiba-document-pdf-types-4.log）。完整桌面构建退出 0（/tmp/amiba-document-pdf-build-2.log）；--compat --sidebar-right 退出 0（/tmp/amiba-document-pdf-smoke-2.log），实际 module Worker、红蓝两页像素、损坏后失败/重试清理、恢复及关闭后的全部 Worker 终止通过。
+
+已查看最新 amiba-native-document.png，页面正常且原聊天、输入器和工作区标签保留。pnpm pack 后 scripts/verify-pdf-pack.mjs 验证 tar 包中的 client.js 保留 10 份 PDF.js/资源许可证和 189 个二进制资源（/tmp/amiba-document-pdf-pack-verify.log）。字体/CMap、复杂图像解码的实际 PDF 样本、更多页可见性/恢复及独立 Web 仍待专项验证；此次矢量两页验收不代替全部 PDF 语义，44/0/20 入口统计不变，完整目标未完成。
+
 ## 进行中：代码文档视图（2026-09-13）
 
 当前 rc.2 CodeBlock 缺少 streaming、lineNumbers、contentRef；迁移固定源对应 CodeBlock、StreamingHighlightSession、viewport 高亮及语言表，仅供新增 code 文档正文。复用公共 writeClipboard，保留聊天及原文件代码组件。固定 shiki/@shikijs/langs 4.4.3（原 lock 已有），局部原生字体/颜色及浅深色 shiki token；不改全局 Markdown 样式。metadata 在 Markdown/HTML 之后注册，保留其默认优先级；text-pages 累积内容、行号、独立 scrollport 和换行接到文档 owner。
