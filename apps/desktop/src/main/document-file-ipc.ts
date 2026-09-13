@@ -1,4 +1,5 @@
 import type { IpcMain, WebContents } from 'electron';
+import { dirname, resolve as resolvePath } from 'node:path';
 import type { WorkspaceDocumentReadRequest, WorkspaceDocumentReadResult } from '@amiba/app-runtime/platform';
 type Args = { id: string; sessionId: string; path: string; request: WorkspaceDocumentReadRequest };
 function valid(value: unknown): value is Args {
@@ -39,15 +40,24 @@ export function registerDocumentFileIpc(
   }
   ipcMain.handle('files:read-document', async (event, args: unknown): Promise<WorkspaceDocumentReadResult> => {
     if (!valid(args)) return failed('gateway/bad-request', 'Invalid document read request');
+    const relative = args.request.kind === 'all' ? args.request.relativePath : undefined;
+    if (relative !== undefined && (typeof relative !== 'string' || !relative || /^(?:[a-z][a-z\d+.-]*:|[/\\])/iu.test(relative) || relative.includes('\0'))) {
+      return failed('gateway/bad-request', 'relativePath must be a relative filesystem path');
+    }
     if (event.sender.isDestroyed()) return failed('ABORT_ERR', 'Document was closed', {}, 'AbortError');
     const owner = ownerFor(event.sender);
     if (owner.requests.has(args.id)) return failed('gateway/bad-request', 'Duplicate document read request');
     const controller = new AbortController();
     owner.requests.set(args.id, controller);
     try {
-      const resolved = await resolve(args.sessionId, args.path);
+      let resolved = await resolve(args.sessionId, args.path);
       controller.signal.throwIfAborted();
-      const value = await read(resolved, args.request, controller.signal);
+      if (relative !== undefined) {
+        // Resolve from the canonical base, then authorize the dependency independently.
+        resolved = await resolve(args.sessionId, resolvePath(dirname(resolved.path), relative.replace(/\\/g, '/')));
+        controller.signal.throwIfAborted();
+      }
+      const value = await read(resolved, relative === undefined ? args.request : { kind: 'all' }, controller.signal);
       controller.signal.throwIfAborted();
       return { ok: true, value };
     } catch (error) {

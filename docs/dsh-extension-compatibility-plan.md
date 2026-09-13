@@ -5,6 +5,18 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 进行中：HTML 文档视图（2026-09-13）
+
+迁移固定源 HtmlBody、pack、bootstrap、UTF-8 工具、relative reader、metadata 与 locale。html/htm 采用完整字节，在 allow-scripts 的 opaque iframe 中打开；原文及有限直接引用的普通 JS/CSS 经 base64 序列化，依赖 Blob URL 在 iframe 自身创建。每个资源 4 MiB、最多 64 个、总计 32 MiB；保留官方 base 元素处理及不遍历模块、CSS 内部依赖、图片和运行时请求的范围，不能据此声称任意本地网站完整运行。
+
+桌面完整读取增加可选 relativePath：从已授权且 canonical 的基础文件目录解析，再对目标进行同会话授权；两次授权后均检查取消。保留 Amiba 工作区限制，不迁移新版允许越界读取的行为。文档适配器注入 readRelated，未向 iframe 暴露 IPC 或读取回调。旧读取请求不变。
+
+89 项文档测试退出 0（/tmp/amiba-document-html-tests-2.log），6 项主进程 IPC 测试退出 0（/tmp/amiba-document-html-ipc-tests.log），插件和主进程类型检查退出 0。迁移测试覆盖序列化、依赖去重/限额、取消、iframe 替换与释放、失败提示和保持挂载；当前 jsdom 缺少 AbortSignal.any，HTML body 测试改用 Node 真实 AbortController/AbortSignal 后通过，生产代码未替换取消语义。
+
+完整桌面构建退出 0（/tmp/amiba-document-html-build.log）。首次桌面运行确认 CSP 拒绝 Blob iframe，增加 frame/child、script-src-elem、style-src 的 Blob 来源后，electron-vite 重建（/tmp/amiba-document-html-csp-build-2.log）与 bundle verifier 均退出 0。最终 --compat --sidebar-right 退出 0（/tmp/amiba-document-html-smoke-3.log）：相对 CSS/JS 查询串及片段、实际执行及计算颜色、opaque origin/父 DOM 隔离、正文高度、无效 UTF-8 重载失败、URL 撤销通过；缺失基础文件、绝对依赖、路径及软链接越界经真实 IPC 验证。第二次功能回归截图早于 iframe 绘制；增加双动画帧和短 compositor 等待后重跑，已查看最新 amiba-native-document.png，正文及紫色标题正常，原聊天、输入器和工作区标签保留。
+
+发现上一轮图片 smoke 用 fetch 拒绝证明 URL 释放的证据不充分：connect-src 本身拒绝 Blob。已改为成功解码的 SVG 在重载后、PNG 在关闭后用新 Image 再解码必须失败；最终回归通过。HTML 则记录并调用真实 URL.revokeObjectURL，配合 iframe 销毁断言，不把 CSP 拒绝算作释放。其余图片格式、脚注本地化、代码/PDF、独立 Web 及其他服务仍待完成；44/0/20 入口统计不变。
+
 ## 进行中：图片文档视图（2026-09-13）
 
 迁移固定源 ImageBody、图片 metadata、locale 与独立 CSS，注册 png/jpg/jpeg/gif/webp/bmp/ico/svg 的 bytes-complete 内置实现。通过已有文档 face/会话授权读取完整字节，按文件类型创建 Blob URL；按原始 CSS 像素显示，容器负责滚动。SVG 仅交给 img 静态图片模式。文件内容替换/卸载释放 URL；分配失败、解码失败和不支持的输入显示本地化状态，不替换现有原生图片入口。

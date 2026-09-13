@@ -21,6 +21,12 @@ export async function smokeDocumentRead({ evaluate, fileWorkspace }) {
     assert.equal((await read(file + '-missing', { kind: 'all' })).error.code, 'workspace-file/not-found');
     await writeFile(path.join(outside, 'secret'), 'OUTSIDE_FIXTURE');
     await symlink(outside, link, 'dir');
+    const related = await read(file, { kind: 'all', relativePath: './compat-document.txt' });
+    assert.equal(Buffer.from(related.value.data, 'base64').toString(), '你好\nsecond\n');
+    assert.equal((await read(file + '-missing', { kind: 'all', relativePath: './compat-document.txt' })).error.code, 'workspace-file/not-found');
+    assert.equal((await read(file, { kind: 'all', relativePath: 'compat-document-escape/secret' })).error.code, 'workspace-file/outside-workspace');
+    assert.equal((await read(file, { kind: 'all', relativePath: path.relative(fileWorkspace, path.join(outside, 'secret')) })).error.code, 'workspace-file/outside-workspace');
+    assert.equal((await read(file, { kind: 'all', relativePath: '/absolute.js' })).error.code, 'gateway/bad-request');
     for (const candidate of [path.join(outside, 'secret'), path.join(link, 'secret')]) assert.equal((await read(candidate, { kind: 'all' })).error.code, 'workspace-file/outside-workspace');
     await writeFile(file, Buffer.from([0, 255]));
     assert.equal((await read(file, { kind: 'text' })).error.code, 'workspace-file/not-text');

@@ -6,6 +6,10 @@ import { ImageBody } from './image/ImageBody.js'
 import { imageBodyDefinition, IMAGE_BODY_ID } from './image/index.js'
 import { en as imageEn, zh as imageZh } from './image/locales.js'
 import imageCss from './image/ImageBody.module.css?inline'
+import { HtmlBody, type HtmlBodyProps } from './html/HtmlBody.js'
+import { htmlBodyDefinition, HTML_BODY_ID } from './html/index.js'
+import { en as htmlEn, zh as htmlZh } from './html/locales.js'
+import htmlCss from './html/HtmlBody.module.css?inline'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceFilesAdapter } from '@amiba/app-runtime/platform'
 import type { SidebarRightTabRegistry } from '../sidebar-right/tab-registry.js'
@@ -38,13 +42,16 @@ export function registerDocumentPreview(ctx: ClientContext, tabs: SidebarRightTa
   const disposeImageLocale = ctx.locale.register('sidebarImage', { zh: imageZh, en: imageEn })
   const imageT = ctx.locale.bind('sidebarImage')
   const disposeImage = previews.register(imageBodyDefinition(() => imageT('title')))
+  const disposeHtmlLocale = ctx.locale.register('documentHtml', { zh: htmlZh, en: htmlEn })
+  const htmlT = ctx.locale.bind('documentHtml')
+  const disposeHtml = previews.register(htmlBodyDefinition(() => htmlT('title')))
   const disposePlain = previews.register(textBodyDefinition(() => t('viewer.text')))
   const store = createTextStore()
-  const { readPage, readAll } = nativeDocumentReads(files)
+  const { readPage, readAll, readRelated } = nativeDocumentReads(files)
   const face = textFace(readPage, readAll)
   const style = document.createElement('style')
   style.dataset.pluginCss = '@amiba/dsh-plugin-ui-shell/document-preview'
-  style.textContent = previewCss + '\n' + loadingCss + '\n' + markdownCss + '\n' + imageCss
+  style.textContent = previewCss + '\n' + loadingCss + '\n' + markdownCss + '\n' + imageCss + '\n' + htmlCss
   document.head.append(style)
   const disposeBody = ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
     name: 'sidebar.right.pane.tab', key: TEXTPREVIEW_ID, locale: 'sidebarDocumentPreview', store,
@@ -55,7 +62,9 @@ export function registerDocumentPreview(ctx: ClientContext, tabs: SidebarRightTa
   const disposeText = ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register({ name: 'sidebar.right.tab.document', key: PLAIN_BODY_ID }, TextBody))
   const disposeMarkdownBody = ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register({ name: 'sidebar.right.tab.document', key: MARKDOWN_BODY_ID, locale: 'documentMarkdown' }, MarkdownBody))
   const disposeImageBody = ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register({ name: 'sidebar.right.tab.document', key: IMAGE_BODY_ID, locale: 'sidebarImage' }, ImageBody))
+  const disposeHtmlBody = ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register({ name: 'sidebar.right.tab.document', key: HTML_BODY_ID, locale: 'documentHtml', inject: (): Pick<HtmlBodyProps, 'readRelated'> => ({ readRelated }) }, HtmlBody))
   return () => {
+    disposeHtmlBody(); disposeHtml(); disposeHtmlLocale();
     disposeImageBody(); disposeImage(); disposeImageLocale();
     disposeMarkdownBody(); disposeMarkdown(); disposeMarkdownLocale();
     disposeText(); disposeTitle(); disposeBody(); disposePlain(); disposeType()

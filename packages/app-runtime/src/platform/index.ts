@@ -512,7 +512,7 @@ export interface WorkspaceFileStat {
 export type WorkspaceDocumentReadRequest =
   | { kind: "text"; offset?: number; limit?: number }
   | { kind: "bytes"; offset?: number; length?: number }
-  | { kind: "all" };
+  | { kind: "all"; /** Resolve a dependency from the canonical base file, under the same session authority. */ relativePath?: string };
 export type WorkspaceDocumentContent = WorkspaceFileStat & ({ offset: number; text: string; lines: number; eof: boolean } | { offset: number; data: string; eof: boolean });
 /** Explicit envelope: Electron does not preserve custom properties on thrown errors. */
 export type WorkspaceDocumentReadResult =

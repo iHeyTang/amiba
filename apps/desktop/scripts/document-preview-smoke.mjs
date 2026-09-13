@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { smokeHtmlDocument } from './html-document-smoke.mjs';
 export async function smokeDocumentPreview({ evaluate, wait, fileWorkspace, screenshot }) {
   const relative = '.cache/compat-document-preview.txt';
   const file = path.join(fileWorkspace, relative);
@@ -68,15 +69,16 @@ export async function smokeDocumentPreview({ evaluate, wait, fileWorkspace, scre
     await wait(() => evaluate("!!document.querySelector('[data-textpreview-changed]')"));
     await evaluate("document.querySelector('[data-textpreview-reload-now]').click()");
     await wait(() => evaluate("!!document.querySelector('[data-image-preview] [role=alert]')"));
-    assert.ok(await evaluate("fetch(window.__documentImageUrl).then(()=>false,()=>true)"), 'Old image Blob URL must be revoked after reload');
+    assert.ok(await evaluate("new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(false);image.onerror=()=>resolve(true);image.src=window.__documentImageUrl})"), 'Old image Blob URL must be revoked after reload');
     await evaluate("window.__documentImageUrl=document.querySelector('[data-image-preview] img').src;window.__sidebarService.close(window.__sidebarService.active().id)");
     await wait(() => evaluate("!document.querySelector('[data-image-preview]')"));
-    assert.ok(await evaluate("fetch(window.__documentImageUrl).then(()=>false,()=>true)"), 'Image Blob URL must be revoked after close');
     await writeFile(rasterFile, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jP1sAAAAASUVORK5CYII=', 'base64'));
     await evaluate("window.__sidebarService.openResource(window.__documentAddress.replace(/\\.txt$/,'.png'))");
     await wait(() => evaluate("(()=>{const img=document.querySelector('[data-image-preview] img');return img && !img.hidden && img.complete && img.naturalWidth===1 && img.naturalHeight===1})()"));
-    await evaluate("window.__sidebarService.close(window.__sidebarService.active().id)");
+    await evaluate("window.__documentImageUrl=document.querySelector('[data-image-preview] img').src;window.__sidebarService.close(window.__sidebarService.active().id)");
     await wait(() => evaluate("!document.querySelector('[data-image-preview]')"));
+    assert.ok(await evaluate("new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(false);image.onerror=()=>resolve(true);image.src=window.__documentImageUrl})"), 'Image Blob URL must be revoked after close');
+    await smokeHtmlDocument({ evaluate, wait, fileWorkspace, screenshot });
     await evaluate("if(window.__sidebarService.isExpanded())window.__sidebarService.toggleExpanded()");
     console.log('Image document passed real SVG and PNG decoding, intrinsic dimensions, changed-file reload failure, and Blob URL release on replacement and close.');
     console.log('Document preview passed actual resource opening, 5000-line paging/navigation, metadata change/reload, measured body, third-party byte renderer owner/hooks, unload-to-plain fallback, tab cancellation and actual Markdown heading/table/link/code rendering.');

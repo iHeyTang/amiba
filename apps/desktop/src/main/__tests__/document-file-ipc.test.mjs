@@ -68,3 +68,36 @@ test('navigation and destruction abort active reads while in-place and subframe 
   a.emit('destroyed'); assert.equal((await next).error.code, 'ABORT_ERR');
   assert.equal(a.listenerCount('did-start-navigation'), 0);
 });
+test('related reads use the canonical base directory and authorize the dependency again', async () => {
+  const paths = [];
+  const h = harness(async (sessionId, path) => {
+    assert.equal(sessionId, 's'); paths.push(path);
+    return { path: paths.length === 1 ? '/workspace/canonical/base.html' : path };
+  }, async (file, request) => { assert.equal(file.path, '/workspace/asset.js'); assert.deepEqual(request, { kind: 'all' }); return { data: 'eA==' }; });
+  assert.equal((await h.start(sender(1), { ...args(), request: { kind: 'all', relativePath: '../asset.js' } })).ok, true);
+  assert.deepEqual(paths, ['doc', '/workspace/asset.js']);
+  let reads = 0;
+  const denied = harness(async (_session, path) => {
+    if (path === 'doc') return { path: '/workspace/base.html' };
+    throw new Error("The requested file is outside this conversation's workspace.");
+  }, async () => { reads++; });
+  assert.equal((await denied.start(sender(2), { ...args(), request: { kind: 'all', relativePath: '../secret' } })).error.code, 'workspace-file/outside-workspace');
+  assert.equal(reads, 0);
+});
+test('malformed related paths fail before authorization and cancellation stops a second authorization', async () => {
+  let calls = 0, finish;
+  const h = harness(async () => {
+    calls++;
+    if (calls === 1) return { path: '/workspace/base.html' };
+    return new Promise(resolve => { finish = resolve; });
+  }, async () => { assert.fail('cancelled dependency must not be read'); });
+  const from = sender(1);
+  for (const relativePath of ['', '/x', '\\x', 'C:\\x', 'file:x', '\0', null, 2]) {
+    assert.equal((await h.start(from, { ...args(), request: { kind: 'all', relativePath } })).error.code, 'gateway/bad-request');
+  }
+  assert.equal(calls, 0);
+  const pending = h.start(from, { ...args(), request: { kind: 'all', relativePath: 'asset.js' } });
+  await Promise.resolve(); await Promise.resolve();
+  h.cancel(from); finish({ path: '/workspace/asset.js' });
+  assert.equal((await pending).error.code, 'ABORT_ERR');
+});
