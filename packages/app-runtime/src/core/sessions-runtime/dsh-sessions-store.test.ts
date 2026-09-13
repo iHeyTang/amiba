@@ -388,6 +388,41 @@ describe("SessionsStore with DSH sessions", () => {
     store.teardown();
   });
 
+  it("does not run a delayed message updater against a different selected session or Home", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    await store.openTab("dsh-1");
+    const update = vi.fn((messages) => [...messages, { role: "user", content: "wrong target" }]);
+    await store.openTab("dsh-blank");
+    const before = store.getSnapshot();
+    expect(store.updateActiveMessagesFor("dsh-1", update)).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+    expect(store.getSnapshot()).toBe(before);
+    await store.deselect();
+    expect(store.updateActiveMessagesFor("dsh-1", update)).toBe(false);
+    expect(store.updateActiveMessagesFor("", update)).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+    store.teardown();
+  });
+
+  it("applies addressed updates to the latest messages after returning to the target", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    await store.openTab("dsh-1");
+    await store.openTab("dsh-blank");
+    await store.openTab("dsh-1");
+    const messages = [{ role: "user" as const, content: "latest target history" }];
+    store.setActiveMessages(messages);
+    const update = vi.fn(prev => [...prev, { role: "assistant" as const, content: "target update" }]);
+    expect(store.updateActiveMessagesFor("dsh-1", update)).toBe(true);
+    expect(update).toHaveBeenCalledWith(messages);
+    expect(store.getSnapshot().activeMessages).toEqual([...messages, { role: "assistant", content: "target update" }]);
+    const before = store.getSnapshot();
+    expect(store.updateActiveMessagesFor("dsh-1", prev => prev)).toBe(true);
+    expect(store.getSnapshot()).toBe(before);
+    store.teardown();
+  });
+
   it("keeps an explicitly opened blank host session through a refresh", async () => {
     const store = new SessionsStore();
     await store.initialize();

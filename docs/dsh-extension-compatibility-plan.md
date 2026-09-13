@@ -7,6 +7,12 @@ Main and the other task's personal menu, external-message and update changes are
 
 ## Required invariants
 
+### Addressed asynchronous message updates
+
+`SessionsStore.updateActiveMessagesFor` checks the actual selected session before evaluating an updater. Callbacks for another session or Home do not run; accepted updates use the current message array and preserve the original persistence behavior. Native asynchronous attachment badges now use this addressed update, skip absent user messages, and update the matching in-flight user cache so recovery of a missing local user bubble can include the completed badges. This prevents delayed badge preparation from touching another session's messages or recalculating the sending session's metadata using another conversation.
+
+Validation: 25 session-store tests passed, including two new target-isolation/return-to-target cases; runtime and UI type checks, full desktop build and the complete compatibility smoke passed. The smoke verifies existing flows, not an artificially delayed thumbnail race. Evidence: `/tmp/amiba-addressed-messages-tests.log`, `/tmp/amiba-addressed-messages-runtime-types.log`, `/tmp/amiba-addressed-messages-ui-types.log`, `/tmp/amiba-addressed-messages-build.log`, `/tmp/amiba-addressed-messages-smoke.log`. Full offscreen submission remains pending.
+
 - Preserve all existing Amiba capabilities, behavior, styling and default layout.
 - An unoccupied additive extension contributes no DOM, spacing or placeholder.
 - Use the official slot/service contracts, including actual owner data and disposal.

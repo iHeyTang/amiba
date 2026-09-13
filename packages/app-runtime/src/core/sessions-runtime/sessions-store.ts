@@ -384,6 +384,16 @@ export class SessionsStore {
     this.schedulePersistMessages();
   };
 
+  /** Address asynchronous UI updates without evaluating them against another session. */
+  updateActiveMessagesFor = (
+    sessionId: string,
+    action: (prev: SessionMessage[]) => SessionMessage[],
+  ): boolean => {
+    if (!sessionId || this.state.activeId !== sessionId) return false;
+    this.setActiveMessages(action);
+    return true;
+  };
+
   // -------------------------------------------------------------------------
   // Action: active-id transitions
   // -------------------------------------------------------------------------

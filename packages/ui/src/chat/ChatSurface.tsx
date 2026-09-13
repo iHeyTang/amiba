@@ -1715,7 +1715,12 @@ export default function ChatSurface({
     // thumbnails are ready.
     void badgesPromise.then((attachmentBadges) => {
       if (!attachmentBadges) return;
-      sessions.setActiveMessages((prev) => {
+      const cached = inFlightTurnByIdRef.current.get(sessionId);
+      if (cached?.user.uiId === userMsg.uiId) {
+        cached.user = { ...cached.user, attachmentBadges };
+      }
+      sessions.updateActiveMessagesFor(sessionId, (prev) => {
+        if (!prev.some(m => (m as UiMessage).uiId === userMsg.uiId)) return prev;
         const next = (prev as UiMessage[]).map((m) =>
           m.uiId === userMsg.uiId ? { ...m, attachmentBadges } : m,
         );

@@ -131,6 +131,7 @@ export function useSessions(): SessionsController {
     activeMessages:
       state.activeMessages as SessionsController["activeMessages"],
     setActiveMessages: store.setActiveMessages,
+    updateActiveMessagesFor: store.updateActiveMessagesFor,
     ensureActive: store.ensureActive,
     openTab: store.openTab,
     closeTab: store.closeTab,

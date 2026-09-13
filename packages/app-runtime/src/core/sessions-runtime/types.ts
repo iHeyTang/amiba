@@ -61,6 +61,8 @@ export interface SessionsController {
    * shape keep compiling.
    */
   setActiveMessages: Dispatch<SetStateAction<SessionMessage[]>>;
+  /** Returns false without invoking the updater when another session is selected. */
+  updateActiveMessagesFor: (sessionId: string, action: (prev: SessionMessage[]) => SessionMessage[]) => boolean;
 
   /** Returns the active id, creating + opening a new tab if there's none. */
   ensureActive: () => Promise<string>;
