@@ -3,6 +3,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { verifyPackageContents } from './package-content.mjs';
 import { validateMetadata } from './artifacts.mjs';
 
 const target = process.argv[2];
@@ -45,11 +46,14 @@ if (process.platform === 'win32') {
   run('hdiutil', ['verify', path.join(output, `Amiba-${version}-mac-${process.arch}.dmg`)]);
   run('unzip', ['-tq', path.join(output, `Amiba-${version}-mac-${process.arch}.zip`)], process.env, 300000);
 }
+// Older artifacts can still be installed in verify mode; new packages must satisfy pruning checks.
+if (fs.existsSync(path.join(output, 'package-footprint.json'))) verifyPackageContents(resources, target);
 const runtime = path.join(resources, 'resources/dsh-runtime');
 const manifest = JSON.parse(fs.readFileSync(path.join(runtime, 'runtime-manifest.json')));
 assert.equal(`${manifest.platform}-${manifest.arch}`, target);
 const node = path.join(runtime, process.platform === 'win32' ? 'node/node.exe' : 'node/bin/node');
 assert.equal(run(node, ['-p', "process.platform + '-' + process.arch"]).trim(), target);
+run(node, [path.join(root, 'scripts/release/smoke-memory.cjs'), runtime], process.env, 120000);
 const probe = `
   const assert = require('node:assert/strict');
   assert.equal(process.platform + '-' + process.arch, ${JSON.stringify(target)});

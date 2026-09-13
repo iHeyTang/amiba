@@ -23,6 +23,16 @@ Actions Artifacts 名称为 `amiba-<版本>-<平台架构>-<test|release|verify>
 
 旧构建缺少来源记录，不能通过新的发布校验，需要重新构建；Windows verify 模式仍兼容旧 Artifact 名称用于安装验证。当前 `v0.1.0` 历史草稿属于早期提交，新代码正式发布应先升版。
 
+## 安装包内容与体积检查
+
+发布构建会创建独立的 `.package-resources/dsh-runtime` 副本，排除构建缓存、JS/CSS/TS source map，以及 ONNX 中非目标 OS/架构的二进制；开发运行时不受影响。ASAR 同时排除 workspace 包内重复的 DSH resources。打包完成、签名之前检查实际内容，禁止这些文件再次进入产物。
+
+记忆插件、Transformers、目标平台 ONNX、ONNX Web、npm/pnpm 和 Node 编译头文件保留；本次没有改成按需下载。每次构建保存 `package-footprint.json`，包含裁剪字节数与最终资源目录统计。安装检查还会用内置 Node 执行小型离线 ONNX 图，并加载 Transformers 和 MemOS 适配器，不下载模型。
+
+ONNX 1.24.3 的 npm 包缺少 Darwin x64 原生绑定（上游 microsoft/onnxruntime#27961），因此 Intel Mac 使用单独锁文件，将 Node 推理库固定为 1.22.0；ARM/Windows 保持原依赖。更新依赖锁时需分别运行 `pnpm runtime:lock` 和 `pnpm runtime:lock --lock-target=darwin-x64`，提交两个锁文件及对应 manifest。
+
+可以用 `AMIBA_DSH_SMOKE_RUNTIME_DIR=<已打包运行时绝对路径> AMIBA_DSH_SMOKE_CHECK=MemOS node packages/app-runtime/scripts/dsh-runtime/smoke.mjs` 验证成品中的 DSH 启动、插件安装与 MemOS 就绪状态。测试使用独立临时用户目录。
+
 ## 本地构建
 
 使用 Git、Node 22.19+ 和 pnpm 9.12；首次运行 `pnpm install`。运行时包含独立 Node 和原生模块，必须在目标操作系统和 Node 架构下准备依赖与构建。

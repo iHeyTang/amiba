@@ -152,6 +152,9 @@ const outputDir = process.env.DSH_RUNTIME_OUTPUT
 const managedPnpmVersion = "9.12.0";
 const markerPath = path.join(outputDir, "runtime-manifest.json");
 const args = new Set(process.argv.slice(2));
+const lockTarget = [...args].find(arg => arg.startsWith('--lock-target='))?.slice('--lock-target='.length);
+if (lockTarget && (!args.has('--update-lock') || lockTarget !== 'darwin-x64')) throw new Error('--lock-target=darwin-x64 is only for runtime:lock');
+const dependencyTarget = lockTarget || `${process.platform}-${process.arch}`;
 const verifyOnly = args.has("--verify");
 const force = args.has("--force");
 
@@ -264,7 +267,7 @@ const amibaSourceDigest = await computeAmibaSourceDigest();
 const appPackageJsonContent = `${JSON.stringify(
   {
     private: true,
-    overrides: memoryPeerOverrides(declaration.version),
+    overrides: memoryPeerOverrides(declaration.version, dependencyTarget),
     dependencies: {
       "@deepseek-ai/dsh": declaration.version,
       pnpm: managedPnpmVersion,
@@ -288,7 +291,7 @@ const appPackageJsonContent = `${JSON.stringify(
   null,
   2,
 )}\n`;
-const dependencyDir = path.join(runtimePackageDir, "runtime-deps");
+const dependencyDir = path.join(runtimePackageDir, "runtime-deps", dependencyTarget === "darwin-x64" ? "darwin-x64" : "");
 const dependencyManifest = path.join(dependencyDir, "package.json");
 const dependencyLock = path.join(dependencyDir, "package-lock.json");
 if (args.has("--update-lock")) {

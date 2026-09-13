@@ -2,10 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { stageRuntime, packageExclusions, verifyPackageContents } from './package-content.mjs';
 import { productVersion } from './version.mjs';
 import { sourceIdentity } from './provenance.mjs';
 import { preflightRelease } from './release-policy.mjs';
-import { recordArtifacts } from './artifacts.mjs';
+import { recordArtifacts, metadataName } from './artifacts.mjs';
 import { releaseSettings, targets } from './config.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const desktop = path.join(root, 'apps/desktop');
@@ -34,15 +35,20 @@ const marker = JSON.parse(fs.readFileSync(path.join(root, 'packages/app-runtime/
 if (`${marker.platform}-${marker.arch}` !== target) throw new Error('Bundled runtime target mismatch');
 const output = path.join(desktop, 'dist', target);
 fs.mkdirSync(output, { recursive: true });
+const stagedRuntime = path.join(output, '.package-resources', 'dsh-runtime');
+const footprint = await stageRuntime(path.join(root, 'packages/app-runtime/resources/dsh-runtime'), stagedRuntime, target);
+console.log('Runtime staging:', JSON.stringify(footprint));
 const sourceFile = path.join(output, 'release-config.json');
 fs.writeFileSync(sourceFile, JSON.stringify({ sources: settings.sources }, null, 2));
 const pkg = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json')));
 const config = {
   ...pkg.build,
   directories: { output },
+  files: [...pkg.build.files, ...packageExclusions],
+  afterPack: path.join(root, 'scripts/release/verify-package-hook.cjs'),
   forceCodeSigning: !localOnly && !allowUnsigned,
   artifactName: 'Amiba-${version}-${os}-${arch}.${ext}',
-  extraResources: [...pkg.build.extraResources, { from: sourceFile, to: 'release-config.json' }],
+  extraResources: [...pkg.build.extraResources.map(resource => resource.to === 'resources/dsh-runtime' ? { ...resource, from: stagedRuntime } : resource), { from: sourceFile, to: 'release-config.json' }],
   // Reserved URL only enables metadata generation for local QA. Embedded sources stay empty.
   publish: [{ provider: 'generic', url: settings.sources[0] || 'https://local-test.invalid/', channel: settings.channel }],
   mac: { ...pkg.build.mac, target: ['dmg', 'zip'], hardenedRuntime: !localOnly, ...(localOnly ? { identity: null } : {}) },
@@ -51,7 +57,17 @@ const config = {
 const configFile = path.join(output, 'builder.json');
 fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
 run(['exec', 'node', 'scripts/fix-node-pty-permissions.mjs'], desktop);
+// Repeated builds of the same version must not reuse an older updater ZIP.
+for (const name of fs.readdirSync(output)) {
+  if ((name.startsWith(`Amiba-${version}-`) && /\.(dmg|zip|exe|blockmap)$/.test(name)) || [metadataName(target), 'release-manifest.json', 'package-footprint.json'].includes(name)) fs.rmSync(path.join(output, name), { force: true });
+}
 run(['exec', 'electron-builder', '--config', configFile, target.startsWith('darwin') ? '--mac' : '--win', `--${process.arch}`, '--publish', 'never'], desktop);
+const resources = target.startsWith('darwin')
+  ? path.join(output, process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'Amiba.app/Contents/Resources')
+  : path.join(output, 'win-unpacked/resources');
+const packaged = verifyPackageContents(resources, target);
+fs.writeFileSync(path.join(output, 'package-footprint.json'), JSON.stringify({ target, version, ...identity, staging: footprint, packaged }, null, 2));
+console.log('Package footprint:', JSON.stringify({ asarBytes: packaged.asarBytes, runtimeBytes: packaged.runtimeBytes }));
 recordArtifacts(output, target, pkg.version, !localOnly, identity);
 console.log(`Artifacts: ${output}`);
 if (process.argv.includes('--upload')) run(['release:upload', target]);
