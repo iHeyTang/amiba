@@ -78,3 +78,33 @@
 - electron-builder 文件收集与额外资源：https://www.electron.build/docs/contents/ （当前网站可能高于项目版本；实现时以项目安装的 25.1.8 为准）
 - Transformers.js 模型目录和缓存配置：https://huggingface.co/docs/transformers.js/api/env
 - WorkBuddy 官方安装说明：https://www.workbuddy.ai/docs/workbuddy/From-Beginner-to-Expert-Guide/Installation-Mac-Guide （未提供足以推断其内部组件组成的证据）
+
+
+## 第一阶段实施与验收结果（2026-09-13）
+
+已完成并推送 main。产品构建提交为 `1e6b02a1f55379c57fbc4d71b079a9ba4fe6d5fe`；复验脚本提交为 `fe0adf393b6d549c3606e9007e6645ab4551e067`。本次只裁剪冗余文件，保留完整记忆插件、Transformers、目标平台 ONNX、ONNX Web、包管理器和 Node 头文件；未实施可选组件下载或改变模型获取方式。
+
+以下从 GitHub Artifact ZIP 的文件目录实际读取，单位 MiB（未把 DMG 和更新 ZIP 相加）：
+
+| 平台/文件 | 优化前：34729999257 | 优化后：34736708616 |
+| --- | ---: | ---: |
+| ARM Mac DMG | 780.1 | 361.8 |
+| ARM Mac 更新 ZIP | 800.6 | 374.0 |
+| Intel Mac DMG | 785.0 | 364.4 |
+| Intel Mac 更新 ZIP | 817.0 | 385.6 |
+| Windows x64 EXE | 690.4 | 312.3 |
+
+三个单独安装包减少约 54%。ASAR 约 116.8–116.9 MiB；独立运行时按文件字节计 ARM 782.5 MiB、Intel 800.8 MiB、Windows 745.4 MiB。Mac Actions Artifact 仍包含安装 DMG 和更新 ZIP 两份产物，合集大小与单个安装包不同。
+
+本地最终 ARM DMG 339.2 MiB、ZIP 349.5 MiB；此处保留记录，但正式前后比较统一使用上表云端数据。
+
+验证记录：
+
+- [原生三平台构建](https://github.com/iHeyTang/amiba/actions/runs/34736708616)：三个构建均生成产物；ARM、Windows 检查成功。Intel 的推理和模块加载已通过，但测试脚本强制 process.exit 导致原生线程池退出错误，因此该次整体状态为失败。
+- [Intel Mac 复验成功](https://github.com/iHeyTang/amiba/actions/runs/34738136294)：测试脚本改为自然退出，复用原始安装包，DMG/ZIP、内置 Node、实际 ONNX CPU 推理、Transformers/MemOS 加载和 PTY 全部通过。
+- [Windows 复验成功](https://github.com/iHeyTang/amiba/actions/runs/34738138012)：复用原始 EXE，完成静默安装、内置 Node、推理、记忆依赖加载和 PTY 检查。
+- 本地成品 DSH 集成检查成功：独立临时用户目录中完成插件安装、DSH 启动，MemOS 状态 ready/full。没有使用用户真实记忆数据或下载模型。
+- 24 项 Node 测试通过，云端 UI 菜单测试通过。新的签名前内容检查会拒绝缓存、重复 DSH resources、指定 source map 和非目标平台 ONNX 二进制。
+- 修复同版本重复打包可能复用旧 ZIP：生成前清理该版本的旧安装包和清单；已直接检查新 ZIP 内部 ASAR 无缓存或重复资源。
+
+Intel Mac 还修复了上游 ONNX 1.24.3 未附带 x64 二进制的问题：只对 Intel 使用独立、可复现的 1.22.0 依赖锁；其他平台不变。原生模块经过上述实际推理验证。第二阶段的可选组件拆分仍是候选方案，不属于本次实施范围。
