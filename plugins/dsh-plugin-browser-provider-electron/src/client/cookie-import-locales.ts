@@ -40,7 +40,7 @@ const messages = {
       "Imports cookies only, not saved passwords or passkeys. Login data is shared by workbench browser tabs.",
     running: "Bringing your logins over…",
     runningHint:
-      "If macOS asks for access, choose Allow. This may take a moment.",
+      "If macOS asks for access, choose Allow.\nThis may take a moment.",
     done: "You're ready to browse",
     doneHint:
       "Login data from {browser} has been imported. Some websites may still ask you to sign in.",
@@ -113,7 +113,7 @@ const messages = {
       "仅导入 Cookie，不包含已保存的密码和通行密钥。登录状态由工作台浏览器标签页共享。",
     running: "正在带回你的登录状态…",
     runningHint:
-      "如果 macOS 弹出访问提示，请选择「允许」。这可能需要一点时间。",
+      "如果 macOS 弹出访问提示，请选择「允许」。\n这可能需要一点时间。",
     done: "准备好了，继续浏览吧",
     doneHint: "已导入来自 {browser} 的登录数据。部分网站可能仍需要重新登录。",
     unchanged: "已保留你现有的登录状态",

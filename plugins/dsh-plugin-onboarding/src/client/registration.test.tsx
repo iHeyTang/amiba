@@ -14,12 +14,13 @@ it("declares extension slots once, accepts contributed steps, and removes them o
         "shell.overlay": { kind: "list", scope: "root" },
         "settings.onboarding": { kind: "list", scope: "root" },
         "settings.section": { kind: "list", scope: "root" },
+        "settings.general.item": { kind: "list", scope: "root" },
       },
     },
     ({
       renderSlot,
     }: PropsRenderSlots<
-      "shell.overlay" | "settings.onboarding" | "settings.section"
+      "shell.overlay" | "settings.onboarding" | "settings.section" | "settings.general.item"
     >) => {
       void renderSlot;
       return null;
@@ -43,7 +44,10 @@ it("declares extension slots once, accepts contributed steps, and removes them o
   );
   expect(core.entriesOfSlot("amiba.onboarding.step")).toHaveLength(1);
   expect(core.entriesOfSlot("settings.onboarding")).toHaveLength(1);
+  expect(core.entriesOfSlot("settings.section")).toHaveLength(0);
+  expect(core.entriesOfSlot("settings.general.item").map(row => row.options.id)).toEqual(["onboarding"]);
   off();
+  expect(core.entriesOfSlot("settings.general.item")).toHaveLength(0);
   extra();
   expect(core.entriesOfSlot("amiba.onboarding.step")).toHaveLength(0);
   expect(core.entriesOfSlot("shell.overlay")).toHaveLength(0);

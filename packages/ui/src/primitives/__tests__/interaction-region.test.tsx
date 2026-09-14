@@ -7,7 +7,7 @@ import {
 } from "../interaction-region";
 import type { SurfaceInteraction } from "@amiba/extension-sdk";
 import {
-  ComposerAccessory,
+  EmptyStateVisual,
   EmptyStateVisualProvider,
 } from "../empty-state-visual";
 
@@ -119,23 +119,22 @@ describe("region interaction", () => {
     fireEvent.pointerLeave(region);
     expect(interaction.getSnapshot().pointer).toBeNull();
   });
-  it("supplies the same interaction subscription to the accessory", () => {
+  it("supplies the same interaction subscription to the empty-state visual", () => {
     let interaction: SurfaceInteraction | undefined;
     render(
       <EmptyStateVisualProvider
-        render={({ defaultVisual }) => defaultVisual}
-        accessory={(owner) => {
+        render={(owner) => {
           interaction = owner.interaction;
-          return <span>accessory</span>;
+          return <span>visual</span>;
         }}
       >
         <InteractionRegion>
-          <ComposerAccessory />
+          <EmptyStateVisual scene="home" />
         </InteractionRegion>
       </EmptyStateVisualProvider>,
     );
     expect(
-      screen.getByText("accessory").closest("[data-composer-accessory]"),
+      screen.getByText("visual").closest(".isolate"),
     ).not.toBeNull();
     expect(interaction?.getSnapshot().pointer).toBeNull();
   });
@@ -147,14 +146,13 @@ it("disables presentation leases on document hide and region unmount", () => {
     | undefined;
   const { unmount } = render(
     <EmptyStateVisualProvider
-      render={({ defaultVisual }) => defaultVisual}
-      accessory={(owner) => {
+      render={(owner) => {
         coordinator = owner.presentation;
         return null;
       }}
     >
       <InteractionRegion>
-        <ComposerAccessory />
+        <EmptyStateVisual scene="home" />
       </InteractionRegion>
     </EmptyStateVisualProvider>,
   );

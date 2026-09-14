@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Context as ClientContext } from "@deepseek-ai/cordis";
-import type { ComposerAccessoryOwner } from "@amiba/extension-sdk";
+import type { SurfaceVisualOwner } from "@amiba/extension-sdk";
 import { usePresentationCoordinator } from "@amiba/ui/plugin";
 
 const idleInput = {
@@ -17,7 +17,7 @@ function Probe({
   presentation,
   place,
   priority,
-}: ComposerAccessoryOwner & { place: string; priority: number }) {
+}: SurfaceVisualOwner & { place: string; priority: number }) {
   const root = usePresentationCoordinator();
   const coordinator = presentation ?? root;
   const input = useSyncExternalStore(
@@ -105,32 +105,6 @@ export function apply(ctx: Pick<ClientContext, "slots">) {
           label: "Welcome card probe",
         },
         () => <div data-probe-card="">Welcome illustration</div>,
-      ),
-    ),
-    ctx.slots.inject("amiba.composer.accessory", () =>
-      ctx.slots.register(
-        {
-          name: "amiba.composer.accessory",
-          id: "surface-probe",
-          label: "Interaction probe",
-        },
-        (owner) => <Probe {...owner} place="composer" priority={20} />,
-      ),
-    ),
-    ctx.slots.inject("amiba.message.decoration", () =>
-      ctx.slots.register(
-        {
-          name: "amiba.message.decoration",
-          id: "surface-probe",
-          label: "Interaction probe",
-        },
-        (owner) => (
-          <Probe
-            {...owner}
-            place={`message:${owner.messageId}`}
-            priority={10}
-          />
-        ),
       ),
     ),
     ctx.slots.inject("shell.overlay", () =>

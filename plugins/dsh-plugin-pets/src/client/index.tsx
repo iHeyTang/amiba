@@ -4,7 +4,7 @@ import type {} from "@amiba/dsh-plugin-notification-hub/client";
 import { DesktopPet } from "./desktop.js";
 import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
-import type { ComposerAccessoryOwner } from "@amiba/extension-sdk";
+import type { SurfaceVisualOwner } from "@amiba/extension-sdk";
 import { PawPrint } from "lucide-react";
 import { useSyncExternalStore, type ReactNode } from "react";
 import { PET_REMOTE } from "../remote.js";
@@ -20,7 +20,7 @@ function Companion({
   priority = 10,
   defaultVisual,
   ...owner
-}: ComposerAccessoryOwner & {
+}: SurfaceVisualOwner & {
   library: PetLibraryClient;
   priority?: number;
   defaultVisual?: ReactNode;
@@ -112,17 +112,6 @@ export async function apply(ctx: ClientContext) {
               inject: () => ({ library }),
             },
             (props) => <Companion {...props} priority={30} />,
-          ),
-        ),
-        c.slots.inject("amiba.composer.accessory", () =>
-          c.slots.register(
-            {
-              name: "amiba.composer.accessory",
-              id: "mofli",
-              label,
-              inject: () => ({ library }),
-            },
-            (props) => <Companion {...props} priority={20} />,
           ),
         ),
       ];

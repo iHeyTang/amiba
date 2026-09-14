@@ -98,6 +98,7 @@ export const zhCN: UiMessages = {
   "workspacePane.copyPath": "复制路径",
   "workspacePane.revealFile": "在访达中显示",
   "workspacePane.openExternal": "使用默认应用打开",
+  "workspacePane.openInDefaultBrowser": "在默认浏览器中打开",
   "workspacePane.expandFile": "展开文件",
   "workspacePane.collapseFile": "折叠文件",
   "workspacePane.expandAll": "全部展开",

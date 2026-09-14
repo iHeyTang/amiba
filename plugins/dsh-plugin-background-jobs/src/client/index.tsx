@@ -1,4 +1,3 @@
-import {CommandExecution, isCommand} from "./command-view.js";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
@@ -6,7 +5,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { JOBS_REMOTE, type JobDetail } from "../remote.js";
 import { createRelations, type Relations } from "./relations.js";
 import { JobResult } from "./job-result.js";
-import { taskRows } from "./history.js";
+import { isCommand, taskRows } from "./history.js";
 import css from "./style.css?inline";
 
 export const name = "amiba-background-jobs-ui";
@@ -145,34 +144,6 @@ function WorkbenchTab({ sessionId, useSessions, api, relations, openPanel, activ
 export function WorkbenchActivity(props: WorkbenchProps) {
   return props.placement === "tab" ? <WorkbenchTab {...props}/> : props.activePanel === "background-jobs" ? <Activity {...props}/> : null;
 }
-/** Live status belongs to the conversation flow, independent of folded history. */
-export function RunningJobs({ sessionId, useSessions, relations }: PropsRuntime<"amiba.conversation.progress"> & { relations: Relations }) {
-  const liveJobs = useSessions(state => state.jobsBySession[sessionId]) ?? EMPTY;
-  const metadata = useSyncExternalStore(relations.subscribe, () => relations.get(sessionId));
-  const jobs = taskRows(liveJobs, metadata);
-  const running = jobs.filter(job => (job.status === "running" || job.status === "stopping") && !(job.kind === "media" && job.callId));
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => { if (!running.length) return; setNow(Date.now()); const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [running.length, sessionId]);
-  if (!running.length) return null;
-  return <section className="amiba-jobs-progress" aria-label="进行中的后台任务">
-    {running.map(job => <button key={job.id} disabled={!job.recordId} onClick={() => relations.open(sessionId, job.id)} title="查看执行记录" aria-label={`${job.title || job.command || "正在处理"}，${states[job.status]}，在工作台查看任务`}>
-      <span className="amiba-jobs-progress-dot" aria-hidden="true"/>
-      <span className="amiba-jobs-progress-title">{job.title || job.command || "正在处理"}</span>
-      <span className="amiba-jobs-progress-time">{job.status === "stopping" ? "停止中 · " : ""}{elapsed(job.startedAt, now)}</span>
-    </button>)}
-  </section>;
-}
-export function Notice({ sessionId, useSessions, summary, reference, relations }: PropsRuntime<"amiba.conversation.notice"> & { relations: Relations }) {
-  const liveJobs = useSessions(state => state.jobsBySession[sessionId]) ?? EMPTY;
-  const metadata = useSyncExternalStore(relations.subscribe, () => relations.get(sessionId));
-  const jobs = taskRows(liveJobs, metadata);
-  if (!reference || reference.kind !== "background-job" || reference.sessionId !== sessionId || !reference.instance) {
-    throw new Error("Invalid background task notice reference");
-  }
-  const target = jobs.find(job => job.recordId === reference.id && reference.instance === String(job.startedAt));
-  if (target && (isCommand(target) || (target.kind === "media" && target.callId))) return null;
-  return <button className="amiba-jobs-notice" disabled={!target} title={target ? "查看任务" : "任务记录未加载或不存在"} onClick={() => relations.open(sessionId, reference.id)}>{summary} · 查看任务</button>;
-}
 export async function apply(ctx: ClientContext) {
   const relations = createRelations();
   ctx.effect(() => () => relations.clear(), "background-jobs: relations");
@@ -184,16 +155,10 @@ export async function apply(ctx: ClientContext) {
       name: "amiba.workbench.panel", id: "background-jobs", order: 20,
       inject: () => ({ api: child.remote.amibaJobs, relations }),
     }, WorkbenchActivity));
-    const command = child.slots.inject("amiba.tool.execution",()=>child.slots.register({name:"amiba.tool.execution",inject:()=>({relations,api:child.remote.amibaJobs})},CommandExecution));
-    const progress = child.slots.inject("amiba.conversation.progress", () => child.slots.register({
-      name: "amiba.conversation.progress", id: "background-jobs", order: 20,
-      inject: () => ({relations}),
-    }, RunningJobs));
     const notice = child.slots.inject("amiba.conversation.notice", () => child.slots.register({
       name: "amiba.conversation.notice", key: "reference:background-job", priority: 20,
-      inject: () => ({ relations }),
-    }, Notice));
-    // Upstream model-context notice duplicates the structured UI completion.
+    }, () => null));
+    // Background completion is reflected by normal tool results and the reply.
     // Current official model delivery is separate from this plugin's UI notice.
     const modelNotice = child.slots.inject("amiba.conversation.notice", () => child.slots.register({
       name: "amiba.conversation.notice", key: "tool-jobs", priority: 20,
@@ -201,7 +166,7 @@ export async function apply(ctx: ClientContext) {
     const source = child.slots.inject("amiba.message.source", () => child.slots.register({
       name: "amiba.message.source", id: "tool-jobs", label: () => "后台任务", order: 20,
     }, () => null));
-    return () => { dispose(); command(); progress(); notice(); modelNotice(); source(); };
+    return () => { dispose(); notice(); modelNotice(); source(); };
   });
   return async () => { await fiber.dispose(); unmount(); };
 }

@@ -536,14 +536,19 @@
   font-style: italic;
 }
 
-/* Links */
-.chat-md.chat-md [data-streamdown="link"] {
+/* Match custom Markdown anchors as well as Streamdown's default links. */
+.chat-md.chat-md a[href] {
   color: hsl(var(--primary));
-  text-decoration-color: hsl(var(--primary) / 0.4);
-  text-underline-offset: 2px;
+  text-decoration-line: underline;
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
-.chat-md.chat-md [data-streamdown="link"]:hover {
-  text-decoration-color: hsl(var(--primary));
+.chat-md.chat-md a[href]:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
 /* Tables — tighter padding, subtle header band, sane row dividers. */
@@ -726,35 +731,6 @@
   border-bottom-color: hsl(var(--border) / 0.4);
 }
 
-/* Horizontal tab rails (workbench tabs) overflow sideways. Their scrollbar is
- * a position INDICATOR, not a control: nobody drags a tab strip's bar, they
- * use the wheel. So it is a hairline, and deliberately NOT `scrollbar-width:
- * thin` — Chromium ignores every ::-webkit-scrollbar rule once that property
- * is set to anything but `auto`, and its own "thin" is still ~11px. Firefox
- * has no equivalent knob and keeps its default; the app target is Chromium. */
-.amiba-tab-rail::-webkit-scrollbar {
-  height: 3px;
-}
-
-.amiba-tab-rail::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.amiba-tab-rail::-webkit-scrollbar-thumb {
-  border: 0;
-  background: var(--scrollbar-thumb);
-  border-radius: 999px;
-}
-
-.amiba-tab-rail:hover::-webkit-scrollbar-thumb {
-  border: 0;
-  background: var(--scrollbar-thumb-hover);
-}
-
-.amiba-tab-rail::-webkit-scrollbar-thumb:active {
-  background: var(--scrollbar-thumb-drag);
-}
-
 /* The workspace terminal is a native pane surface, not an embedded black
  * console card. xterm still owns cursor/input/rendering; these rules only
  * align its viewport and scrollbar with Amiba's surrounding workbench. */
@@ -782,3 +758,26 @@
 .chat-md.chat-md .amiba-markdown-code[data-wrap="true"] pre code > span { display: block; }
 .chat-md.chat-md .amiba-markdown-code[data-wrap="true"] pre code[class*="counter"] > span { position: relative; padding-left: 2.5rem; }
 .chat-md.chat-md .amiba-markdown-code[data-wrap="true"] pre code[class*="counter"] > span::before { position: absolute; left: 0; margin-right: 0; }
+
+/* Fit controls to the conversation column, including beside a wide preview. */
+[data-composer-card] {
+  container: composer / inline-size;
+}
+[data-composer-card] [data-composer-model-picker] {
+  flex: 0 1 auto;
+}
+[data-composer-card] [data-composer-effort-trigger] {
+  flex-shrink: 0;
+}
+@container composer (max-width: 560px) {
+  [data-composer-secondary-label] { display: none; }
+  [data-composer-card] [data-composer-toolbar-start] { flex: 1 0 auto; }
+  [data-composer-card] [data-composer-toolbar-start] > button { flex-shrink: 0; }
+  [data-composer-card] [data-composer-model-trigger] { max-width: clamp(4rem, 32cqw, 11rem); }
+}
+@container composer (max-width: 360px) {
+  [data-composer-card] [data-composer-toolbar], [data-composer-card] [data-composer-toolbar-start] { gap: 2px; }
+  [data-composer-card] [data-composer-effort-trigger] > span { display: none; }
+  [data-composer-card] [data-composer-toolbar-start] > button,
+  [data-composer-card] [data-composer-model-trigger], [data-composer-card] [data-composer-effort-trigger] { padding-inline: 6px; }
+}

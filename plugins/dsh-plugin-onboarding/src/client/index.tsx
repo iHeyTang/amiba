@@ -6,7 +6,7 @@ import type {
 } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import { useSyncExternalStore } from "react";
-import { Button, PageContent, usePluginT } from "@amiba/ui/plugin";
+import { Button, Label, usePluginT } from "@amiba/ui/plugin";
 import { Guide, type GuideProps, type StepSource } from "./Guide.js";
 import { createProgressStore } from "./progress.js";
 import { FirstRun } from "./FirstRun.js";
@@ -42,12 +42,12 @@ function Overlay(
 function Revisit({ launcher }: { launcher: Launcher }) {
   const { t } = usePluginT(guideI18n);
   return (
-    <PageContent size="md">
-      <p className="mb-4 text-sm text-muted-foreground">{t("guide.saved")}</p>
-      <Button onClick={() => launcher.open({ revisit: true, done: () => {} })}>
+    <div className="flex items-center justify-between gap-4 py-1">
+      <Label className="text-sm font-normal">{t("guide.settings")}</Label>
+      <Button variant="outline" size="sm" onClick={() => launcher.open({ revisit: true, done: () => {} })}>
         {t("guide.reopen")}
       </Button>
-    </PageContent>
+    </div>
   );
 }
 export function apply(ctx: ClientContext) {
@@ -127,16 +127,12 @@ export function apply(ctx: ClientContext) {
         FirstRun,
       ),
     ),
-    ctx.slots.inject("settings.section", () =>
+    ctx.slots.inject("settings.general.item", () =>
       ctx.slots.register(
         {
-          name: "settings.section",
+          name: "settings.general.item",
           id: "onboarding",
-          order: 1,
-          label: () =>
-            document.documentElement.lang.startsWith("zh")
-              ? "入门引导"
-              : "Setup guide",
+          order: 40,
           inject: () => ({ launcher }),
         },
         Revisit,

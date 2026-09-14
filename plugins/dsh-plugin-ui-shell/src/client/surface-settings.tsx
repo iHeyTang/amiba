@@ -18,16 +18,16 @@ export function SurfaceSettings({ surfaces }: { surfaces: SurfaceSelections }) {
   const { language } = useT();
   const zh = language.startsWith("zh");
   const labels = zh
-    ? ["空状态展示", "输入区展示", "消息装饰"]
-    : ["Empty-state visual", "Composer accessory", "Message decoration"];
+    ? ["空状态展示"]
+    : ["Empty-state visual"];
   return (
     <div className="space-y-3">
       {SURFACE_SLOTS.map((slot, i) => {
         const id = state.choices[slot],
           available = state.rows[slot].some((r) => r.id === id);
         return (
-          <div className="flex items-center justify-between gap-4" key={slot}>
-            <Label>{labels[i]}</Label>
+          <div className="flex items-center justify-between gap-4 py-1" key={slot}>
+            <Label className="text-sm font-normal">{labels[i]}</Label>
             <Select
               disabled={!state.ready}
               value={id === undefined ? "default" : id === "" ? "none" : `provider:${id}`}
@@ -43,7 +43,7 @@ export function SurfaceSettings({ surfaces }: { surfaces: SurfaceSelections }) {
               <SelectTrigger
                 data-surface-selector={slot}
                 aria-label={labels[i]}
-                className="w-48"
+                className="w-36"
               >
                 <SelectValue />
               </SelectTrigger>

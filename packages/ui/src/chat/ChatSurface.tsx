@@ -1,3 +1,4 @@
+import { useConversationAutoScroll } from "./use-conversation-auto-scroll";
 import { ensureSessionWorkspace } from "@amiba/app-runtime/platform";
 import { nativeSubmissionAdmission } from "./internal/native-submission-admission";
 import { deleteUnretainedAttachments, withSendingAttachments } from "./internal/attachment-ownership";
@@ -97,6 +98,7 @@ import {
 import { useWorkspacePane } from "./WorkspacePane";
 import {
   WorkspaceFileOpenerContext,
+  WorkspaceUrlOpenerContext,
   isHtmlPreviewPath,
   resolveWorkspaceFilePath,
   workspaceFileUrl,
@@ -615,6 +617,14 @@ export default function ChatSurface({
     },
     [workspacePane, workspacePath],
   );
+  const workspaceUrlOpener = useMemo(() => ({
+    open(url: string) {
+      if (!workspacePane.openUrl(url)) void getPlatform().shell.openExternal(url);
+    },
+    openExternal(url: string) {
+      void getPlatform().shell.openExternal(url);
+    },
+  }), [workspacePane.openUrl]);
   // Hidden file-input ref + onChange handler are owned by
   // `useComposerAttachments` — see `fileInputProps` below.
   /** Composer instance — exposes focus/select via ComposerHandle.
@@ -753,8 +763,13 @@ export default function ChatSurface({
   const conversationContentRef = useRef<HTMLDivElement | null>(null);
   const composerDockRef = useRef<HTMLElement | null>(null);
   const composerDockHeightRef = useRef(0);
-  const keepConversationPinnedAfterDockResizeRef = useRef(false);
   const [composerDockHeight, setComposerDockHeight] = useState(0);
+  useConversationAutoScroll(
+    conversationViewportRef,
+    sessions.activeId,
+    sessions.activeMessages,
+    composerDockHeight,
+  );
   // The chunk-buffer / RAF-flush machinery used to live inline here; now
   // owned by `useStreamBuffer` (`stream.*`).
 
@@ -787,14 +802,6 @@ export default function ChatSurface({
       }
       if (nextClearance === composerDockHeightRef.current) return;
 
-      const viewport = conversationViewportRef.current;
-      if (viewport) {
-        const distanceFromBottom =
-          viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-        keepConversationPinnedAfterDockResizeRef.current =
-          distanceFromBottom <= 24;
-      }
-
       composerDockHeightRef.current = nextClearance;
       setComposerDockHeight(nextClearance);
     };
@@ -815,13 +822,6 @@ export default function ChatSurface({
       targetObserver?.disconnect();
     };
   }, [hasActive, onComposerHeightChange]);
-
-  useLayoutEffect(() => {
-    if (!keepConversationPinnedAfterDockResizeRef.current) return;
-    const viewport = conversationViewportRef.current;
-    if (viewport) viewport.scrollTop = viewport.scrollHeight;
-    keepConversationPinnedAfterDockResizeRef.current = false;
-  }, [composerDockHeight]);
 
   // Pending-turn queue. `runChatTurn` is referenced by the hook for
   // sendNow / drainHead / send; it's a function declaration further
@@ -1535,12 +1535,6 @@ export default function ChatSurface({
 
   // Lifecycle of an assistant bubble is owned by DSH-backed engine snapshots.
   // The UI never infers a durable run state from the volatile `streaming` flag.
-
-  // Auto-scroll on new content.
-  useEffect(() => {
-    const viewport = conversationViewportRef.current;
-    if (viewport) viewport.scrollTop = viewport.scrollHeight;
-  }, [sessions.activeMessages]);
 
   // Session switch: drop panel-local stream accumulators and compose-time
   // attachments. The previous session's DSH turn keeps running; switching
@@ -2446,33 +2440,35 @@ export default function ChatSurface({
                           workspacePane.enabled ? openWorkspaceFile : undefined
                         }
                       >
-                        <MessageTurns
-                          messageImages={slots?.messageImages}
-                          assistantActions={slots?.assistantActions}
-                          messageText={slots?.messageText}
-                          turnTail={slots?.turnTail}
-                          timelineRows={slots?.timelineRows}
-                          turnTailAnchors={slots?.turnTailAnchors}
-                          openTurnFile={path => {
-                            if (path === ".") {
-                              if (!workspacePane.files || !sessions.activeId) throw new Error("Workspace folder access is unavailable.");
-                              return workspacePane.files.openExternal(sessions.activeId, path);
+                        <WorkspaceUrlOpenerContext.Provider value={workspaceUrlOpener}>
+                          <MessageTurns
+                            messageImages={slots?.messageImages}
+                            assistantActions={slots?.assistantActions}
+                            messageText={slots?.messageText}
+                            turnTail={slots?.turnTail}
+                            timelineRows={slots?.timelineRows}
+                            turnTailAnchors={slots?.turnTailAnchors}
+                            openTurnFile={path => {
+                              if (path === ".") {
+                                if (!workspacePane.files || !sessions.activeId) throw new Error("Workspace folder access is unavailable.");
+                                return workspacePane.files.openExternal(sessions.activeId, path);
+                              }
+                              return openWorkspaceFile({ path });
+                            }}
+                            sessionId={sessions.activeId ?? undefined}
+                            messages={messages}
+                            onReviewWorkspaceChanges={
+                              workspacePane.enabled
+                                ? workspacePane.openReview
+                                : undefined
                             }
-                            return openWorkspaceFile({ path });
-                          }}
-                          sessionId={sessions.activeId ?? undefined}
-                          messages={messages}
-                          onReviewWorkspaceChanges={
-                            workspacePane.enabled
-                              ? workspacePane.openReview
-                              : undefined
-                          }
-                          restorableTurnOrdinals={restorableTurnOrdinals}
-                          onRestoreBeforeTurn={restoreWorkspaceBeforeTurn}
-                          onOpenAgentDestination={openAgentDestination}
-                          onBranchUserMessage={branchUserMessage}
-                        />
-                        {slots?.progress?.()}
+                            restorableTurnOrdinals={restorableTurnOrdinals}
+                            onRestoreBeforeTurn={restoreWorkspaceBeforeTurn}
+                            onOpenAgentDestination={openAgentDestination}
+                            onBranchUserMessage={branchUserMessage}
+                          />
+                          {slots?.progress?.()}
+                        </WorkspaceUrlOpenerContext.Provider>
                       </WorkspaceFileOpenerContext.Provider>
                     </MessageSourceLabelContext.Provider>
                   </AwaitingUserInputContext.Provider>
@@ -2503,7 +2499,7 @@ export default function ChatSurface({
         <footer
           ref={composerDockRef}
           data-composer-dock=""
-          style={{ paddingTop: "calc(8px + var(--amiba-companion-clearance, 0px))" }}
+          style={{ paddingTop: 8 }}
           className={cn(
             // The sticky user-question strip inside the scroll viewport is
             // z-20. Composer popovers live inside the composer's own z-10

@@ -19,8 +19,7 @@ export function SurfaceProvider({
   const selected = (slot: keyof typeof state.rows) => {
     const id = state.choices[slot];
     // Use the installed visual by default; an explicit empty choice disables it.
-    if (id === undefined && slot !== "amiba.message.decoration")
-      return state.rows[slot][0]?.id;
+    if (id === undefined) return state.rows[slot][0]?.id;
     return id && state.rows[slot].some((row) => row.id === id) ? id : undefined;
   };
   return (
@@ -34,20 +33,6 @@ export function SurfaceProvider({
               fallback: owner.defaultVisual,
             })
           : owner.defaultVisual;
-      }}
-      accessory={(owner) => {
-        if (!state.ready) return null;
-        const id = selected("amiba.composer.accessory");
-        return id
-          ? renderSlot("amiba.composer.accessory", owner, { only: id })
-          : null;
-      }}
-      message={(owner) => {
-        if (!state.ready) return null;
-        const id = selected("amiba.message.decoration");
-        return id
-          ? renderSlot("amiba.message.decoration", owner, { only: id })
-          : null;
       }}
     >
       {children}
