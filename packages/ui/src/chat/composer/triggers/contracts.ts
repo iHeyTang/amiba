@@ -126,6 +126,7 @@ export interface ComposerInputDraft extends ComposerInputStatus {
     readonly length: number;
     readonly label: string;
     readonly clipboardText: string;
+    readonly appearance?: ReferenceInsert["appearance"];
   }[];
 }
 

@@ -73,3 +73,10 @@ it("keeps previously valid raw backslashes and percent-escaped literal strings",
     kind: "mention", mention: { payload: { path: "%5C" } },
   })
 })
+
+it.each(["file", "folder", "session"])("round-trips optional official appearance %s without changing legacy token encoding", appearance => {
+  const base: MentionData = { type: "dsh.reference", display: "Label", payload: { source: "fixture", ref: "id", label: "Label", clipboardText: "clip" } };
+  expect(encodeMention(base)).toBe("@[dsh.reference:fixture|id|Label|clip]");
+  const decorated = { ...base, payload: { ...base.payload, appearance } };
+  expect(parseTokens(encodeMention(decorated))[0]).toMatchObject({ kind: "mention", mention: decorated });
+});

@@ -2101,3 +2101,14 @@ keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入�
 47 项输入与剪贴板回归通过，含调用方拦截优先、文字仅插一次和一次撤销文字；补充范围复跑原输入 33 项通过。UI 类型检查、完整桌面构建、架构检查通过。真实 `--compat --input-state --command-images` 退出 0：DOM ClipboardEvent 同带一张 PNG 和 token 状普通文字，只生成一张原生上传图片，文字出现一次且无引用 occurrence；图片移除后注册清零，原编辑器仍连接、卡片 class 保留。原官方输入四阶段、图片命令原始字节、卸载尺寸保留等也通过。使用 DOM DataTransfer，未读写系统剪贴板。
 
 日志 `/tmp/amiba-mixed-paste-tests-5.log`、`/tmp/amiba-mixed-paste-undo-tests.log`、`/tmp/amiba-mixed-paste-final-types.log`、`/tmp/amiba-mixed-paste-build.log`、`/tmp/amiba-mixed-paste-smoke.log`、`/tmp/amiba-mixed-paste-architecture.log`。首次测试缺少会话 ID 未进入官方路径，后续补齐；JSDOM 缺少 Range 几何接口的测试环境问题使用局部替身解决，未用替身替代实际桌面上传验证。系统剪贴板快捷键、文件与引用混合的完整撤销、词表装饰、invalid/appearance、新版坐标仍待核对。
+
+
+#### 官方引用 appearance 保留与展示
+
+补齐 ReferenceInsert 公开的 file/folder/session 可选 appearance：插入时写入原 mention payload，前台和离屏 Occurrence 都投影该值，交接比较包含该字段。仅带 appearance 的引用显示对应小图标，原按钮 class、标签、点击事件及无标记默认展示不变。图标 aria-hidden，不改变可访问名称或复制文本。
+
+持久化采用 dsh.reference token 的可选第五段；旧四段 token 编码完全不变，新解析器只接受三种已声明值。结构化草稿自然保留 payload，旧式字符串恢复也恢复标记。没有用未知字符串生成图标或服务。
+
+76 项投影/序列化/引用 UI 测试及 21 项输入提供者测试通过，UI 和插件类型检查、完整桌面构建通过。`--compat --resident-draft` 真实回归退出 0：插件提供 file 外观，现场 DOM 存在图标，会话往返、renderer 重载后的 Occurrence 仍保留 file；复制、纯文本粘贴和旧版本写入保护保持通过。已查看 `/var/folders/w1/6rt3z_zs1395fn30txrlysvr0000gn/T/amiba-reference-appearance.png`，图标与标签正常对齐，原输入器布局保留。folder/session 由组件和状态测试覆盖，未声称所有主题/平台均已实测。日志 `/tmp/amiba-reference-appearance-tests.log`、`/tmp/amiba-reference-appearance-provider-tests.log`、`/tmp/amiba-reference-appearance-ui-types.log`、`/tmp/amiba-reference-appearance-plugin-types.log`、`/tmp/amiba-reference-appearance-build.log`、`/tmp/amiba-reference-appearance-smoke.log`。
+
+同轮核对 invalid：rc.2 set-invalid 是内部状态机分支，实际 facade 没有公开接线，固定新版仅保留节点字段/恢复。不能自行将来源暂时不可用永久写成 invalid；原提交 codec 失败拒绝发送和引用保留继续有效。完整失效展示与恢复的兼容语义仍需进一步核对，未标记完成。

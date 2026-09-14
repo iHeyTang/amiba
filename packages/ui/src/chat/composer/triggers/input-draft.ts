@@ -1,3 +1,4 @@
+import { referenceAppearance } from "../../../reference-appearance";
 import { $getRoot, $isElementNode, type LexicalNode } from "lexical";
 import { $isMentionNode } from "../MentionNode";
 import type { ComposerInputDraft } from "./contracts";
@@ -31,7 +32,8 @@ export class InputDraftProjection {
           const key = node.getKey();
           let occurrenceId = this.ids.get(key);
           if (occurrenceId === undefined) { occurrenceId = ++this.nextId; this.ids.set(key, occurrenceId); }
-          occurrences.push({ occurrenceId, source: mention.payload.source, ref: mention.payload.ref,
+          const appearance = referenceAppearance(mention.payload.appearance);
+          occurrences.push({ ...(appearance ? { appearance } : {}), occurrenceId, source: mention.payload.source, ref: mention.payload.ref,
             offset: draft.length, length: text.length, label, clipboardText: mention.payload.clipboardText ?? text });
           draft += text;
           return;

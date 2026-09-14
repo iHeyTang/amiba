@@ -32,7 +32,7 @@ export function bindInputDraft(ops: TriggerEditorOps, cursor: InputDraftCursor) 
         const old = handoff.occurrences[index];
         return old.source === item.source && old.ref === item.ref &&
           old.offset === item.offset && old.length === item.length &&
-          old.label === item.label && old.clipboardText === item.clipboardText;
+          old.label === item.label && old.clipboardText === item.clipboardText && old.appearance === item.appearance;
       });
     const occurrences = local.occurrences.map((occurrence, index) => {
       let id = ids.get(occurrence.occurrenceId);

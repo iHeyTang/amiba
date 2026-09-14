@@ -24,3 +24,16 @@ describe("provider-neutral reference UI", () => {
     expect(screen.getByRole("button", { name: "Plan" })).toBeTruthy(); expect(document.querySelector("script")).toBeNull(); expect(document.querySelector("a")).toBeNull();
   });
 });
+
+it.each(["file", "folder", "session"] as const)("shows the optional %s glyph without changing the accessible label", appearance => {
+  render(<ReferenceButton source="fixture" reference="id" appearance={appearance}>Label</ReferenceButton>);
+  const button = screen.getByRole("button", { name: "Label" });
+  expect(button.getAttribute("data-reference-appearance")).toBe(appearance);
+  expect(button.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+});
+
+it("keeps the default reference button free of appearance markup", () => {
+  render(<ReferenceButton source="fixture" reference="id">Label</ReferenceButton>);
+  expect(screen.getByRole("button").querySelector("svg")).toBeNull();
+  expect(screen.getByRole("button").hasAttribute("data-reference-appearance")).toBe(false);
+});

@@ -770,7 +770,7 @@ try {
       const otherCwd = path.join(profile,"draft-other");
       await mkdir(otherCwd,{recursive:true});
       const otherId = await evaluate(`window.__probeCtx.sessions.create({cwd:${JSON.stringify(otherCwd)}})`);
-      const expectedReference = {source:'compat-resident-ref',ref:'C:\\file|id]\\',label:'引用😀',clipboardText:'clip|]😀\\'};
+      const expectedReference = {appearance:'file',source:'compat-resident-ref',ref:'C:\\file|id]\\',label:'引用😀',clipboardText:'clip|]😀\\'};
       const sourceCode = `window.__draftReferenceOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-resident-ref',trigger:'@',order:-100,candidates:async()=>[],onPick:()=>({}),matchSpace:(_session,token)=>token==='@keep'?{insert:${JSON.stringify(expectedReference)}}:undefined,codec:{serialize:ref=>'<resident>'+ref+'</resident>'}});void 0`;
       await evaluate(sourceCode);
       await wait(() => evaluate("Boolean(window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId))"));
@@ -780,6 +780,8 @@ try {
       await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.occurrences.length===1"));
       let originalDraft = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
       assert.deepEqual(Object.fromEntries(Object.keys(expectedReference).map(k=>[k,originalDraft.occurrences[0][k]])),expectedReference);
+      assert.ok(await evaluate("!!document.querySelector('[data-reference-appearance=file] svg')"));
+      await writeFile(path.join(tmpdir(), "amiba-reference-appearance.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
       const mixedDraft = originalDraft.draft + ' literal @[dsh.reference:missing-example|id|literal|clip]';
       assert.equal(await evaluate(`window.__probeCtx.composerInputs.editInputDraft(window.__compatSessionId,${JSON.stringify(mixedDraft)})`),true);
       await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===${JSON.stringify(mixedDraft)}`));

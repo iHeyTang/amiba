@@ -62,6 +62,7 @@ export function referenceMention(reference: ReferenceInsert): MentionData {
       ref: reference.ref,
       label: reference.label,
       clipboardText: reference.clipboardText,
+      ...(reference.appearance ? { appearance: reference.appearance } : {}),
     },
     display: reference.label,
   };

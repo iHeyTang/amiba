@@ -1,3 +1,4 @@
+import { createComposerDraftSource } from "../../composer-draft-store";
 /**
  * The APPLIED-TRUTH contract of the four scoped `slash/input-*` verbs.
  *
@@ -464,4 +465,17 @@ describe("mounted and resident public draft edit agreement", () => {
     expect(composerDraftDisplayText(resident)).toBe(next);
     if(next===display) expect(resident).toBe(initial);
   });
+});
+
+it.each(["file", "folder", "session"] as const)("retains %s appearance through mounted and resident reference projections", appearance => {
+  const { editor, ops } = setup("");
+  expect(ops.insertReference({ source: "fixture", ref: "id", label: "Label", clipboardText: "clip", appearance }, span(0, 0))).toBe(true);
+  expect(ops.readInputDraft!().occurrences[0]).toMatchObject({ source: "fixture", ref: "id", appearance });
+  const parts = editor.getEditorState().read($readComposerParts);
+  const source = createComposerDraftSource();
+  source.setParts(parts);
+  expect(source.readInputDraft().occurrences[0]).toMatchObject({ appearance });
+  const restored = createComposerDraftSource();
+  restored.set(source.getSnapshot());
+  expect(restored.readInputDraft().occurrences[0]).toMatchObject({ appearance });
 });

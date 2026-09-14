@@ -1,3 +1,4 @@
+import { referenceAppearance } from "../reference-appearance";
 import { composerDraftDisplayText, type ComposerDraftDocument } from "./composer-draft-document";
 import { atomicTextEdit } from "./composer/atomic-text-edit";
 import type { ComposerInputDraft } from "./composer/triggers/contracts";
@@ -36,11 +37,12 @@ export class ResidentInputProjection {
         continue;
       }
       const text = `@${mention.display}`;
-      const value = { source: mention.payload.source, ref: mention.payload.ref, offset,
+      const appearance = referenceAppearance(mention.payload.appearance);
+      const value = { ...(appearance ? { appearance } : {}), source: mention.payload.source, ref: mention.payload.ref, offset,
         length: text.length, label: mention.display, clipboardText: mention.payload.clipboardText ?? text };
       const candidate = candidates.get(offset);
       const same = candidate && candidate.source === value.source && candidate.ref === value.ref &&
-        candidate.label === value.label && candidate.clipboardText === value.clipboardText;
+        candidate.label === value.label && candidate.clipboardText === value.clipboardText && candidate.appearance === value.appearance;
       const retained = this.ids.get(part);
       const occurrenceId = retained !== undefined ? retained
         : same && !retainedIds.has(candidate.occurrenceId) && !assigned.has(candidate.occurrenceId)
