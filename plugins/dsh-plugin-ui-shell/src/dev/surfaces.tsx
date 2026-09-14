@@ -99,7 +99,6 @@ function App({
   renderSlot,
 }: Slots.PropsRenderSlots<
   | "amiba.emptyState.visual"
-  | "amiba.message.decoration"
   | "shell.overlay"
 >) {
   const [session, setSession] = React.useState("a"),
@@ -179,7 +178,6 @@ core.register(
     name: "root",
     children: {
       "amiba.emptyState.visual": { kind: "list", scope: "root" },
-      "amiba.message.decoration": { kind: "list", scope: "root" },
       "shell.overlay": { kind: "list", scope: "root" },
     },
   },

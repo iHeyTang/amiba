@@ -107,22 +107,6 @@ export function apply(ctx: Pick<ClientContext, "slots">) {
         () => <div data-probe-card="">Welcome illustration</div>,
       ),
     ),
-    ctx.slots.inject("amiba.message.decoration", () =>
-      ctx.slots.register(
-        {
-          name: "amiba.message.decoration",
-          id: "surface-probe",
-          label: "Interaction probe",
-        },
-        (owner) => (
-          <Probe
-            {...owner}
-            place={`message:${owner.messageId}`}
-            priority={10}
-          />
-        ),
-      ),
-    ),
     ctx.slots.inject("shell.overlay", () =>
       ctx.slots.register({ name: "shell.overlay", id: "surface-probe" }, () => (
         <div

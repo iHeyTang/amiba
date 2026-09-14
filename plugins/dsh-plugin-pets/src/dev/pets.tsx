@@ -154,7 +154,6 @@ function App({
   | "amiba.session.observer"
   | "amiba.workspace.view"
   | "amiba.emptyState.visual"
-  | "amiba.message.decoration"
 >) {
   const [readStates, setReadStates] = React.useState<{sessionId:string;readAt:number}[]>([]);
   const [surface, setSurface] = React.useState(false);
@@ -233,7 +232,6 @@ core.register(
       "amiba.workspace.view": { kind: "list", scope: "root" },
       "amiba.session.observer": { kind: "list", scope: "root" },
       "amiba.emptyState.visual": { kind: "list", scope: "root" },
-      "amiba.message.decoration": { kind: "list", scope: "root" },
     },
   },
   App,

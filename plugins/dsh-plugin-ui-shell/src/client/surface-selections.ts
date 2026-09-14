@@ -3,7 +3,6 @@ import { resolveSlotLabel } from "@deepseek-ai/dsh-client-ui-slots";
 import type { SlotContributionsCtx } from "./session-list-sources.js";
 export const SURFACE_SLOTS = [
   "amiba.emptyState.visual",
-  "amiba.message.decoration",
 ] as const;
 export type SurfaceSlot = (typeof SURFACE_SLOTS)[number];
 const key = "ui.surfaceProviders";

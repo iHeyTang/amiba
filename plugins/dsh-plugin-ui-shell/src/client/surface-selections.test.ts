@@ -13,15 +13,11 @@ it("persists explicit selection, keeps missing choices and restores candidates a
       name: "root",
       children: {
         "amiba.emptyState.visual": { kind: "list", scope: "root" },
-        "amiba.message.decoration": { kind: "list", scope: "root" },
       },
     },
     ({
       renderSlot,
-    }: PropsRenderSlots<
-      | "amiba.emptyState.visual"
-      | "amiba.message.decoration"
-    >) => {
+    }: PropsRenderSlots<"amiba.emptyState.visual">) => {
       void renderSlot;
       return null;
     },
@@ -50,12 +46,26 @@ it("persists explicit selection, keeps missing choices and restores candidates a
   ).toEqual(["a"]);
   expect(state.getSnapshot().choices["amiba.emptyState.visual"]).toBe("b");
   const reloaded = createSurfaceSelections(core, storage);
-  await reloaded.set("amiba.message.decoration", "");
+  await new Promise<void>((resolve) => {
+    const off = reloaded.subscribe(() => {
+      if (reloaded.getSnapshot().ready) {
+        off();
+        resolve();
+      }
+    });
+  });
   expect(reloaded.getSnapshot().choices["amiba.emptyState.visual"]).toBe("b");
   await reloaded.set("amiba.emptyState.visual", "");
   expect(reloaded.getSnapshot().choices["amiba.emptyState.visual"]).toBe("");
   const disabled = createSurfaceSelections(core, storage);
-  await disabled.set("amiba.message.decoration", undefined);
+  await new Promise<void>((resolve) => {
+    const off = disabled.subscribe(() => {
+      if (disabled.getSnapshot().ready) {
+        off();
+        resolve();
+      }
+    });
+  });
   expect(disabled.getSnapshot().choices["amiba.emptyState.visual"]).toBe("");
   await reloaded.set("amiba.emptyState.visual", undefined);
   expect(

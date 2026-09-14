@@ -500,13 +500,6 @@ export interface SurfaceVisualOwner {
   interaction?: SurfaceInteraction;
 }
 
-/** Visual replacement only: host keeps text, composer and actions. */
-export interface MessageDecorationOwner extends SurfaceVisualOwner {
-  sessionId?: string;
-  /** Amiba rendered-message id, not a DSH turn id. */
-  messageId: string;
-  streaming: boolean;
-}
 export interface EmptyStateVisualOwner {
   activity?: SurfaceActivity;
   presentation?: PresentationCoordinator;
@@ -518,7 +511,6 @@ export interface EmptyStateVisualOwner {
 
 export const AMIBA_ROOT_SLOTS = [
   "amiba.session.observer",
-  "amiba.message.decoration",
   "amiba.emptyState.visual",
   "amiba.navigation.before",
   "amiba.navigation.after",
@@ -707,7 +699,6 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotMap {
     "main": { kind: "keyed"; scope: "root" };
     "sidebar.panellist": { kind: "list"; scope: "root"; owner: { size: number; active: boolean } };
-    "amiba.message.decoration": { kind: "list"; scope: "root"; owner: MessageDecorationOwner };
     "amiba.emptyState.visual": { kind: "list"; scope: "root"; owner: EmptyStateVisualOwner };
     "amiba.navigation.before": { kind: "list"; scope: "root" };
     "amiba.navigation.after": { kind: "list"; scope: "root" };

@@ -6,7 +6,6 @@ import { WorkspaceMarkdown } from "../workspace-file-links";
 import { CompactionRow } from "./CompactionRow";
 import type { CompactionProgress } from "@amiba/app-runtime/protocol";
 import { Fragment } from "react";
-import { MessageDecoration } from "../../primitives/empty-state-visual";
 import { ToolRowFrame } from "./tool-row-frame";
 import { useToolCallSeat } from "./tool-call-seat";
 import type { NoticeReference } from "@amiba/app-runtime/protocol";
@@ -1897,7 +1896,6 @@ export function MessageTurns({
                 {renderTailsAfter(itemIndex)}
                 {item.message.role === "assistant" && !item.message.streaming && item.message.assistantMessageId
                   ? assistantActions?.(item.message.assistantMessageId) : null}
-                {item.message.role === "assistant" && <MessageDecoration sessionId={sessionId} messageId={item.message.uiId} streaming={!!item.message.streaming} />}
                 </Fragment>
               );
             })}

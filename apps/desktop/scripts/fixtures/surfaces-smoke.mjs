@@ -52,7 +52,6 @@ app
       await wait('!!document.querySelector("[data-probe=overlay]")');
       for (const slot of [
         "amiba.emptyState.visual",
-        "amiba.message.decoration",
       ]) {
         await click(`[data-surface-selector="${slot}"]`);
         await wait(
@@ -77,9 +76,6 @@ app
       await wait('document.querySelector("[data-probe=empty]")?.dataset.enabled==="true"');
       await assert(
         'document.querySelector("[data-probe=overlay]")?.dataset.enabled==="false"',
-      );
-      await wait(
-        '!!document.querySelector("[data-message-decoration=message-a] [data-probe]")',
       );
       await click("header button:nth-child(3)");
       await wait('!!document.querySelector("[data-menu]")');

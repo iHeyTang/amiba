@@ -325,8 +325,7 @@ DSH's scoped injection lifecycle. The host default is a dispatch fallback,
 not a registered occupant. Plugins register uniquely identified candidates. Users
 choose one provider per surface in Settings → General; installing a plugin does
 not replace the default automatically. Choices persist in platform storage.
-An unavailable selected provider falls back to the host default (or an empty
-message region), without silently choosing another plugin.
+An unavailable selected provider falls back to the host default, without silently choosing another plugin.
 
 This interface has no Mofli dependency and does not constrain the visual to a
 pet. Its optional `interaction` is a read-only subscription to its nearest
@@ -335,7 +334,7 @@ to any conversation's data.
 
 ### Regional activity
 
-Both visual slots receive an optional `SurfaceInteraction`:
+The empty-state visual slot receives an optional `SurfaceInteraction`:
 
 ```tsx
 const snapshot = useSyncExternalStore(
@@ -362,7 +361,7 @@ This is regional input observation, not a global keyboard hook.
 
 ### Session activity and coordinated presentation
 
-Both visual owners also expose optional `activity` and `presentation`.
+The visual owner also exposes optional `activity` and `presentation`.
 `activity` is available inside ChatSurface and follows the existing engine
 snapshot/event handlers. It is not a second execution controller and adds no
 engine subscription. Its read-only snapshot contains `sessionId`, `phase`,
@@ -404,16 +403,6 @@ queue or a cross-window election. Global overlay components can obtain the same
 coordinator through `usePresentationCoordinator` from
 `@amiba/dsh-plugin-ui-shell/client`. Use the owner's coordinator for regional
 components: it additionally tracks that individual presentation's visibility.
-
-### Message decorations
-
-`amiba.message.decoration` is a root-scoped list slot with one user-selected
-provider. It renders after normal assistant reply bubbles, outside the bubble;
-it does not replace message text, execution folds or tool output. Its
-`MessageDecorationOwner` includes `messageId` (Amiba UI identity), `sessionId`,
-`streaming`, and the optional interaction/activity/presentation subscriptions.
-Each decoration has its own visibility boundary. Content occupies at most
-96px, with clipped overflow. No provider means no extra space.
 
 ### Integration verification
 
