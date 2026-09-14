@@ -588,6 +588,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             }
             const captured = (attachments?.attachments ?? []).map((item) => ({ ...item }));
             const sessionId = permissionSessionId;
+            const commandDocument = draftSource?.getDocument();
             const commandAttempt = {};
             commandAttemptRef.current = commandAttempt;
             trigger.setAttemptInFlight(true, "submitting");
@@ -599,8 +600,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   trigger.setAttemptInFlight(false);
                   if (currentDraftRef.current.sessionId !== sessionId) return;
                   if (outcome.kind === "success") {
-                    if (innerRef.current?.getValue() === draft) {
+                    if (innerRef.current?.getValue() === draft &&
+                      (!draftSource || (commandDocument && (draftSource.commitSend
+                        ? draftSource.commitSend(commandDocument)
+                        : commandDocument === draftSource.getDocument())))) {
                       trigger.claims.release();
+                      innerRef.current?.clearHistory?.();
                       onChange("");
                     }
                     for (const item of captured) attachments?.removeAttachment(item.uiId);

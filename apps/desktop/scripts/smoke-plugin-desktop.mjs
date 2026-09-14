@@ -1033,6 +1033,16 @@ try {
         console.log("Official attachment seat received original browser images and added/removed files through the native upload path");
       }
       console.log("Official image command received original staged bytes through native composer and consumed its draft attachments");
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft"), "");
+      const sentHistoryModifier = await evaluate("/Mac/.test(navigator.platform) ? 4 : 2");
+      for (const redo of [false, true]) {
+        await evaluate("document.querySelector('[data-auto-grow-editor]').focus()");
+        await call('Input.dispatchKeyEvent',{type:'keyDown',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:sentHistoryModifier+(redo?8:0)});
+        await call('Input.dispatchKeyEvent',{type:'keyUp',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:sentHistoryModifier+(redo?8:0)});
+        await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft"), "", "successful command content must not return through undo or redo");
+      }
+      console.log("Successful image commands cut prior input history; native keyboard undo/redo did not resurrect submitted text.");
       if(process.argv.includes("--input-state")) {
         assert.deepEqual(await evaluate("Array.from(new Set(window.__inputObserved.filter(Boolean).map(s=>s.phase))).sort()"), ["adjudicating","claimed","plain","submitting"]);
         assert.deepEqual(await evaluate("Array.from(new Set(window.__wholeInputObserved.filter(Boolean).map(s=>s.phase))).sort()"), ["adjudicating","claimed","plain","submitting"]);

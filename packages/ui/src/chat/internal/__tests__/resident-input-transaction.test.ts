@@ -32,6 +32,7 @@ it("expands real reference parts and preserves literal token-shaped text through
   expect(f.transaction.submit()).toBe(false);
   await f.settled();
   expect(f.serialize).toHaveBeenCalledTimes(1);
+  expect(f.source.getHistoryVersion()).toBe(1);
   expect(f.deps.send).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "target", text: literal + "<resolved:id>" }));
   expect(f.source.getSnapshot()).toBe("");
   expect(f.release).toHaveBeenCalledTimes(1);
@@ -46,10 +47,12 @@ it("adjudicates first and executes the retained command claim on the next submit
   expect(f.claims.getInputStatus().phase).toBe("claimed");
   expect(f.deps.send).not.toHaveBeenCalled();
   expect(f.deps.submitClaim).not.toHaveBeenCalled();
+  expect(f.source.getHistoryVersion()).toBe(0);
   f.transaction.submit(); await f.settled();
   expect(f.deps.submitClaim).toHaveBeenCalledWith(claim, "exact args", []);
   expect(f.source.getSnapshot()).toBe("");
   expect(f.claims.getInputStatus().phase).toBe("plain");
+  expect(f.source.getHistoryVersion()).toBe(1);
 });
 
 it("keeps a newer draft after Host acceptance and consumes only the captured images", async () => {
@@ -63,6 +66,7 @@ it("keeps a newer draft after Host acceptance and consumes only the captured ima
   f.source.setDisplayText("new draft");
   finish({ kind: "accepted" }); await f.settled();
   expect(f.source.getSnapshot()).toBe("new draft");
+  expect(f.source.getHistoryVersion()).toBe(0);
   expect(f.deps.consume).toHaveBeenCalledWith([image]);
 });
 
@@ -90,6 +94,7 @@ it("retains input on rejected or unconfirmed receipts and reports why", async ()
   f.transaction.submit(); await f.settled();
   expect(f.source.getSnapshot()).toBe("original");
   expect(f.transaction.getSnapshot().notice).toBe("Workspace unavailable");
+  expect(f.source.getHistoryVersion()).toBe(0);
 });
 
 it("does not submit after native ownership returns during reference resolution", async () => {
@@ -114,6 +119,7 @@ it("keeps a failed command claim and its draft for an explicit retry", async () 
   expect(f.source.getSnapshot()).toBe("/fixture retry args");
   expect(f.claims.get()).toBe(claim);
   expect(f.transaction.getSnapshot().notice).toBe("Command rejected");
+  expect(f.source.getHistoryVersion()).toBe(0);
   expect(f.deps.consume).not.toHaveBeenCalled();
   f.transaction.submit(); await f.settled();
   expect(f.source.getSnapshot()).toBe("");

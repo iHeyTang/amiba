@@ -229,8 +229,10 @@ it("switches identical canonical strings without confusing literal text with a r
 });
 
 
-it("restores a session history on a new editor without retaining the old editor target", async () => {
-  const source = createComposerDraftSource(); source.set("one");
+it.each([false, true])("restores session history without retaining the old editor (legacy source=%s)", async legacy => {
+  const native = createComposerDraftSource();
+  const source = legacy ? { ...native, commitSend: undefined, getHistoryVersion: undefined } : native;
+  source.set("one");
   let editor!: LexicalEditor;
   const view = () => <RichComposerEditor value={source.getSnapshot()} draftSource={source} onChange={source.set}><EditorRefCapture onReady={next => { editor = next; }} /></RichComposerEditor>;
   const first = render(view());
@@ -321,4 +323,38 @@ it.each(["incoming", ""])("keeps a draft update arriving while cached history re
   await waitFor(() => expect(source.getSnapshot()).toBe(incomingText));
   act(() => { editor.dispatchCommand(REDO_COMMAND, undefined); });
   await waitFor(() => expect(source.getSnapshot()).toBe(incomingText));
+});
+
+it.each([[false, false], [true, false], [false, true], [true, true]])("does not resurrect a consumed draft after commit (offscreen=%s, empty=%s)", async (offscreen, empty) => {
+  const source = createComposerDraftSource(); source.set("before");
+  let editor!: LexicalEditor;
+  const view = () => <RichComposerEditor value={source.getSnapshot()} draftSource={source} onChange={source.set}>
+    <EditorRefCapture onReady={next => { editor = next; }} />
+  </RichComposerEditor>;
+  let mounted = render(view());
+  await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe("before"));
+  act(() => editor.update(() => { $getRoot().clear().append($createParagraphNode().append($createTextNode("sent"))); }, { discrete: true, tag: "history-push" }));
+  await waitFor(() => expect(source.getSnapshot()).toBe("sent"));
+  if (empty) {
+    act(() => editor.update(() => { $getRoot().clear().append($createParagraphNode()); }, { discrete: true, tag: "history-push" }));
+    await waitFor(() => expect(source.getSnapshot()).toBe(""));
+  }
+  if (offscreen) mounted.unmount();
+  act(() => { expect(source.commitSend(source.getDocument())).toBe(true); });
+  if (offscreen) mounted = render(view());
+  await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe(""));
+  act(() => { editor.dispatchCommand(UNDO_COMMAND, undefined); });
+  expect(source.getSnapshot()).toBe("");
+  act(() => { editor.dispatchCommand(REDO_COMMAND, undefined); });
+  expect(source.getSnapshot()).toBe("");
+  // New typing starts an ordinary independent history after the successful send.
+  act(() => editor.update(() => { $getRoot().clear().append($createParagraphNode().append($createTextNode("next"))); }, { discrete: true, tag: "history-push" }));
+  await waitFor(() => expect(source.getSnapshot()).toBe("next"));
+  act(() => { editor.dispatchCommand(UNDO_COMMAND, undefined); });
+  await waitFor(() => expect(source.getSnapshot()).toBe(""));
+  mounted.unmount();
+  render(view());
+  await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe(""));
+  act(() => { editor.dispatchCommand(REDO_COMMAND, undefined); });
+  await waitFor(() => expect(source.getSnapshot()).toBe("next"));
 });

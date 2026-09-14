@@ -10,7 +10,7 @@ import type { TriggerProvider } from "../composer/providers/types";
 
 export interface ResidentInputTransactionDeps {
   sessionId: string;
-  source: Pick<ComposerDraftSource, "getDocument" | "setDisplayText" | "readInputDraft">;
+  source: Pick<ComposerDraftSource, "getDocument" | "readInputDraft"> & Required<Pick<ComposerDraftSource, "commitSend">>;
   claims: CommandClaimStore;
   available(): boolean;
   busy?(): boolean;
@@ -56,7 +56,7 @@ export function createResidentInputTransaction(deps: ResidentInputTransactionDep
         if (!deps.available() || deps.source.getDocument() !== document) throw new DOMException("Input changed before submission", "AbortError");
       };
       const consume = () => {
-        if (deps.source.getDocument() === document) { deps.claims.release(); deps.source.setDisplayText(""); }
+        if (deps.source.commitSend(document)) deps.claims.release();
         deps.consume(images);
       };
       publish(true, null);

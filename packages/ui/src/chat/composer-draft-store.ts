@@ -7,6 +7,9 @@ import type { ComposerInputDraft } from "./composer/triggers/contracts";
 export interface ComposerDraftSource {
   getSnapshot(): string;
   getDocument(): ComposerDraftDocument;
+  /** Successful consumption is distinct from an ordinary, undoable draft edit. */
+  commitSend?(document: ComposerDraftDocument): boolean;
+  getHistoryVersion?(): number;
   /** Native document in official coordinates; used only without a mounted editor. */
   readInputDraft(): ComposerInputDraft;
   setParts(parts: readonly ParsedPart[]): void;
@@ -16,14 +19,17 @@ export interface ComposerDraftSource {
   set(value: string | ((previous: string) => string)): void;
 }
 
+type NativeComposerDraftSource = ComposerDraftSource & Required<Pick<ComposerDraftSource, "commitSend" | "getHistoryVersion">>;
+
 /** Shared native draft; the document preserves literal text and reference identity. */
-export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: string): ComposerDraftSource {
+export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: string): NativeComposerDraftSource {
   const key = sessionId ? `amiba.composer.draft.${sessionId}` : undefined;
   let document = composerDraftDocument([]);
   const inputProjection = new ResidentInputProjection();
   let inputDraft = inputProjection.update(document);
   let fingerprint = JSON.stringify(document);
   let revision = 0;
+  let historyVersion = 0;
   let readGeneration = 0;
   let pendingWrites = 0;
   let writes = Promise.resolve();
@@ -64,6 +70,16 @@ export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: 
   return {
     getSnapshot: () => document.text,
     getDocument: () => document,
+    getHistoryVersion: () => historyVersion,
+    commitSend(expected) {
+      if (document !== expected) return false;
+      revision++;
+      historyVersion++;
+      const empty = composerDraftDocument([]);
+      if (!publish(empty)) for (const listener of listeners) listener();
+      save(empty);
+      return true;
+    },
     readInputDraft: () => inputDraft,
     setParts(parts) {
       const next = composerDraftDocument(parts);
@@ -109,8 +125,8 @@ export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: 
   };
 }
 
-const stores = new WeakMap<StorageAdapter, Map<string, ComposerDraftSource>>();
-export function sessionComposerDraft(storage: StorageAdapter, sessionId: string): ComposerDraftSource {
+const stores = new WeakMap<StorageAdapter, Map<string, NativeComposerDraftSource>>();
+export function sessionComposerDraft(storage: StorageAdapter, sessionId: string): NativeComposerDraftSource {
   let sessions = stores.get(storage);
   if (!sessions) { sessions = new Map(); stores.set(storage, sessions); }
   let source = sessions.get(sessionId);

@@ -2139,3 +2139,15 @@ keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入�
 57 项编辑器、触发器和文档测试通过，UI 类型检查通过，git diff --check 通过。日志 /tmp/amiba-history-race-regression.log、/tmp/amiba-history-race-types.log。本次未重新运行完整桌面构建或桌面回归；竞态证据来自实际 React/Lexical 生命周期测试，上一提交的桌面通过记录仍仅代表上一提交。
 
 另外确认后台写入历史不能无差别套用新版本：实际 rc.2 InputFacade.setDraft 派发 draft-changed 事件，固定 c291e796 的 setDraft 明确使用 HISTORY_MERGE_TAG。两版 commitSend 均单独切断已发送内容的历史。后续完整后台历史合并必须区分程序写入、用户编辑和提交消费，不能把所有文档变化都作为可撤销编辑，也不能把尚未完成的版本适配宣称为已兼容。
+
+#### 成功命令与后台提交的历史消费
+
+原生 ComposerDraftSource 增加可选 commitSend/getHistoryVersion：只消费提交时捕获的同一文档，原子推进历史版本并清空草稿。普通 set/setDisplayText 仍保持原有含义。ComposerHistoryPlugin 监听消费版本，清除对应活动历史，缓存恢复也核对版本；纯图片发送可能没有文字变化，仍切断旧历史，并保留当前空状态作为下一次编辑的撤销起点。
+
+官方前台命令成功且草稿仍匹配时调用消费及公共 CLEAR_HISTORY_COMMAND；失败、草稿已更新、旧会话回调不清新稿。标准后台输入事务在成功消费路径调用同一接口；拒绝/未确认结果不消费，异步结果与较新草稿不匹配时也不切断新历史。两个新方法在公共草稿接口上保持可选，旧嵌入方和只有草稿读写的 bridge 继续使用原路径，未声称没有历史接口的第三方宿主也获得持久历史控制。
+
+71 项编辑器/触发器/文档/后台提交测试及 39 项输入提供者/桥接测试通过，UI 与插件类型检查、架构检查、最终完整桌面构建通过。测试覆盖活动及离屏消费、文字已空的图片消费、消费后新输入正常 undo/redo、旧草稿源、失败和较新草稿保护。中间发现纯图片消费后 current 为 null 导致第一次新输入无法撤销，已修复并保留回归用例。初次构建发现 bridge 源类型缺少消费接口，已接通并重新验证。
+
+最终真实 --compat --resident-draft --input-state --command-images 退出 0：图片命令完成后原生键盘 undo/redo 仍为空；会话切换引用历史、输入状态四阶段、混合文件文字粘贴、原控件样式和卸载回退等既有回归同时通过。日志 /tmp/amiba-send-history-regression-3.log、/tmp/amiba-send-history-provider-tests.log、/tmp/amiba-send-history-types-2.log、/tmp/amiba-send-history-plugin-types-2.log、/tmp/amiba-send-history-architecture-final.log、/tmp/amiba-send-history-build-3.log、/tmp/amiba-send-history-smoke.log。
+
+尚未覆盖原生普通发送和所有队列交接的成功边界，未将它们统一改成消费操作；完整后台编辑历史合并、跨重启和跨窗口历史仍待适配。本轮没有改变原输入框及附件栏的样式。

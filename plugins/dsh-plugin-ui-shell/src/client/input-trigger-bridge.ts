@@ -63,6 +63,7 @@ export interface InputTriggerBridgeDeps {
   /** Same per-session document as the original Composer; optional for other hosts. */
   residentDraft?(sessionId: string): {
     getDocument?: import("@amiba/ui").ComposerDraftSource["getDocument"];
+    commitSend?: import("@amiba/ui").ComposerDraftSource["commitSend"];
     subscribe(listener: () => void): () => void;
     setDisplayText(text: string): void;
     readInputDraft(): ReturnType<NonNullable<TriggerEditorOps["readInputDraft"]>>;
@@ -296,7 +297,15 @@ export function createInputTriggerBridge(
     if (transaction && transactionSources.get(id) !== source && !transaction.getSnapshot().pending) transaction = undefined;
     if (!transaction && source?.getDocument) {
       transaction = createResidentInputTransaction({
-        sessionId: id, source: { ...source, getDocument: source.getDocument }, claims: claimsFor(id),
+        sessionId: id, source: { ...source, getDocument: source.getDocument,
+          commitSend: document => {
+            if (source.commitSend) return source.commitSend(document);
+            // Older embedders expose only draft mutation, without history ownership.
+            if (source.getDocument?.() !== document) return false;
+            source.setDisplayText("");
+            return true;
+          },
+        }, claims: claimsFor(id),
         available: () => !editors.has(id) && residentInputs.get(id)?.source === source && !!inputSessions.get(id) &&
           inputSessions.get(id)!.session.getSnapshot().subagent?.address.mode !== "one-shot" && (!bridge.isSessionRunning!(id) || !!deps.pendingQueue),
         busy: () => bridge.isSessionRunning!(id) || residentSender?.isBusy?.(id) === true,

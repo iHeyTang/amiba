@@ -7,6 +7,7 @@ import { composerDraftDocument, type ComposerDraftDocument } from "../../compose
 import { $readComposerParts } from "../composer-parts";
 
 type SavedHistory = {
+  version: number;
   document: ComposerDraftDocument;
   state: EditorState;
   current: EditorState | null;
@@ -27,7 +28,7 @@ export function ComposerHistoryPlugin({ source }: { source?: ComposerDraftSource
   const [editor] = useLexicalComposerContext();
   const { history, saved } = useMemo(() => {
     const candidate = source && histories.get(source);
-    const saved = candidate?.document === source?.getDocument() ? candidate : undefined;
+    const saved = candidate?.document === source?.getDocument() && candidate?.version === (source?.getHistoryVersion?.() ?? 0) ? candidate : undefined;
     const history: HistoryState = saved ? {
       current: saved.current ? { editor, editorState: saved.current } : null,
       undoStack: saved.undo.map(editorState => ({ editor, editorState })),
@@ -37,6 +38,25 @@ export function ComposerHistoryPlugin({ source }: { source?: ComposerDraftSource
   }, [editor, source]);
   useLayoutEffect(() => {
     let active = true;
+    let version = source?.getHistoryVersion?.() ?? 0;
+    const clear = () => {
+      history.current = null;
+      history.undoStack = [];
+      history.redoStack = [];
+    };
+    const off = source?.subscribe(() => {
+      const next = source.getHistoryVersion?.() ?? 0;
+      if (version !== next) {
+        version = next;
+        clear();
+        const state = editor.getEditorState();
+        // An image-only send may consume an already empty document, so no
+        // editor update follows. Seed that empty state for the next edit's undo.
+        if (state.read(() => JSON.stringify(composerDraftDocument($readComposerParts()))) === JSON.stringify(source.getDocument())) {
+          history.current = { editor, editorState: state };
+        }
+      }
+    });
     if (saved) {
       restored.set(editor, saved.document);
       // Reconcile decorators outside React's layout phase (Lexical may flushSync).
@@ -44,11 +64,9 @@ export function ComposerHistoryPlugin({ source }: { source?: ComposerDraftSource
         if (!active) return;
         // A resident write can land after render/layout but before this task.
         // Revalidate at the actual commit boundary, not only in useMemo.
-        if (source?.getDocument() !== saved.document) {
+        if (source?.getDocument() !== saved.document || (source?.getHistoryVersion?.() ?? 0) !== saved.version) {
           restored.delete(editor);
-          history.current = null;
-          history.undoStack = [];
-          history.redoStack = [];
+          clear();
           return;
         }
         editor.setEditorState(saved.state, { tag: "historic" });
@@ -56,6 +74,7 @@ export function ComposerHistoryPlugin({ source }: { source?: ComposerDraftSource
     }
     return () => {
       active = false;
+      off?.();
       restored.delete(editor);
       if (!source) return;
       const document = source.getDocument();
@@ -65,7 +84,7 @@ export function ComposerHistoryPlugin({ source }: { source?: ComposerDraftSource
       const same = state.read(() => JSON.stringify(composerDraftDocument($readComposerParts()))) === JSON.stringify(document);
       const entries = [...history.undoStack, ...history.redoStack, ...(history.current ? [history.current] : [])];
       if (!same || entries.some(entry => entry.editor !== editor)) { histories.delete(source); return; }
-      histories.set(source, { document, state, current: history.current?.editorState ?? null,
+      histories.set(source, { version: source.getHistoryVersion?.() ?? 0, document, state, current: history.current?.editorState ?? null,
         undo: history.undoStack.map(entry => entry.editorState), redo: history.redoStack.map(entry => entry.editorState) });
     };
   }, [editor, source, history, saved]);

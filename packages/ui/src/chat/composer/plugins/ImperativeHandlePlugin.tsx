@@ -1,7 +1,7 @@
 import { $readComposerParts } from "../composer-parts"
 import type { ParsedPart } from "../serialize"
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
-import { $createRangeSelection, $getRoot, $getSelection, $isRangeSelection, $setSelection } from "lexical"
+import { $createRangeSelection, $getRoot, $getSelection, $isRangeSelection, $setSelection, CLEAR_HISTORY_COMMAND } from "lexical"
 import { useImperativeHandle, type Ref } from "react"
 
 import { $caretOffset, $scanDraft, $spliceTriggerText } from "../triggers/lexical-draft"
@@ -16,6 +16,7 @@ export interface RichComposerHandle {
   getParts?(): readonly ParsedPart[]
   /** Insert literal clipboard text at the current selection as one undo step. */
   pasteText?(text: string): void
+  clearHistory?(): void
   getTextarea(): HTMLTextAreaElement | null
 }
 
@@ -25,6 +26,7 @@ export function ImperativeHandlePlugin({ handleRef }: { handleRef: Ref<RichCompo
     handleRef,
     (): RichComposerHandle => ({
       getParts: () => editor.getEditorState().read($readComposerParts),
+      clearHistory: () => { editor.dispatchCommand(CLEAR_HISTORY_COMMAND, undefined) },
       pasteText: text => {
         if (!editor.isEditable() || !text) return
         editor.update(() => {
