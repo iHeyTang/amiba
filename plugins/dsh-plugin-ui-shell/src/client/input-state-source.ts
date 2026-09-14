@@ -31,12 +31,12 @@ export function createInputStateSource(deps: {
         return snapshot = undefined;
       }
       const queue = session.getSnapshot().queue;
-      const unchangedImages = snapshot && snapshot.imageIds.length === images.length &&
-        images.every((image, i) => image.id === snapshot!.imageIds[i]);
+      const unchangedImages = snapshot && snapshot.attachmentIds.length === images.length &&
+        images.every((image, i) => image.id === snapshot!.attachmentIds[i]);
       if (snapshot && previousDraft === draft && unchangedImages && snapshot.queue === queue) return snapshot;
-      const imageIds = unchangedImages ? snapshot!.imageIds : Object.freeze(images.map(image => image.id));
+      const attachmentIds = unchangedImages ? snapshot!.attachmentIds : Object.freeze(images.map(image => image.id));
       previousDraft = draft;
-      snapshot = Object.freeze({ ...draft, imageIds, queue });
+      snapshot = Object.freeze({ ...draft, attachmentIds, queue });
       return snapshot;
     },
     subscribe(listener) {

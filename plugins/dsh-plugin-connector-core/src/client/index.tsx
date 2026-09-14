@@ -140,7 +140,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
       // same function identity: `ConnectQuestionScreen` keys its loader
       // effect off it, and a fresh closure per render would re-fetch forever.
       const loadPresets = () =>
-        loadAgentPresets(ctx.get("connection") as unknown as PresetConnection);
+        loadAgentPresets(ctx.remote);
       const disposeSection = injectedCtx.slots.inject("settings.section", () =>
         injectedCtx.slots.register(
           {

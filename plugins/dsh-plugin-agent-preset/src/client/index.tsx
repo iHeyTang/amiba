@@ -17,7 +17,7 @@ import {
 } from "./DshAgentPresetsPage.js";
 
 export const name = "amiba-agent-preset-ui";
-export const inject = ["slots", "remote", "connection"];
+export const inject = ["slots", "remote"];
 
 /**
  * Keeps the retired registry id so `#agents` deep links resolve through
@@ -73,7 +73,7 @@ function AgentPresetsSettings({
  * host event for roster refreshes. No host platform adapter is involved.
  */
 export function apply(ctx: ClientContext): void {
-  const { api } = ctx.get("connection") as ConnectionHandle;
+  const api = ctx.remote;
   const adapter = createAgentPresetsAdapter(api);
 
   ctx.effect(() => {

@@ -1,9 +1,9 @@
 import type { ConversationInputActions } from "@amiba/extension-sdk";
-import type { SessionProvideDescriptor } from "@deepseek-ai/dsh-client-runtime/client";
+import type { SessionSourceDescriptor } from "@deepseek-ai/dsh-client-ui-session/client";
 import type { AmibaInputTriggerBridge } from "./input-trigger-bridge.js";
 
 /** Standard session props target the original editor, including after rebinding. */
-export function createInputActionsProvider(bridge: AmibaInputTriggerBridge): SessionProvideDescriptor & { dispose(): void } {
+export function createInputActionsProvider(bridge: AmibaInputTriggerBridge): SessionSourceDescriptor<readonly ["input"], undefined, readonly ["inputActions"]> & { dispose(): void } {
   const actions = new Map<string, ConversationInputActions>();
   const bindings = new Map<string, { session: unknown; ctx: unknown; dispose(): void }>();
   return {
@@ -39,9 +39,9 @@ export function createInputActionsProvider(bridge: AmibaInputTriggerBridge): Ses
                 : "Input editor is not mounted or the resident draft cannot accept edits");
             }
           },
-          addImages: ids => bridge.addInputImages(sessionId, ids),
-          removeImage: id => bridge.removeInputImage(sessionId, id),
-          pruneImages: ids => bridge.pruneInputImages(sessionId, ids),
+          addAttachments: ids => bridge.addInputImages(sessionId, ids),
+          removeAttachment: id => bridge.removeInputImage(sessionId, id),
+          pruneAttachments: ids => bridge.pruneInputImages(sessionId, ids),
           submit() { bridge.submitInput(sessionId); },
         } satisfies ConversationInputActions);
         actions.set(sessionId, inputActions);

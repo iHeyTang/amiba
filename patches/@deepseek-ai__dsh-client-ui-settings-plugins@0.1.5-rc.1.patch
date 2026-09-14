@@ -1,0 +1,24 @@
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -1810,6 +1810,9 @@
+ 			});
+ 		}
+ 		//#endregion
++		exports.BashCardController = BashCardController;
++		exports.AgentLoopCardController = AgentLoopCardController;
++		exports.WebSearchCardController = WebSearchCardController;
+ 		exports.apply = apply;
+ 		exports.inject = inject;
+ 		return module.exports;
+--- a/lib/types/client/index.d.ts
++++ b/lib/types/client/index.d.ts
+@@ -26,4 +26,7 @@
+  * @param ctx - the browser plugin context.
+  */
+ export declare function apply(ctx: ClientContext): void;
+-//# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=index.d.ts.map
++export { BashCardController } from "./bash-card-controller.ts";
++export { AgentLoopCardController } from "./agent-loop-card-controller.ts";
++export { WebSearchCardController } from "./web-search-card-controller.ts";

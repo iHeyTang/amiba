@@ -591,5 +591,3 @@ describe('SidebarRightController — binding lifetime', () => {
     expect(() => { controller.toggleExpanded() }).not.toThrow()
   })
 })
-
-vi.mock('@deepseek-ai/dsh-client-runtime/client', async () => await import('../../dev/runtime-store.js'));

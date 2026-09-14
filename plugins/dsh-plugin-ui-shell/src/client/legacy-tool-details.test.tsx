@@ -2,7 +2,7 @@
 import React from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ConversationSnapshot } from "@deepseek-ai/dsh-client-runtime/client";
+import type { ConversationSnapshot } from "./conversation-snapshot.js";
 import type { ToolCallBlock } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type { WorkbenchPanelOwner } from "@amiba/extension-sdk";
 import { LegacyToolDetails, legacyToolCalls, LEGACY_TOOL_DETAILS_PANEL } from "./legacy-tool-details.js";

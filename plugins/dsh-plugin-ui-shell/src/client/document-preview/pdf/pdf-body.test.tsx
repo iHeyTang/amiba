@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-vi.mock('@deepseek-ai/dsh-client-runtime/client', async () => await import('../../../dev/runtime-store.js'))
 /** PDF controls and stale-completion guards with real tab view state and controlled document loads. */
 import { useMemo, useSyncExternalStore } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

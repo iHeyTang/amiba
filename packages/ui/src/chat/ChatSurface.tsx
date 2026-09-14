@@ -898,11 +898,26 @@ export default function ChatSurface({
     // cancellation would silently drop the user's prompt. The payload
     // is session-agnostic; whichever effect run wins should still seed
     // the composer.
-    void drain().then((payload: PendingPromptResult | null) => {
+    void drain().then(async (payload: PendingPromptResult | null) => {
       if (payload == null) return;
       const text = payload.text?.trim() ?? "";
       const incoming = payload.attachments ?? [];
-      const promotedAttachments: Attachment[] = incoming.map((a) => ({
+      for (const item of incoming) {
+        if (!item.dataBase64) continue;
+        try {
+          const adapter = getPlatform().agentAttachments;
+          if (!adapter) throw new Error("Official attachment service is unavailable.");
+          const bytes = Uint8Array.from(atob(item.dataBase64), c => c.charCodeAt(0));
+          const sessionId = sessions.activeId || draftUploadSessionRef.current;
+          const draft = await adapter.put({ sessionId, name: item.name, mime: item.mime, bytes });
+          item.attachmentId = draft.attachmentId;
+        } catch (error) {
+          setAttachmentError(`${item.name}: ${error instanceof Error ? error.message : String(error)}`);
+        } finally {
+          delete item.dataBase64;
+        }
+      }
+      const promotedAttachments: Attachment[] = incoming.filter(a => a.attachmentId).map((a) => ({
         uiId: a.uiId,
         name: a.name,
         mime: a.mime,

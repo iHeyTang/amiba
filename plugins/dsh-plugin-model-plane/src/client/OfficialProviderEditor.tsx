@@ -1,3 +1,4 @@
+import { jsonValue } from "./schema-object.js";
 import { ProviderCardExtension, type ProviderCardRenderer } from "./model-settings-extensions.js";
 import { useState } from "react";
 import {
@@ -48,7 +49,7 @@ export function configurationDiff(
       ]),
     );
   }
-  return [{ op: "set", path, value: after }];
+  return [{ op: "set", path, value: jsonValue(after) }];
 }
 const containsSecret = (schema: unknown): boolean => {
   const s = object(schema);

@@ -73,7 +73,7 @@ export function scheduleDispatchListener(
     const dispatchId = change.id;
     if (typeof dispatchId !== "string") return;
     const title = compact(
-      schedulePromptOf(session.events, dispatchId) ?? "",
+      schedulePromptOf(session.snapshotEvents(), dispatchId) ?? "",
       TITLE_LIMIT,
     );
     if (!title) return;

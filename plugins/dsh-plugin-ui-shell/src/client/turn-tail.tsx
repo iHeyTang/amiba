@@ -1,10 +1,10 @@
 import type { AssistantTimelineItem } from "@amiba/app-runtime/protocol";
 import { WorkspaceTextMentionsContext } from "@amiba/ui";
-import type { ChatFileMentions } from "@deepseek-ai/dsh-client-ui-conversation/client";
+import type { ChatFileMentions } from "@deepseek-ai/dsh-client-ui-chat/client";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import type { ConversationSnapshot } from "@deepseek-ai/dsh-client-runtime/client";
+import type { ConversationSnapshot } from "./conversation-snapshot.js";
 import type { ObservableSnapshot } from "@deepseek-ai/dsh-client-store";
-import type { TurnTailOwnerProps } from "@deepseek-ai/dsh-client-ui-conversation/client";
+import type { TurnTailOwnerProps } from "@deepseek-ai/dsh-client-ui-chat/client";
 
 export function turnTailOwner(
   snapshot: ConversationSnapshot | null,
@@ -25,7 +25,7 @@ export function TurnTail({
   openFile,
   render,
 }: {
-  source?: ObservableSnapshot<ConversationSnapshot>;
+  source?: ObservableSnapshot<ConversationSnapshot | undefined>;
   runtimeTurn: number;
   openFile: (path: string) => void;
   render: (owner: TurnTailOwnerProps) => ReactNode;
@@ -50,7 +50,7 @@ export function TurnTail({
   return owner ? <>{render(owner)}{fileError ? <p role="alert" className="text-xs text-destructive">{fileError}</p> : null}</> : null;
 }
 
-function useConversationSnapshot(source?: ObservableSnapshot<ConversationSnapshot>) {
+function useConversationSnapshot(source?: ObservableSnapshot<ConversationSnapshot | undefined>) {
   const subscribe = useCallback(
     (listener: () => void) => source?.subscribe(listener) ?? (() => {}),
     [source],
@@ -63,7 +63,7 @@ function useConversationSnapshot(source?: ObservableSnapshot<ConversationSnapsho
 }
 
 /** Preserve engine order even when the product has no visible assistant row. */
-export function useTurnTailAnchors(source?: ObservableSnapshot<ConversationSnapshot>) {
+export function useTurnTailAnchors(source?: ObservableSnapshot<ConversationSnapshot | undefined>) {
   const snapshot = useConversationSnapshot(source);
   return useMemo(() => snapshot?.chat.timeline.turnOrder.flatMap(runtimeTurn => {
     const turn = snapshot.chat.timeline.turns.get(runtimeTurn);
@@ -75,7 +75,7 @@ export function useTurnTailAnchors(source?: ObservableSnapshot<ConversationSnaps
 
 /** The native Markdown renderer supplies the exact source sequence of each code span. */
 export function TurnText({source,runtimeTurn,openFile,fileMentions,children,timeline}:{
-  source?:ObservableSnapshot<ConversationSnapshot>;
+  source?:ObservableSnapshot<ConversationSnapshot | undefined>;
   runtimeTurn?:number;
   openFile:(path:string)=>void;
   fileMentions:ChatFileMentions["forClosing"];
@@ -84,7 +84,7 @@ export function TurnText({source,runtimeTurn,openFile,fileMentions,children,time
 }) {
   const snapshot=useConversationSnapshot(source);
   const owner=runtimeTurn===undefined?null:turnTailOwner(snapshot,runtimeTurn,openFile);
-  const mentions=owner?fileMentions(owner):undefined;
+  const mentions=owner && snapshot ? fileMentions(owner, snapshot.sessionId) : undefined;
   const interruptedStep = matchingInterruptedStep(owner, timeline);
   return <WorkspaceTextMentionsContext.Provider value={(seq,value,step)=>owner && (seq!==undefined ? owner.seq===seq : step!==undefined && step===interruptedStep) ? mentions?.resolve(value):undefined}>{children}</WorkspaceTextMentionsContext.Provider>;
 }

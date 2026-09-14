@@ -1,0 +1,23 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1169,7 +1169,9 @@
+ 	*/
+ 	append(type, data, ...opts) {
+ 		const surfaceOpts = opts[0];
++		if (surfaceOpts?.ignorable !== void 0 && surfaceOpts.ignorable !== true) throw new Error("ignorable must be true when provided");
+ 		const surfaceMetadata = {
++			...surfaceOpts?.ignorable === true ? { ignorable: true } : {},
+ 			...surfaceOpts?.sourceEventSeqs === void 0 ? {} : { sourceEventSeqs: surfaceOpts.sourceEventSeqs },
+ 			...surfaceOpts?.surfaceOp === void 0 ? {} : { surfaceOp: surfaceOpts.surfaceOp }
+ 		};
+--- a/lib/types/index.d.ts
++++ b/lib/types/index.d.ts
+@@ -235,7 +235,7 @@
+      *   append reentered while this acceptance/publication boundary is open also
+      *   rejects before the log changes.
+      */
+-    append<T extends SessionEventType>(type: T, data: SessionEventMap[T], ...opts: T extends SurfaceEventType ? [opts: SurfaceIntent<T>] : []): SessionEvent<T>;
++    append<T extends SessionEventType>(type: T, data: SessionEventMap[T], ...opts: T extends SurfaceEventType ? [opts: SurfaceIntent<T> & { ignorable?: true }] : [opts?: { ignorable?: true }]): SessionEvent<T>;
+     /** Cached fold of the request-header events — see {@link requestHeader}. */
+     private headerFold;
+     /** Log position (events consumed) the header fold has reached. */

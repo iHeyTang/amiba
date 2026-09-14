@@ -1,4 +1,4 @@
-import type { IApiClient } from "@deepseek-ai/dsh-api-remotes/client";
+import type { ClientRemote } from "@deepseek-ai/dsh-api-remotes/client";
 export interface Progress {
   completed: string[];
   skipped?: string[];
@@ -10,17 +10,15 @@ export interface ProgressStore {
   finish(): Promise<Progress>;
 }
 async function value<T>(
-  response: Promise<{
-    result: { ok: true; value: T } | { ok: false; error: { message: string } };
-  }>,
+  response: Promise<{ ok: true; value: T } | { ok: false; error: { message: string } }>,
 ): Promise<T> {
-  const { result } = await response;
+  const result = await response;
   if (!result.ok) throw new Error(result.error.message);
   return result.value;
 }
-export function createProgressStore(api: IApiClient): ProgressStore {
+export function createProgressStore(api: ClientRemote): ProgressStore {
   async function describe() {
-    const result = await value(api.settings.describe({}));
+    const result = await value(api.settings.describe());
     const ns = result.namespaces.find((n) => n.ns === "amiba-onboarding");
     if (!ns) throw new Error("Onboarding settings unavailable");
     const data = ns.value as Partial<Progress>;
@@ -55,16 +53,12 @@ export function createProgressStore(api: IApiClient): ProgressStore {
           ]
         : (progress.skipped ?? []);
       await value(
-        api.settings.mutate({
-          ns: ns.ns,
-          expectedRevision: ns.revision,
-          ops: id
+        api.settings.mutate(ns.ns, id
             ? [
                 { op: "set", path: ["completed"], value: completed },
                 { op: "set", path: ["skipped"], value: skipped },
               ]
-            : [{ op: "set", path: ["finished"], value: true }],
-        }),
+            : [{ op: "set", path: ["finished"], value: true }], ns.revision),
       );
       return { completed, skipped, finished: id ? progress.finished : true };
     });

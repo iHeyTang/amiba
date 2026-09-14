@@ -1,3 +1,4 @@
+import { SessionSeq } from "@deepseek-ai/dsh-session/types";
 import { sharedConversationBinding, SHARED_CONVERSATION_FEATURE, installSharedConversationAccess } from "./shared-conversation.js";
 export * from "./shared-conversation.js";
 import z from "@deepseek-ai/schemastery";
@@ -39,7 +40,7 @@ export function featureSeed(
   return [
     {
       type: FEATURE_EVENT,
-      seq: 0,
+      seq: SessionSeq(0),
       time: Date.now(),
       ignorable: true,
       data: { sessionId, plugin, version },
@@ -48,9 +49,9 @@ export function featureSeed(
 }
 export function requiredFeatures(session: {
   id: unknown;
-  events: readonly SessionEvent[];
+  snapshotEvents(): readonly SessionEvent[];
 }): FeatureBinding[] {
-  const bindings = session.events.flatMap((event) => {
+  const bindings = session.snapshotEvents().flatMap((event) => {
     if (event.type !== FEATURE_EVENT || event.data.sessionId !== session.id)
       return [];
     const binding = event.data;
@@ -200,3 +201,5 @@ export function apply(ctx: Context, config: Config = {}): void {
     }
   });
 }
+
+export { readSessionHistory } from "./session-history.js";

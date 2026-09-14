@@ -1,9 +1,9 @@
+import type { JsonValue } from "@deepseek-ai/dsh-util-values";
 import type { Context } from "@deepseek-ai/cordis";
 import type { ImageMediaType } from "@deepseek-ai/dsh-attachment";
 import {
   assertObjectJsonSchema,
   type JsonSchemaNode,
-  type JsonValue,
   type ToolDefinition,
 } from "@deepseek-ai/dsh-tools";
 import type {

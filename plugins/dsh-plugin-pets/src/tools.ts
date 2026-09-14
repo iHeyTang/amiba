@@ -1,5 +1,6 @@
+import type { JsonValue } from "@deepseek-ai/dsh-util-values";
 import type { Context } from "@deepseek-ai/cordis";
-import type { ToolDefinition, JsonValue } from "@deepseek-ai/dsh-tools";
+import type { ToolDefinition } from "@deepseek-ai/dsh-tools";
 import { catalog, type PetInput } from "./model.js";
 import type { PetService } from "./service.js";
 const object = (

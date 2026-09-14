@@ -274,7 +274,7 @@ if (args.has("--update-lock")) {
   for (const entry of entries) {
     await fsp.mkdir(entry.directory, { recursive: true });
     await fsp.writeFile(path.join(entry.directory, 'package.json'), `${JSON.stringify(entry.manifest, null, 2)}\n`);
-    const npmArgs = ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline'];
+    const npmArgs = ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-online'];
     run(process.platform === 'win32' ? 'npm.cmd' : 'npm', npmArgs, { cwd: entry.directory });
   }
   console.log('[dsh:runtime] updated host and plugin locks; commit the changed distribution files');

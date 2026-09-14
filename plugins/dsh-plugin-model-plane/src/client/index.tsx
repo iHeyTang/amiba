@@ -21,7 +21,7 @@ import {
 } from "./ModelProviderConfigTab.js";
 
 export const name = "amiba-model-plane-client";
-export const inject = ["slots", "remote", "connection"];
+export const inject = ["slots", "remote", "connection", "remote.session", "remote.settings", "remote.llm", "remote.credentials"];
 
 const SECTION_ID = "models";
 
@@ -113,11 +113,17 @@ function SessionModelPickerContribution(
  *  Settings section, and the two composer picker contributions (official
  *  session seat + vendor hero seat). */
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
-  const api = (ctx.get("connection") as ConnectionHandle).api;
+  const api = ctx.remote;
   // Official wire faces, captured once from the connection
   // service (the agent-preset plugin's ctx.get("connection").api precedent).
-  const wire: SessionModelWire = (ctx.get("connection") as ConnectionHandle).api
-    .sessions;
+  const wire: SessionModelWire = {
+    modelCatalog: () => ctx.remote.session.modelCatalog(),
+    selectModel: request => ctx.remote.session.selectModel(request),
+    modelSelection: id => {
+      const projection = ctx.sessions.binding(id)?.session.projections.faceOf("modelSelection").getSnapshot() as import("@deepseek-ai/dsh-api-remotes/client").ModelSelectionProjection | undefined;
+      return projection?.next ?? undefined;
+    },
+  };
   const subscribe = (listener: () => void) => {
     const disposers = [
       ctx.remote.$on("llm/adapters-updated", listener),

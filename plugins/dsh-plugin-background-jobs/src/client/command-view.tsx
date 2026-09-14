@@ -25,10 +25,10 @@ export function CommandExecution(props:Props) {
   const args = toolCallArgs(props.block);
   const record=records.find(r=>r.callId===callId || r.resultCallIds.includes(callId))
     ?? (props.toolName === "job_output" ? [...records].reverse().find(r=>r.id === args.job_id) : undefined);
-  const sourceArgs = props.useSession(snapshot => {
-    if (!record?.callId || snapshot.sessionId !== sessionId) return undefined;
-    const calls = snapshot.nodes.filter(node => node.kind === "tool-result");
-    return argsInCalls(calls, record.callId) || argsInCalls(snapshot.runningCalls, record.callId);
+  const sourceArgs = props.useChat(snapshot => {
+    if (!record?.callId) return undefined;
+    const calls = snapshot.legacy.nodes.filter(node => node.kind === "tool-result");
+    return argsInCalls(calls, record.callId) || argsInCalls(snapshot.legacy.runningCalls, record.callId);
   });
   const job=record && taskRows(live,[record])[0];
   const [open,setOpen]=useState(false);

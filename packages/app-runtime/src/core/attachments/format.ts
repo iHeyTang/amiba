@@ -1,12 +1,5 @@
-/**
- * Render composer-time `FileAttachment`s into a plain-text block that gets
- * inlined into the user message content.
- *
- * Metadata remains durable text inside the user's own turn. Supported
- * raster images are also carried as native DSH image parts by the desktop
- * client; UTF-8 text and PDFs remain opaque-id-based and are read through
- * Amiba's DSH attachment tools.
- */
+/** New messages use official structured attachment parts. The parser below
+ * only formats existing message text; it never opens or migrates old files. */
 
 import type { AttachmentBadge, FileAttachment } from "./types";
 
@@ -15,32 +8,9 @@ import type { AttachmentBadge, FileAttachment } from "./types";
  * the user message content, or `""` when the list is empty.
  */
 export function formatFileAttachmentsForPrompt(
-  atts: FileAttachment[],
+  _atts: FileAttachment[],
 ): string {
-  const ready = atts.filter((a) => a.attachmentId && !a.uploading);
-  if (ready.length === 0) return "";
-  // Blocks only — no per-message usage preamble. The attachments plugin
-  // already injects the how-to-read guidance into the system prompt every
-  // turn (`ctx.systemPrompt.context`, order 55), so repeating it here only
-  // padded every attachment-bearing message with boilerplate. The block
-  // itself stays: it is how the model learns each file's Attachment-ID for
-  // the id-based read tools.
-  const blocks = ready.map((att, i) => {
-    const indexAttr = ready.length > 1 ? ` index="${i + 1}"` : "";
-    const lines: string[] = [
-      `<file-attachment${indexAttr}>`,
-      `Name: ${JSON.stringify(att.name)}`,
-      `Kind: ${JSON.stringify(att.kind)}`,
-      `Mime: ${JSON.stringify(att.mime || "application/octet-stream")}`,
-      `Size: ${att.size} bytes`,
-    ];
-    if (att.attachmentId) {
-      lines.push(`Attachment-ID: ${JSON.stringify(att.attachmentId)}`);
-    }
-    lines.push("</file-attachment>");
-    return lines.join("\n");
-  });
-  return blocks.join("\n\n");
+  return "";
 }
 
 /**

@@ -98,9 +98,9 @@ export function registerIpcHandlers() {
     }
     const lifetime = uploadSenders.get(sender.id)!;
     const generation = lifetime.generation;
-    const { baseUrl } = await dshRuntime.ensureStarted();
+    const { baseUrl, browserCookie } = await dshRuntime.ensureStarted();
     if (sender.isDestroyed() || lifetime.generation !== generation) throw new Error('Upload window closed or navigated.');
-    return fileUploads.open(sender.id, url, baseUrl);
+    return fileUploads.open(sender.id, url, baseUrl, browserCookie);
   });
   ipcMain.handle('dsh-client:upload-write', (event, id: string, bytes: Uint8Array) => fileUploads.write(event.sender.id, id, bytes));
   ipcMain.handle('dsh-client:upload-finish', (event, id: string) => fileUploads.finish(event.sender.id, id));

@@ -25,7 +25,6 @@ import net from "node:net"
 import path from "node:path"
 import { app } from "electron"
 
-import { dshAttachments } from "./dsh-attachments"
 import { inboxSocketPathFor } from "./external-inbox-path"
 import { mainStore } from "./storage"
 
@@ -71,7 +70,8 @@ export interface StagedPromptAttachment
   mime: string
   size: number
   kind: "image" | "text" | "pdf"
-  attachmentId: string
+  attachmentId?: string
+  dataBase64?: string
 }
 
 function attachmentKind(
@@ -139,19 +139,16 @@ export async function deliverPrompt(
     const name = attachment.name?.trim() || path.basename(attachment.path) || "file"
     const mime = attachment.mime?.trim() || "application/octet-stream"
     try {
-      const staged = await dshAttachments.importFile({
-        sessionId: `inbox-${Date.now()}-${index}`,
-        name,
-        mime,
-        path: attachment.path,
-      })
+      const info = await fs.lstat(attachment.path)
+      if (!info.isFile() || info.isSymbolicLink() || info.size > 50 * 1024 * 1024) throw new Error("Invalid attachment source")
+      const bytes = await fs.readFile(attachment.path)
       attachments.push({
         ...attachment,
         name,
         mime,
         kind,
-        attachmentId: staged.attachmentId,
-        size: staged.size,
+        dataBase64: bytes.toString("base64"),
+        size: bytes.length,
       })
     } catch (error) {
       console.warn(

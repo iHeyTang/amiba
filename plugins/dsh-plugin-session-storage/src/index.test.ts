@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { defineDomain, domainTable } from "@deepseek-ai/dsh-storage-domain";
 import { z } from "zod";
 import { SessionStorage } from "./index.js";
@@ -26,14 +26,11 @@ async function fixture() {
   const ctx = {
     agents: { get: () => undefined },
     sessionPersistence: {
-      inspect: async (id: string) => {
+      stat: async (id: string) => {
         if (!["s1", "s2"].includes(id)) throw new Error("Unknown session");
-        return { meta: { id } };
+        return { header: { id } };
       },
-      locate: (meta: { id: string }) => ({
-        kind: "jsonl",
-        path: join(root, meta.id, "session.jsonl.zstd"),
-      }),
+      resolveCurrentLog: async (id: string): Promise<string | undefined> => join(root, id, "session.jsonl.zstd"),
     },
   };
   return { root, ctx, newStorage: () => new SessionStorage(ctx as any) };
@@ -77,7 +74,20 @@ it("rejects untrusted paths and backends without independent session directories
   await expect(store.open("../../escape", "safe", spec)).rejects.toThrow(
     "Unknown session",
   );
-  f.ctx.sessionPersistence.locate = () => undefined as any;
+  f.ctx.sessionPersistence.resolveCurrentLog = async () => undefined;
   await expect(store.open("s1", "safe", spec)).rejects.toThrow("JSONL");
+  await store.close();
+});
+
+
+it("flushes a new live session before locating its deferred JSONL artifact", async () => {
+  const f = await fixture();
+  const session = { header: { id: "s1" } };
+  let materialized = false;
+  const flush = vi.fn(async (value: unknown) => { expect(value).toBe(session); materialized = true; return true });
+  const store = new SessionStorage({ ...f.ctx, agents: { get: () => ({ session }) }, sessions: { flush }, sessionPersistence: { ...f.ctx.sessionPersistence, resolveCurrentLog: async () => materialized ? join(f.root, "s1", "session.jsonl.zstd") : undefined } } as any);
+  const domain = await store.open("s1", "background-jobs", spec);
+  await domain.table("items").put("job", { title: "new" });
+  expect(flush).toHaveBeenCalledTimes(1);
   await store.close();
 });

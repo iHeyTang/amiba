@@ -27,6 +27,7 @@ export interface DshRuntimeHandle {
   baseUrl: string
   client: DshApiClient
   pluginToken: string
+  browserCookie?: string
 }
 
 export function extractDshReadyUrl(output: string): string | null {
@@ -37,7 +38,7 @@ export function extractDshReadyUrl(output: string): string | null {
     throw new Error(`DSH runtime advertised a non-loopback URL: ${url.href}`)
   }
   if (!url.port) throw new Error(`DSH runtime advertised a URL without a port: ${url.href}`)
-  return url.origin
+  return url.searchParams.has("token") ? url.href : url.origin
 }
 
 let developmentProfile: Awaited<ReturnType<typeof createDevelopmentProfile>> | undefined
@@ -132,7 +133,7 @@ export class DshRuntimeController {
     message: string,
     level?: AgentRuntimeLogLevel,
   ): void {
-    const normalized = message.endsWith("\r") ? message.slice(0, -1) : message
+    const normalized = (message.endsWith("\r") ? message.slice(0, -1) : message).replace(/([?&]token=)[^\s&]+/gu, "$1[redacted]")
     const inferred = level ?? (
       /\b(error|fatal|critical)\b/i.test(normalized)
         ? "error"
@@ -292,7 +293,7 @@ export class DshRuntimeController {
     this.child = child
     this.startedAt = Date.now()
 
-    const baseUrl = await new Promise<string>((resolve, reject) => {
+    const launchUrl = await new Promise<string>((resolve, reject) => {
       let output = ""
       let settled = false
       const settle = (fn: () => void): void => {
@@ -344,11 +345,25 @@ export class DshRuntimeController {
       timer.unref()
     })
 
+    const baseUrl = new URL(launchUrl).origin
+    let browserCookie: string | undefined
+    if (new URL(launchUrl).searchParams.has("token")) {
+      const exchange = await fetch(launchUrl, { redirect: "manual", signal: AbortSignal.timeout(15_000) })
+      if (exchange.status !== 303) throw new Error(`DSH browser authentication failed (HTTP ${exchange.status})`)
+      browserCookie = exchange.headers.getSetCookie().map(value => value.split(";", 1)[0]).join("; ")
+      if (!browserCookie) throw new Error("DSH browser authentication omitted its session cookie")
+    }
     const handle = {
       baseUrl,
+      browserCookie,
       client: new DshApiClient({
         baseUrl,
-        createWebSocket: (url) => new NodeWebSocket(url),
+        fetch: (url, init) => {
+          const headers = new Headers(init?.headers)
+          if (browserCookie) headers.set("cookie", browserCookie)
+          return fetch(url, { ...init, headers })
+        },
+        createWebSocket: (url) => new NodeWebSocket(url, { headers: browserCookie ? { Cookie: browserCookie } : {} }),
       }),
       pluginToken,
     }

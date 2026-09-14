@@ -7,7 +7,7 @@
  */
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import type { RemoteFailure, RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import type { ResourceFailure as RemoteFailure, ResourceResult as RemoteResult } from './result.js'
 function remoteFailure(code: string, message: string, details: object): RemoteFailure { return { code, message, details } }
 import { protocolOf, RESOURCE_SCHEME, ResourceRegistry } from './resources.js'
 import type { ResourceOpenContext, ResourceProvider } from './contract.js'

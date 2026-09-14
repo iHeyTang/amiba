@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 
-const runtimeRequire = createRequire(realpathSync(new URL("../../../../../packages/extension-sdk/node_modules/@deepseek-ai/dsh-client-runtime/package.json", import.meta.url)));
+const runtimeRequire = createRequire(new URL("../../../../../packages/app-runtime/resources/dsh-runtime/app/package.json", import.meta.url));
 const source = readFileSync(join(dirname(runtimeRequire.resolve("@deepseek-ai/dsh-client-connection/package.json")), "lib/client.js"), "utf8");
 
 for (const [page, transport, expected] of [
@@ -21,7 +21,7 @@ for (const [page, transport, expected] of [
   runInNewContext(source, {
     URL, URLSearchParams, console,
     location: new URL(page),
-    __AMIBA_DSH_TRANSPORT_URL__: transport,
+    __DSH_TRANSPORT__: { ownsHost: new URL(page).protocol === "file:" && transport !== undefined && ["127.0.0.1", "[::1]", "localhost"].includes(new URL(transport).hostname) },
     window: { __ModuleLoader__: { load: ({factory}) => { plugin = factory(); } } },
   });
   plugin.apply({ provide: (key, value) => { if (key === "connection") connection = value; } });

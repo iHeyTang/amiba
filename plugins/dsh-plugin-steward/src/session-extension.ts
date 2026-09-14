@@ -1,5 +1,5 @@
 import type { Context } from "@deepseek-ai/cordis";
-import { PERSONA_ORDER, PERSONA_SECTION } from "@deepseek-ai/dsh-system-prompt";
+import { PERSONA_PREFIX_SECTION } from "@deepseek-ai/dsh-system-prompt";
 import type { StewardService } from "./service.js";
 import { registerStewardTools } from "./tools.js";
 
@@ -28,8 +28,8 @@ export function installStewardExtension(
   const disposePersona = ctx.effect(
     () =>
       ctx.systemPrompt.section({
-        name: PERSONA_SECTION,
-        order: PERSONA_ORDER,
+        name: PERSONA_PREFIX_SECTION,
+        order: ctx.systemPrompt.getSectionOrder("DEPLOYMENT_PERSONA_PREFIX"),
         text: STEWARD_PERSONA,
       }),
     "amiba-steward.persona",

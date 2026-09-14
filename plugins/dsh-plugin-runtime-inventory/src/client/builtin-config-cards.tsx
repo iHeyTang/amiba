@@ -2,7 +2,7 @@ import {
   BashCardController,
   AgentLoopCardController,
   WebSearchCardController,
-} from "@deepseek-ai/dsh-client-ui-settings-plugins/card-controllers";
+} from "@deepseek-ai/dsh-client-ui-settings-plugins/client";
 import type {} from "@deepseek-ai/dsh-client-connection/client";
 import {
   type CardActions,
@@ -115,10 +115,11 @@ function ownedScope<T>(
     },
     set: (field, value) => scope.set(field, value),
     unset: (field) => scope.unset(field),
+    mutate: ops => scope.mutate(ops),
   };
 }
 export function registerBuiltinConfigCards(ctx: ClientContext) {
-  return ctx.inject(["slots", "settingsScope", "connection", "remote"], (c) => {
+  return ctx.inject(["slots", "settingsScope", "connection", "remote", "remote.credentials", "remote.session"], (c) => {
     const bash = new BashCardController(
       ownedScope(c, c.settingsScope.bind({ namespace: "shell" })),
     );
@@ -127,7 +128,7 @@ export function registerBuiltinConfigCards(ctx: ClientContext) {
     );
     const search = new WebSearchCardController(
       ownedScope(c, c.settingsScope.bind({ namespace: "web-search-deepseek" })),
-      c.get("connection").api,
+      c,
     );
     c.effect(() =>
       c.remote.$on("credentials/reference-updated", (ref) =>

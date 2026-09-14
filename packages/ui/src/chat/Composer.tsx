@@ -595,9 +595,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             const commandAttempt = {};
             commandAttemptRef.current = commandAttempt;
             trigger.setAttemptInFlight(true, "submitting");
-            void commandImages(claim, captured, sessionId && triggerRuntime?.uploadCommandFile
-              ? (data, name) => triggerRuntime.uploadCommandFile!(sessionId, data, name)
-              : undefined).then((images) => {
+            void commandImages(claim, captured, sessionId).then((images) => {
                 if (commandAttemptRef.current !== commandAttempt) throw new Error("Command preparation was cancelled.");
                 return submit(claim, args, images);
               })
@@ -762,12 +760,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     const attachmentSeat = inputAttachments?.({
       attachments: attachments?.getDraftImages?.() ?? attachments?.draftImages ?? [],
       canAcceptDrop: attachmentSeatCanAdd(),
-      onAddImages: files => {
+      uploads: attachments?.fileUploads ?? {},
+      onRetryFile: id => { if (attachmentSeatWritable()) imageBindingRef.current.attachments?.retryFileUpload?.(id); },
+      onAddFiles: files => {
         if (!attachmentSeatCanAdd()) return;
-        const images = files.filter(file => file.type.startsWith("image/"));
-        if (images.length) void imageBindingRef.current.attachments?.addFiles(images);
+        if (files.length) void imageBindingRef.current.attachments?.addFiles([...files]);
       },
-      onRemoveImage: id => {
+      onRemoveAttachment: id => {
         if (attachmentSeatWritable()) imageBindingRef.current.attachments?.removeDraftImage?.(id);
       },
     });

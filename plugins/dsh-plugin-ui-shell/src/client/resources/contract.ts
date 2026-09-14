@@ -15,7 +15,7 @@
  * consumer names the protocol as a type argument and receives the owner's value
  * type without importing the owner's runtime.
  */
-import type { RemoteFailure, RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import type { ResourceFailure as RemoteFailure, ResourceResult as RemoteResult } from './result.js'
 import type { ObservableSnapshot } from '@amiba/extension-sdk'
 import type { ResourceProtocolMap } from '@deepseek-ai/dsh-client-ui-slots'
 

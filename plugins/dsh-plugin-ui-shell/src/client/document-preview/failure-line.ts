@@ -6,7 +6,7 @@
  * this reader does not name fall to the generic line carrying the carrier's
  * message.
  */
-import type { RemoteFailure } from '@deepseek-ai/dsh-typert-protocol'
+import type { ResourceFailure as RemoteFailure } from '../resources/result.js'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 
 /** Render a byte count the way a person reads one. */

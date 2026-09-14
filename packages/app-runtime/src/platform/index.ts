@@ -145,24 +145,20 @@ export interface AgentSessionsAdapter {
   fork(sessionId: string, atSeq?: number): Promise<{ sessionId: string }>;
 }
 
-/** DSH-plugin-owned opaque attachment storage used by every client surface. */
+/** Browser draft adapter over the official DSH conversation attachment controller. */
 export interface AgentAttachmentsAdapter {
+  drafts?(ids: readonly string[]): readonly import("@amiba/extension-sdk").ComposerAttachment[];
+  uploadState?(): import("@amiba/extension-sdk").ComposerAttachmentsOwner["uploads"];
+  subscribe?(listener: () => void): () => void;
+  retry?(id: string): void;
   put(input: {
     sessionId: string;
     name: string;
     mime: string;
     bytes: Uint8Array;
   }): Promise<{ attachmentId: string }>;
-  /** Persist a message reference before reading or submitting its bytes. */
-  retainForSession?(attachmentId: string, sessionId: string): Promise<void>;
-  readForPrompt(attachmentId: string): Promise<{
-    attachmentId: string;
-    name: string;
-    mime: string;
-    size: number;
-    kind: "image" | "text" | "pdf";
-    dataBase64: string;
-  }>;
+  /** Serialize official draft IDs to native image parts and uploaded file receipts. */
+  serialize?(sessionId: string, ids: readonly string[], signal?: AbortSignal): Promise<import("../dsh-client/index.js").DshPromptContentPart[]>;
   remove(attachmentId: string): Promise<void>;
 }
 

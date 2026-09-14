@@ -7,7 +7,7 @@ import { healProfilesModuleFallback } from "@deepseek-ai/dsh-app-boot";
 import { expect, it } from "vitest";
 import { shippedEntries } from "./registration-source.js";
 
-it.each([false, true])("resolves the runtime from the profile with a direct DSH link: %s", (directLink) => {
+it.each([false, true])("resolves the runtime from the profile with a direct DSH link: %s", async (directLink) => {
   const root = mkdtempSync(join(tmpdir(), "amiba-catalog-"));
   const home = join(root, "home");
   const profile = join(home, "profiles", "catalog-test");
@@ -29,7 +29,7 @@ it.each([false, true])("resolves the runtime from the profile with a direct DSH 
     bundle(join(profile, "node_modules"), "user-bundle", "user");
     // A broken user patch must not prevent reading the shipped tool inventory.
     writeFileSync(join(profile, "cordis.patch.yml"), "[invalid yaml");
-    healProfilesModuleFallback(anchor, home);
+    await healProfilesModuleFallback({ installAnchor: anchor, home });
     if (directLink) {
       const link = join(profile, "node_modules/@deepseek-ai/dsh");
       mkdirSync(dirname(link), { recursive: true });

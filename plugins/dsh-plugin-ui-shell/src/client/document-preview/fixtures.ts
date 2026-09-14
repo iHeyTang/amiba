@@ -1,5 +1,5 @@
 // Adapted from DeepSeek c291e796, MIT. See LICENSE.deepseek.
-import type { RemoteFailure, RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import type { ResourceFailure as RemoteFailure, ResourceResult as RemoteResult } from '../resources/result.js'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TabId } from '../sidebar-right/dockkit/index.js'
 import type { WorkspaceFileText } from './wire.js'

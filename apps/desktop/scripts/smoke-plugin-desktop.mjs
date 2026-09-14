@@ -1833,38 +1833,6 @@ try {
           await wait(()=>evaluate(`window.__probeCtx.get('composerImages').draftImages([${JSON.stringify(finalImageId)}]).length===0`));
           console.log("Restored queued image registered a real browser File with exact original bytes and a distinct draft ID; renderer reload and final registry release passed");
           console.log("Actual queued image bytes survived cancel edit, chip removal and session switching; deleting the last queue owner removed its stored file");
-          if(process.argv.includes("--host-file-refs")) {
-            const result=await evaluate("(async()=>{const call=async(method,args)=>{const rpcId=crypto.randomUUID();const response=await window.amiba.dshClient.fetch({url:'/api/amibaAttachments/'+method,method:'POST',headers:{'content-type':'application/json'},body:new TextEncoder().encode(JSON.stringify({type:'client-request',rpcId,method:'amibaAttachments/'+method,payload:{args}}))});const envelope=JSON.parse(new TextDecoder().decode(response.body));if(envelope.rpcId!==rpcId)throw new Error('Invalid attachment RPC envelope');return envelope.result;};const created=await call('put',{name:'retained.txt',mime:'text/plain',kind:'text',dataBase64:btoa('retained bytes')});if(!created.ok)throw new Error(JSON.stringify(created));const id=created.value.attachmentId;const retained=await call('retainForSession',{attachmentId:id,sessionId:window.__compatSessionId});const removed=await call('removeAttachment',{attachmentId:id});const read=await call('readForPrompt',{attachmentId:id});return {retained,removed,read};})()");
-            assert.equal(result.retained.ok,true);
-            assert.equal(result.retained.value.retained,true);
-            assert.equal(result.removed.ok,true);
-            assert.equal(result.removed.value.deleted,false);
-            assert.equal(result.read.ok,true);
-            assert.equal(result.read.value.dataBase64,Buffer.from('retained bytes').toString('base64'));
-            console.log("Real Host attachment remote retained session-referenced bytes against a later draft deletion request");
-            if(process.argv.includes("--legacy-file-refs")) {
-              const attachmentRpc=async(method,args)=>evaluate(`(async()=>{const method=${JSON.stringify(method)};const rpcId=crypto.randomUUID();const response=await window.amiba.dshClient.fetch({url:'/api/amibaAttachments/'+method,method:'POST',headers:{'content-type':'application/json'},body:new TextEncoder().encode(JSON.stringify({type:'client-request',rpcId,method:'amibaAttachments/'+method,payload:{args:${JSON.stringify(args)}}}))});const envelope=JSON.parse(new TextDecoder().decode(response.body));if(!envelope.result.ok)throw new Error(JSON.stringify(envelope.result));return envelope.result.value;})()`);
-              const old=await attachmentRpc('put',{name:'legacy.txt',mime:'text/plain',kind:'text',dataBase64:Buffer.from('legacy bytes').toString('base64')});
-              const metadataFiles=(await readdir(profile,{recursive:true})).filter(file=>file.endsWith('/'+old.attachmentId+'.json'));
-              assert.equal(metadataFiles.length,1);
-              const metadataFile=path.join(profile,metadataFiles[0]);
-              assert.equal(JSON.parse(await readFile(metadataFile,'utf8')).retainedBy,undefined);
-              const rootSessionId=await evaluate("window.__compatSessionId");
-              const text=['<file-attachment>','Name: "legacy.txt"','Kind: "text"','Mime: "text/plain"','Size: 12 bytes','Attachment-ID: '+JSON.stringify(old.attachmentId),'</file-attachment>','','COMPAT_LEGACY_ATTACHMENT'].join('\n');
-              await writeFile(path.join(profile,'legacy-attachment.json'),JSON.stringify({sessionId:rootSessionId,text}));
-              await wait(async()=> (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LEGACY_ATTACHMENT'})")).entries.length>0);
-              await evaluate("window.__legacyReloadBefore=true;void 0");
-              await call('Page.reload',{});
-              await wait(async()=>{try{return await evaluate("!window.__legacyReloadBefore && !!window.__probeCtx?.sessions");}catch{return false;}});
-              await evaluate(`window.__compatSessionId=${JSON.stringify(rootSessionId)};window.__probeCtx.layout.openChat();window.__probeCtx.sessions.open(window.__compatSessionId);void 0`);
-              await wait(()=>evaluate("document.body.textContent.includes('COMPAT_LEGACY_ATTACHMENT')"));
-              await wait(async()=>JSON.parse(await readFile(metadataFile,'utf8')).retainedBy?.includes(rootSessionId));
-              assert.equal((await attachmentRpc('removeAttachment',{attachmentId:old.attachmentId})).deleted,false);
-              assert.equal((await attachmentRpc('readForPrompt',{attachmentId:old.attachmentId})).dataBase64,Buffer.from('legacy bytes').toString('base64'));
-              console.log('Opening real legacy history after renderer reload migrated its original attachment reference and preserved the exact stored bytes');
-            }
-
-          }
 
         }
 

@@ -71,13 +71,13 @@ function SkillsPresetSection({
     const current = sessionState.current
       ? sessionState.byId[sessionState.current]
       : undefined;
-    if (current && !current.origin && current.agentPreset === profileId) {
+    if (current && !current.origin && current.projectionValues?.agentPreset === profileId) {
       return sessionState.current;
     }
     return sessionState.ids
       .map((id) => sessionState.byId[id])
       .filter(
-        (item) => item && !item.origin && item.agentPreset === profileId,
+        (item) => item && !item.origin && item.projectionValues?.agentPreset === profileId,
       )
       .sort((left, right) => right.updatedAt - left.updatedAt)[0]?.id;
   }, [sessionState, profileId]);

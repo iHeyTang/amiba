@@ -27,6 +27,7 @@ import { createServer } from "node:net";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const runtimePackageDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -183,6 +184,15 @@ function managedCommandEnv() {
   };
 }
 
+let browserCookie;
+const systemFetch = globalThis.fetch;
+globalThis.fetch = async (input, init) => {
+  const target = new URL(input instanceof Request ? input.url : input);
+  const headers = new Headers(init?.headers);
+  if (browserCookie?.origin === target.origin) headers.set("cookie", browserCookie.value);
+  return systemFetch(input, { ...init, headers });
+};
+
 async function waitForReady() {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -203,7 +213,13 @@ async function waitForReady() {
         );
         return;
       }
-      finish(() => resolve(url.origin));
+      finish(() => resolve((async () => {
+        const response = await systemFetch(url, { redirect: "manual" });
+        assert.equal(response.status, 303, "DSH launch token exchange failed");
+        browserCookie = { origin: url.origin, value: response.headers.getSetCookie().map(value => value.split(";", 1)[0]).join("; ") };
+        assert.ok(browserCookie.value, "DSH launch token exchange omitted cookie");
+        return url.origin;
+      })()));
     };
     child.stdout.on("data", inspect);
     child.stderr.on("data", inspect);
@@ -231,6 +247,39 @@ async function stopChild() {
 }
 
 async function rpc(baseUrl, method, payload = {}) {
+  // Preserve scenario-level names while exercising the 0.1.5 generated wire contract.
+  if (method === "session.history") {
+    const frame = await firstRemoteFrame(baseUrl, "session/follow", { request: { address: { kind: "session", sessionId: payload.sessionId }, maxMessages: payload.maxMessages } });
+    assert.equal(frame.type, "snapshot");
+    if (payload.beforeSeq !== undefined) {
+      const page = await rpc(baseUrl, "session/page", { args: { request: { address: { kind: "session", sessionId: payload.sessionId }, throughSeq: frame.cursor, beforeSeq: payload.beforeSeq, maxMessages: payload.maxMessages } } });
+      return { events: page.records, hasMore: page.hasMore, projections: frame.projections };
+    }
+    return { events: frame.records, hasMore: frame.hasMore, projections: frame.projections };
+  }
+  if (method === "workspace.list") return (await firstRemoteFrame(baseUrl, "workspace/follow", {})).value;
+  if (method === "session.models") {
+    const catalog = await rpc(baseUrl, "session/modelCatalog", { args: {} });
+    const history = await rpc(baseUrl, "session.history", payload);
+    return { ...catalog, current: history.projections?.values.modelSelection?.next ?? catalog.default };
+  }
+  if (method === "llm.providers") {
+    const [directory, active] = await Promise.all([rpc(baseUrl, "llm/listConfigurableProviders", { args: {} }), rpc(baseUrl, "llm/listProviders", { args: {} })]);
+    return { providers: directory.map(provider => ({ ...provider, active: active.some(item => item.id === provider.provider) })) };
+  }
+  if (method === "credentials.describe") return { credentials: await rpc(baseUrl, "credentials/describe", { args: payload }) };
+  if (method === "agentPreset.copy") {
+    await rpc(baseUrl, "agentPresets/copy", { args: { from: payload.from, id: payload.agentPreset, name: payload.name } });
+    return { agentPreset: payload.agentPreset };
+  }
+  if (method === "agentPreset.select") return { agentPreset: await rpc(baseUrl, "agentPresets/select", { args: { agentId: payload.sessionId, agentPreset: payload.agentPreset } }) };
+  if (method === "agentPreset.remove") return rpc(baseUrl, "agentPresets/deletePreset", { args: { id: payload.agentPreset } });
+  if (method.includes(".")) {
+    const aliases = { "llm.models": "session/modelCatalog", "agentPreset.list": "agentPresets/list", "agentPreset.read": "agentPresets/read", "skill.list": "skills/list", "settings.openDocument": "settings/openSettingsDocument" };
+    method = aliases[method] ?? method.replace(".", "/");
+    if (method === "session/prompt") payload = { ...payload, requestId: randomUUID() };
+    payload = { args: method === "session/list" ? { _request: payload } : /^(session|workspace|skills)\//u.test(method) && method !== "session/modelCatalog" ? { request: payload } : payload };
+  }
   const rpcId = `smoke-${++rpcSequence}`;
   const endpoint = method
     .split("/")
@@ -300,83 +349,41 @@ async function pluginRequest(baseUrl, route, options = {}) {
   return payload;
 }
 
-async function waitForMuxSubscription(baseUrl, sessionId) {
-  const url = new URL("/api/events.mux", `${baseUrl}/`);
+async function firstRemoteFrame(baseUrl, endpoint, args) {
+  const url = new URL("/api/remote.mux", baseUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url);
-
-  await new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (callback) => {
-      if (settled) return;
-      settled = true;
+  const RuntimeWebSocket = createRequire(path.join(runtimeDir, "app", "package.json"))("ws");
+  const socket = new RuntimeWebSocket(url, { headers: { Cookie: browserCookie?.value ?? "" } });
+  const streamId = randomUUID();
+  return new Promise((resolve, reject) => {
+    const finish = (error, value) => {
       clearTimeout(timer);
-      socket.removeEventListener("message", onMessage);
-      socket.removeEventListener("error", onError);
-      socket.removeEventListener("close", onClose);
-      if (socket.readyState < WebSocket.CLOSING)
-        socket.close(1000, "smoke complete");
-      callback();
+      socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null;
+      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "cancel", streamId }));
+      socket.close();
+      if (error) reject(error); else resolve(value);
     };
-    const onMessage = (event) => {
+    const timer = setTimeout(() => finish(new Error(`${endpoint} opening timed out`)), 8000);
+    socket.onopen = () => socket.send(JSON.stringify({ type: "open", streamId, endpoint, payload: { args } }));
+    socket.onmessage = event => {
       try {
-        assert.equal(
-          typeof event.data,
-          "string",
-          "DSH mux emitted a non-text frame",
-        );
-        const envelope = JSON.parse(event.data);
-        assert.equal(
-          envelope.type,
-          "server-request",
-          "DSH mux returned the wrong envelope type",
-        );
-        assert.equal(
-          typeof envelope.rpcId,
-          "string",
-          "DSH mux omitted its RPC id",
-        );
-        assert.equal(
-          typeof envelope.method,
-          "string",
-          "DSH mux omitted its method",
-        );
-        if (
-          envelope.payload?.type === "session/subscribed" &&
-          envelope.payload.sessionId === sessionId
-        ) {
-          finish(resolve);
-        }
-      } catch (error) {
-        finish(() => reject(error));
-      }
+        const frame = JSON.parse(event.data);
+        assert.equal(frame.streamId, streamId);
+        if (frame.type === "error") throw new Error(JSON.stringify(frame.error));
+        assert.equal(frame.type, "item");
+        finish(undefined, frame.value);
+      } catch (error) { finish(error); }
     };
-    const onError = () =>
-      finish(() => reject(new Error("DSH mux WebSocket failed")));
-    const onClose = (event) =>
-      finish(() =>
-        reject(
-          new Error(
-            `DSH mux WebSocket closed before subscription (${event.code}): ${event.reason}`,
-          ),
-        ),
-      );
-    const timer = setTimeout(
-      () =>
-        finish(() =>
-          reject(
-            new Error(
-              `DSH mux did not subscribe session ${sessionId} within 8000ms`,
-            ),
-          ),
-        ),
-      8_000,
-    );
-
-    socket.addEventListener("message", onMessage);
-    socket.addEventListener("error", onError);
-    socket.addEventListener("close", onClose);
+    socket.onerror = () => finish(new Error(`${endpoint} WebSocket failed`));
+    socket.onclose = () => finish(new Error(`${endpoint} closed before its opening`));
   });
+}
+
+async function waitForMuxSubscription(baseUrl, sessionId) {
+  const frame = await firstRemoteFrame(baseUrl, "session/follow", { request: { address: { kind: "session", sessionId }, assistantStream: true } });
+  assert.equal(frame.type, "snapshot");
+  assert.equal(frame.header.id, sessionId);
+  assert.equal(typeof frame.cursor, "number");
 }
 
 const checkFilter = process.env.AMIBA_DSH_SMOKE_CHECK?.trim();
@@ -468,7 +475,7 @@ try {
             bundle: { patch: "./cordis.patch.yml" },
             client: {
               inject: [
-                "@deepseek-ai/dsh-client-runtime",
+                "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
                 "@amiba/dsh-plugin-ui-shell",
               ],
               platform: "web",
@@ -626,8 +633,10 @@ export function apply(ctx) {
     assert.ok(tools.length > 0);
     assert.ok(tools.every(tool => ["builtin", "user"].includes(tool.source.distribution)));
     const origin = name => tools.filter(tool => tool.name === name).map(tool => tool.source.distribution);
+    assert.deepEqual(origin("attachment_read_text"), []);
+    assert.deepEqual(origin("attachment_read_pdf"), []);
     assert.deepEqual(origin("amiba_smoke_download"), ["user"]);
-    for (const name of ["amiba_connect_add", "cron_create", "attachment_read_text", "memos_search", process.platform === "win32" ? "pwsh" : "bash"]) {
+    for (const name of ["amiba_connect_add", "cron_create", "memos_search", process.platform === "win32" ? "pwsh" : "bash"]) {
       assert.ok(origin(name).length > 0, `missing ${name}`);
       assert.ok(origin(name).every(value => value === "builtin"), `${name} is not builtin`);
     }
@@ -708,7 +717,7 @@ export function apply(ctx) {
         (entry) => entry.id === externalPackageName,
       );
       assert.deepEqual(externalClient.inject, [
-        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
         "@amiba/dsh-plugin-ui-shell",
       ]);
       const externalBundle = await fetch(new URL(externalClient.url, baseUrl), {
@@ -775,7 +784,7 @@ export function apply(ctx) {
       const uiShell = graph.entries.find(
         (entry) => entry.id === "@amiba/dsh-plugin-ui-shell",
       );
-      assert.deepEqual(uiShell.inject, ["@deepseek-ai/dsh-client-runtime", "@deepseek-ai/dsh-api-remotes"]);
+      assert.deepEqual(uiShell.inject, ["@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-api-remotes"]);
       const bundle = await fetch(new URL(uiShell.url, baseUrl), {
         signal: AbortSignal.timeout(35_000),
       });
@@ -788,7 +797,7 @@ export function apply(ctx) {
         (entry) => entry.id === "@amiba/dsh-plugin-memory-memos",
       );
       assert.deepEqual(memoryClient.inject, [
-        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-api-remotes",
         "@amiba/dsh-plugin-ui-shell",
       ]);
@@ -804,7 +813,7 @@ export function apply(ctx) {
         (entry) => entry.id === "@amiba/dsh-plugin-connector-webhook",
       );
       assert.deepEqual(webhookClient.inject, [
-        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-api-remotes",
         "@amiba/dsh-plugin-ui-shell",
         "@amiba/dsh-plugin-connector-core",
@@ -823,12 +832,12 @@ export function apply(ctx) {
       for (const [id, inject] of [
         [
           "@amiba/dsh-plugin-background-jobs",
-          ["@deepseek-ai/dsh-client-runtime", "@deepseek-ai/dsh-api-remotes", "@amiba/dsh-plugin-ui-shell"],
+          ["@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-api-remotes", "@amiba/dsh-plugin-ui-shell"],
         ],
         [
           "@amiba/dsh-plugin-catalog",
           [
-            "@deepseek-ai/dsh-client-runtime",
+            "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
             "@deepseek-ai/dsh-api-remotes",
             "@amiba/dsh-plugin-ui-shell",
           ],
@@ -836,7 +845,7 @@ export function apply(ctx) {
         [
           "@amiba/dsh-plugin-skills",
           [
-            "@deepseek-ai/dsh-client-runtime",
+            "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
             "@deepseek-ai/dsh-api-remotes",
             "@amiba/dsh-plugin-ui-shell",
           ],
@@ -844,7 +853,7 @@ export function apply(ctx) {
         [
           "@amiba/dsh-plugin-mcp-manager",
           [
-            "@deepseek-ai/dsh-client-runtime",
+            "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
             "@deepseek-ai/dsh-api-remotes",
             "@amiba/dsh-plugin-ui-shell",
           ],
@@ -852,7 +861,7 @@ export function apply(ctx) {
         [
           "@amiba/dsh-plugin-pets",
           [
-            "@deepseek-ai/dsh-client-runtime",
+            "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
             "@deepseek-ai/dsh-api-remotes",
             "@amiba/dsh-plugin-ui-shell",
             "@amiba/dsh-plugin-notification-hub",
@@ -861,7 +870,7 @@ export function apply(ctx) {
         [
           "@amiba/dsh-plugin-cron",
           [
-            "@deepseek-ai/dsh-client-runtime",
+            "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
             "@deepseek-ai/dsh-api-remotes",
             "@amiba/dsh-plugin-ui-shell",
           ],
@@ -869,7 +878,7 @@ export function apply(ctx) {
         [
           "@amiba/dsh-plugin-runtime-inventory",
           [
-            "@deepseek-ai/dsh-client-runtime",
+            "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
             "@deepseek-ai/dsh-api-remotes",
             "@amiba/dsh-plugin-ui-shell",
             "@deepseek-ai/dsh-client-connection",
@@ -1137,7 +1146,6 @@ export function apply(ctx) {
         ),
       ].sort();
       for (const packageName of [
-        "@amiba/dsh-plugin-attachments",
         "@amiba/dsh-plugin-memory-memos",
         "@amiba/dsh-plugin-resources",
         "@amiba/dsh-plugin-pets",
@@ -1223,6 +1231,25 @@ export function apply(ctx) {
       assert.equal(cancelled.accepted, true);
     },
   );
+
+  await check("official file upload, receipt isolation, and durable prompt admission", async () => {
+    const owner = await rpc(baseUrl, "session.create", { cwd: workspacePath });
+    const other = await rpc(baseUrl, "session.create", { cwd: workspacePath });
+    const bytes = Buffer.from("official upload smoke\n", "utf8");
+    const uploaded = await rpc(baseUrl, "fileUploads/upload", { args: { agentId: owner.sessionId, request: { name: "notes.txt", data: bytes.toString("base64") } } });
+    assert.equal(uploaded.file.name, "notes.txt");
+    assert.equal(uploaded.file.bytes, bytes.length);
+    assert.equal(typeof uploaded.receiptId, "string");
+    await assert.rejects(() => rpc(baseUrl, "session.prompt", { sessionId: other.sessionId, mode: "queue", content: [{ type: "text", text: "Inspect file" }, { type: "file", receiptId: uploaded.receiptId }] }), /receipt|file|scope|unavailable/i);
+    await rpc(baseUrl, "session.prompt", { sessionId: owner.sessionId, mode: "queue", content: [{ type: "text", text: "Inspect file" }, { type: "file", receiptId: uploaded.receiptId }] });
+    await waitFor("official durable file reference", async () => {
+      const history = await rpc(baseUrl, "session.history", { sessionId: owner.sessionId });
+      return history.events.some(({ event }) => event.type === "user/message" && event.data.content?.some(part => part.type === "file" && part.attachment.attachmentId === uploaded.file.attachmentId));
+    });
+    await rpc(baseUrl, "session.cancel", { sessionId: owner.sessionId });
+    await rpc(baseUrl, "workspace.archiveSession", { sessionId: owner.sessionId });
+    await rpc(baseUrl, "workspace.archiveSession", { sessionId: other.sessionId });
+  });
 
   await check("background jobs presentation plugin and session fence", async () => {
     const inventory = await rpc(baseUrl, "pluginInventory/list", { args: {} });
@@ -1462,7 +1489,7 @@ export function apply(ctx) {
     const graph = JSON.parse(boot[1]);
     const client = graph.entries.find(entry => entry.id === "@amiba/dsh-plugin-media");
     assert.ok(client, "Media client missing from packaged graph");
-    assert.deepEqual(client.inject, ["@deepseek-ai/dsh-client-runtime","@deepseek-ai/dsh-api-remotes","@amiba/dsh-plugin-ui-shell"]);
+    assert.deepEqual(client.inject, ["@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings","@deepseek-ai/dsh-api-remotes","@amiba/dsh-plugin-ui-shell"]);
     const bundle = await fetch(new URL(client.url,baseUrl));
     assert.equal(bundle.status,200);
     const source = await bundle.text();

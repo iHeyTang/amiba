@@ -1,4 +1,3 @@
-vi.mock('@deepseek-ai/dsh-client-runtime/client', async () => await import('../../../dev/runtime-store.js'))
 /** PDF view preferences survive body remounts without sharing state between tabs. */
 import { describe, expect, it, vi } from 'vitest'
 import type { TabId } from '../../sidebar-right/dockkit/index.js'

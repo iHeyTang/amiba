@@ -19,7 +19,6 @@ import {
   TOOLVIEWS as browser,
   createToolviews,
 } from "../../../dsh-plugin-browser-core/src/client/toolviews";
-import { TOOLVIEWS as attachments } from "../../../dsh-plugin-attachments/src/client/toolviews";
 import { TOOLVIEWS as resources } from "../../../dsh-plugin-resources/src/client/toolviews";
 import { TOOLVIEWS as steward } from "../../../dsh-plugin-steward/src/client/toolviews";
 import { ToolChip } from "../../../../packages/ui/src/chat/bubble/tool-chip";
@@ -196,7 +195,7 @@ describe("tool views", () => {
     ).toContain("hello");
   });
   it.each(
-    [...browser, ...attachments, ...resources, ...steward].map(
+    [...browser, ...resources, ...steward].map(
       (e) => [e.key, e.component] as const,
     ),
   )("renders localized plugin action for %s", (key, View) => {
@@ -275,11 +274,6 @@ describe("tool views", () => {
   it("covers every product-owned tool registration", () => {
     for (const [path, views, pattern] of [
       ["browser-core/src/index.ts", browser, /name: "(amiba_browser_[^"]+)"/g],
-      [
-        "attachments/src/index.ts",
-        attachments,
-        /name: "(attachment_read_[^"]+)"/g,
-      ],
       ["steward/src/tools.ts", steward, /name: "(steward_[^"]+)"/g],
       ["resources/src/index.ts", resources, /name: "(amiba_resource_[^"]+)"/g],
     ] as const) {

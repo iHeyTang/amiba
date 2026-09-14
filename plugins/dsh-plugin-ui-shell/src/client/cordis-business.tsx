@@ -1,6 +1,6 @@
 import { useCallback, useSyncExternalStore, type ReactNode } from "react";
 import type { ObservableSnapshot, ToolCallOwnerProps } from "@amiba/extension-sdk";
-import type { ConversationSnapshot } from "@deepseek-ai/dsh-client-runtime/client";
+import type { ConversationSnapshot } from "./conversation-snapshot.js";
 import type { ToolCallBlock } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type { CordisDynamicPluginId, CordisDynamicPackageId, CordisDynamicPluginRunId } from "@deepseek-ai/dsh-api-remotes/client";
 
@@ -33,7 +33,7 @@ export function cordisBusinessOwner(block: ToolCallBlock, snapshot: Pick<Convers
   let latest: ToolCallBlock | undefined;
   const visit = (candidate: ToolCallBlock) => {
     const next = identity(candidate);
-    if (next?.pluginId === owner.pluginId && next.packageId === owner.packageId && "kind" in candidate &&
+    if (next && next.pluginId === owner.pluginId && next.packageId === owner.packageId && "kind" in candidate &&
         (!latest || !("kind" in latest) || candidate.seq > latest.seq)) latest = candidate;
     for (const child of candidate.subCalls) visit(child);
   };
@@ -43,7 +43,7 @@ export function cordisBusinessOwner(block: ToolCallBlock, snapshot: Pick<Convers
 
 export function CordisBusiness({ owner, source, packages, render }: {
   owner: ToolCallOwnerProps;
-  source?: ObservableSnapshot<ConversationSnapshot>;
+  source?: ObservableSnapshot<ConversationSnapshot | undefined>;
   packages: CordisPackages;
   render(owner: CordisBusinessOwner): ReactNode;
 }) {
