@@ -1100,6 +1100,28 @@ try {
       await wait(() => evaluate("window.__draftImageRegistry.draftImages([window.__modernImage.id]).length===0&&!document.body.textContent.includes('modern-image.png')"));
       await evaluate("window.__modernImageOff();void 0");
       console.log("Newer attachment command received the actual total and typed original image payload; legacy image commands retained their original shape");
+      const nativeFilePath=path.join(profile,'native-command.txt');await writeFile(nativeFilePath,'COMPAT_NATIVE_FILE');
+      await evaluate("Array.from(document.querySelectorAll('[data-composer-card]')).find(n=>n.getClientRects().length>0).parentElement.querySelector('input[type=file]').id='compat-native-file-input';void 0");
+      const nativeFileDoc=await call('DOM.getDocument',{});const nativeFileNode=await call('DOM.querySelector',{nodeId:nativeFileDoc.root.nodeId,selector:'#compat-native-file-input'});
+      await call('DOM.setFileInputFiles',{nodeId:nativeFileNode.nodeId,files:[nativeFilePath]});
+      await wait(()=>evaluate("document.body.textContent.includes('native-command.txt')"));
+      await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'/compat-native-file check');void 0");
+      await wait(()=>evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).some(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')&&!n.disabled)"));
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"),true);
+      await wait(()=>evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).phase==='claimed'"));
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"),true);
+      await wait(()=>evaluate("document.body.textContent.includes('NATIVE_FILE_RETRY')"));
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft"),'/compat-native-file check');
+      assert.equal(await evaluate("document.body.textContent.includes('native-command.txt')"),true);
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).claim.attachments"),true);
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"),true);
+      await wait(()=>evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft===''&&!document.body.textContent.includes('native-command.txt')"));
+      const nativeCommandLogs=await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_NATIVE_FILE '})");
+      const nativeCommandResults=nativeCommandLogs.entries.filter(entry=>entry.message.includes('AMIBA_PROBE_NATIVE_FILE ')).map(entry=>JSON.parse(entry.message.split('AMIBA_PROBE_NATIVE_FILE ')[1]));
+      assert.deepEqual(nativeCommandResults,[{attempt:1,name:'native-command.txt',content:'COMPAT_NATIVE_FILE',result:{kind:'error',text:'NATIVE_FILE_RETRY'}},{attempt:2,name:'native-command.txt',content:'COMPAT_NATIVE_FILE',result:{kind:'success',text:'NATIVE_FILE_OK'}}]);
+      console.log('Native file command retained its original draft and attachment on refusal, then consumed both after real Host success.');
+
 
       assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft"), "");
       const sentHistoryModifier = await evaluate("/Mac/.test(navigator.platform) ? 4 : 2");

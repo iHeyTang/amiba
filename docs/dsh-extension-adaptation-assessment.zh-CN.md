@@ -135,7 +135,7 @@
 | 命令图片载荷 | mediaType/data/name | type:image 加 mediaType/data/name | 在实际调用边界转换，旧数组保持原格式和身份 |
 | 来源判定的附件数量 | envelope.images | envelope.attachments | 前台同时提供图片数和总数；后台当前注册对象全为图片，两项数量相同 |
 | 命令状态 | token/hint/images | name/token/hint/attachments | 保留新版 name/attachments，同时给现有组件提供对应 images 能力 |
-| 命令普通文件载荷 | 当前图片专用链路不支持 | type:file 加 receiptId | 未完成；receiptId 必须来自 ctx.fileUpload.upload 成功结果，不能使用 Host staging ID 替代 |
+| 命令普通文件载荷 | 前台原输入器已接通真实上传凭据，Host 拒绝保留/重试成功消费已通过桌面验证 | type:file 加 receiptId，保持与图片混合顺序 | 前台文件命令已验证；离屏普通文件注册、队列与跨窗口生命周期仍待完成 |
 | 输入附件操作与状态 | addImages/removeImage/pruneImages、imageIds | addAttachments/removeAttachment/pruneAttachments、attachmentIds | 尚未整体迁移；当前图片命令支持不代表新版完整附件服务已接入 |
 | 输入正文与引用范围 | 显示标签正文和对应 offset/length | clipboardText 正文和对应 offset/length | 同名字段语义冲突，仍需按契约区分投影，不能全局替换旧坐标 |
 

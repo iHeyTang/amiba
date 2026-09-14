@@ -1,3 +1,4 @@
+import type { CommandAttachments } from "@amiba/ui/composer-runtime";
 import { bindInputDraft, type InputDraftCursor } from "./input-draft-binding.js";
 import { createResidentImageStaging, type PreparedInputImages } from "./resident-image-staging.js";
 import { commandAcceptsImages, commandImagePayload, CommandClaimStore, createResidentInputTransaction, expandMentionPartsAsync } from "@amiba/ui/composer-runtime";
@@ -60,6 +61,7 @@ function imageRegistry(value: unknown): ImageRegistry | undefined {
 
 /** Everything the bridge needs from the client root context. */
 export interface InputTriggerBridgeDeps {
+  uploadCommandFile?(sessionId: string, dataBase64: string, name: string, signal?: AbortSignal): Promise<string>;
   /** Same per-session document as the original Composer; optional for other hosts. */
   residentDraft?(sessionId: string): {
     getDocument?: import("@amiba/ui").ComposerDraftSource["getDocument"];
@@ -330,6 +332,7 @@ export function createInputTriggerBridge(
           request.onDispatch?.(targetId);
           deps.pendingQueue?.(id).setPaused(false);
         } }) : Promise.resolve({ kind: "rejected", error: "The resident conversation sender is unavailable." }),
+        uploadCommandFile: (data, name, signal) => bridge.uploadCommandFile!(id, data, name, signal),
         submitClaim: (claim, args, images) => bridge.submitClaim!(id, claim, args, images),
         changed: () => { notifyDraft(id); imageBindings.get(id)?.transfer?.(); },
       });
@@ -640,11 +643,15 @@ export function createInputTriggerBridge(
       return command.bindComposerFocus(sessionId as never, focus);
     },
 
+    uploadCommandFile(sessionId, data, name, signal) {
+      if (!deps.uploadCommandFile) return Promise.reject(new Error("File upload service is unavailable."));
+      return deps.uploadCommandFile(sessionId, data, name, signal);
+    },
     submitClaim(
       sessionId: string,
       claim: CommandClaim,
       args: string,
-      images: Parameters<CommandClaim["submit"]>[2] = [],
+      images: CommandAttachments = [],
     ): Promise<SubmitOutcome> {
       const actx = deps.scopeOf(sessionId);
       if (actx === undefined) {
@@ -655,7 +662,11 @@ export function createInputTriggerBridge(
       if (images.length && !commandAcceptsImages(claim)) {
         return Promise.reject(new Error("This command does not accept images."));
       }
-      return Promise.resolve().then(() => claim.submit(args, actx, commandImagePayload(claim, images)));
+      if (images.some(item => "receiptId" in item) && !("attachments" in claim && claim.attachments === true)) {
+        return Promise.reject(new Error("This command accepts image attachments only."));
+      }
+      const submit = claim.submit as unknown as (args: string, ctx: typeof actx, attachments: ReturnType<typeof commandImagePayload>) => ReturnType<CommandClaim["submit"]>;
+      return Promise.resolve().then(() => submit.call(claim, args, actx, commandImagePayload(claim, images)));
     },
   };
   return bridge;

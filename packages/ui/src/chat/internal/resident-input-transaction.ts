@@ -1,3 +1,4 @@
+import type { CommandAttachments } from "../composer/command-contract";
 import { commandEnvelope } from "../composer/command-contract";
 import type { Attachment } from "@amiba/app-runtime/core";
 import type { SubmitReceipt } from "@amiba/app-runtime/protocol";
@@ -11,6 +12,7 @@ import type { TriggerProvider } from "../composer/providers/types";
 
 export interface ResidentInputTransactionDeps {
   sessionId: string;
+  uploadCommandFile?(dataBase64: string, name: string, signal?: AbortSignal): Promise<string>;
   source: Pick<ComposerDraftSource, "getDocument" | "readInputDraft"> & Required<Pick<ComposerDraftSource, "commitSend">>;
   claims: CommandClaimStore;
   available(): boolean;
@@ -22,7 +24,7 @@ export interface ResidentInputTransactionDeps {
   prepare(images: readonly ComposerDraftImageRegistration[], signal: AbortSignal): Promise<{ attachments: readonly Attachment[]; release(): void }>;
   consume(images: readonly ComposerDraftImageRegistration[]): void;
   send(request: ResidentTurnRequest): Promise<SubmitReceipt>;
-  submitClaim(claim: CommandClaim, args: string, images: Parameters<CommandClaim["submit"]>[2]): Promise<SubmitOutcome>;
+  submitClaim(claim: CommandClaim, args: string, images: CommandAttachments): Promise<SubmitOutcome>;
   changed(): void;
 }
 
@@ -69,7 +71,10 @@ export function createResidentInputTransaction(deps: ResidentInputTransactionDep
           if (claim) {
             deps.claims.setAttemptPhase("submitting");
             prepared = await deps.prepare(images, signal);
-            const bytes = await commandImages(claim, prepared.attachments);
+            const upload = deps.uploadCommandFile;
+            const bytes = await commandImages(claim, prepared.attachments, upload
+              ? (data, name) => { check(); return upload(data, name, signal); }
+              : undefined);
             check(); current.dispatched = true;
             const result = await deps.submitClaim(claim, argsAfter(draft, claim.token), bytes);
             if (result.kind === "success") consume();

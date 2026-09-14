@@ -1,3 +1,4 @@
+import type { CommandAttachments } from "../command-contract";
 /**
  * The composer's trigger session: everything one composer instance needs to
  * speak the official pipeline, resolved once per (runtime, session) pair.
@@ -47,7 +48,7 @@ export interface ComposerTriggerSession {
    * Amiba's own sources never return one).
    */
   readonly submitClaim:
-    | ((claim: CommandClaim, args: string, images?: Parameters<CommandClaim["submit"]>[2]) => Promise<SubmitOutcome>)
+    | ((claim: CommandClaim, args: string, images?: CommandAttachments) => Promise<SubmitOutcome>)
     | null;
   /** The availability tier handed to `track` (upstream's `guardOf(phase)`). */
   guard(): TriggerGuard;
@@ -124,7 +125,7 @@ export function useComposerTriggers(
       resolver,
       submitClaim:
         runtime?.submitClaim !== undefined && sessionId
-          ? (claim: CommandClaim, args: string, images?: Parameters<CommandClaim["submit"]>[2]): Promise<SubmitOutcome> =>
+          ? (claim: CommandClaim, args: string, images?: CommandAttachments): Promise<SubmitOutcome> =>
               // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
               runtime.submitClaim!(sessionId, claim, args, images)
           : null,

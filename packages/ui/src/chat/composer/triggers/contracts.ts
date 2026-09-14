@@ -1,3 +1,4 @@
+import type { CommandAttachments } from "../command-contract";
 /**
  * The runtime-neutral face of the OFFICIAL input-trigger pipeline, as seen
  * from `@amiba/ui`.
@@ -239,11 +240,12 @@ export interface ComposerTriggerRuntime {
    * references, commands insert text), so nothing is lost; a claim arriving
    * without this hook is reported as a failure, never silently swallowed.
    */
+  uploadCommandFile?(sessionId: string, dataBase64: string, name: string, signal?: AbortSignal): Promise<string>;
   submitClaim?(
     sessionId: string,
     claim: CommandClaim,
     args: string,
-    images?: Parameters<CommandClaim["submit"]>[2],
+    images?: CommandAttachments,
   ): Promise<SubmitOutcome>;
 }
 

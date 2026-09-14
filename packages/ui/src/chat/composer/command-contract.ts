@@ -1,14 +1,16 @@
 import type { CommandClaim } from "@amiba/extension-sdk";
 
+export type CommandAttachments = ReadonlyArray<Parameters<CommandClaim["submit"]>[2][number] | { type: "file"; receiptId: string }>;
+
 /** c291e796 declares attachments; rc.2 declares images. Keep the claim and
  * callback identity intact, selecting the payload only at the call boundary. */
 export function commandAcceptsImages(claim: CommandClaim): boolean {
   return "attachments" in claim ? claim.attachments === true : claim.images === true;
 }
 
-export function commandImagePayload(claim: CommandClaim, images: Parameters<CommandClaim["submit"]>[2]) {
+export function commandImagePayload(claim: CommandClaim, images: CommandAttachments) {
   return "attachments" in claim
-    ? images.map(image => ({ ...image, type: "image" as const }))
+    ? images.map(image => "receiptId" in image ? image : ({ ...image, type: "image" as const }))
     : images;
 }
 

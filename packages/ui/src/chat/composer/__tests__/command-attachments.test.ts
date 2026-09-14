@@ -41,3 +41,20 @@ describe("command image serialization", () => {
     await expect(commandImages(claim, [attachment])).rejects.toThrow("file unavailable");
   });
 });
+
+it('uploads validated native files and preserves their position among images', async () => {
+  const file:Attachment={uiId:'file-ui',attachmentId:'file-id',name:'note.txt',mime:'text/plain',size:3,kind:'text'};
+  read.mockImplementation(async id=>id==='file-id'?{attachmentId:id,name:'note.txt',mime:'text/plain',size:3,kind:'text',dataBase64:'YWJj'}:{attachmentId:'stored',name:'original.png',mime:'image/png',size:3,kind:'image',dataBase64:'AQID'});
+  const modern={token:'/file ',attachments:true,submit:vi.fn()};
+  const upload=vi.fn(async()=> 'official-receipt');
+  expect(await commandImages(modern,[file,attachment],upload)).toEqual([{type:'file',receiptId:'official-receipt'},{mediaType:'image/png',data:'AQID',name:'original.png'}]);
+  expect(upload).toHaveBeenCalledWith('YWJj','note.txt');
+});
+it('validates the entire native batch before issuing file upload requests', async () => {
+  const file:Attachment={uiId:'file-ui',attachmentId:'file-id',name:'note.txt',mime:'text/plain',size:3,kind:'text'};
+  read.mockImplementation(async id=>id==='file-id'?{attachmentId:id,name:'note.txt',mime:'text/plain',size:3,kind:'text',dataBase64:'YWJj'}:{attachmentId:'stored',name:'bad.svg',mime:'image/svg+xml',size:3,kind:'image',dataBase64:'AQID'});
+  const modern={token:'/file ',attachments:true,submit:vi.fn()};
+  const upload=vi.fn(async()=> 'receipt');
+  await expect(commandImages(modern,[file,attachment],upload)).rejects.toThrow('validation');
+  expect(upload).not.toHaveBeenCalled();
+});

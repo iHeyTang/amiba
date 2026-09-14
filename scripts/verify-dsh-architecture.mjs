@@ -1369,7 +1369,10 @@ for (const [event, call] of bailListeners) {
 // Arity is upstream's business — DSH 0.1.1 appended composer images — so the
 // check ends at `actx` and tolerates further arguments. What it must keep
 // pinning is that `actx` is the resolved scope in the ctx position.
-if (!/claim\.submit\(args, actx[,)]/u.test(triggerBridgeSource)) {
+const directClaimSubmit = /claim\.submit\(args, actx[,)]/u.test(triggerBridgeSource);
+const typedClaimSubmit = /const submit\s*=\s*claim\.submit\s+as/u.test(triggerBridgeSource) &&
+  /submit\.call\(claim, args, actx[,)]/u.test(triggerBridgeSource);
+if (!directClaimSubmit && !typedClaimSubmit) {
   fail(
     "input-trigger bridge must run CommandClaim.submit against the resolved session-scope context",
   );

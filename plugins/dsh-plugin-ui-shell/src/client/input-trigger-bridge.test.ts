@@ -236,6 +236,18 @@ describe("service resolution", () => {
     expect(submit).toHaveBeenCalledWith("text-only", scope.ctx, []);
   });
 
+  it("preserves file receipt types and refuses them for legacy image claims", async () => {
+    const scope=scopeDouble();const bridge=bridgeOver(scope);
+    const submit=vi.fn(async()=>({kind:"success" as const}));
+    const file={type:"file" as const,receiptId:"receipt"};
+    const modern={token:"/file ",attachments:true,submit};
+    await bridge.submitClaim!("s1",modern,"",[file]);
+    expect(submit).toHaveBeenCalledWith("",scope.ctx,[file]);
+    submit.mockClear();
+    await expect(bridge.submitClaim!("s1",{token:"/image ",images:true,submit},"",[file])).rejects.toThrow("image attachments only");
+    expect(submit).not.toHaveBeenCalled();
+  });
+
   it("rejects a claim submit for a session with no scope", async () => {
     const bridge = createInputTriggerBridge({
       scopeOf: () => undefined,

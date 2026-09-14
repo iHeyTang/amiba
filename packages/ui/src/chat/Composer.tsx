@@ -595,7 +595,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             const commandAttempt = {};
             commandAttemptRef.current = commandAttempt;
             trigger.setAttemptInFlight(true, "submitting");
-            void commandImages(claim, captured).then((images) => submit(claim, args, images))
+            void commandImages(claim, captured, sessionId && triggerRuntime?.uploadCommandFile
+              ? (data, name) => triggerRuntime.uploadCommandFile!(sessionId, data, name)
+              : undefined).then((images) => {
+                if (commandAttemptRef.current !== commandAttempt) throw new Error("Command preparation was cancelled.");
+                return submit(claim, args, images);
+              })
               .then(
                 (outcome) => {
                   if (commandAttemptRef.current !== commandAttempt) return;

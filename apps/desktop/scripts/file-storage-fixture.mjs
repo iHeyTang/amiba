@@ -27,6 +27,15 @@ if (!fileStorageChecked) {
       if (attachments.length!==1||file.type!=='file'||file.attachment.attachmentId!==ref.attachmentId||file.attachment.name!=='command.bin') return {kind:'error',text:'Unexpected file block'};
       return {kind:'success',text:'COMPAT_FILE_RECEIPT_OK'};
     }});
+    let nativeFileAttempts=0;
+    ctx.commands.register({name:'compat-native-file',description:'Native file command fixture',input:{hint:'file',attachments:true},handler:async({attachments})=>{
+      if(attachments.length!==1||attachments[0].type!=='file'||attachments[0].attachment.name!=='native-command.txt')return {kind:'error',text:'Unexpected native file'};
+      const chunks=[];for await(const chunk of service.readFileStream(attachments[0].attachment))chunks.push(chunk);
+      if(Buffer.concat(chunks).toString('utf8')!=='COMPAT_NATIVE_FILE')return {kind:'error',text:'Wrong native bytes'};
+      const result=++nativeFileAttempts===1?{kind:'error',text:'NATIVE_FILE_RETRY'}:{kind:'success',text:'NATIVE_FILE_OK'};
+      console.log('AMIBA_PROBE_NATIVE_FILE '+JSON.stringify({attempt:nativeFileAttempts,name:attachments[0].attachment.name,content:Buffer.concat(chunks).toString('utf8'),result}));
+      return result;
+    }});
     console.log('AMIBA_PROBE_FILE_STORAGE '+JSON.stringify({
       commandReceiptId:commandUpload.receiptId, commandSessionId:agent.id,
       receiptResolved, rollbackPreserved, committedRetired,

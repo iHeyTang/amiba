@@ -1,0 +1,52 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -707,13 +707,15 @@
+ 				const bare = ws === -1;
+ 				const name = token.slice(1);
+ 				if (name === "") return void 0;
+-				const refuseImages = () => {
++				const totalAttachments = envelope.attachments ?? envelope.images;
++                const refuseImages = () => {
++                    if (totalAttachments > envelope.images) throw new Error(`/${name} does not accept file attachments; remove them first`);
+ 					throw new Error(this.t("notice.imagesUnsupported", { command: name }));
+ 				};
+ 				const contribution = this.live.contributions.get(name);
+ 				if (contribution !== void 0 && contribution.available(session)) {
+ 					if (!bare) return void 0;
+-					if (envelope.images > 0) refuseImages();
++					if (totalAttachments > 0) refuseImages();
+ 					this.openPopup(name, contribution.ui, session, {
+ 						via: "enter",
+ 						token
+@@ -726,7 +728,7 @@
+ 				if (bare) {
+ 					const decoration = this.live.decorations.get(name);
+ 					if (decoration !== void 0 && decoration.available(session)) {
+-						if (envelope.images > 0) refuseImages();
++						if (totalAttachments > 0) refuseImages();
+ 						this.openPopup(name, decoration.ui, session, {
+ 							via: "enter",
+ 							token
+@@ -735,11 +737,11 @@
+ 					}
+ 				}
+ 				if (desc.input !== void 0) {
+-					if (envelope.images > 0 && desc.input.images !== true) refuseImages();
++					if ((totalAttachments > 0 && ("attachments" in desc.input ? desc.input.attachments !== true : desc.input.images !== true)) || (totalAttachments > envelope.images && desc.input.attachments !== true)) refuseImages();
+ 					return { claim: this.leadingClaim(desc, session) };
+ 				}
+ 				if (!bare) return void 0;
+-				if (envelope.images > 0) refuseImages();
++				if (totalAttachments > 0) refuseImages();
+ 				this.consumeVia(session.sessionId, {
+ 					via: "enter",
+ 					token
+@@ -760,6 +762,7 @@
+ 					token,
+ 					...desc.input !== void 0 ? { hint: desc.input.hint } : {},
+ 					...desc.input?.images === true ? { images: true } : {},
++                    ...desc.input && "attachments" in desc.input ? { attachments: desc.input.attachments } : {},
+ 					submit: (args, _actx, images) => this.execute(session, token + args, images)
+ 				};
+ 			}

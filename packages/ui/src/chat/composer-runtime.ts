@@ -5,3 +5,5 @@ export { sessionPendingQueue, type PendingChatTurn } from "./internal/pending-qu
 export { expandMentionPartsAsync } from "./composer/expandMentions";
 
 export { commandAcceptsImages, commandImagePayload } from "./composer/command-contract";
+
+export type { CommandAttachments } from "./composer/command-contract";

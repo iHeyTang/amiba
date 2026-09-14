@@ -2260,3 +2260,13 @@ OfficialTriggerPlugin 订阅公开词表，以编辑器所在窗口的 CSS Custo
 - 23 项附件/上传测试、类型和架构检查、runtime prepare/verify 通过；真实 Desktop --compat --input-state --command-images 验证浏览器 Blob 上传取得新凭据，再通过官方命令执行，取消生效，新旧图片、混合粘贴和输入历史回归通过。
 - 限制与剩余：available=false 表示尚无后台流式承载，ReadableStream 显式拒绝；原生输入器的普通文件命令调用与成功消费、流式上传、模型文件及队列仍需适配。本地桥接可用不等于整个新版 dsh-client-file-upload 包已迁移。
 - 日志：/tmp/amiba-upload-remote-{tests,types,architecture,build,verify,smoke}.log。
+
+
+### 2026-09-14 原输入器普通文件命令
+
+- 原生附件准备按整批验证身份、大小和图片类型，再按原顺序生成图片字节/文件凭据；普通文件通过 fileUpload 获取真实会话凭据。旧图片声明仍拒绝普通文件，显式新版 attachments 声明启用文件路径。
+- 新增内部混合命令载荷与上传桥接，不修改原附件条和样式；原成功消费流程处理对应 UI 附件，错误保留草稿和附件。会话切换使准备失效时不再继续派发原命令。
+- 修复实际 dsh-client-ui-commands 发布包丢弃 attachments 声明的问题，按总附件数拒绝不接受文件的命令/弹窗入口；命令实际回调、会话上下文及 this 保留。架构检查同时识别这一类型兼容调用写法。
+- 证据：UI 23 项、桥接与官方发布包 29 项测试通过；UI/插件类型检查、架构检查、Desktop build 和 runtime prepare/verify 通过。真实 Desktop --compat --input-state --command-images 使用原文件选择器和官方命令入口，Host 第一次返回错误后正文和附件保留，第二次成功后对应内容清理；两次实际文件内容一致。新旧图片、混合粘贴、输入历史等原能力同轮通过。
+- 仍待完成：离屏普通文件注册/恢复、队列绑定与跨窗口生命周期、后台流式上传、模型文件提交等；此处前台文件命令成功不是整个附件组完成。
+- 日志：/tmp/amiba-composer-files-{ui-tests,bridge-tests,ui-types,shell-types,architecture,build,runtime-build,verify,smoke}.log。

@@ -622,6 +622,15 @@ export async function apply(ctx: ClientContext): Promise<void> {
       return () => { off(); composerImages.dispose(); };
     }, "native composer draft images");
     const triggerRuntime = createInputTriggerBridge({
+      uploadCommandFile: async (sessionId, data, name, signal) => {
+        const service = ctx.get("fileUpload") as {upload(sessionId:string,data:Uint8Array,name:string,signal?:AbortSignal):Promise<{ok:true;value:{receiptId:string}}|{ok:false;error:{message:string}}>} | undefined;
+        if (!service) throw new Error("File upload service is unavailable.");
+        signal?.throwIfAborted();
+        const bytes = Uint8Array.from(atob(data), character => character.charCodeAt(0));
+        const result = await service.upload(sessionId, bytes, name, signal);
+        if (!result.ok) throw new Error(result.error.message);
+        return result.value.receiptId;
+      },
       residentDraft: sessionId => sessionComposerDraft(getPlatform().storage, sessionId),
       pendingQueue: sessionId => sessionPendingQueue(getPlatform().storage, sessionId),
       mentionProviders: sessionId => {
