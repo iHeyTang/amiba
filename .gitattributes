@@ -1,2 +1,5 @@
 # Runtime patches target LF files unpacked from npm on every operating system.
 *.patch text eol=lf
+# Unified diff context adds a space before the original tab indentation.
+# Keep other whitespace checks; this prefix is patch syntax, not source indent.
+*.patch whitespace=-space-before-tab
