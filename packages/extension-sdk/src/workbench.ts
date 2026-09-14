@@ -19,6 +19,11 @@ export interface WorkbenchViewExtension {
   /** Lower order wins; id breaks ties deterministically. */
   order: number;
   component: ComponentType<WorkbenchViewProps>;
+  /** Reuse this component instance across resources in the same session.
+   * Views sharing a component and instanceKey can share navigation UI.
+   * Omit to remount for each resource. Preview children own their own keys.
+   */
+  instanceKey?: string;
   /** Mounted alongside the workbench for the elected view, including background sessions.
    * Owns persistent surfaces; removing/replacing the contribution unmounts it.
    */

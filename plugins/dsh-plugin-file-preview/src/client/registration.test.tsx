@@ -43,6 +43,10 @@ it("registers both extension layers in the real slot ledger and releases them on
     "file",
     "files",
   ]);
+  expect(source.getSnapshot().map((view) => view.instanceKey)).toEqual([
+    "amiba.file-workspace", "amiba.file-workspace",
+  ]);
+  expect(source.getSnapshot()[0]!.component).toBe(source.getSnapshot()[1]!.component);
   expect(core.entriesOfSlot("amiba.filePreview.renderer")).toHaveLength(2);
   const files: WorkspaceFilesAdapter = {
     list: async () => [],
