@@ -25,7 +25,28 @@ try {
   ] }]));
   await fs.mkdir(path.join(project, "lib"), { recursive: true });
   await fs.writeFile(path.join(project, "package.json"), JSON.stringify({ name: "dsh-plugin-probe", version: "0.0.0", type: "module", main: "lib/index.js", exports: { ".": "./lib/index.js", "./package.json": "./package.json" } }));
-  const source = version => `import {appendFileSync} from 'node:fs'; export function apply(ctx) { ctx.effect(() => { appendFileSync(process.env.PROBE_EVENTS, JSON.stringify({kind:'start',version:${version},pid:process.pid})+'\\n'); return () => appendFileSync(process.env.PROBE_EVENTS, JSON.stringify({kind:'stop',version:${version},pid:process.pid})+'\\n'); }); }`;
+  const source = version => `
+import {appendFileSync} from 'node:fs';
+import {fileURLToPath, pathToFileURL} from 'node:url';
+import {resolve} from 'node:path';
+export const inject = ['hmr', 'loader'];
+export function apply(ctx) {
+  const record = row => appendFileSync(process.env.PROBE_EVENTS, JSON.stringify({...row, pid:process.pid}) + String.fromCharCode(10));
+  ctx.effect(() => {
+    record({kind:'start', version:${version}, url:import.meta.url});
+    const watcher = ctx.hmr.watcher;
+    record({kind:'watch-ready', watched:watcher.getWatched(), base:ctx.hmr.baseDir,
+      ignoredFile:watcher._isIgnored(fileURLToPath(import.meta.url)),
+      ignoredRoot:watcher._isIgnored(fileURLToPath(new URL('.', import.meta.url))),
+      cached:ctx.loader.internal.loadCache.has(import.meta.url)});
+    const onEvent = (kind, file) => {
+      const url = pathToFileURL(resolve(ctx.hmr.baseDir, file)).href;
+      record({kind:'watch-event', event:kind, file, url, cached:ctx.loader.internal.loadCache.has(url)});
+    };
+    watcher.on('all', onEvent);
+    return () => { watcher.off('all', onEvent); record({kind:'stop', version:${version}}); };
+  });
+}`;
   await fs.writeFile(path.join(project, "lib/index.js"), source(1));
   profile = await createDevelopmentProfile(base, [project]);
   // The managed gateway and a linked plugin must see the same private Remote
@@ -60,17 +81,20 @@ try {
     for (let i = 0; i < 200; i++) {
       const rows = (await fs.readFile(events, "utf8").catch(() => "")).trim().split("\n").filter(Boolean).map(line => JSON.parse(line));
       if (rows.some(row => row.kind === "start" && row.version === version)) return rows;
-      if (child.exitCode !== null) break;
+      if (child.exitCode !== null || child.signalCode !== null) break;
       await delay(100);
     }
-    throw new Error(`Plugin ${version} did not activate: ${logs}`);
+    throw new Error(`Plugin ${version} did not activate (exit=${child.exitCode}, signal=${child.signalCode}).\nEvents: ${await fs.readFile(events, "utf8").catch(() => "missing")}\nLogs: ${logs}`);
   }
   await waitFor(1);
-  await delay(500);
+  // The probe injects hmr, so activation waits for the watcher's ready event.
+  const diagnostics = await fs.readFile(events, "utf8");
+  console.log("HMR startup diagnostics:", diagnostics);
   await fs.writeFile(path.join(project, "lib/index.js"), source(2));
   const rows = await waitFor(2);
   assert(rows.some(row => row.kind === "stop" && row.version === 1));
   assert(rows.every(row => row.pid === child.pid));
+  console.log("HMR reload diagnostics:", JSON.stringify(rows));
   assert.equal(await fs.readFile(base.profileManifest, "utf8"), original);
   const patchBefore = await fs.readFile(base.profilePatch, "utf8");
   await fs.writeFile(base.profilePatch, JSON.stringify([{ insert: [{ id: "existing", name: "dsh-plugin-probe", disabled: true, config: { saved: 42 } }] }]));
