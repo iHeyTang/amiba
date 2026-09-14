@@ -33,7 +33,6 @@ export const inject = ['hmr', 'loader'];
 export function apply(ctx) {
   const record = row => appendFileSync(process.env.PROBE_EVENTS, JSON.stringify({...row, pid:process.pid}) + String.fromCharCode(10));
   ctx.effect(() => {
-    record({kind:'start', version:${version}, url:import.meta.url});
     const watcher = ctx.hmr.watcher;
     record({kind:'watch-ready', watched:watcher.getWatched(), base:ctx.hmr.baseDir,
       ignoredFile:watcher._isIgnored(fileURLToPath(import.meta.url)),
@@ -44,6 +43,8 @@ export function apply(ctx) {
       record({kind:'watch-event', event:kind, file, url, cached:ctx.loader.internal.loadCache.has(url)});
     };
     watcher.on('all', onEvent);
+    // Publish activation only after diagnostics and event subscription are complete.
+    record({kind:'start', version:${version}, url:import.meta.url});
     return () => { watcher.off('all', onEvent); record({kind:'stop', version:${version}}); };
   });
 }`;
