@@ -44,3 +44,6 @@ export function taskRows(
   }
   return rows;
 }
+
+export const isCommand = (job: { kind: string; callId?: string }) =>
+  !!job.callId && ["bash", "pwsh", "pty-send"].includes(job.kind);
