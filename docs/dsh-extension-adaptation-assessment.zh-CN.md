@@ -140,3 +140,21 @@
 | 输入正文与引用范围 | 显示标签正文和对应 offset/length | clipboardText 正文和对应 offset/length | 同名字段语义冲突，仍需按契约区分投影，不能全局替换旧坐标 |
 
 本表依据本地固定官方 contract/input、service 和 ui-input-trigger 类型/源码；图片载荷分流是运行时兼容，不表示任意新版插件及其完整依赖已经验证。
+
+
+## 普通文件 receipt 的实际依赖核对
+
+2026-09-14 对当前受管 Node 加载的 rc.2 包与固定 c291e796（包版本 0.1.5-rc.2）核对后，普通文件不是仅修改输入参数即可接入。
+
+| 层次 | 当前实际状态 | 完整接入必须完成的工作 |
+| --- | --- | --- |
+| 附件存储 | 当前 dsh-attachment 0.1.1-rc.2 的公开类型只有图片存储；没有 FileAttachmentRef、admitEncodedFile、saveFileStream | 迁移官方文件引用、完整性校验及持久化实现，同时保留当前图片策略和原生附件存储 |
+| 命令接收 | 当前 dsh-commands 0.1.1-rc.2 实际类没有 registerFileReceiptResolver；公开 execute 只接收编码图片，Invocation.attachments 为 ImageBlock[] | 迁移文件 receipt 解析、完整命令输入校验与文件块；不能只把图片回调参数改名 |
+| 上传与授权 | 受管 app 无法解析 dsh-client-file-upload（MODULE_NOT_FOUND）；新版 FileUploads 注入 commands、attachments、agents、connection | 注册上传服务及承载通道，按真实 Agent/Session 生成和解析 receipt；不能用原生 att_* ID 替代 |
+| 接收及回收 | 新版 FileUploads.bindPrompt 具有提交/回滚，队列移除和带 rpcId 的 user/message 会退休 receipt | 与真实接收确认、队列和历史观察接通，失败保留重试权限，不能提前释放 |
+| 浏览器输入 | 新版 conversation 通过 fileUpload.upload 保存 receipt，serializeDraftAttachments 只接受 ready 文件并按原顺序输出 | 接入上传状态、取消、原顺序和非图片注册对象；保留现有原生文字/PDF/图片功能和样式 |
+| 新版子会话文件上传 | 固定 c291e796 的 commit 先调用 assertOrdinaryAgent；origin=subagent 时明确抛 SUBAGENT_FILE_UNSUPPORTED | 此官方路径不能支持子会话文件上传。属于固定新版的明确限制，不意味着 Amiba 原有子会话附件能力应被删除 |
+
+下一步应按存储→命令解析→上传授权→输入生命周期成组迁移。这是可实施但尚未完成的服务迁移，不是“普通文件永远不能支持”。本次没有安装新版依赖或替换当前运行时。
+
+证据定位：当前受管 app/node_modules 下 dsh-attachment/lib/types/index.d.ts、dsh-commands/lib/types/index.d.ts 和实际模块导出；固定源码 packages/client/file-upload/src/index.ts（commit/assertOrdinaryAgent/bindPrompt/observeSessionEvent）、packages/client/ui-conversation/src/client/service.ts（beginFileUpload/serializeDraftAttachments）、packages/interaction/commands/src/index.ts（registerFileReceiptResolver）。注意抽象 saveImage 不出现在基类运行时 prototype，不能用该现象推断图片不受支持。

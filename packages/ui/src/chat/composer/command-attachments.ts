@@ -15,6 +15,9 @@ export async function commandImages(
     throw new Error("Wait for attachments to finish uploading before submitting this command.");
   }
   if (attachments.some((item) => item.kind !== "image")) {
+    if ("attachments" in claim && claim.attachments === true) {
+      throw new Error("File attachments for this command are not available in this runtime yet.");
+    }
     throw new Error("This command accepts image attachments only. Remove other files before submitting.");
   }
   if (!commandAcceptsImages(claim)) throw new Error("This command does not accept images. Remove them before submitting.");

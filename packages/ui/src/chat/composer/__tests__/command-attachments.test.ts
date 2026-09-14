@@ -21,6 +21,8 @@ describe("command image serialization", () => {
     const modern = { name: "image", token: "/image ", attachments: true, submit: vi.fn() };
     expect(await commandImages(modern, [attachment])).toEqual([{ mediaType: "image/png", name: "original.png", data: "AQID" }]);
     read.mockClear();
+    await expect(commandImages(modern, [{ ...attachment, kind: "pdf" }])).rejects.toThrow("not available in this runtime yet");
+    expect(read).not.toHaveBeenCalled();
     const refusing = { ...modern, attachments: false, images: true };
     await expect(commandImages(refusing, [attachment])).rejects.toThrow("does not accept images");
     expect(read).not.toHaveBeenCalled();

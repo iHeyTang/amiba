@@ -2207,3 +2207,12 @@ OfficialTriggerPlugin 订阅公开词表，以编辑器所在窗口的 CSS Custo
 验证：UI 四组 54 项测试及 bridge/provider 41 项测试通过，共 95 项；UI 和 ui-shell typecheck、架构检查、完整 Desktop 构建通过。Desktop --compat --input-state --command-images exit 0：同次运行旧图片命令与使用新版字段的真实注册来源，分别收到对应载荷；新版可观察正确附件总数、claim 状态和原始图片字节，成功释放浏览器注册并清空原稿；原生撤销、输入卡片尺寸、图片混合粘贴等同轮通过。日志 /tmp/amiba-command-dialects-{ui,bridge,types,architecture,build,smoke}.log。
 
 边界：这是固定新版图片命令字段的运行时接入，不代表完整新版插件依赖已经迁移。新版普通文件需 ctx.fileUpload.upload 返回真实 receiptId，不能伪造或借用 Host 文件 ID；完整 addAttachments/attachmentIds、输入 clipboardText 坐标仍待实现。详细评估表增加七行新旧输入契约对照，避免以字段相似推断已兼容。
+
+
+## 2026-09-14 — 文件 receipt 依赖审计与准确诊断
+
+已实际加载受管 app 的 rc.2 commands 模块确认缺少 registerFileReceiptResolver，并确认 file-upload 包未安装；同时核对附件服务公开类型只有图片。新版普通文件需要附件存储、命令解析、上传授权和接收回收整体迁移，详细表新增六行依赖核对，明确下一步工作顺序。
+
+另发现固定 c291e796 的文件上传 commit 明确拒绝 origin=subagent（SUBAGENT_FILE_UNSUPPORTED），已与普通根会话尚未迁移分开。没有借此缩小整体兼容目标，也没有改变 Amiba 原有子会话附件能力。
+
+修正新版声明 attachments:true 的命令遇到普通文件时的提示：说明当前运行时尚未接入，而不是错误声称命令仅接受图片。旧命令诊断保留，仍在读取文件前拒绝，原有失败保留链路不变。9 项 command-attachments 测试通过，涵盖新版文件诊断和拒绝时不读取字节。本次仅诊断文案及证据更新，没有重复完整构建或桌面回归。
