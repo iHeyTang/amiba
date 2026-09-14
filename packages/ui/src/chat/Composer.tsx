@@ -1,4 +1,5 @@
 import type { ComposerDraftDocument } from "./composer-draft-document";
+import { captureComposerHistory } from "./composer/composer-history-state";
 const EMPTY_RESIDENT_SUBMISSION = Object.freeze({ pending: false, notice: null });
 const emptySubmissionSnapshot = () => EMPTY_RESIDENT_SUBMISSION;
 const noSubmissionSubscription = () => () => {};
@@ -589,6 +590,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             const captured = (attachments?.attachments ?? []).map((item) => ({ ...item }));
             const sessionId = permissionSessionId;
             const commandDocument = draftSource?.getDocument();
+            const confirmHistory = draftSource && captureComposerHistory(draftSource);
             const commandAttempt = {};
             commandAttemptRef.current = commandAttempt;
             trigger.setAttemptInFlight(true, "submitting");
@@ -608,6 +610,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                       innerRef.current?.clearHistory?.();
                       onChange("");
                     }
+                    confirmHistory?.();
                     for (const item of captured) attachments?.removeAttachment(item.uiId);
                     if (outcome.text) setCommandNotice(outcome.text);
                     return;

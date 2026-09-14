@@ -12,6 +12,7 @@ import {
 
 import type { ComposerDraftDocument } from "../composer-draft-document";
 import type { ComposerDraftSource } from "../composer-draft-store";
+import { captureComposerHistory } from "../composer/composer-history-state";
 
 import { pickSendText } from "./pickSendText";
 import { deleteUnretainedAttachments } from "./attachment-ownership";
@@ -283,7 +284,9 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
         return;
       }
       let item: PendingChatTurn | undefined;
+      let onAccepted: (() => void) | undefined;
       if (editingThisOne) {
+        onAccepted = draftSource && captureComposerHistory(draftSource);
         item = {
           queueId,
           text: pickSendText(textArg, input),
@@ -345,6 +348,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
           text: item.text,
           attachments: item.attachments,
           ...(item.draft ? { draft: item.draft } : {}),
+          ...(onAccepted ? { onAccepted } : {}),
         });
       });
     },
@@ -424,6 +428,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       return;
     }
 
+    const onAccepted = draftSource && captureComposerHistory(draftSource);
     setInput("");
     setAttachments([]);
     setAttachmentError(null);
@@ -436,14 +441,11 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     // fires the remaining items after this fresh turn completes.
     if (queuePausedRef.current) setPaused(false);
 
-    const clearedDocument = draftSource?.getDocument();
     await runChatTurn({
       text,
       ...(draft ? { draft } : {}),
       attachments: attachmentsForSend,
-      ...(clearedDocument?.text === "" && draftSource?.commitSend ? {
-        onAccepted: () => { draftSource.commitSend?.(clearedDocument); },
-      } : {}),
+      ...(onAccepted ? { onAccepted } : {}),
     });
   }, [
     input,

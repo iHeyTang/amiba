@@ -1403,6 +1403,22 @@ try {
         await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=\"Send now\"]').click();void 0");
         await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(expected))));
         await wait(() => evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]') && !document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]')"));
+        for (const redo of [false, true]) {
+          await evaluate("document.querySelector('[data-auto-grow-editor]').focus()");
+          await call('Input.dispatchKeyEvent',{type:'keyDown',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:queueHistoryModifier+(redo?8:0)});
+          await call('Input.dispatchKeyEvent',{type:'keyUp',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:queueHistoryModifier+(redo?8:0)});
+          await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft"), "", "accepted edited queue content must not return through history");
+        }
+        await call('Input.insertText',{text:'AFTER_EDITED_SEND'});
+        await wait(()=>evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft==='AFTER_EDITED_SEND'"));
+        for (const [redo, expectedDraft] of [[false, ''], [true, 'AFTER_EDITED_SEND']]) {
+          await call('Input.dispatchKeyEvent',{type:'keyDown',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:queueHistoryModifier+(redo?8:0)});
+          await call('Input.dispatchKeyEvent',{type:'keyUp',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:queueHistoryModifier+(redo?8:0)});
+          await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft===${JSON.stringify(expectedDraft)}`));
+        }
+        await evaluate("window.__probeCtx.composerInputs.setInputDraft('compat-continuable-child','');void 0");
+        console.log('Accepted edited-queue history stayed consumed while subsequent typing retained native undo/redo.');
         await evaluate("window.__residentQueueRefOff();void 0");
         console.log("Standard busy offscreen submissions entered the native queue once, retained real reference and image ownership, preserved foreground input, and restored original Stop/Edit/Delete/Send now behavior");
       }

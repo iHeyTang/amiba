@@ -2171,3 +2171,17 @@ keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入�
 43 项 admission/原生队列/会话交接测试和 13 项真实引擎接收确认测试通过，UI 类型检查、架构检查、完整桌面构建通过。真实 --compat --child-continuation --native-admission --resident-queue 退出 0：已接收的普通输入不能经键盘 undo/redo 恢复；以实际 rc.2 子会话图片拒绝验证，本次图片载荷与旧 backlog 均保留为两条暂停队列，旧项没有自动进入模型，原删除操作正常；后台队列确认/历史、子会话运行/停止及既有兼容回归同时通过。
 
 日志 /tmp/amiba-native-admission-tests-2.log、/tmp/amiba-native-admission-engine-tests.log、/tmp/amiba-native-admission-types-2.log、/tmp/amiba-native-admission-architecture.log、/tmp/amiba-native-admission-build.log、/tmp/amiba-native-admission-smoke.log。未确认和旧宿主行为由状态测试覆盖，未声称在所有网络故障或平台实测。编辑队列发送的历史消费、接收前已输入新稿后的完整历史分界、跨窗口/重启、双队列协调仍未完成。本轮未修改组件布局或样式。
+
+#### 提交前历史边界与编辑队列发送
+
+新增 composer-history-state 共享历史登记：提交前捕获当时的 EditorState 集合；收到真实确认后仅从当前或缓存的 undo/redo 中移除这一集合。确认不改草稿文档，也不清掉提交之后产生的编辑。当前已空的纯图片输入保留空基线，尚未提交到编辑器的清空不重新种入旧正文。重复确认幂等；未确认则不执行消费。历史缓存仍只保留 EditorState，编辑器登记在卸载时释放。
+
+普通直接发送与编辑队列发送均在清空输入之前捕获边界，并通过现有 onAccepted 回执回调消费。成功命令也清理其提交前历史，在用户已经编辑新稿时不会清掉新稿内容和较新的编辑历史。此前普通发送仅对未变更空稿 commitSend 的限制已被这条边界路径替代。
+
+97 项编辑器、触发器、队列和 admission 测试通过，涵盖确认期间新稿的两步 undo/redo、离屏确认、返回后确认、未确认保留旧引用历史、重复确认及纯图片空基线；UI 类型检查、架构检查、完整桌面构建通过。真实 --compat --child-continuation --native-admission --resident-queue --input-state --command-images 退出 0：编辑队列接受后旧稿不能经原生键盘恢复，随后新输入仍可正常 undo/redo；普通发送、真实拒绝、后台持久队列、图片命令、混合粘贴、原输入区样式和尺寸同时通过。接收前新稿多步历史和缓存恢复由实际 React/Lexical 测试覆盖，不冒充桌面网络延迟实测。日志 /tmp/amiba-history-boundary-regression.log、/tmp/amiba-history-boundary-types-final.log、/tmp/amiba-history-boundary-architecture.log、/tmp/amiba-history-boundary-build.log、/tmp/amiba-history-boundary-smoke.log。
+
+#### 纠正无依据的跨重启撤销栈要求
+
+核对实际 rc.2 发布包 lib/client.js：InputMachine 初始化 log=[]、redoStack=[]（约 450 行），InputFacade 每次新建该机器（约 978 行）；ConversationSession 恢复 storedDraft 并绑定字符串镜像（约 7404 行），没有导入历史栈。固定 c291e796 的 input/facade.ts 构造器明确 registerHistory(editor, createEmptyHistoryState(), ...)，bindMirror 只写 draft 字符串。两条已核对的官方初始化/持久化路径均不承诺重启后恢复整套 undo/redo。
+
+因此此前将“历史跨重启”列为兼容必做项是不准确的，移出必做清单；这是纠正超出官方支持范围的额外增强，不是省略原审计的扩展契约。草稿、队列、附件的真实持久化和恢复要求仍保留；同一渲染器的会话历史兼容和上述已实现能力也不回退。早期记录中笼统把跨重启撤销列为未完成的文字，以本条纠正为准。

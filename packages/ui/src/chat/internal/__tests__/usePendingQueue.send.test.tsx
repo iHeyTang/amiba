@@ -252,7 +252,7 @@ describe("queued draft identity", () => {
     const {result}=renderHook(()=>usePendingQueue(args));
     act(()=>result.current.setEditingQueueId("edit"));
     await act(async()=>{await result.current.send("new resolved payload");});
-    expect(args.runChatTurn).toHaveBeenCalledWith({text:"new resolved payload",attachments:[],draft:document});
+    expect(args.runChatTurn).toHaveBeenCalledWith({text:"new resolved payload",attachments:[],draft:document,onAccepted:expect.any(Function)});
     expect(draftSource.getSnapshot()).toBe("");
   });
   it("routes the editing row's Send now through Composer without clearing or preempting early", async () => {
@@ -461,7 +461,7 @@ it.each([true, false])("Send now suppresses only an existing native finalizer: %
   expect(result.current.queue.map(row => row.queueId)).toEqual(["next"]);
 });
 
-it.each([false, true])("consumes direct-send history only on acceptance without erasing newer input (newer=%s)", async newer => {
+it.each([false, true])("acceptance leaves current draft contents intact (newer=%s)", async newer => {
   const source = createComposerDraftSource(); source.set("send this");
   const args = makeArgs({ input: source.getSnapshot(), draftSource: source, setInput: source.set });
   const { result } = renderHook(() => usePendingQueue(args));
@@ -472,5 +472,5 @@ it.each([false, true])("consumes direct-send history only on acceptance without 
   const submitted = vi.mocked(args.runChatTurn).mock.calls[0][0];
   act(() => { submitted.onAccepted?.(); });
   expect(source.getSnapshot()).toBe(newer ? "next draft" : "");
-  expect(source.getHistoryVersion()).toBe(newer ? 0 : 1);
+  expect(source.getHistoryVersion()).toBe(0);
 });

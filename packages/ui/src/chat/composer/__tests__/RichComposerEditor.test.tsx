@@ -1,3 +1,4 @@
+import { captureComposerHistory } from "../composer-history-state"
 import { createComposerDraftSource } from "../../composer-draft-store"
 import { $isElementNode } from "lexical"
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
@@ -357,4 +358,63 @@ it.each([[false, false], [true, false], [false, true], [true, true]])("does not 
   await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe(""));
   act(() => { editor.dispatchCommand(REDO_COMMAND, undefined); });
   await waitFor(() => expect(source.getSnapshot()).toBe("next"));
+});
+
+it.each(["mounted", "offscreen", "revisited", "unconfirmed"])("cuts submitted history while preserving subsequent edits: %s", async mode => {
+  const source = createComposerDraftSource(); source.set("older draft");
+  let editor!: LexicalEditor;
+  const view = () => <RichComposerEditor value={source.getSnapshot()} draftSource={source} onChange={source.set}>
+    <EditorRefCapture onReady={next => { editor = next; }} />
+  </RichComposerEditor>;
+  let mounted = render(view());
+  await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe("older draft"));
+  const sent = "@[dsh.reference:files|sent|Sent|clip|file]";
+  act(() => source.set(sent));
+  await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe(sent));
+  const accepted = captureComposerHistory(source);
+  act(() => source.setDisplayText(""));
+  await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe(""));
+  const type = async (text: string) => {
+    act(() => editor.update(() => { $getRoot().clear().append($createParagraphNode().append($createTextNode(text))); }, { discrete: true, tag: "history-push" }));
+    await waitFor(() => expect(source.getSnapshot()).toBe(text));
+  };
+  await type("new first");
+  await type("new second");
+  if (mode === "offscreen" || mode === "revisited") mounted.unmount();
+  if (mode === "revisited") {
+    mounted = render(view());
+    await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe("new second"));
+  }
+  if (mode !== "unconfirmed") act(() => { accepted(); });
+  if (mode === "offscreen") {
+    mounted = render(view());
+    await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe("new second"));
+  }
+  expect(source.getSnapshot()).toBe("new second");
+  for (const expected of ["new first", "", mode === "unconfirmed" ? sent : ""]) {
+    act(() => { editor.dispatchCommand(UNDO_COMMAND, undefined); });
+    await waitFor(() => expect(source.getSnapshot()).toBe(expected));
+  }
+  if (mode === "unconfirmed") return;
+  for (const expected of ["new first", "new second"]) {
+    act(() => { editor.dispatchCommand(REDO_COMMAND, undefined); });
+    await waitFor(() => expect(source.getSnapshot()).toBe(expected));
+  }
+  await type("post-confirmation");
+  act(() => { accepted(); editor.dispatchCommand(UNDO_COMMAND, undefined); });
+  await waitFor(() => expect(source.getSnapshot()).toBe("new second"));
+});
+
+it("keeps the empty undo baseline when an image-only input is acknowledged", async () => {
+  const source = createComposerDraftSource();
+  let editor!: LexicalEditor;
+  render(<RichComposerEditor value="" draftSource={source} onChange={source.set}>
+    <EditorRefCapture onReady={next => { editor = next; }} />
+  </RichComposerEditor>);
+  await waitFor(() => expect(editor).toBeDefined());
+  act(() => { captureComposerHistory(source)(); });
+  act(() => editor.update(() => { $getRoot().clear().append($createParagraphNode().append($createTextNode("new"))); }, { discrete: true, tag: "history-push" }));
+  await waitFor(() => expect(source.getSnapshot()).toBe("new"));
+  act(() => { editor.dispatchCommand(UNDO_COMMAND, undefined); });
+  await waitFor(() => expect(source.getSnapshot()).toBe(""));
 });

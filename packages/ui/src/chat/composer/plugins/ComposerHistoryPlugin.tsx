@@ -1,20 +1,12 @@
 import { HistoryPlugin, createEmptyHistoryState, type HistoryState } from "@lexical/react/LexicalHistoryPlugin";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import type { EditorState, LexicalEditor } from "lexical";
+import type { LexicalEditor } from "lexical";
 import { useLayoutEffect, useMemo } from "react";
 import type { ComposerDraftSource } from "../../composer-draft-store";
 import { composerDraftDocument, type ComposerDraftDocument } from "../../composer-draft-document";
 import { $readComposerParts } from "../composer-parts";
 
-type SavedHistory = {
-  version: number;
-  document: ComposerDraftDocument;
-  state: EditorState;
-  current: EditorState | null;
-  undo: EditorState[];
-  redo: EditorState[];
-};
-const histories = new WeakMap<ComposerDraftSource, SavedHistory>();
+import { composerHistories as histories, trackComposerHistory } from "../composer-history-state";
 const restored = new WeakMap<LexicalEditor, ComposerDraftDocument>();
 
 /** Avoid rebuilding the exact node tree restored together with its history. */
@@ -38,6 +30,7 @@ export function ComposerHistoryPlugin({ source }: { source?: ComposerDraftSource
   }, [editor, source]);
   useLayoutEffect(() => {
     let active = true;
+    const untrack = source && trackComposerHistory(source, { editor, history });
     let version = source?.getHistoryVersion?.() ?? 0;
     const clear = () => {
       history.current = null;
@@ -74,6 +67,7 @@ export function ComposerHistoryPlugin({ source }: { source?: ComposerDraftSource
     }
     return () => {
       active = false;
+      untrack?.();
       off?.();
       restored.delete(editor);
       if (!source) return;
