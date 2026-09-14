@@ -1,3 +1,4 @@
+import { commandEnvelope } from "../composer/command-contract";
 import type { Attachment } from "@amiba/app-runtime/core";
 import type { SubmitReceipt } from "@amiba/app-runtime/protocol";
 import type { ComposerDraftSource } from "../composer-draft-store";
@@ -78,7 +79,7 @@ export function createResidentInputTransaction(deps: ResidentInputTransactionDep
           const controller = deps.controller();
           if (draft.trim().startsWith("/")) {
             if (!controller) throw new Error("The command runtime is unavailable.");
-            const result = await controller.adjudicate(draft.trim(), signal, { images: images.length });
+            const result = await controller.adjudicate(draft.trim(), signal, commandEnvelope(images.length, images.length));
             check();
             if (result !== undefined) {
               if (result !== "handled" && "claim" in result) deps.claims.begin(result.claim);

@@ -1008,7 +1008,7 @@ try {
         }
       }
       await wait(() => evaluate("window.__commandImages.length===1"));
-      assert.deepEqual(await evaluate("window.__imageEnvelope"), {images:1});
+      assert.deepEqual(await evaluate("window.__imageEnvelope"), {images:1,attachments:1});
       assert.deepEqual(await evaluate("window.__registeredImages.map(image=>({kind:image.kind,name:image.file.name,size:image.file.size,preview:image.previewUrl.startsWith('blob:')}))"), [{kind:"image",name:"command-image.png",size:Buffer.from(imageData,"base64").length,preview:true}]);
       assert.equal(await evaluate("(async()=>{const bytes=new Uint8Array(await window.__registeredImages[0].file.arrayBuffer());return btoa(String.fromCharCode(...bytes))})()"), imageData);
       assert.deepEqual(await evaluate("window.__commandImages[0]"), {args:"describe",images:[{mediaType:"image/png",data:imageData,name:"command-image.png"}]});
@@ -1055,6 +1055,20 @@ try {
         console.log("Official attachment seat received original browser images and added/removed files through the native upload path");
       }
       console.log("Official image command received original staged bytes through native composer and consumed its draft attachments");
+      await evaluate("window.__modernCommandPayloads=[];window.__modernImageClaim={name:'compat-modern-image',token:'/compat-modern-image ',attachments:true,submit:async(args,ctx,attachments)=>{window.__modernCommandPayloads.push({args,attachments});return {kind:'success',text:'MODERN_IMAGE_OK'}}};window.__modernImageOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-modern-image',trigger:'/',order:-101,candidates:async()=>[],onPick:()=>({claim:window.__modernImageClaim}),matchEnter:async(_session,line,_signal,envelope)=>{if(!line.startsWith('/compat-modern-image '))return;window.__modernEnvelope=envelope;if(envelope.attachments!==1)throw new Error('modern source missing attachment count');return {claim:window.__modernImageClaim}}});window.__modernImage=window.__draftImageRegistry.createDraftImages([new File([window.__extensionImage.file],'modern-image.png',{type:'image/png'})])[0];window.__probeCtx.composerInputs.addInputImages(window.__compatSessionId,[window.__modernImage.id]);window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'/compat-modern-image describe');void 0");
+      await wait(() => evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).some(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')&&!n.disabled)"));
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"),true);
+      await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).phase==='claimed'"));
+      assert.deepEqual(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).claim"),{name:'compat-modern-image',token:'/compat-modern-image ',images:true,attachments:true});
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"),true);
+      await wait(() => evaluate("window.__modernCommandPayloads.length===1&&window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft===''"));
+      assert.deepEqual(await evaluate("window.__modernEnvelope"),{images:1,attachments:1});
+      assert.deepEqual(await evaluate("window.__modernCommandPayloads[0]"),{args:'describe',attachments:[{type:'image',mediaType:'image/png',data:imageData,name:'modern-image.png'}]});
+      await wait(() => evaluate("window.__draftImageRegistry.draftImages([window.__modernImage.id]).length===0&&!document.body.textContent.includes('modern-image.png')"));
+      await evaluate("window.__modernImageOff();void 0");
+      console.log("Newer attachment command received the actual total and typed original image payload; legacy image commands retained their original shape");
+
       assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft"), "");
       const sentHistoryModifier = await evaluate("/Mac/.test(navigator.platform) ? 4 : 2");
       for (const redo of [false, true]) {

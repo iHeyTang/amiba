@@ -1,3 +1,4 @@
+import { commandEnvelope } from "./composer/command-contract";
 import type { ComposerDraftDocument } from "./composer-draft-document";
 import { captureComposerHistory } from "./composer/composer-history-state";
 const EMPTY_RESIDENT_SUBMISSION = Object.freeze({ pending: false, notice: null });
@@ -651,9 +652,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         if (controller !== undefined && trimmed.startsWith("/")) {
           let outcome;
           try {
-            outcome = await controller.adjudicate(trimmed, attempt.signal, {
-              images: attachments?.attachments.filter((item) => item.kind === "image").length ?? 0,
-            });
+            outcome = await controller.adjudicate(trimmed, attempt.signal, commandEnvelope(
+              attachments?.attachments.filter((item) => item.kind === "image").length ?? 0,
+              attachments?.attachments.length ?? 0,
+            ));
           } catch (error) {
             if (attempt.signal.aborted) return;
             setCommandNotice(

@@ -112,3 +112,6 @@
 逐项证据、当前实现范围及验证记录见 [详细评估表](dsh-extension-adaptation-assessment.zh-CN.md) 和 [实施记录](dsh-extension-compatibility-plan.md)。
 
 范围纠正：官方 rc.2 和 c291e796 新建空撤销栈，只镜像草稿；“重启后恢复整套撤销历史”不再列为兼容必做项，详见[收尾清单](dsh-extension-closeout.zh-CN.md)。
+
+
+新版图片命令进展：已兼容 attachments 能力、附件总数及 type:image 载荷；旧版 images 命令保持原格式，同轮桌面验证通过。这不包含普通文件 receipt、新版完整附件服务或同名草稿字段的坐标迁移。

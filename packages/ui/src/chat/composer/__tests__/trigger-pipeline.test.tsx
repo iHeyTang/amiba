@@ -566,7 +566,7 @@ describe("enter adjudication attachment envelope", () => {
     render(<ControlledComposer initial="/fixture" sessionId="s1" runtime={runtimeFor(controller)} controller={controller} onSubmit={onSubmit} initialAttachments={attachments}/>);
     await waitFor(()=>expect(controller.tracked.length).toBeGreaterThan(0));
     act(()=>screen.getByRole("button",{name:/send/iu}).click());
-    await waitFor(()=>expect(adjudicate).toHaveBeenCalledWith("/fixture",expect.any(AbortSignal),{images:count}));
+    await waitFor(()=>expect(adjudicate).toHaveBeenCalledWith("/fixture",expect.any(AbortSignal),{images:count,attachments:count+1}));
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });

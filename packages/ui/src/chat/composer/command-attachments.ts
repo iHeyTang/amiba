@@ -1,3 +1,4 @@
+import { commandAcceptsImages } from "./command-contract";
 import type { Attachment } from "@amiba/app-runtime/core";
 import { getPlatform } from "@amiba/app-runtime/platform";
 import type { CommandClaim } from "@amiba/extension-sdk";
@@ -16,7 +17,7 @@ export async function commandImages(
   if (attachments.some((item) => item.kind !== "image")) {
     throw new Error("This command accepts image attachments only. Remove other files before submitting.");
   }
-  if (!claim.images) throw new Error("This command does not accept images. Remove them before submitting.");
+  if (!commandAcceptsImages(claim)) throw new Error("This command does not accept images. Remove them before submitting.");
   const adapter = getPlatform().agentAttachments;
   if (!adapter) throw new Error("DSH attachment plugin is unavailable.");
   const images: Array<CommandImages[number]> = [];

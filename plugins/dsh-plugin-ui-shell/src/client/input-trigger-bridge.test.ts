@@ -219,6 +219,23 @@ describe("service resolution", () => {
     expect(submit).not.toHaveBeenCalled();
   });
 
+  it("adapts newer attachment claims at invocation without mutating legacy payloads or scope", async () => {
+    const scope = scopeDouble();
+    const bridge = bridgeOver(scope);
+    const submit = vi.fn(async () => ({ kind: "success" as const }));
+    const claim = { name: "image", token: "/image ", attachments: true, submit };
+    const images = Object.freeze([Object.freeze({ mediaType: "image/png" as const, data: "AQID", name: "photo.png" })]);
+    await bridge.submitClaim!("s1", claim, "describe", images);
+    expect(submit).toHaveBeenCalledWith("describe", scope.ctx, [{ type: "image", ...images[0] }]);
+    expect(images[0]).not.toHaveProperty("type");
+    submit.mockClear();
+    const refusing = { ...claim, attachments: false, images: true };
+    await expect(bridge.submitClaim!("s1", refusing, "describe", images)).rejects.toThrow("does not accept images");
+    expect(submit).not.toHaveBeenCalled();
+    await bridge.submitClaim!("s1", refusing, "text-only");
+    expect(submit).toHaveBeenCalledWith("text-only", scope.ctx, []);
+  });
+
   it("rejects a claim submit for a session with no scope", async () => {
     const bridge = createInputTriggerBridge({
       scopeOf: () => undefined,

@@ -2196,3 +2196,14 @@ OfficialTriggerPlugin 订阅公开词表，以编辑器所在窗口的 CSS Custo
 27 项词表及 RichComposerEditor 测试、UI typecheck、架构检查和完整 Desktop 构建通过。真实 Desktop --compat --input-state --command-images 通过：注册后高亮出现，空词表移除，更新恢复，卸载移除；draftRev、occurrences 和输入框 DOMRect 保持一致。已查看 amiba-lexicon-native.png 截图；同轮图片命令、混合粘贴和输入区回归通过。日志为 /tmp/amiba-lexicon-{tests,types,architecture,build,smoke}.log。
 
 详细表同步纠正后台自动出队和后台入队落盘的两条过时描述。
+
+
+## 2026-09-14 — 新旧图片命令契约并行适配
+
+依据固定 c291e796 的 client/ui-conversation/src/client/contract/input.ts 和 service.ts，新版 claim 以 attachments 接受附件，图片载荷增加 type:image，来源判定使用 envelope.attachments；rc.2 使用 images 与无 type 的图片载荷。新增 command-contract 在调用边界区分显式 attachments 声明，不替换原 claim、submit 回调或会话 scope。旧图片数组原样传递，新载荷创建独立对象；新版明确 attachments:false 即使同时出现旧 images:true 也拒绝图片。无图片的文字命令仍可运行。
+
+前台判定同时提供图片数和完整附件数，避免新版来源忽略普通文件；后台当前注册对象均为图片，提供相同的两项计数。claim 状态保留新版 name/attachments，同时保留现有组件使用的 images 能力。原始字节校验、拒绝时保留原稿与附件、成功消费仍经过原有链路。
+
+验证：UI 四组 54 项测试及 bridge/provider 41 项测试通过，共 95 项；UI 和 ui-shell typecheck、架构检查、完整 Desktop 构建通过。Desktop --compat --input-state --command-images exit 0：同次运行旧图片命令与使用新版字段的真实注册来源，分别收到对应载荷；新版可观察正确附件总数、claim 状态和原始图片字节，成功释放浏览器注册并清空原稿；原生撤销、输入卡片尺寸、图片混合粘贴等同轮通过。日志 /tmp/amiba-command-dialects-{ui,bridge,types,architecture,build,smoke}.log。
+
+边界：这是固定新版图片命令字段的运行时接入，不代表完整新版插件依赖已经迁移。新版普通文件需 ctx.fileUpload.upload 返回真实 receiptId，不能伪造或借用 Host 文件 ID；完整 addAttachments/attachmentIds、输入 clipboardText 坐标仍待实现。详细评估表增加七行新旧输入契约对照，避免以字段相似推断已兼容。

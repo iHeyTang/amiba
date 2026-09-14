@@ -17,6 +17,14 @@ describe("command image serialization", () => {
     await expect(commandImages({ ...claim, images: false }, [attachment])).rejects.toThrow("does not accept images");
     expect(read).not.toHaveBeenCalled();
   });
+  it("accepts the newer attachment capability while preserving original image validation", async () => {
+    const modern = { name: "image", token: "/image ", attachments: true, submit: vi.fn() };
+    expect(await commandImages(modern, [attachment])).toEqual([{ mediaType: "image/png", name: "original.png", data: "AQID" }]);
+    read.mockClear();
+    const refusing = { ...modern, attachments: false, images: true };
+    await expect(commandImages(refusing, [attachment])).rejects.toThrow("does not accept images");
+    expect(read).not.toHaveBeenCalled();
+  });
   it("keeps incomplete uploads and non-image files out of command submission", async () => {
     await expect(commandImages(claim, [{ ...attachment, uploading: true }])).rejects.toThrow("finish uploading");
     await expect(commandImages(claim, [{ ...attachment, kind: "pdf" }])).rejects.toThrow("image attachments only");

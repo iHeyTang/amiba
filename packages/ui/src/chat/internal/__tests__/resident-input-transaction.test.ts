@@ -38,6 +38,23 @@ it("expands real reference parts and preserves literal token-shaped text through
   expect(f.release).toHaveBeenCalledTimes(1);
 });
 
+it("supplies the new attachment count to an offscreen command source", async () => {
+  const f = fixture();
+  f.source.setDisplayText("/new-source");
+  const image = { image: { id: "draft-image" }, release: vi.fn() } as unknown as ComposerDraftImageRegistration;
+  f.deps.images = () => [image];
+  f.deps.controller = () => ({ adjudicate: async (_line: string, _signal: AbortSignal, envelope: { attachments: number }) => {
+    expect(envelope.attachments).toBe(1);
+    throw new Error("New source refuses the complete attachment envelope");
+  } } as unknown as ComposerTriggerController);
+  expect(f.transaction.submit()).toBe(true);
+  await f.settled();
+  expect(f.transaction.getSnapshot().notice).toContain("complete attachment envelope");
+  expect(f.source.getSnapshot()).toBe("/new-source");
+  expect(f.deps.consume).not.toHaveBeenCalled();
+  expect(f.deps.send).not.toHaveBeenCalled();
+});
+
 it("adjudicates first and executes the retained command claim on the next submit", async () => {
   const f = fixture();
   const claim = { token: "/fixture ", submit: async () => ({ kind: "success" }) } as CommandClaim;

@@ -1,6 +1,6 @@
 import { bindInputDraft, type InputDraftCursor } from "./input-draft-binding.js";
 import { createResidentImageStaging, type PreparedInputImages } from "./resident-image-staging.js";
-import { CommandClaimStore, createResidentInputTransaction, expandMentionPartsAsync } from "@amiba/ui/composer-runtime";
+import { commandAcceptsImages, commandImagePayload, CommandClaimStore, createResidentInputTransaction, expandMentionPartsAsync } from "@amiba/ui/composer-runtime";
 import { shortId } from "@amiba/app-runtime/utils";
 /**
  * Bridge between Amiba's composer (plain React, `@amiba/ui`) and the OFFICIAL
@@ -652,10 +652,10 @@ export function createInputTriggerBridge(
           new Error(`command: session "${sessionId}" resolved no scope`),
         );
       }
-      if (images.length && !claim.images) {
+      if (images.length && !commandAcceptsImages(claim)) {
         return Promise.reject(new Error("This command does not accept images."));
       }
-      return Promise.resolve().then(() => claim.submit(args, actx, images));
+      return Promise.resolve().then(() => claim.submit(args, actx, commandImagePayload(claim, images)));
     },
   };
   return bridge;

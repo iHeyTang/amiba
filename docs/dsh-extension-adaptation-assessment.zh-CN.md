@@ -125,3 +125,18 @@
 实现及验证记录见 [兼容实施清单](dsh-extension-compatibility-plan.md)。以上是逐项评估，不是全部兼容完成声明。
 
 最新补充：编辑队列时暂存的未发送草稿，已接入发送前的引用解析。直接发送与自动出队都会保留普通文字身份；解析失败或结果为空且没有附件时保留记录。真实桌面自动出队的模型负载已验证。完整 Host inbox 对齐和队列图片生命周期仍待适配。
+
+
+## 新旧输入契约差异（固定 rc.2 与 c291e796）
+
+| 公共行为 | rc.2 | c291e796 | 当前处理 |
+| --- | --- | --- | --- |
+| 命令接受图片 | claim.images | claim.attachments | 已按声明分别判定；新版明确拒绝附件时不退回旧 images 标志 |
+| 命令图片载荷 | mediaType/data/name | type:image 加 mediaType/data/name | 在实际调用边界转换，旧数组保持原格式和身份 |
+| 来源判定的附件数量 | envelope.images | envelope.attachments | 前台同时提供图片数和总数；后台当前注册对象全为图片，两项数量相同 |
+| 命令状态 | token/hint/images | name/token/hint/attachments | 保留新版 name/attachments，同时给现有组件提供对应 images 能力 |
+| 命令普通文件载荷 | 当前图片专用链路不支持 | type:file 加 receiptId | 未完成；receiptId 必须来自 ctx.fileUpload.upload 成功结果，不能使用 Host staging ID 替代 |
+| 输入附件操作与状态 | addImages/removeImage/pruneImages、imageIds | addAttachments/removeAttachment/pruneAttachments、attachmentIds | 尚未整体迁移；当前图片命令支持不代表新版完整附件服务已接入 |
+| 输入正文与引用范围 | 显示标签正文和对应 offset/length | clipboardText 正文和对应 offset/length | 同名字段语义冲突，仍需按契约区分投影，不能全局替换旧坐标 |
+
+本表依据本地固定官方 contract/input、service 和 ui-input-trigger 类型/源码；图片载荷分流是运行时兼容，不表示任意新版插件及其完整依赖已经验证。
