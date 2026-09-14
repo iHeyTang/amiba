@@ -40,7 +40,8 @@ describe("DshChatEngineClient", () => {
       command: { kind: "success" as const, text: "runtime healthy" },
     }));
     const client = {
-      createSession,
+      listSessions: vi.fn(async () => ({ items: [] })),
+    createSession,
       prompt,
       selectModel: vi.fn(),
       cancel: vi.fn(async () => ({ accepted: true as const })),
@@ -75,7 +76,8 @@ describe("DshChatEngineClient", () => {
       command: { kind: "success" as const, text: "seen" },
     }));
     const client = {
-      createSession,
+      listSessions: vi.fn(async () => ({ items: [] })),
+    createSession,
       prompt,
       selectModel: vi.fn(),
       cancel: vi.fn(async () => ({ accepted: true as const })),
@@ -218,6 +220,7 @@ const TURN_END = sessionFrame("turn/end", { reason: { kind: "completed" } }, 4);
  */
 function scriptedClient(script: DshMuxEnvelope[]): DshApiClient {
   return {
+    listSessions: vi.fn(async () => ({ items: [] })),
     createSession: vi.fn(async () => ({ sessionId: "session-1" })),
     prompt: vi.fn(async () => ({})),
     selectModel: vi.fn(),
@@ -436,4 +439,78 @@ describe("compaction event delivery", () => {
     expect(events.filter(event => event.kind === "compaction")).toHaveLength(2);
     engine.dispose();
   });
+});
+
+it("resumes an IM session with its persisted cwd and preset instead of desktop defaults", async () => {
+  const createSession = vi.fn(async () => ({ sessionId: "session-1" }));
+  const prompt = vi.fn(async () => ({
+    command: { kind: "success", text: "sent" },
+  }));
+  const resolveSession = vi.fn(async () => ({
+    cwd: "/desktop/home",
+    workspaceId: "desktop-worktree",
+    agentPreset: "code",
+  }));
+  const client = {
+    listSessions: vi.fn(async () => ({
+      items: [
+        {
+          sessionId: "session-1",
+          cwd: "/im/runtime",
+          agentPreset: "restricted",
+        },
+      ],
+    })),
+    createSession,
+    prompt,
+    async *events() {
+      yield {
+        rpcId: "subscription",
+        payload: {
+          type: "session/subscribed",
+          sessionId: "session-1",
+          lastSeq: 0,
+        },
+      };
+    },
+  } as unknown as DshApiClient;
+  const engine = new DshChatEngineClient({ client, resolveSession });
+  engine.submit(payload({ agent: { profileId: "code" } as never }));
+  await eventually(() => expect(prompt).toHaveBeenCalledOnce());
+  expect(createSession).toHaveBeenCalledWith(
+    { sessionId: "session-1", cwd: "/im/runtime", agentPreset: "restricted" },
+    expect.any(AbortSignal),
+  );
+  expect(resolveSession).not.toHaveBeenCalled();
+  engine.dispose();
+});
+it("keeps desktop workspace creation for a genuinely new session", async () => {
+  const createSession = vi.fn(async () => ({ sessionId: "session-1" }));
+  const client = {
+    listSessions: vi.fn(async () => ({ items: [] })),
+    createSession,
+    prompt: vi.fn(async () => ({ command: { kind: "success", text: "ok" } })),
+    async *events() {
+      yield {
+        rpcId: "s",
+        payload: {
+          type: "session/subscribed",
+          sessionId: "session-1",
+          lastSeq: 0,
+        },
+      };
+    },
+  } as unknown as DshApiClient;
+  const engine = new DshChatEngineClient({
+    client,
+    resolveSession: async () => ({ workspaceId: "chosen-workspace" }),
+  });
+  engine.submit(payload());
+  await eventually(() =>
+    expect(createSession).toHaveBeenCalledWith(
+      { sessionId: "session-1", workspaceId: "chosen-workspace" },
+      expect.any(AbortSignal),
+    ),
+  );
+  engine.dispose();
 });

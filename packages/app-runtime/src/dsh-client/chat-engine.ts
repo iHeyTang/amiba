@@ -462,12 +462,25 @@ export class DshChatEngineClient implements ChatEngineClient {
     const { client } = this.options;
     const sessionId = payload.sessionId;
     try {
-      const resolved = (await this.options.resolveSession?.(payload, controller.signal)) ?? {};
+      // IM/plugin-created and cold sessions already own their cwd and preset.
+      // Desktop workspace defaults are creation hints, never resume overrides.
+      const existing = (
+        await client.listSessions(controller.signal)
+      ).items.find((session) => session.sessionId === sessionId);
+      const resolved = existing
+        ? {
+            ...(existing.cwd ? { cwd: existing.cwd } : {}),
+            ...(existing.agentPreset
+              ? { agentPreset: existing.agentPreset }
+              : {}),
+          }
+        : ((await this.options.resolveSession?.(payload, controller.signal)) ??
+          {});
       await client.createSession(
         {
           sessionId,
           ...resolved,
-          ...(resolved.agentPreset
+          ...(existing || resolved.agentPreset
             ? {}
             : payload.agent?.profileId && payload.agent.profileId !== "default"
               ? { agentPreset: payload.agent.profileId }
