@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, usePluginT } from "@amiba/ui/plugin";
+import { MessagesSquare, ChevronDown, RefreshCw } from "lucide-react";
+import {
+  Button,
+  Switch,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  usePluginT,
+} from "@amiba/ui/plugin";
 import type { ConnectAdapter } from "./adapter.js";
 import type { MessageConversationView } from "../remote.js";
 
@@ -9,11 +17,13 @@ export function DesktopSyncSettings({
   connectId,
   conversationKey,
   target,
+  onEnabledChange,
 }: {
   adapter: ConnectAdapter;
   connectId: string;
   conversationKey: string;
   target: string;
+  onEnabledChange?: (enabled: boolean) => void;
 }) {
   const { language } = usePluginT();
   const zh = language === "zh-CN";
@@ -25,6 +35,9 @@ export function DesktopSyncSettings({
   useEffect(() => {
     let active = true;
     let loading = false;
+    revision.current++;
+    saving.current = false;
+    setBusy(false);
     setView(undefined);
     setError(false);
     const refresh = async () => {
@@ -51,25 +64,33 @@ export function DesktopSyncSettings({
     const timer = setInterval(() => void refresh(), 3000);
     return () => {
       active = false;
+      revision.current++;
       clearInterval(timer);
     };
   }, [adapter, connectId, conversationKey]);
   const change = async (
     input: Parameters<NonNullable<ConnectAdapter["conversationSettings"]>>[2],
   ) => {
-    revision.current++;
+    const requestRevision = ++revision.current;
     saving.current = true;
     setBusy(true);
     setError(false);
     try {
-      setView(
-        await adapter.conversationSettings!(connectId, conversationKey, input),
+      const next = await adapter.conversationSettings!(
+        connectId,
+        conversationKey,
+        input,
       );
+      if (requestRevision !== revision.current) return;
+      setView(next);
+      onEnabledChange?.(next.desktopSync?.enabled ?? false);
     } catch {
-      setError(true);
+      if (requestRevision === revision.current) setError(true);
     } finally {
-      saving.current = false;
-      setBusy(false);
+      if (requestRevision === revision.current) {
+        saving.current = false;
+        setBusy(false);
+      }
     }
   };
   const sync = view?.desktopSync;
@@ -99,24 +120,25 @@ export function DesktopSyncSettings({
   };
   return (
     <section className="space-y-3 text-sm">
-      <label className="flex items-center justify-between gap-3">
-        <span>
-          {zh ? "同步到：" : "Sync to: "}
-          {target}
-        </span>
-        <input
-          type="checkbox"
+      <div className="flex items-center gap-3">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+          <MessagesSquare className="size-4" aria-hidden="true" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="font-medium">{zh ? "同步消息" : "Message sync"}</h3>
+          <p className="truncate text-xs text-muted-foreground" title={target}>
+            {target}
+          </p>
+        </div>
+        <Switch
           aria-label={zh ? "同步桌面端消息" : "Sync desktop messages"}
           checked={sync?.enabled ?? false}
           disabled={busy || !view}
-          onChange={(event) =>
-            void change({
-              action: "configure",
-              desktopSync: event.target.checked,
-            })
+          onCheckedChange={(checked) =>
+            void change({ action: "configure", desktopSync: checked })
           }
         />
-      </label>
+      </div>
       <p className="text-xs text-muted-foreground">
         {zh
           ? "由机器人发送你的消息和助手回复。开启后只同步新消息，群聊内所有成员可见。附件请在桌面端查看。"
@@ -131,8 +153,9 @@ export function DesktopSyncSettings({
       )}
       {sync?.messages.length ? (
         <details>
-          <summary className="cursor-pointer text-xs text-muted-foreground">
+          <summary className="flex cursor-pointer list-none items-center justify-between rounded-md py-2 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
             {zh ? "最近同步记录" : "Recent deliveries"}
+            <ChevronDown className="size-3.5" aria-hidden="true" />
           </summary>
           <ul className="mt-2 max-h-64 space-y-3 overflow-auto">
             {sync.messages
@@ -159,6 +182,7 @@ export function DesktopSyncSettings({
           disabled={busy}
           onClick={() => void change({ action: "retry-sync" })}
         >
+          <RefreshCw className="mr-2 size-3.5" aria-hidden="true" />
           {zh ? "重试同步" : "Retry sync"}
         </Button>
       )}
@@ -225,26 +249,42 @@ export function DesktopSyncHeader({
   }, [adapter, sessionId, zh]);
   if (!route) return null;
   return (
-    <details className="relative text-xs">
-      <summary className="max-w-64 cursor-pointer truncate text-muted-foreground">
-        {route.enabled
-          ? zh
-            ? "同步到："
-            : "Sync to: "
-          : zh
-            ? "同步已关闭："
-            : "Sync off: "}
-        {route.target}
-      </summary>
-      <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-md border border-border bg-background p-4">
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex max-w-80 items-center gap-2 rounded-lg border border-border/60 bg-background px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`${zh ? "同步消息" : "Message sync"}: ${route.target}`}
+        >
+          <MessagesSquare className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{route.target}</span>
+          <span className="flex shrink-0 items-center gap-1.5 border-l border-border pl-2">
+            <span
+              className={`size-1.5 rounded-full ${route.enabled ? "bg-primary" : "bg-muted-foreground/40"}`}
+              aria-hidden="true"
+            />
+            {route.enabled ? (zh ? "已开启" : "On") : zh ? "已关闭" : "Off"}
+          </span>
+          <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        size="md"
+        padding="md"
+        align="start"
+        className="max-w-[calc(100vw-2rem)]"
+      >
         <DesktopSyncSettings
-          key={`${route.connectId}:${route.key}`}
+          key={`${sessionId}:${route.connectId}:${route.key}`}
           adapter={adapter}
           connectId={route.connectId}
           conversationKey={route.key}
           target={route.target}
+          onEnabledChange={(enabled) =>
+            setRoute((current) => (current ? { ...current, enabled } : current))
+          }
         />
-      </div>
-    </details>
+      </PopoverContent>
+    </Popover>
   );
 }
