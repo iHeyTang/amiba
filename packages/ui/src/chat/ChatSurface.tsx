@@ -1,4 +1,5 @@
 import { ensureSessionWorkspace } from "@amiba/app-runtime/platform";
+import { nativeSubmissionAdmission } from "./internal/native-submission-admission";
 import { deleteUnretainedAttachments, withSendingAttachments } from "./internal/attachment-ownership";
 import { useSessionComposerDraft } from "./use-session-composer-draft";
 import { useConversationSubmitHandoff } from "./useConversationSubmitHandoff";
@@ -653,6 +654,7 @@ export default function ChatSurface({
   const inFlightTurnByIdRef = useRef<
     Map<string, { user: UiMessage; assistantUiId: string; owner?: "resident" }>
   >(new Map());
+  const nativeAdmissions = useRef(new Map<string, ReturnType<typeof nativeSubmissionAdmission>>());
   const agentBySessionRef = useRef<Map<string, AgentExecutionContext>>(
     new Map(),
   );
@@ -1309,6 +1311,11 @@ export default function ChatSurface({
     event: Extract<StreamEvent, { kind: "error" }>,
   ): void {
     residentQueueDrainer.interrupted(sessionId);
+    const admission = nativeAdmissions.current.get(sessionId);
+    if (admission?.protectsQueue) {
+      sessionPendingQueue(getPlatform().storage, sessionId).setPaused(true);
+      if (admission.notice) event = { ...event, message: admission.notice };
+    }
     if (sessionId !== sessions.activeId) {
       inFlightTurnByIdRef.current.delete(sessionId);
       rejectPendingTurn(sessionId, new Error(event.message));
@@ -1316,12 +1323,12 @@ export default function ChatSurface({
     }
     const assistantUiId = stream.getCurrentAssistantUiId() ?? null;
     stream.reset();
-    setPendingQueue((pq) => {
+    if (!admission?.protectsQueue) setPendingQueue((pq) => {
       deleteUnretainedAttachments(pq.flatMap(q => q.attachments), attachments);
       return [];
     });
     // Errors wipe the queue, so the paused flag (if any) is meaningless now.
-    setQueuePaused(false);
+    if (!admission?.protectsQueue) setQueuePaused(false);
     resetApprovals();
     resetQuestions();
     setError({
@@ -1632,6 +1639,7 @@ export default function ChatSurface({
     markdown: prepareMarkdownTurn,
     dispatch: async ({ payload, messages, workspacePath }) => {
       if (!client.submitWithReceipt) return { kind: "rejected", error: "The chat transport does not provide submission receipts." };
+      nativeAdmissions.current.delete(payload.sessionId);
       const user: UiMessage = { uiId: shortId("u"), role: "user", content: payload.history[payload.history.length - 1].content,
         sentAt: Date.now(), ...(workspacePath ? { workspacePath } : {}) };
       const cached = { user, assistantUiId: payload.assistantUiId, owner: "resident" as const };
@@ -1878,9 +1886,10 @@ export default function ChatSurface({
       const modelSelection = pendingModelSelectionRef.current;
       pendingModelSelectionRef.current = null;
       await new Promise<void>((resolve, reject) => {
-        pendingTurnRef.current = { sessionId, resolve, reject };
+        const pending = { sessionId, resolve, reject };
+        pendingTurnRef.current = pending;
         try {
-          client.submit({
+          const admission = nativeSubmissionAdmission(client, {
             sessionId,
             sessionTitle: sessions.sessions.find(
               (session) => session.id === sessionId,
@@ -1903,7 +1912,28 @@ export default function ChatSurface({
               : {}),
             agent: agentForTurn,
             ...(modelSelection ? { modelSelection } : {}),
+          }, {
+            accepted() {
+              if (nativeAdmissions.current.get(sessionId) !== admission) return;
+              nativeAdmissions.current.delete(sessionId);
+              args.onAccepted?.();
+            },
+            failed(message) {
+              if (nativeAdmissions.current.get(sessionId) !== admission) return;
+              const queue = sessionPendingQueue(getPlatform().storage, sessionId);
+              queue.setPaused(true);
+              queue.setNotice(message);
+              queue.update(previous => [{ queueId: shortId("q"), text,
+                ...(args.draft ? { draft: args.draft } : {}),
+                attachments: attachmentsForTurn.map(item => ({ ...item })),
+              }, ...previous]);
+              // Some rejection paths have no stream event (disposed/busy engine).
+              // Settle only this attempt, never a newer pending turn.
+              if (pendingTurnRef.current === pending) streamHandlerRef.current(sessionId, { kind: "error", message });
+            },
           });
+          nativeAdmissions.current.set(sessionId, admission);
+          admission.start();
           submitted = true;
         } catch (e) {
           pendingTurnRef.current = null;

@@ -30,6 +30,8 @@ export function previewPendingTurn(t: PendingChatTurn): string {
  * the surface's runChatTurn without leaking the runner's many internal
  * dependencies into this file. */
 export interface RunChatTurnArgs {
+  /** Called only after an authoritative admission receipt, never on legacy dispatch. */
+  onAccepted?: () => void;
   text: string;
   attachments: Attachment[];
   /** Original editor nodes, separate from the resolved model payload. */
@@ -434,10 +436,14 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     // fires the remaining items after this fresh turn completes.
     if (queuePausedRef.current) setPaused(false);
 
+    const clearedDocument = draftSource?.getDocument();
     await runChatTurn({
       text,
       ...(draft ? { draft } : {}),
       attachments: attachmentsForSend,
+      ...(clearedDocument?.text === "" && draftSource?.commitSend ? {
+        onAccepted: () => { draftSource.commitSend?.(clearedDocument); },
+      } : {}),
     });
   }, [
     input,

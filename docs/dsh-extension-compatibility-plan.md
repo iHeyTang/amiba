@@ -2161,3 +2161,13 @@ keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入�
 52 项队列存储/原生操作/后台事务测试和 40 项桥接/提供者测试通过，涵盖延迟及失败写入、失败后一次重试、并发 admission、保存期间原生编辑、保存期间 Stop；前端/插件类型、架构检查及完整桌面构建通过。真实 --compat --child-continuation --resident-queue 退出 0，验证两条后台持久队列、图片所有权、会话返回后 undo/redo 不复活已入队草稿且两条队列不变，原 Stop/Edit/Delete/Send now 行为继续通过。日志 /tmp/amiba-queue-admission-tests-2.log、/tmp/amiba-queue-admission-provider-tests.log、/tmp/amiba-queue-admission-types.log、/tmp/amiba-queue-admission-plugin-types.log、/tmp/amiba-queue-admission-architecture.log、/tmp/amiba-queue-admission-build.log、/tmp/amiba-queue-admission-smoke-2.log。首轮脚本将新断言放在返回目标会话之前，访问未挂载输入失败；移到正确阶段后复用构建重跑通过，未修改产品以绕过该错误。
 
 普通发送仍调用无接收确认的 client.submit，不能把该调用返回等同于成功确认；其确认边界及全部队列/历史协调仍待完成。根据用户反馈新增 dsh-extension-closeout.zh-CN.md，统一按功能组收尾，减少零散阶段和重复完整构建，不改变原 64 项目标及保留现有能力/样式的要求。
+
+#### 普通发送接收确认、失败队列保留与历史消费
+
+普通发送现在优先调用已有 submitWithReceipt，通过 nativeSubmissionAdmission 区分 pending、accepted、failed 与旧宿主 legacy。只有真实 accepted 才调用普通直接发送的 onAccepted；原输入已清空且文档仍未变更时消费历史，新草稿不受旧回执影响。旧宿主没有回执接口时继续原 submit 路径，不伪造成功。
+
+接收前错误不会再清掉整个待发送队列。拒绝或未确认的本次载荷（含原始结构化草稿与附件）保留为暂停队列项，原 backlog 保留；未确认提示先核对会话，不自动重发。保留 admission 失败状态以处理晚到的流错误，避免新保留的队列再次被错误处理清掉；没有流事件的 disposed/busy 拒绝路径也能结算本次 pending。通过最新 streamHandlerRef 处理异步结果，避免旧会话闭包清理当前会话。真正已接收后的模型流错误沿用原处理路径。
+
+43 项 admission/原生队列/会话交接测试和 13 项真实引擎接收确认测试通过，UI 类型检查、架构检查、完整桌面构建通过。真实 --compat --child-continuation --native-admission --resident-queue 退出 0：已接收的普通输入不能经键盘 undo/redo 恢复；以实际 rc.2 子会话图片拒绝验证，本次图片载荷与旧 backlog 均保留为两条暂停队列，旧项没有自动进入模型，原删除操作正常；后台队列确认/历史、子会话运行/停止及既有兼容回归同时通过。
+
+日志 /tmp/amiba-native-admission-tests-2.log、/tmp/amiba-native-admission-engine-tests.log、/tmp/amiba-native-admission-types-2.log、/tmp/amiba-native-admission-architecture.log、/tmp/amiba-native-admission-build.log、/tmp/amiba-native-admission-smoke.log。未确认和旧宿主行为由状态测试覆盖，未声称在所有网络故障或平台实测。编辑队列发送的历史消费、接收前已输入新稿后的完整历史分界、跨窗口/重启、双队列协调仍未完成。本轮未修改组件布局或样式。

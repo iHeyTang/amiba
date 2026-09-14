@@ -34,6 +34,9 @@ if (process.argv.includes("--child-cold-restart") && !["--compat", "--child-navi
 if (process.argv.includes("--child-nested-restart") && !process.argv.includes("--child-cold-restart")) {
   throw new Error("--child-nested-restart requires --child-cold-restart");
 }
+if (process.argv.includes("--native-admission") && !["--compat", "--child-continuation"].every(flag => process.argv.includes(flag))) {
+  throw new Error("--native-admission requires --compat --child-continuation");
+}
 if (process.argv.includes("--resident-queue") && !["--compat", "--child-continuation"].every(flag => process.argv.includes(flag))) {
   throw new Error("--resident-queue requires --compat --child-continuation");
 }
@@ -1244,6 +1247,47 @@ try {
       await wait(() => evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
       assert.equal(await evaluate("window.__probeCtx.sessions.subagentAddress('compat-continuable-child')?.parentSessionId"), "compat-continuable-parent");
       console.log("Real continuable child interrupt reached the running model and cleared native busy state");
+      if (process.argv.includes("--native-admission")) {
+        const modifier = await evaluate("/Mac/.test(navigator.platform) ? 4 : 2");
+        for (const redo of [false, true]) {
+          await evaluate("document.querySelector('[data-auto-grow-editor]').focus()");
+          await call('Input.dispatchKeyEvent',{type:'keyDown',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:modifier+(redo?8:0)});
+          await call('Input.dispatchKeyEvent',{type:'keyUp',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:modifier+(redo?8:0)});
+          await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft"), "");
+        }
+        const submitNative = async text => {
+          await evaluate(`window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions.setDraft(${JSON.stringify(text)});void 0`);
+          await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.draft===${JSON.stringify(text)}`));
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-continuable-child')"),true);
+        };
+        const readNativeQueue = () => evaluate("(async()=>{const saved=await window.amiba.storage.get('pendingQueue:compat-continuable-child');return saved['pendingQueue:compat-continuable-child']??[]})()");
+        await submitNative('COMPAT_WAIT_FOR_STOP');
+        await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        await submitNative('COMPAT_NATIVE_BACKLOG');
+        await wait(async()=> (await readNativeQueue()).length===1);
+        await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]').click();void 0");
+        await wait(()=>evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"));
+        const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+        await evaluate(`window.__nativeRejectImages=window.__probeCtx.get('composerImages').createDraftImages([new File([Uint8Array.from(atob(${JSON.stringify(png)}),c=>c.charCodeAt(0))],'native-rejection.png',{type:'image/png'})]);void 0`);
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.addInputImages('compat-continuable-child',window.__nativeRejectImages.map(image=>image.id))"),true);
+        await evaluate("window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions.setDraft('COMPAT_NATIVE_REJECTED_IMAGE');void 0");
+        await wait(()=>evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).some(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')&&!n.disabled)"));
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-continuable-child')"),true);
+        await wait(async()=> (await readNativeQueue()).some(row=>row.text==='COMPAT_NATIVE_REJECTED_IMAGE'));
+        const failedQueue = await readNativeQueue();
+        assert.deepEqual(failedQueue.map(row=>row.text), ['COMPAT_NATIVE_REJECTED_IMAGE','COMPAT_NATIVE_BACKLOG']);
+        assert.equal(failedQueue[0].attachments.length,1);
+        assert.equal(failedQueue[0].draft.text,'COMPAT_NATIVE_REJECTED_IMAGE');
+        await wait(()=>evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        assert.ok(!((await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry=>entry.message.includes('COMPAT_NATIVE_BACKLOG'))));
+        await wait(()=>evaluate("document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Delete]').length===2"));
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Delete]').click();void 0");
+        await wait(async()=> (await readNativeQueue()).length===1);
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Delete]').click();void 0");
+        await wait(async()=> (await readNativeQueue()).length===0);
+        console.log('Native admission confirmed history consumption; real rejected child-image input and the older backlog remained paused and editable without automatic retry.');
+      }
       if (process.argv.includes("--resident-sender")) {
         await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
         await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)"));

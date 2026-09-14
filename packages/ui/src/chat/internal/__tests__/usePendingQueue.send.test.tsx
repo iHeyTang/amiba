@@ -273,7 +273,7 @@ describe("queued draft identity", () => {
     const args=makeArgs({draftSource,input:document.text,setInput:draftSource.set});
     const {result}=renderHook(()=>usePendingQueue(args));
     await act(async()=>{await result.current.send("resolved");});
-    expect(args.runChatTurn).toHaveBeenLastCalledWith({text:"resolved",attachments:[],draft:document});
+    expect(args.runChatTurn).toHaveBeenLastCalledWith({text:"resolved",attachments:[],draft:document,onAccepted:expect.any(Function)});
     act(()=>result.current.setQueue([{queueId:"later",text:"queued resolved",attachments:[],draft:document}]));
     await act(async()=>{result.current.drainHead();});
     expect(args.runChatTurn).toHaveBeenLastCalledWith({text:"queued resolved",attachments:[],draft:document});
@@ -459,4 +459,18 @@ it.each([true, false])("Send now suppresses only an existing native finalizer: %
   expect(args.client.abort).toHaveBeenCalledWith("s1");
   expect(args.runChatTurn).toHaveBeenCalledWith({ text: "send first", attachments: [] });
   expect(result.current.queue.map(row => row.queueId)).toEqual(["next"]);
+});
+
+it.each([false, true])("consumes direct-send history only on acceptance without erasing newer input (newer=%s)", async newer => {
+  const source = createComposerDraftSource(); source.set("send this");
+  const args = makeArgs({ input: source.getSnapshot(), draftSource: source, setInput: source.set });
+  const { result } = renderHook(() => usePendingQueue(args));
+  await act(async () => { await result.current.send(); });
+  expect(source.getSnapshot()).toBe("");
+  expect(source.getHistoryVersion()).toBe(0);
+  if (newer) source.setDisplayText("next draft");
+  const submitted = vi.mocked(args.runChatTurn).mock.calls[0][0];
+  act(() => { submitted.onAccepted?.(); });
+  expect(source.getSnapshot()).toBe(newer ? "next draft" : "");
+  expect(source.getHistoryVersion()).toBe(newer ? 0 : 1);
 });
