@@ -1,3 +1,5 @@
+import type { AgentSubagentAddress } from "../platform/index.js"
+
 export { upsertCompactionTimeline, interruptOpenCompactions } from "./compaction.js"
 export interface DshRpcErrorShape {
   code: string
@@ -158,6 +160,7 @@ export type DshImageMediaType =
 
 export type DshPromptContentPart =
   | { type: "text"; text: string }
+  | { type: "file"; receiptId: string }
   | {
       type: "image"
       mediaType: DshImageMediaType
@@ -542,6 +545,51 @@ export class DshApiClient {
     )
   }
 
+  /** Read a catalog child without resuming either it or its direct parent. */
+  subagentHistory(
+    address: AgentSubagentAddress,
+    options: { beforeSeq?: number; maxMessages?: number; signal?: AbortSignal } = {},
+  ): Promise<DshHistoryPage> {
+    return this.call(
+      "subagent.history",
+      {
+        parentSessionId: address.parentSessionId,
+        childSessionId: address.childSessionId,
+        mode: address.mode,
+        ...(options.beforeSeq === undefined ? {} : { beforeSeq: options.beforeSeq }),
+        ...(options.maxMessages === undefined ? {} : { maxMessages: options.maxMessages }),
+      },
+      options.signal,
+    )
+  }
+
+  subagentPrompt(
+    address: AgentSubagentAddress & { mode: "continuable" },
+    content: DshPromptContentPart[],
+    options: { clientTimeZone?: string; signal?: AbortSignal } = {},
+  ): Promise<{ messageId: string }> {
+    if (address.mode !== "continuable") return Promise.reject(new Error("One-shot subagents cannot receive follow-up prompts"))
+    if (content.some((part) => part.type === "image")) return Promise.reject(new Error("Image input is unavailable for subagent continuations"))
+    return this.call("subagent.prompt", {
+      parentSessionId: address.parentSessionId,
+      childSessionId: address.childSessionId,
+      mode: address.mode,
+      content,
+      ...(options.clientTimeZone ? { clientTimeZone: options.clientTimeZone } : {}),
+    }, options.signal)
+  }
+
+  subagentInterrupt(
+    address: AgentSubagentAddress & { mode: "continuable" },
+  ): Promise<{ accepted: true }> {
+    if (address.mode !== "continuable") return Promise.reject(new Error("One-shot subagents do not support continuation interrupts"))
+    return this.call("subagent.interrupt", {
+      parentSessionId: address.parentSessionId,
+      childSessionId: address.childSessionId,
+      mode: address.mode,
+    })
+  }
+
   models(sessionId: string, signal?: AbortSignal): Promise<{
     current: { provider: string; model: string; reasoningEffort?: string }
     routable: boolean
@@ -633,7 +681,40 @@ export class DshApiClient {
     )
   }
 
-  async *events(signal?: AbortSignal): AsyncGenerator<DshMuxEnvelope> {
+  /** Uses the official browser carrier's socket-open readiness, before any frame. */
+  async openEvents(signal?: AbortSignal): Promise<AsyncIterableIterator<DshMuxEnvelope>> {
+    const controller = new AbortController()
+    const abort = () => controller.abort(signal?.reason)
+    signal?.addEventListener("abort", abort, { once: true })
+    if (signal?.aborted) abort()
+    const close = () => { controller.abort(); signal?.removeEventListener("abort", abort) }
+    let opened!: () => void
+    let failed!: (reason: unknown) => void
+    const ready = new Promise<void>((resolve, reject) => { opened = resolve; failed = reject })
+    const frames = this.events(controller.signal, opened)
+    let buffered: Promise<IteratorResult<DshMuxEnvelope>> | undefined = frames.next()
+    buffered.then((result) => { if (result.done) failed(new Error("DSH events.mux closed before opening")) }, failed)
+    try { await ready } catch (error) {
+      close()
+      await frames.return(undefined).catch(() => {})
+      throw error
+    }
+    const stream: AsyncIterableIterator<DshMuxEnvelope> = {
+      next: async () => {
+        try {
+          const result = await (buffered ?? frames.next())
+          buffered = undefined
+          if (result.done) close()
+          return result
+        } catch (error) { close(); throw error }
+      },
+      return: async () => { close(); return frames.return(undefined) },
+      [Symbol.asyncIterator]: () => stream,
+    }
+    return stream
+  }
+
+  async *events(signal?: AbortSignal, onOpen?: () => void): AsyncGenerator<DshMuxEnvelope> {
     if (signal?.aborted) return
 
     const url = new URL("/api/events.mux", `${this.baseUrl}/`)
@@ -699,6 +780,8 @@ export class DshApiClient {
       enqueue({ kind: "aborted" })
     }
 
+    const handleOpen = () => onOpen?.()
+    socket.addEventListener("open", handleOpen)
     socket.addEventListener("message", onMessage)
     socket.addEventListener("error", onError)
     socket.addEventListener("close", onClose)
@@ -719,6 +802,7 @@ export class DshApiClient {
         yield item.value
       }
     } finally {
+      socket.removeEventListener("open", handleOpen)
       socket.removeEventListener("message", onMessage)
       socket.removeEventListener("error", onError)
       socket.removeEventListener("close", onClose)
@@ -763,3 +847,7 @@ export function parseDshWebSocketFrame(data: string): DshMuxEnvelope {
 }
 
 export * from "./amiba-event-bridge"
+
+export * from "./assistant-text-source";
+
+export { durableContentImages } from "./content-images";

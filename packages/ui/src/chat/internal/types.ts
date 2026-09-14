@@ -67,6 +67,9 @@ export interface UiMessage extends ChatMessage {
    */
   /** Canonical DSH closing message, never the synthetic bubble id. */
   assistantMessageId?: string
+  /** Exact DSH engine turn, shared by live and historical projections. */
+  runtimeTurn?: number
+  assistantDraftSource?: Extract<AssistantTimelineItem, {kind:"text"}>
   assistantTimeline?: AssistantTimelineItem[]
   /**
    * Approvals that fired during this assistant turn — including resolved
@@ -82,7 +85,7 @@ export interface UiMessage extends ChatMessage {
  * UI can extend it later without breaking the wire protocol.
  */
 export type AssistantTimelineItem =
-  | { kind: "text"; id: string; text: string }
+  | Extract<import("@amiba/app-runtime/core").AssistantTimelineItem, { kind: "text" }>
   | { kind: "reasoning"; id: string; text: string; startedAt?: number; endedAt?: number }
   | { kind: "tool"; id: string; toolCallId: string }
   | { kind: "approval"; id: string; approvalId: string }

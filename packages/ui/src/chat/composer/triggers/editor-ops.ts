@@ -1,3 +1,5 @@
+import { $setInputDraft } from "./input-draft-edit";
+import { InputDraftProjection } from "./input-draft";
 /**
  * The four scoped `slash/input-*` verbs, implemented against Amiba's Lexical
  * editor.
@@ -31,6 +33,7 @@ import type { MentionData } from "../providers/types";
 import { CommandClaimStore } from "./claim";
 import type {
   CommandClaim,
+  ComposerInputDraft,
   ConsumeTokenGuard,
   PickOutcome,
   ReferenceInsert,
@@ -59,6 +62,7 @@ export function referenceMention(reference: ReferenceInsert): MentionData {
       ref: reference.ref,
       label: reference.label,
       clipboardText: reference.clipboardText,
+      ...(reference.appearance ? { appearance: reference.appearance } : {}),
     },
     display: reference.label,
   };
@@ -105,6 +109,7 @@ export function createTriggerEditorOps(
   editor: LexicalEditor,
   claims: CommandClaimStore,
   revision: DraftRevision,
+  canWrite: () => boolean = () => editor.isEditable(),
 ): TriggerEditorOps {
   /** Span CAS: revision equality plus bounds sanity (upstream `casOk`). */
   const casOk = (span: TokenSpan, draftLength: number): boolean =>
@@ -113,7 +118,52 @@ export function createTriggerEditorOps(
     span.start <= span.end &&
     span.end <= draftLength;
 
+  const inputDraft = new InputDraftProjection();
+  let cachedDraft: ReturnType<InputDraftProjection["read"]> | undefined;
+  let cachedStatus: ReturnType<CommandClaimStore["getInputStatus"]> | undefined;
+  let cachedInput: ComposerInputDraft | undefined;
+  const readInput = (): ComposerInputDraft => {
+    const draft = inputDraft.read();
+    const status = claims.getInputStatus();
+    if (!cachedInput || draft !== cachedDraft || status !== cachedStatus) {
+      cachedDraft = draft;
+      cachedStatus = status;
+      cachedInput = Object.freeze({ ...draft, ...status });
+    }
+    return cachedInput;
+  };
   return {
+    readInputDraft() {
+      return editor.getEditorState().read(readInput);
+    },
+    setInputDraft(text, expectedRevision) {
+      const phase = claims.getInputStatus().phase;
+      if (!canWrite() || phase === "adjudicating" || phase === "submitting") return false;
+      return transact(editor, () => {
+        const before = inputDraft.read();
+        if (expectedRevision !== undefined && before.draftRev !== expectedRevision) return false;
+        $setInputDraft(text);
+        return before.draft !== text && inputDraft.read().draft === text;
+      });
+    },
+    editInputDraft(text) {
+      if (!editor.isEditable()) return false;
+      return transact(editor, () => {
+        const before = inputDraft.read();
+        $setInputDraft(text);
+        return before.draft !== text && inputDraft.read().draft === text;
+      });
+    },
+    subscribeInputDraft(listener) {
+      const offEditor = editor.registerUpdateListener(({ editorState }) => {
+        // Advance public revisions even when no subscriber reads this update;
+        // editing away and back must still invalidate an earlier span.
+        editorState.read(() => inputDraft.read());
+        listener();
+      });
+      const offClaim = claims.subscribe(listener);
+      return () => { offEditor(); offClaim(); };
+    },
     beginCommand(claim: CommandClaim, span: TokenSpan): boolean {
       const entered = transact(editor, () => {
         const before = $scanDraft();

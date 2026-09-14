@@ -45,6 +45,11 @@ export const dshAttachments: AgentAttachmentsAdapter & {
     });
   },
 
+  async retainForSession(attachmentId, sessionId) {
+    const { client } = await dshRuntime.ensureStarted();
+    await client.call("amibaAttachments/retainForSession", { args: { attachmentId, sessionId } });
+  },
+
   async readForPrompt(attachmentId) {
     const { client } = await dshRuntime.ensureStarted();
     return client.call("amibaAttachments/readForPrompt", {

@@ -1,3 +1,4 @@
+import type { CommandAttachments } from "../command-contract";
 /**
  * The runtime-neutral face of the OFFICIAL input-trigger pipeline, as seen
  * from `@amiba/ui`.
@@ -16,8 +17,11 @@
 
 import type {
   ClientSessionContext,
+  ComposerAttachment,
+  ConversationInputState,
   CommandClaim,
   ConsumeTokenRequest,
+  InputTriggerSource,
   MenuState,
   ObservableSnapshot,
   PickOutcome,
@@ -66,6 +70,8 @@ export type ConsumeTokenGuard = ConsumeTokenRequest["guard"];
 export interface ComposerTriggerController {
   /** Menu state store — the ONE menu model both mount paths render from. */
   readonly menu: ObservableSnapshot<MenuState>;
+  /** Public hot plain-text names; optional for older/custom controllers. */
+  readonly lexicon?: ObservableSnapshot<ReadonlyMap<"/" | "@", readonly string[]>>;
   /** Feed one draft/caret change through detection and candidate fetch. */
   track(
     draft: string,
@@ -78,7 +84,7 @@ export interface ComposerTriggerController {
   /** Space adjudication over the just-completed leading token. */
   onSpace(): boolean;
   /** Enter adjudication; rejects when a polled source's warmup failed. */
-  adjudicate(line: string, signal: AbortSignal): Promise<PickOutcome>;
+  adjudicate(line: string, signal: AbortSignal, envelope: Parameters<NonNullable<InputTriggerSource["matchEnter"]>>[3]): Promise<PickOutcome>;
   /** Serialize one reference occurrence to its model form via its codec. */
   serializeReference(
     source: string,
@@ -106,7 +112,33 @@ export interface ComposerTriggerController {
  * counter, so a CAS-passing outcome whose splice is a no-op still answers
  * `false`.
  */
+/** The text/reference portion of official InputState, read from the live editor. */
+export interface ComposerInputStatus {
+  readonly phase: "plain" | "claimed" | "adjudicating" | "submitting";
+  readonly claim?: Readonly<Pick<CommandClaim, "token" | "hint" | "images"> & { name?: string; attachments?: boolean }>;
+}
+
+export interface ComposerInputDraft extends ComposerInputStatus {
+  readonly draft: string;
+  readonly draftRev: number;
+  readonly occurrences: readonly {
+    readonly occurrenceId: number;
+    readonly source: string;
+    readonly ref: string;
+    readonly offset: number;
+    readonly length: number;
+    readonly label: string;
+    readonly clipboardText: string;
+    readonly appearance?: ReferenceInsert["appearance"];
+  }[];
+}
+
 export interface TriggerEditorOps {
+  readInputDraft?(): ComposerInputDraft;
+  /** User draft edits remain available during asynchronous admission/submission. */
+  editInputDraft?(text: string): boolean;
+  setInputDraft?(text: string, expectedRevision?: number): boolean;
+  subscribeInputDraft?(listener: () => void): () => void;
   beginCommand(claim: CommandClaim, span: TokenSpan): boolean;
   insertReference(reference: ReferenceInsert, span: TokenSpan): boolean;
   consumeToken(guard: ConsumeTokenGuard): boolean;
@@ -118,7 +150,52 @@ export interface TriggerEditorOps {
  * `@amiba/dsh-plugin-ui-shell`; `undefined` on every surface without a plugin
  * runtime.
  */
+export interface ComposerDraftImageRegistration {
+  image: ComposerAttachment;
+  /** Optional native upload already prepared for this exact browser image. */
+  readonly prepared?: import("@amiba/app-runtime/core").Attachment;
+  release(): void;
+}
+
+export interface ComposerImageOps {
+  getImages(): readonly ComposerAttachment[];
+  subscribeImages?(listener: () => void): () => void;
+  /** Admission may change without any image-list mutation (e.g. upload settles). */
+  subscribeAvailability?(listener: () => void): () => void;
+  pruneImages?(ids: readonly ComposerAttachment["id"][]): void;
+  canAdd(): boolean;
+  addImages(images: readonly ComposerDraftImageRegistration[]): void;
+  removeImage(id: ComposerAttachment["id"]): void;
+}
+
+export interface ResidentTurnRequest {
+  sessionId: string;
+  /** Already adjudicated and reference-expanded text, not a raw composer draft. */
+  text: string;
+  attachments: readonly import("@amiba/app-runtime/core").Attachment[];
+  signal?: AbortSignal;
+  /** Internal transaction boundary immediately before dispatch/admission.
+   * Receives the prepared engine target, or the owning session for local queue admission. */
+  onDispatch?(targetSessionId: string): void;
+}
+
+export interface ResidentInputSubmissionState {
+  readonly pending: boolean;
+  readonly notice: string | null;
+}
+
 export interface ComposerTriggerRuntime {
+  commandClaimsFor?(sessionId: string): import("./claim").CommandClaimStore;
+  inputSubmissionSource?(sessionId: string): ObservableSnapshot<ResidentInputSubmissionState>;
+  clearInputSubmissionNotice?(sessionId: string): void;
+  isSessionRunning?(sessionId: string): boolean;
+  resolveResidentDraft?(sessionId: string, draft: import("../../composer-draft-document").ComposerDraftDocument, signal: AbortSignal): Promise<string>;
+  bindResidentTurnSender?(send: (request: ResidentTurnRequest) => Promise<import("@amiba/app-runtime/protocol").SubmitReceipt>, isBusy?: (sessionId: string) => boolean): () => void;
+  inputStateSource?(sessionId: string): ObservableSnapshot<ConversationInputState | undefined>;
+  bindImages?(sessionId: string, ops: ComposerImageOps): () => void;
+  /** Register an original browser image in the official runtime registry. */
+  registerDraftImage?(file: File): ComposerDraftImageRegistration | undefined;
+  bindSubmit?(sessionId: string, submit: () => boolean): () => void;
   /** Official source objects projected onto an editor without a DSH session. */
   draftSources?(): readonly import("@amiba/extension-sdk").InputTriggerSource[];
   /**
@@ -163,10 +240,12 @@ export interface ComposerTriggerRuntime {
    * references, commands insert text), so nothing is lost; a claim arriving
    * without this hook is reported as a failure, never silently swallowed.
    */
+  uploadCommandFile?(sessionId: string, dataBase64: string, name: string, signal?: AbortSignal): Promise<string>;
   submitClaim?(
     sessionId: string,
     claim: CommandClaim,
     args: string,
+    images?: CommandAttachments,
   ): Promise<SubmitOutcome>;
 }
 

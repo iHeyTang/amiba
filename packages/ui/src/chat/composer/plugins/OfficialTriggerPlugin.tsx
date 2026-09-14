@@ -1,3 +1,5 @@
+import { subscribeTextReferenceHighlights } from "../triggers/text-reference-highlights";
+import { $readComposerParts } from "../composer-parts";
 /**
  * THE DRIVER. Everything upstream's ui-conversation InputBar supplies to the
  * official trigger pipeline, supplied here from Amiba's Lexical composer.
@@ -42,13 +44,26 @@ export function OfficialTriggerPlugin({
   const [editor] = useLexicalComposerContext();
   const { controller, runtime, sessionId, claims, revision } = trigger;
 
+  useEffect(() => controller?.lexicon
+    ? subscribeTextReferenceHighlights(editor, controller.lexicon)
+    : undefined, [editor, controller]);
+
   // The four scoped bail listeners, for as long as this editor is mounted.
   useEffect(() => {
     if (runtime === undefined || !sessionId) return;
-    return runtime.bindEditor(
-      sessionId,
-      createTriggerEditorOps(editor, claims, revision),
-    );
+    let active = true;
+    let off: (() => void) | undefined;
+    // MentionSerializePlugin commits external/session draft changes in the
+    // preceding microtask. Do not publish the outgoing node tree under the
+    // incoming session, or force a synchronous Lexical flush during React effects.
+    queueMicrotask(() => {
+      if (!active) return;
+      off = runtime.bindEditor(
+        sessionId,
+        createTriggerEditorOps(editor, claims, revision, () => editor.isEditable() && trigger.guard().tier !== "frozen"),
+      );
+    });
+    return () => { active = false; off?.(); };
   }, [claims, editor, revision, runtime, sessionId]);
 
   // `commandUi` returns focus to the composer after a popup settles.
@@ -64,8 +79,11 @@ export function OfficialTriggerPlugin({
       editorState.read(() => {
         const scan = $scanDraft();
         const caret = $caretOffset(scan);
-        if (scan.draft !== lastDraft) {
-          lastDraft = scan.draft;
+        // Identity/label changes can leave the one-character trigger draft
+        // unchanged, but still invalidate a public input/reference snapshot.
+        const persistedDraft = JSON.stringify($readComposerParts());
+        if (persistedDraft !== lastDraft) {
+          lastDraft = persistedDraft;
           revision.bump();
           // Token integrity watch: an edit that breaks the claim prefix
           // releases command mode (upstream `watchClaim`).

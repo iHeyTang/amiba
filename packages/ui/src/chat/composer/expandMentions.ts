@@ -1,4 +1,4 @@
-import { parseTokens } from "./serialize"
+import { parseTokens, type ParsedPart } from "./serialize"
 import { REFERENCE_MENTION_TYPE } from "./triggers/editor-ops"
 import type { MentionData, MentionType, TriggerProvider } from "./providers/types"
 
@@ -66,15 +66,26 @@ export async function expandMentionsAsync(
   value: string,
   providers: TriggerProvider[],
   resolver?: ReferenceResolver,
+  signal: AbortSignal = new AbortController().signal,
 ): Promise<string> {
+  return expandMentionPartsAsync(parseTokens(value), providers, resolver, signal)
+}
+
+/** A live editor already knows which text is literal; do not parse it again. */
+export async function expandMentionPartsAsync(
+  parts: readonly ParsedPart[],
+  providers: TriggerProvider[],
+  resolver?: ReferenceResolver,
+  signal: AbortSignal = new AbortController().signal,
+): Promise<string> {
+  signal.throwIfAborted()
   const byType = new Map<MentionType, TriggerProvider>()
   for (const provider of providers) {
     if (provider.ownsType && !byType.has(provider.ownsType)) {
       byType.set(provider.ownsType, provider)
     }
   }
-  const attempt = new AbortController()
-  const chunks = await Promise.all(parseTokens(value).map(async (part) => {
+  const chunks = await Promise.all(parts.map(async (part) => {
     if (part.kind === "text") return part.text
     const reference = referenceOf(part.mention)
     if (reference !== null && resolver !== undefined) {
@@ -83,7 +94,7 @@ export async function expandMentionsAsync(
       return resolver.serializeReference(
         reference.source,
         reference.ref,
-        attempt.signal,
+        signal,
       )
     }
     const provider = byType.get(part.mention.type)
@@ -96,5 +107,6 @@ export async function expandMentionsAsync(
     }
     return provider?.serialize ? provider.serialize(part.mention) : part.raw
   }))
+  signal.throwIfAborted()
   return chunks.join("")
 }

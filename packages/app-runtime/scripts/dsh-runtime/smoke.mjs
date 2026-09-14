@@ -872,11 +872,12 @@ export function apply(ctx) {
             "@deepseek-ai/dsh-client-runtime",
             "@deepseek-ai/dsh-api-remotes",
             "@amiba/dsh-plugin-ui-shell",
+            "@deepseek-ai/dsh-client-connection",
           ],
         ],
       ]) {
         const entry = graph.entries.find((candidate) => candidate.id === id);
-        assert.deepEqual(entry.inject, inject);
+        assert.deepEqual(entry.inject, inject, `${id} client injection dependencies differ`);
         const response = await fetch(new URL(entry.url, baseUrl), {
           signal: AbortSignal.timeout(35_000),
         });
@@ -887,7 +888,9 @@ export function apply(ctx) {
         const requireName = (factoryParameter[1] ?? factoryParameter[2]).replaceAll("$", "\\$");
         const requests = new RegExp(`\\b${requireName}\\("(@amiba/[^"\\n]+)"\\)`, "gu");
         for (const [, request] of clientBundleSource.matchAll(requests)) {
-          assert.ok(entry.external?.includes(request), `${id} requires ${request} without declaring its module arrival dependency`);
+          // Match ClientModuleSystem: the /client subpath shares the package module ID.
+          const moduleId = request.replace(/\/client$/, "");
+          assert.ok(entry.external?.some((external) => external.replace(/\/client$/, "") === moduleId), `${id} requires ${request} without declaring its module arrival dependency`);
         }
         assert.match(
           clientBundleSource,

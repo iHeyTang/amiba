@@ -1,3 +1,22 @@
+import { registerDocumentPreview } from './document-preview/register.js';
+export type { ISidebarRight, SidebarRightOpenResourceOptions, SidebarRightOpenTabOptions } from './sidebar-right/service.js';
+import { registerSidebarRight } from './sidebar-right/register.js';
+import { createFileResourceProvider } from "./resources/file-provider.js";
+export { sessionFileAddress, absoluteFileAddress, parseFileAddress, type FileAddress } from "./resources/file-address.js";
+import { ResourceRegistry } from "./resources/resources.js";
+export type { Resources, ResourceProtocol, ResourceProvider, ResourceSnapshot, ResourceStatus, ResourceOpenContext, UseResource } from "./resources/contract.js";
+import { SidebarRightTabRegistry } from "./sidebar-right/tab-registry.js";
+export type { SidebarRightTabDefinition, SidebarRightTabPriority, SidebarRightTabClaim } from "./sidebar-right/tab-registry.js";
+import { createMainPanelListSource, type MainPanelRow } from "./main-panel-list.js";
+import { MainPanelNavigation } from "./main-panel-navigation.js";
+import { LayoutNavigation } from "./layout-navigation.js";
+import { sessionComposerDraft, makeWorkspaceFilesProvider } from "@amiba/ui";
+import { sessionPendingQueue } from "@amiba/ui/composer-runtime";
+import { createInputActionsProvider } from "./input-actions-provider.js";
+import { createDraftImageRegistry } from "./draft-image-registry.js";
+import { registerConversationNodes } from "@deepseek-ai/dsh-client-ui-conversation/headless";
+import { createDirectoryFlow, type DirectoryFlow } from "./directory-flow.js";
+import { createConversationViewSource, type ConversationViewEntry } from "./conversation-view-source.js";
 import { CONVERSATION_ENTRY_REMOTE } from "../conversation-remote.js";
 import { createConversationPreparer } from "./conversation-submit.js";
 import { ConversationSubmitProvider } from "@amiba/ui/plugin";
@@ -252,6 +271,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     settingsOnboardingSteps: SettingsOnboardingStepsSource;
     openSettingsSection: (sectionId: string) => void;
     sessionsBridge: AmibaSessionsBridge;
+    openLineageSession: (sessionId: import("@deepseek-ai/dsh-client-runtime/client").SessionId) => void;
     triggerRuntime: AmibaInputTriggerBridge;
     hiddenSessionIds: HiddenSessionsSource;
     sessionListGroups: ContributionsSource<SessionGroupRow>;
@@ -259,7 +279,18 @@ type AmibaRootProps = PropsRuntime<"root"> &
     messageSources: ContributionsSource<MessageSourceRow>;
     markdownSource: ContributionsSource<MarkdownExtension>;
     surfaces: SurfaceSelections;
+    mainPanels: MainPanelNavigation;
+    mainPanelList: ContributionsSource<MainPanelRow>;
     workbenchSource: ContributionsSource<WorkbenchViewExtension>;
+    directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
+    conversationViews: ContributionsSource<ConversationViewEntry>;
+    cordisPackages: import("./cordis-business.js").CordisPackages;
+    legacyToolDetailsAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
+    toolImagesAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
+    lineageAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
+    commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
+    conversationSource: (sessionId: string) => import("@deepseek-ai/dsh-client-runtime/client").SessionFace | undefined;
+    fileMentions: import("@deepseek-ai/dsh-client-ui-conversation/client").ChatFileMentions["forClosing"];
     reportMarkdown: (sessionId:string, capabilities:MarkdownCapabilities[]) => Promise<void>;
     prepareConversation: (sessionId: string) => Promise<string>;
   };
@@ -289,10 +320,23 @@ function AmibaRoot({
   messageSources,
   markdownSource,
   workbenchSource,
+  directoryFlows,
+  conversationViews,
+  cordisPackages,
+  commandRowKeys,
+  legacyToolDetailsAvailable,
+  toolImagesAvailable,
+  lineageAvailable,
+  conversationSource,
+  fileMentions,
   surfaces,
+  mainPanels,
+  mainPanelList,
   reportMarkdown,
   prepareConversation,
+  renderSlotChain,
   useSessions,
+  openLineageSession,
   useWorkspaces,
 }: AmibaRootProps): ReactNode {
   const workbench = useSyncExternalStore(workbenchSource.subscribe, workbenchSource.getSnapshot, workbenchSource.getSnapshot);
@@ -305,10 +349,21 @@ function AmibaRoot({
 
   return (
     <ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench}><MarkdownProvider extensions={markdown} report={reportMarkdown}><AmibaProductShell
+      mainPanelList={mainPanelList}
+      mainPanels={mainPanels}
       dshClient={dshClient}
       openSettingsSection={openSettingsSection}
       renderSlot={renderSlot}
+      renderSlotChain={renderSlotChain}
+      cordisPackages={cordisPackages}
+      commandRowKeys={commandRowKeys}
+      legacyToolDetailsAvailable={legacyToolDetailsAvailable}
+      toolImagesAvailable={toolImagesAvailable}
+      lineageAvailable={lineageAvailable}
+      conversationSource={conversationSource}
+      fileMentions={fileMentions}
       sessionsBridge={sessionsBridge}
+      openLineageSession={openLineageSession}
       settingsSections={settingsSections}
       settingsOnboardingSteps={settingsOnboardingSteps}
       triggerRuntime={triggerRuntime}
@@ -316,6 +371,8 @@ function AmibaRoot({
       sessionListGroups={sessionListGroups}
       sessionItemMenuItems={sessionItemMenuItems}
       surfaces={surfaces}
+      directoryFlows={directoryFlows}
+      conversationViews={conversationViews}
       messageSources={messageSources}
       useOfficialSessions={useSessions}
       useOfficialWorkspaces={useWorkspaces}
@@ -324,6 +381,9 @@ function AmibaRoot({
 }
 
 export interface AmibaLayoutService {
+  /** Supersede pending asynchronous navigation; aborted on the next navigation or root disposal. */
+  beginNavigation(): AbortSignal;
+  selectPanel(panelId: string | null): void;
   toggleSidebar(): void;
   openDetails(): void;
   closeDetails(): void;
@@ -365,6 +425,8 @@ function resolveSectionNavIcon(
 declare module "@deepseek-ai/cordis" {
   interface Context {
     layout: AmibaLayoutService;
+    sidebarRightTabs: SidebarRightTabRegistry;
+    composerImages: ReturnType<typeof createDraftImageRegistry>;
     composerInputs: AmibaInputTriggerBridge;
     amibaSessionVisibility: AmibaSessionVisibility;
   }
@@ -383,6 +445,7 @@ function dispatchLayoutAction(
 
 /** Register Amiba as the one DSH root owner and declare its child authority. */
 export async function apply(ctx: ClientContext): Promise<void> {
+  const sidebarRightTabs = new SidebarRightTabRegistry(ctx);
   // Typert owns descriptors by package, so all shell namespaces mount together.
   const disposeShellRemote = await ctx.remote.$mount({
     package: MARKDOWN_REMOTE.package,
@@ -411,7 +474,26 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // resolves — the same runtime-less path Quick-Ask takes.
   const disposeMessageCatalog = installAmibaMessageCatalog();
   document.title = "Amiba";
+  const navigation = new LayoutNavigation();
+  let mainPanels: MainPanelNavigation | undefined;
+  ctx.effect(() => () => navigation.dispose());
+  // Use the same event boundary as native navigation, including actions from
+  // the desktop host rather than calls through this particular service object.
+  ctx.effect(() => {
+    const invalidate = (event: Event) => {
+      const action = (event as CustomEvent<{ action?: unknown }>).detail?.action;
+      if (action === "open-chat" || action === "open-new-chat" || action === "open-workspace") mainPanels?.leavePanel();
+      if (action === "open-chat" || action === "open-new-chat" || action === "open-workspace" || action === "open-settings") navigation.commit();
+    };
+    window.addEventListener("amiba:dsh-layout-action", invalidate);
+    return () => window.removeEventListener("amiba:dsh-layout-action", invalidate);
+  });
   const layout: AmibaLayoutService = {
+    beginNavigation: () => navigation.beginNavigation(),
+    selectPanel: (id) => {
+      if (!mainPanels) throw new Error("layout.selectPanel: main panels are not ready");
+      mainPanels.selectPanel(id);
+    },
     toggleSidebar: () => dispatchLayoutAction("toggle-sidebar"),
     openDetails: () => dispatchLayoutAction("open-details"),
     closeDetails: () => dispatchLayoutAction("close-details"),
@@ -495,6 +577,12 @@ export async function apply(ctx: ClientContext): Promise<void> {
         ctx.slots.subscribe("settings.onboarding", listener),
     };
     const disposeLayout = ctx.reflect.provide("layout", layout);
+    const disposeRightTabRegistry = ctx.reflect.provide("sidebarRightTabs", sidebarRightTabs);
+    const resources = new ResourceRegistry(ctx);
+    const disposeResources = ctx.reflect.provide("resources", resources);
+    const workspaceFiles = getPlatform().workspaceFiles;
+    const disposeFileProvider = workspaceFiles?.stat ? resources.register(createFileResourceProvider(workspaceFiles)) : undefined;
+    const disposeResourceHook = ctx.slots.provideRoot({ keyedHooks: { resource: address => resources.source(address) } });
     const visibility = createSessionVisibility();
     const disposeVisibility = ctx.reflect.provide(
       "amibaSessionVisibility",
@@ -520,15 +608,37 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // in lock-step with Amiba's own per-window sessions store. The official
     // side's external switches route through the existing Amiba
     // open-session path.
-    const sessionsBridge = createSessionsBridge(ctx.sessions, (sessionId) => {
+    const sessionsBridge = createSessionsBridge(ctx.sessions, (sessionId, subagent) => {
       window.dispatchEvent(
-        new CustomEvent("amiba:open-session", { detail: { sessionId } }),
+        new CustomEvent("amiba:open-session", { detail: { sessionId, ...(subagent ? { subagent } : {}) } }),
       );
-    });
+    }, () => window.dispatchEvent(new CustomEvent("amiba:clear-session")));
     // The OFFICIAL input-trigger pipeline. Services are resolved lazily on
     // every call (`ctx.get`) so boot order stays free and a disabled row is
     // simply an absent service rather than a crash.
+    const composerImages = createDraftImageRegistry();
+    ctx.effect(() => {
+      const off = ctx.reflect.provide("composerImages", composerImages);
+      return () => { off(); composerImages.dispose(); };
+    }, "native composer draft images");
     const triggerRuntime = createInputTriggerBridge({
+      uploadCommandFile: async (sessionId, data, name, signal) => {
+        const service = ctx.get("fileUpload") as {upload(sessionId:string,data:Uint8Array,name:string,signal?:AbortSignal):Promise<{ok:true;value:{receiptId:string}}|{ok:false;error:{message:string}}>} | undefined;
+        if (!service) throw new Error("File upload service is unavailable.");
+        signal?.throwIfAborted();
+        const bytes = Uint8Array.from(atob(data), character => character.charCodeAt(0));
+        const result = await service.upload(sessionId, bytes, name, signal);
+        if (!result.ok) throw new Error(result.error.message);
+        return result.value.receiptId;
+      },
+      residentDraft: sessionId => sessionComposerDraft(getPlatform().storage, sessionId),
+      pendingQueue: sessionId => sessionPendingQueue(getPlatform().storage, sessionId),
+      mentionProviders: sessionId => {
+        const files = getPlatform().workspaceFiles;
+        return files ? [makeWorkspaceFilesProvider(files, sessionId)] : [];
+      },
+      images: () => composerImages,
+      sessionFor: sessionId => ctx.sessions.binding(sessionId as never)?.session,
       scopeOf: (sessionId) =>
         ctx.sessions.scope(sessionId as never) as unknown as
           | ClientContext
@@ -544,6 +654,16 @@ export async function apply(ctx: ClientContext): Promise<void> {
         >,
     });
     const disposeComposerInputs = ctx.reflect.provide("composerInputs", triggerRuntime);
+    ctx.effect(() => {
+      const provider = createInputActionsProvider(triggerRuntime);
+      try {
+        const off = ctx.sessions.provide(provider);
+        return () => { off(); provider.dispose(); };
+      } catch (error) {
+        provider.dispose();
+        throw error;
+      }
+    }, "native input actions");
     // Amiba's own `/` and `@` sources, published through the official
     // registry rather than a private one — so a plugin's `registerSource`
     // and Amiba's own land in the same menu, ranked by the same `order`.
@@ -552,6 +672,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // before `ui-input-trigger` has provided the service, and an eager call
     // would silently register nothing at all — the built-in skills and
     // session groups would simply never appear in-session.
+    const conversationDataFiber = ctx.inject(["conversationEvents", "conversationViews"], (scope) => {
+      registerConversationNodes(scope);
+    });
     const sourcesFiber = ctx.inject(["inputTriggers"], (scope) => {
       scope.effect(
         () => triggerRuntime.registerSources(officialTriggerSources()),
@@ -581,7 +704,26 @@ export async function apply(ctx: ClientContext): Promise<void> {
     );
     const markdownSource = createMarkdownSource(ctx.slots);
     const workbenchSource = createWorkbenchSource(ctx.slots);
+    const conversationViews = createConversationViewSource(ctx.slots);
+    const adoptDirectory = async (path: string) => {
+      const workspaces = ctx.get("workspaces");
+      if (!workspaces) throw new Error("Workspace service is unavailable");
+      return workspaces.create({ path });
+    };
+    const directoryFlows = {
+      home: createDirectoryFlow(ctx.slots, "conversation.hero.workspace.directoryFlow", adoptDirectory),
+      workspace: createDirectoryFlow(ctx.slots, "sidebar.workspaces.directoryFlow", adoptDirectory),
+    };
     const surfaces = createSurfaceSelections(ctx.slots, getPlatform().storage);
+    mainPanels = new MainPanelNavigation(navigation, {
+      hasPanel: id => ctx.slots.entriesOfSlot("main").some(entry => entry.options.key === id),
+      subscribe: listener => ctx.slots.subscribe("main", listener),
+    }, () => {
+      dispatchLayoutAction("open-workspace", { viewId: "chats" });
+    });
+    const panelNavigation = mainPanels;
+    const mainPanelList = createMainPanelListSource(ctx.slots, id => ctx.slots.entriesOfSlot("main").some(entry => entry.options.key === id));
+    const disposePanelInfo = ctx.slots.provideRoot({ hooks: { panelInfo: panelNavigation } });
     const disposeRoot = ctx.slots.register(
       {
         name: "root",
@@ -592,8 +734,57 @@ export async function apply(ctx: ClientContext): Promise<void> {
         // nav's openSettings affordance rides this face too.
         inject: () => ({
           dshClient,
+          mainPanels: panelNavigation,
+          mainPanelList,
           markdownSource,
           workbenchSource,
+          directoryFlows,
+          conversationViews,
+          fileMentions: (owner: import("@deepseek-ai/dsh-client-ui-conversation/client").TurnTailOwnerProps) => ctx.get("chatFileMentions")?.forClosing(owner),
+          cordisPackages: (() => {
+            const empty: readonly import("./cordis-business.js").CordisBusinessOwner[] = [];
+            const runner = () => ctx.get("dynamicCordisRunner" as never) as unknown as import("./cordis-business.js").CordisPackages | undefined;
+            return {
+              getSnapshot: () => runner()?.getSnapshot() ?? empty,
+              subscribe: (listener: () => void) => {
+                const fiber = ctx.inject(["dynamicCordisRunner" as never], scope => {
+                  scope.effect(() => runner()?.subscribe(listener) ?? (() => {}), "Cordis loaded packages");
+                  listener();
+                });
+                return () => { fiber.dispose(); };
+              },
+            };
+          })(),
+          legacyToolDetailsAvailable: {
+            getSnapshot: () => ctx.slots.entriesOfSlot("conversation.details.tool").length > 0,
+            subscribe: (listener: () => void) => ctx.slots.subscribe("conversation.details.tool", listener),
+          },
+          toolImagesAvailable: {
+            getSnapshot: () => ctx.slots.entriesOfSlot("tool.call.images").length > 0,
+            subscribe: (listener: () => void) => ctx.slots.subscribe("tool.call.images", listener),
+          },
+          commandRowKeys: (() => {
+            let version = -1;
+            let keys: readonly string[] = [];
+            return {
+              getSnapshot: () => {
+                const next = ctx.slots.getVersion("conversation.chat.commandview");
+                if (version !== next) {
+                  version = next;
+                  keys = ctx.slots.entriesOfSlot("conversation.chat.commandview").flatMap(entry =>
+                    typeof entry.options.key === "string" ? [entry.options.key] : []);
+                }
+                return keys;
+              },
+              subscribe: (listener: () => void) => ctx.slots.subscribe("conversation.chat.commandview", listener),
+            };
+          })(),
+          lineageAvailable: {
+            getSnapshot: () => ctx.slots.entriesOfSlot("conversation.session.header.lineage").length > 0,
+            subscribe: (listener: () => void) => ctx.slots.subscribe("conversation.session.header.lineage", listener),
+          },
+          openLineageSession: (sessionId: import("@deepseek-ai/dsh-client-runtime/client").SessionId) => ctx.sessions.open(sessionId),
+          conversationSource: (sessionId: string) => ctx.get("sessions")?.binding(sessionId as import("@deepseek-ai/dsh-client-runtime/client").SessionId)?.session,
           surfaces,
           reportMarkdown,
           prepareConversation,
@@ -609,6 +800,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
           messageSources,
         }),
         children: {
+          "conversation.chat.turnTail": { kind: "chain", scope: "session" },
+          "conversation.hero.workspace.directoryFlow": { kind: "single", scope: "root" },
+          "sidebar.workspaces.directoryFlow": { kind: "single", scope: "root" },
           "sidebar.footer.action": { kind: "list", scope: "root" },
           "amiba.message.decoration": { kind: "list", scope: "root" },
           "amiba.composer.accessory": { kind: "list", scope: "root" },
@@ -640,6 +834,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
           },
           "amiba.session.observer": { kind: "list", scope: "root" },
           "amiba.workspace.view": { kind: "list", scope: "root" },
+          "main": { kind: "keyed", scope: "root" },
+          "sidebar.panellist": { kind: "list", scope: "root" },
           // Official vocabulary: the right-aligned session-header utilities
           // strip, from @deepseek-ai/dsh-client-ui-conversation (replaces
           // the retired amiba.chat.header.after). SESSION scope from a
@@ -649,6 +845,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // components receive, and the renderer's StrictSessionEntry
           // renders null while no official session is current, so the home
           // view is unaffected.
+          "conversation.session.header.lineage": { kind: "single", scope: "session" },
+          "conversation.session.header.corner": { kind: "single", scope: "session" },
           "conversation.session.header.utilities": {
             kind: "list",
             scope: "session",
@@ -704,6 +902,13 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // (`[data-composer-card]`), which is the anchor the official
           // occupants position against and probe with `closest()`.
           "conversation.input.overlay": { kind: "list", scope: "session" },
+          "conversation.input.dock": { kind: "list", scope: "session" },
+          "conversation.composer.dock": { kind: "list", scope: "session" },
+          "tool.view.cordis": { kind: "keyed", scope: "session" },
+          "conversation.chat.commandview": { kind: "keyed", scope: "session" },
+          "conversation.input.attachments": { kind: "single", scope: "session-maybe" },
+          "conversation.input.left": { kind: "list", scope: "session" },
+          "conversation.input.right": { kind: "list", scope: "session" },
           // Official vocabulary: the KEYED per-tool call row, from
           // @deepseek-ai/dsh-client-ui-tool (keyed, session scope, owner
           // ToolCallOwnerProps). Registration key = the wire tool name, an
@@ -715,7 +920,12 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // projection. Declaring it on this root instead is legal and the
           // same pattern the adopted conversation.* seats use; only the
           // declaration site differs, never the key/kind/scope/owner.
+          "conversation.view": { kind: "list", scope: "session" },
+          "conversation.message.images": { kind: "single", scope: "session" },
+          "tool.call.images": { kind: "single", scope: "session" },
+          "conversation.approval.detail": { kind: "single", scope: "session" },
           "conversation.chat.assistant-actions": { kind: "list", scope: "session" },
+          "conversation.details.tool": { kind: "single", scope: "session" },
           "tool.call.toolview": { kind: "keyed", scope: "session" },
           // Amiba's keyed question seat: one entry per question id (a
           // plugin-owned question kind claims exactly its own id), `fallback`
@@ -839,6 +1049,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // generic ToolRowFrame — the reference pattern for any plugin that wants
     // a bespoke row for its own tool. Registered after the root because the
     // root's children table is what declares the seat.
+    const sidebarRightFiber = ctx.inject(['locale'], scope => {
+      scope.effect(() => registerSidebarRight(scope, sidebarRightTabs, resources), 'amiba-ui-shell: optional sidebar panel');
+      const files = getPlatform().workspaceFiles;
+      if (files) scope.effect(() => registerDocumentPreview(scope, sidebarRightTabs, files), 'amiba-ui-shell: document preview');
+    });
     const disposeAskToolview = ctx.slots.inject("tool.call.toolview", () =>
       ctx.slots.register(
         { name: "tool.call.toolview", key: "ask_user_question" },
@@ -856,6 +1071,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     );
     return () => {
       for (const dispose of disposeOfficialToolviews) dispose();
+      void sidebarRightFiber.dispose();
       disposeAskToolview();
       void languageRowFiber.dispose();
       void sessionExportFiber.dispose();
@@ -865,11 +1081,21 @@ export async function apply(ctx: ClientContext): Promise<void> {
       void localeFiber.dispose();
       void messagesFiber.dispose();
       disposeMessageCatalog();
+      void conversationDataFiber.dispose();
       void sourcesFiber.dispose();
       void disposeComposerInputs();
       for (const dispose of disposeWorkbench) dispose();
+      directoryFlows.home.dispose();
+      directoryFlows.workspace.dispose();
+      panelNavigation.dispose();
+      disposePanelInfo();
+      if (mainPanels === panelNavigation) mainPanels = undefined;
       disposeRoot();
       sessionsBridge.dispose();
+      disposeFileProvider?.();
+      disposeResourceHook();
+      void disposeResources();
+      void disposeRightTabRegistry();
       void disposeLayout();
       void disposeVisibility();
     };

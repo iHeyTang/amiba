@@ -1,0 +1,100 @@
+.renderer {
+  --dsw-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ds-font-family-code: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --dsw-font-markdown-code-block: 400 13px/1.6 var(--ds-font-family-code);
+  --dsw-alias-label-primary: hsl(var(--foreground));
+  --dsw-alias-label-tertiary: hsl(var(--muted-foreground));
+  --dsw-alias-bg-base: hsl(var(--background));
+  --dsw-alias-markdown-code-block: hsl(var(--background));
+  --dsw-alias-markdown-code-block-banner: hsl(var(--muted));
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  white-space: normal;
+}
+
+.renderer .code {
+  --dsl-code-block-border-radius: 0px;
+  --dsl-code-block-line-white-space: pre;
+  /* In a sidebar pane the code sits on the pane's own background; the chat
+     card's gray fill stays a chat-only default. */
+  --dsl-code-block-background: transparent;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  position: static;
+  margin: 0;
+  min-width: 0;
+}
+
+/* The banner is the scrollport's sibling, so the source scrollbar starts
+   below it. */
+.renderer .code > [data-code-block-content] {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.renderer .code > [data-code-block-content]::-webkit-scrollbar-track {
+  margin: 2px;
+}
+
+.renderer .code pre {
+  box-sizing: border-box;
+  min-width: 100%;
+  overflow: visible;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.renderer[data-wrap='true'] .code {
+  --dsl-code-block-line-white-space: pre-wrap;
+}
+
+.renderer[data-wrap='true'] .code pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Syntax-highlight token palette: the values behind shiki's css-variables
+   theme (--shiki-* custom properties emitted by the ui-primitives CodeBlock).
+   Light values on :root, dark overrides on the body attribute — the same
+   cascade as every other token sheet. Background/foreground deliberately
+   alias the markdown code-block tokens so highlighted and plain blocks agree. */
+
+.renderer {
+  --shiki-foreground: var(--dsw-alias-label-primary);
+  --shiki-background: var(--dsw-alias-markdown-code-block);
+  --shiki-token-constant: #1c7ed6;
+  --shiki-token-string: #2f9e44;
+  --shiki-token-comment: #868e96;
+  --shiki-token-keyword: #d6336c;
+  --shiki-token-parameter: #e8590c;
+  --shiki-token-function: #6741d9;
+  --shiki-token-string-expression: #2b8a3e;
+  --shiki-token-punctuation: #495057;
+  --shiki-token-link: #1971c2;
+}
+
+:global(.dark) .renderer {
+  --shiki-token-constant: #4dabf7;
+  --shiki-token-string: #69db7c;
+  --shiki-token-comment: #adb5bd;
+  --shiki-token-keyword: #faa2c1;
+  --shiki-token-parameter: #ffa94d;
+  --shiki-token-function: #b197fc;
+  --shiki-token-string-expression: #8ce99a;
+  --shiki-token-punctuation: #ced4da;
+  --shiki-token-link: #74c0fc;
+}

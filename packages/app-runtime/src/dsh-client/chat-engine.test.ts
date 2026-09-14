@@ -30,6 +30,98 @@ function payload(overrides: Partial<SubmitPayload> = {}): SubmitPayload {
 }
 
 describe("DshChatEngineClient", () => {
+  it("sends a cold child prompt after mux readiness without waiting for a child subscription", async () => {
+    const order: string[] = [];
+    const address = { parentSessionId: "parent", childSessionId: "session-1", mode: "continuable" as const };
+    const subagentPrompt = vi.fn(async () => { order.push("prompt"); return { messageId: "child-message" }; });
+    const createSession = vi.fn();
+    const selectModel = vi.fn();
+    const resolveSession = vi.fn();
+    const prompt = vi.fn();
+    const client = { createSession, selectModel, prompt, subagentPrompt,
+      async openEvents() {
+        order.push("ready");
+        return (async function* () { order.push("read"); yield TURN_END; })();
+      },
+    } as unknown as DshApiClient;
+    const engine = new DshChatEngineClient({ client, resolveSession, resolveSubagent: () => address });
+    const events: string[] = [];
+    engine.onStreamEvent((_id, event) => events.push(event.kind));
+    engine.submit(payload({ modelSelection: { provider: "unused", model: "unused" } }));
+    await eventually(() => expect(events).toContain("done"));
+    expect(order).toEqual(["ready", "prompt", "read"]);
+    expect(subagentPrompt).toHaveBeenCalledWith(address, [{ type: "text", text: "/status" }], expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(createSession).not.toHaveBeenCalled();
+    expect(selectModel).not.toHaveBeenCalled();
+    expect(resolveSession).not.toHaveBeenCalled();
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it("surfaces unavailable-parent errors and closes the mux without waiting for any child frame", async () => {
+    const next = vi.fn();
+    const close = vi.fn(async () => ({ done: true, value: undefined }));
+    const client = {
+      openEvents: async () => ({ next, return: close }),
+      subagentPrompt: async () => { throw new Error("parent unavailable"); },
+    } as unknown as DshApiClient;
+    const engine = new DshChatEngineClient({ client, resolveSubagent: () => ({ parentSessionId: "parent", childSessionId: "session-1", mode: "continuable" }) });
+    const events: StreamEvent[] = [];
+    engine.onStreamEvent((_id, event) => events.push(event));
+    engine.submit(payload());
+    await eventually(() => expect(events).toContainEqual(expect.objectContaining({ kind: "error", message: "parent unavailable" })));
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("rejects one-shot sending before workspace resolution or stream creation", async () => {
+    const resolveSession = vi.fn();
+    const openEvents = vi.fn();
+    const createSession = vi.fn();
+    const engine = new DshChatEngineClient({ client: { openEvents, createSession } as unknown as DshApiClient, resolveSession,
+      resolveSubagent: () => ({ parentSessionId: "parent", childSessionId: "session-1", mode: "one-shot" }),
+    });
+    const events: StreamEvent[] = [];
+    engine.onStreamEvent((_id, event) => events.push(event));
+    engine.submit(payload());
+    await eventually(() => expect(events).toContainEqual(expect.objectContaining({ kind: "error", message: "One-shot subagent conversations are read-only" })));
+    expect(resolveSession).not.toHaveBeenCalled();
+    expect(openEvents).not.toHaveBeenCalled();
+    expect(createSession).not.toHaveBeenCalled();
+  });
+
+  it("stops a continuable child through its retained parent without resuming either Agent", () => {
+    const cancel = vi.fn();
+    const subagentInterrupt = vi.fn(async () => ({ accepted: true as const }));
+    const client = { cancel, subagentInterrupt } as unknown as DshApiClient;
+    const address = { parentSessionId: "cold-parent", childSessionId: "child", mode: "continuable" as const };
+    const engine = new DshChatEngineClient({ client, resolveSubagent: () => address });
+    engine.abort("child");
+    expect(subagentInterrupt).toHaveBeenCalledWith(address);
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
+  it.each(["one-shot", "mismatched"])("does not fall back to root cancellation for a %s child address", (kind) => {
+    const cancel = vi.fn();
+    const subagentInterrupt = vi.fn();
+    const client = { cancel, subagentInterrupt } as unknown as DshApiClient;
+    const engine = new DshChatEngineClient({ client, resolveSubagent: () => ({
+      parentSessionId: "parent", childSessionId: kind === "mismatched" ? "other" : "child",
+      mode: kind === "one-shot" ? "one-shot" : "continuable",
+    }) });
+    engine.abort("child");
+    expect(subagentInterrupt).not.toHaveBeenCalled();
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
+  it("keeps ordinary cancellation for sessions without a catalog address", () => {
+    const cancel = vi.fn(async () => ({ accepted: true as const }));
+    const subagentInterrupt = vi.fn();
+    const engine = new DshChatEngineClient({ client: { cancel, subagentInterrupt } as unknown as DshApiClient, resolveSubagent: () => undefined });
+    engine.abort("root");
+    expect(cancel).toHaveBeenCalledWith("root");
+    expect(subagentInterrupt).not.toHaveBeenCalled();
+  });
+
   it("runs slash commands directly through DSH without an Electron engine", async () => {
     const subscribed: DshMuxEnvelope = {
       rpcId: "subscription",
@@ -102,11 +194,14 @@ describe("DshChatEngineClient", () => {
       kind: "image" as const,
       dataBase64: "AQID",
     }));
+    let retained!: () => void;
+    const retainForSession = vi.fn(() => new Promise<void>(resolve => { retained = resolve; }));
     const engine = new DshChatEngineClient({
       client,
       attachments: {
         put: vi.fn(),
         remove: vi.fn(),
+        retainForSession,
         readForPrompt,
       },
     });
@@ -125,10 +220,16 @@ describe("DshChatEngineClient", () => {
         ],
       }),
     );
+    await eventually(() => expect(retainForSession).toHaveBeenCalledOnce());
+    expect(readForPrompt).not.toHaveBeenCalled();
+    expect(prompt).not.toHaveBeenCalled();
+    retained();
     await eventually(() => expect(prompt).toHaveBeenCalledOnce());
     expect(readForPrompt).toHaveBeenCalledWith(
       "att_0123456789abcdef0123456789abcdef",
     );
+    expect(retainForSession).toHaveBeenCalledWith("att_0123456789abcdef0123456789abcdef", "session-1");
+    expect(retainForSession.mock.invocationCallOrder[0]).toBeLessThan(readForPrompt.mock.invocationCallOrder[0]);
     const promptCall = prompt.mock.calls[0] as unknown as [string, unknown];
     expect(promptCall[1]).toEqual([
       { type: "text", text: "what is this?" },
@@ -288,6 +389,8 @@ describe("DshChatEngineClient host-started turns", () => {
     expect(last?.kind).toBe("live");
     const live = last as Extract<SnapshotFrame, { kind: "live" }>;
     expect(live.state.assistantText).toBe("on it");
+    expect(live.state.runtimeTurn).toBe(1);
+    expect(events.find(event => event.kind === "turn")).toMatchObject({ runtimeTurn: 1 });
     expect(live.state.assistantUiId).toBe(
       (events.find((event) => event.kind === "begin") as
         | Extract<StreamEvent, { kind: "begin" }>
@@ -439,6 +542,107 @@ describe("compaction event delivery", () => {
     expect(events.filter(event => event.kind === "compaction")).toHaveLength(2);
     engine.dispose();
   });
+});
+
+
+it("keeps finalized text provenance in passive snapshots without mutating an earlier snapshot", async () => {
+  const final=sessionFrame("assistant/message",{turn:1,step:2,message:{content:[{type:"text",text:"report.txt"}]}},4);
+  (final.payload as any).event.surfaceOp="append";
+  const engine=new DshChatEngineClient({client:scriptedClient([
+    TURN_START,
+    sessionFrame("assistant/chunk",{turn:1,step:2,chunk:{type:"text-delta",index:0,text:"report.txt"}},3),
+    final,
+  ])});
+  const snapshots:SnapshotFrame[]=[];
+  engine.onSnapshot(frame=>snapshots.push(frame));
+  engine.onStreamEvent((id,event)=>{if(event.kind==="chunk"||event.kind==="assistantTextSource")engine.requestSnapshot(id);});
+  engine.subscribe("session-1");
+  await eventually(()=>expect(snapshots.filter(s=>s.kind==="live")).toHaveLength(2));
+  const live=snapshots.filter(s=>s.kind==="live") as Extract<SnapshotFrame,{kind:"live"}>[];
+  expect(live[0].state.timeline[0]).toMatchObject({text:"report.txt",sourceRanges:[{start:0,end:10,runtimeStep:2}]});
+  expect((live[0].state.timeline[0] as any).sourceRanges[0]).not.toHaveProperty("runtimeSeq");
+  expect(live[1].state.timeline[0]).toMatchObject({text:"report.txt",sourceRanges:[{start:0,end:10,runtimeStep:2,runtimeSeq:4}]});
+  engine.dispose();
+});
+
+describe("official running baseline", () => {
+  function source(initial: boolean) {
+    let running=initial;
+    const listeners=new Set<()=>void>();
+    return {getSnapshot:()=>({running}),subscribe:vi.fn((listener:()=>void)=>{listeners.add(listener);return()=>listeners.delete(listener);}),
+      set(value:boolean){running=value;for(const listener of listeners)listener();},listeners};
+  }
+  const quietClient = () => ({async *events(signal:AbortSignal){await new Promise<void>(resolve=>{if(signal.aborted)resolve();else signal.addEventListener("abort",()=>resolve(),{once:true});});}} as unknown as DshApiClient);
+  it("restores Host activity without synthesizing a turn or assistant bubble and follows its idle edge", () => {
+    const activity=source(true), frames:SnapshotFrame[]=[],events:StreamEvent[]=[];
+    const engine=new DshChatEngineClient({client:quietClient(),sessionActivity:()=>activity});
+    engine.onSnapshot(frame=>frames.push(frame));engine.onStreamEvent((_id,event)=>events.push(event));
+    engine.subscribe("restored");
+    expect(frames.at(-1)).toEqual({type:"snapshot",sessionId:"restored",kind:"absent",hostRunning:true});
+    const count=frames.length;activity.set(true);expect(frames).toHaveLength(count);
+    activity.set(false);
+    expect(frames.at(-1)).toEqual({type:"snapshot",sessionId:"restored",kind:"absent",hostRunning:false});
+    expect(events).toEqual([]);
+    engine.dispose();expect(activity.listeners.size).toBe(0);
+  });
+  it("isolates sessions, replaces sources, and ignores stale notifications after clear or dispose", () => {
+    const one=source(true),two=source(false),replacement=source(false),frames:SnapshotFrame[]=[];
+    let first=one;
+    const engine=new DshChatEngineClient({client:Object.assign(quietClient(),{cancel:vi.fn(async()=>{})}),sessionActivity:id=>id==="one"?first:two});
+    engine.onSnapshot(frame=>frames.push(frame));engine.subscribe("one");engine.subscribe("two");engine.subscribe("one");
+    expect(one.subscribe).toHaveBeenCalledOnce();
+    first=replacement;engine.requestSnapshot("one");
+    expect(one.listeners.size).toBe(0);
+    const count=frames.length;one.set(false);expect(frames).toHaveLength(count);
+    two.set(true);expect(frames.at(-1)).toMatchObject({sessionId:"two",hostRunning:true});
+    engine.clear("one");expect(replacement.listeners.size).toBe(0);
+    engine.dispose();expect(two.listeners.size).toBe(0);expect(replacement.listeners.size).toBe(0);
+    const finalCount=frames.length;two.set(false);engine.subscribe("two");expect(frames).toHaveLength(finalCount);
+  });
+  it("does not let a delayed idle baseline override a locally pending submission", () => {
+    const activity=source(true),frames:SnapshotFrame[]=[];
+    const client=Object.assign(quietClient(),{listSessions:async()=>({items:[]}),createSession:async()=>({sessionId:"session-1"}),openEvents:()=>new Promise(()=>{})});
+    const engine=new DshChatEngineClient({client,sessionActivity:()=>activity});
+    engine.onSnapshot(frame=>frames.push(frame));engine.subscribe("session-1");engine.submit(payload());
+    activity.set(false);
+    expect(frames.at(-1)).toMatchObject({kind:"live",state:{streaming:true}});
+    expect(frames.at(-1)?.hostRunning).toBeUndefined();
+    engine.dispose();
+  });
+});
+
+it("stages native files for an ordinary model prompt, preserving metadata and mixed order", async () => {
+  const prompt = vi.fn(async () => ({ accepted: true, command: { text: "ok" } }));
+  const client = { listSessions: vi.fn(async () => ({ items: [] })), createSession: vi.fn(), prompt, async *events() { yield { rpcId: "s", payload: { type: "session/subscribed", sessionId: "session-1", lastSeq: 0 } }; } } as unknown as DshApiClient;
+  const attachments = [
+    { attachmentId: "native-file", name: "notes.txt", mime: "text/plain", size: 3, kind: "text" as const },
+    { attachmentId: "native-image", name: "image.png", mime: "image/png", size: 3, kind: "image" as const },
+  ];
+  const readForPrompt = vi.fn(async (id: string) => ({ ...attachments.find(item => item.attachmentId === id)!, dataBase64: "AQID" }));
+  const uploadFile = vi.fn(async () => "file-receipt");
+  const engine = new DshChatEngineClient({ client, uploadFile, attachments: { put: vi.fn(), remove: vi.fn(), readForPrompt } });
+  expect(await engine.submitWithReceipt(payload({ attachments, attachmentPrompt: "legacy native metadata" }))).toEqual({ kind: "accepted", command: { text: "ok" } });
+  expect(uploadFile).toHaveBeenCalledWith("session-1", "AQID", "notes.txt", expect.any(AbortSignal));
+  expect(readForPrompt.mock.invocationCallOrder[1]).toBeLessThan(uploadFile.mock.invocationCallOrder[0]);
+  expect(prompt.mock.calls[0]).toEqual(["session-1", [
+    { type: "text", text: "legacy native metadata" }, { type: "text", text: "/status" },
+    { type: "file", receiptId: "file-receipt" }, { type: "image", name: "image.png", mediaType: "image/png", data: "AQID" },
+  ], expect.any(Object)]);
+});
+
+it("does not dispatch after file preparation fails or is cancelled", async () => {
+  for (const cancel of [false, true]) {
+    const prompt = vi.fn();
+    const client = { listSessions: vi.fn(async () => ({ items: [] })), createSession: vi.fn(), prompt, cancel: vi.fn(async () => ({ accepted: true as const })), async *events() { yield { rpcId: "s", payload: { type: "session/subscribed", sessionId: "session-1", lastSeq: 0 } }; } } as unknown as DshApiClient;
+    const file = { attachmentId: "native-file", name: "notes.txt", mime: "text/plain", size: 3, kind: "text" as const };
+    const engine = new DshChatEngineClient({ client, attachments: { put: vi.fn(), remove: vi.fn(), readForPrompt: async () => ({ ...file, dataBase64: "AQID" }) }, uploadFile: async () => {
+      if (cancel) { engine.abort("session-1"); return "late-receipt"; }
+      throw new Error("upload rejected");
+    } });
+    const receipt = await engine.submitWithReceipt(payload({ attachments: [file] }));
+    expect(receipt.kind).not.toBe("accepted");
+    expect(prompt).not.toHaveBeenCalled();
+  }
 });
 
 it("resumes an IM session with its persisted cwd and preset instead of desktop defaults", async () => {

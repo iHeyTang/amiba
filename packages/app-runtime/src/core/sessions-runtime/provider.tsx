@@ -123,6 +123,7 @@ export function useSessions(): SessionsController {
   // compiling; the actual arrays are still treated immutably by the
   // store.
   return {
+    getSnapshot: store.getSnapshot,
     ready: state.ready,
     sessions: state.sessions as SessionsController["sessions"],
     openTabIds: state.openTabIds as SessionsController["openTabIds"],
@@ -131,6 +132,7 @@ export function useSessions(): SessionsController {
     activeMessages:
       state.activeMessages as SessionsController["activeMessages"],
     setActiveMessages: store.setActiveMessages,
+    updateActiveMessagesFor: store.updateActiveMessagesFor,
     ensureActive: store.ensureActive,
     openTab: store.openTab,
     closeTab: store.closeTab,

@@ -204,11 +204,48 @@ describe("service resolution", () => {
       commandUi: () => undefined,
     });
     await bridge.submitClaim!("s1", { token: "/goal ", submit }, "ship it");
-    // DSH 0.1.1 added composer images as a third `submit` argument. Amiba's
-    // composer does not forward attachments to slash commands, so the bridge
-    // passes an empty list rather than inventing one — pin that it is passed
-    // explicitly, not left undefined.
     expect(submit).toHaveBeenCalledWith("ship it", actx, []);
+  });
+
+  it("forwards actual command images and refuses claims without image support", async () => {
+    const scope = scopeDouble();
+    const bridge = bridgeOver(scope);
+    const submit = vi.fn(async () => ({ kind: "success" as const }));
+    const images = [{ mediaType: "image/png" as const, data: "AQID", name: "photo.png" }];
+    await bridge.submitClaim!("s1", { token: "/image ", images: true, submit }, "describe", images);
+    expect(submit).toHaveBeenCalledWith("describe", scope.ctx, images);
+    submit.mockClear();
+    await expect(bridge.submitClaim!("s1", { token: "/plain ", submit }, "describe", images)).rejects.toThrow("does not accept images");
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("adapts newer attachment claims at invocation without mutating legacy payloads or scope", async () => {
+    const scope = scopeDouble();
+    const bridge = bridgeOver(scope);
+    const submit = vi.fn(async () => ({ kind: "success" as const }));
+    const claim = { name: "image", token: "/image ", attachments: true, submit };
+    const images = Object.freeze([Object.freeze({ mediaType: "image/png" as const, data: "AQID", name: "photo.png" })]);
+    await bridge.submitClaim!("s1", claim, "describe", images);
+    expect(submit).toHaveBeenCalledWith("describe", scope.ctx, [{ type: "image", ...images[0] }]);
+    expect(images[0]).not.toHaveProperty("type");
+    submit.mockClear();
+    const refusing = { ...claim, attachments: false, images: true };
+    await expect(bridge.submitClaim!("s1", refusing, "describe", images)).rejects.toThrow("does not accept images");
+    expect(submit).not.toHaveBeenCalled();
+    await bridge.submitClaim!("s1", refusing, "text-only");
+    expect(submit).toHaveBeenCalledWith("text-only", scope.ctx, []);
+  });
+
+  it("preserves file receipt types and refuses them for legacy image claims", async () => {
+    const scope=scopeDouble();const bridge=bridgeOver(scope);
+    const submit=vi.fn(async()=>({kind:"success" as const}));
+    const file={type:"file" as const,receiptId:"receipt"};
+    const modern={token:"/file ",attachments:true,submit};
+    await bridge.submitClaim!("s1",modern,"",[file]);
+    expect(submit).toHaveBeenCalledWith("",scope.ctx,[file]);
+    submit.mockClear();
+    await expect(bridge.submitClaim!("s1",{token:"/image ",images:true,submit},"",[file])).rejects.toThrow("image attachments only");
+    expect(submit).not.toHaveBeenCalled();
   });
 
   it("rejects a claim submit for a session with no scope", async () => {
@@ -222,4 +259,298 @@ describe("service resolution", () => {
       bridge.submitClaim!("s1", { token: "/x ", submit: async () => ({ kind: "success" }) }, ""),
     ).rejects.toThrow(/resolved no scope/u);
   });
+});
+
+
+it("exposes only the current bound editor's input projection", () => {
+  const bridge=bridgeOver(scopeDouble());
+  const first={draft:"first",draftRev:1,occurrences:[],phase:"plain" as const};
+  const second={draft:"second",draftRev:2,occurrences:[],phase:"plain" as const};
+  expect(bridge.inputDraftFor("s1")).toBeUndefined();
+  const disposeFirst=bridge.bindEditor("s1",{...opsDouble(true),readInputDraft:()=>first});
+  expect(bridge.inputDraftFor("s1")).toBe(first);
+  expect(bridge.inputDraftFor("s2")).toBeUndefined();
+  const disposeSecond=bridge.bindEditor("s1",{...opsDouble(true),readInputDraft:()=>second});
+  disposeFirst();
+  expect(bridge.inputDraftFor("s1")).toBe(second);
+  disposeSecond();
+  expect(bridge.inputDraftFor("s1")).toBeUndefined();
+});
+
+
+it("streams input snapshots through edit, replacement and detach without stale editor events", () => {
+  const scope=scopeDouble();
+  const bridge=bridgeOver(scope);
+  const source=bridge.inputDraftSource("s1");
+  expect(bridge.inputDraftSource("s1")).toBe(source);
+  const seen:Array<string|undefined>=[];
+  const off=source.subscribe(()=>seen.push(source.getSnapshot()?.draft));
+  let draft={draft:"one",draftRev:0,occurrences:[],phase:"plain" as const};
+  let emit!:()=>void;
+  const unsubscribe=vi.fn();
+  const oldOps={...opsDouble(true),readInputDraft:()=>draft,subscribeInputDraft:(listener:()=>void)=>{emit=listener;return unsubscribe;}};
+  const oldDispose=bridge.bindEditor("s1",oldOps);
+  expect(seen).toEqual(["one"]);
+  draft={...draft,draft:"two",draftRev:1};
+  emit();
+  expect(seen).toEqual(["one","two"]);
+  const newOps={...opsDouble(true),readInputDraft:()=>({draft:"replacement",draftRev:0,occurrences:[],phase:"plain" as const})};
+  const dispose=bridge.bindEditor("s1",newOps);
+  emit(); // The old editor is still mounted briefly during replacement.
+  expect(seen).toEqual(["one","two","replacement"]);
+  expect(scope.bail("slash/input-insert-text",{text:"x",span:SPAN})).toBe(true);
+  expect(oldOps.insertText).not.toHaveBeenCalled();
+  expect(newOps.insertText).toHaveBeenCalledOnce();
+  oldDispose();
+  expect(unsubscribe).toHaveBeenCalledOnce();
+  expect(source.getSnapshot()?.draft).toBe("replacement");
+  dispose();
+  expect(seen).toEqual(["one","two","replacement",undefined]);
+  off();
+  const another=bridge.bindEditor("s1",newOps);
+  expect(seen).toHaveLength(4);
+  another();
+});
+
+it("does not broadcast another session's input changes", () => {
+  const bridge=bridgeOver(scopeDouble());
+  const listener=vi.fn();
+  const off=bridge.inputDraftSource("s1").subscribe(listener);
+  const detach=bridge.bindEditor("s2",opsDouble(true));
+  detach();
+  expect(listener).not.toHaveBeenCalled();
+  off();
+});
+
+
+it("keeps a replacement binding even when it reuses the same editor operations", () => {
+  const bridge=bridgeOver(scopeDouble());
+  const snapshot={draft:"same",draftRev:0,occurrences:[],phase:"plain" as const};
+  const ops={...opsDouble(true),readInputDraft:()=>snapshot};
+  const oldDispose=bridge.bindEditor("s1",ops);
+  const newDispose=bridge.bindEditor("s1",ops);
+  oldDispose();
+  expect(bridge.inputDraftFor("s1")).toEqual({ ...snapshot, draftRev: 1 });
+  newDispose();
+  expect(bridge.inputDraftFor("s1")).toBeUndefined();
+});
+
+it("does not remove newer listeners when an old subscription is disposed twice", () => {
+  const bridge=bridgeOver(scopeDouble());
+  const source=bridge.inputDraftSource("s1");
+  const oldOff=source.subscribe(()=>{});
+  oldOff();
+  const listener=vi.fn();
+  const off=source.subscribe(listener);
+  oldOff();
+  const detach=bridge.bindEditor("s1",opsDouble(true));
+  expect(listener).toHaveBeenCalledOnce();
+  off();
+  detach();
+});
+
+
+it("routes public draft writes to the current session editor and reports absence", () => {
+  const bridge=bridgeOver(scopeDouble());
+  expect(bridge.setInputDraft("s1","new")).toBe(false);
+  const setInputDraft=vi.fn(()=>true);
+  const dispose=bridge.bindEditor("s1",{...opsDouble(true),setInputDraft,readInputDraft:()=>({draft:"old",draftRev:12,occurrences:[],phase:"plain"})});
+  expect(bridge.setInputDraft("s2","wrong")).toBe(false);
+  expect(bridge.setInputDraft("s1","new",12)).toBe(true);
+  expect(setInputDraft).toHaveBeenCalledWith("new",12);
+  dispose();
+  expect(bridge.setInputDraft("s1","detached")).toBe(false);
+});
+
+
+it("routes submission only to the latest live binding for the addressed session", () => {
+  const bridge=bridgeOver(scopeDouble());
+  expect(bridge.submitInput("s1")).toBe(false);
+  const old=vi.fn(()=>true);
+  const current=vi.fn(()=>true);
+  const oldOff=bridge.bindSubmit!("s1",old);
+  const off=bridge.bindSubmit!("s1",current);
+  oldOff();
+  expect(bridge.submitInput("s2")).toBe(false);
+  expect(bridge.submitInput("s1")).toBe(true);
+  expect(current).toHaveBeenCalledOnce();
+  expect(old).not.toHaveBeenCalled();
+  off();
+  expect(bridge.submitInput("s1")).toBe(false);
+});
+
+describe("official browser draft image registrations", () => {
+  it("releases exactly once through the creating service even after service replacement", () => {
+    const file = { name: "original.png" } as File;
+    const image = { kind: "image", id: "browser-id", file, previewUrl: "blob:original" };
+    const first = { createDraftImages: vi.fn(() => [image]), releaseDraftImage: vi.fn() };
+    const second = { createDraftImages: vi.fn(), releaseDraftImage: vi.fn() };
+    let service: unknown = first;
+    const bridge = createInputTriggerBridge({
+      images: () => service,
+      scopeOf: () => undefined, subscribeSessions: () => () => {},
+      inputTriggers: () => undefined, commandUi: () => undefined,
+    });
+    const registration = bridge.registerDraftImage!(file)!;
+    expect(first.createDraftImages).toHaveBeenCalledWith([file]);
+    expect(registration.image).toBe(image);
+    service = second;
+    registration.release();
+    registration.release();
+    expect(first.releaseDraftImage).toHaveBeenCalledTimes(1);
+    expect(first.releaseDraftImage).toHaveBeenCalledWith("browser-id");
+    expect(second.releaseDraftImage).not.toHaveBeenCalled();
+  });
+
+  it("does not invent draft descriptors when the concrete registry is unavailable", () => {
+    const bridge = createInputTriggerBridge({
+      images: () => ({ send() {} }),
+      scopeOf: () => undefined, subscribeSessions: () => () => {},
+      inputTriggers: () => undefined, commandUi: () => undefined,
+    });
+    expect(bridge.registerDraftImage!({} as File)).toBeUndefined();
+  });
+});
+
+describe("session-scoped draft image operations", () => {
+  function setup() {
+    const image = { kind: "image" as const, id: "draft-one" as never, file: {} as File, previewUrl: "blob:one" };
+    const releaseDraftImage = vi.fn();
+    const bridge = createInputTriggerBridge({
+      images: () => registry,
+      scopeOf: () => undefined, subscribeSessions: () => () => {},
+      inputTriggers: () => undefined, commandUi: () => undefined,
+    });
+    const registry = {
+      createDraftImages: () => [image],
+      draftImages: (ids: readonly string[]) => ids.flatMap(id => id === image.id ? [image] : []),
+      releaseDraftImage,
+    };
+    const received: Array<{ image: typeof image; release(): void }> = [];
+    const ops = {
+      getImages: () => received.map(item => item.image), canAdd: vi.fn(() => true),
+      addImages: vi.fn((images: typeof received) => received.push(...images)), removeImage: vi.fn(),
+    };
+    return { bridge, image, releaseDraftImage, received, ops };
+  }
+  it("rejects missing IDs as a whole batch and never releases caller-owned images on rejection", () => {
+    const { bridge, image, ops, releaseDraftImage } = setup();
+    expect(bridge.addInputImages("unbound", [image.id])).toBe(false);
+    const off = bridge.bindImages!("s1", ops);
+    expect(bridge.addInputImages("s1", [image.id, "missing" as never])).toBe(false);
+    expect(ops.addImages).not.toHaveBeenCalled();
+    ops.canAdd.mockReturnValue(false);
+    expect(bridge.addInputImages("s1", [image.id])).toBe(false);
+    expect(releaseDraftImage).not.toHaveBeenCalled();
+    off();
+    expect(bridge.inputImagesFor("s1")).toBeUndefined();
+  });
+  it("retains duplicate/shared IDs until their last native owner releases them", () => {
+    const { bridge, image, ops, received, releaseDraftImage } = setup();
+    bridge.bindImages!("s1", ops);
+    bridge.bindImages!("s2", ops);
+    expect(bridge.addInputImages("s1", [image.id, image.id])).toBe(true);
+    expect(bridge.addInputImages("s2", [image.id])).toBe(true);
+    expect(received.map(item => item.image)).toEqual([image, image, image]);
+    received[0].release();
+    received[0].release();
+    received[1].release();
+    expect(releaseDraftImage).not.toHaveBeenCalled();
+    received[2].release();
+    expect(releaseDraftImage).toHaveBeenCalledTimes(1);
+    expect(releaseDraftImage).toHaveBeenCalledWith(image.id);
+  });
+  it("uses the latest binding, isolates sessions, and ignores stale binding cleanup", () => {
+    const { bridge, image, ops } = setup();
+    const old = bridge.bindImages!("s1", ops);
+    const replacement = { ...ops, removeImage: vi.fn(), getImages: () => [image] };
+    const current = bridge.bindImages!("s1", replacement);
+    old();
+    expect(bridge.inputImagesFor("s1")).toEqual([image]);
+    bridge.removeInputImage("s1", image.id);
+    bridge.removeInputImage("s2", image.id);
+    expect(replacement.removeImage).toHaveBeenCalledTimes(1);
+    expect(ops.removeImage).not.toHaveBeenCalled();
+    current();
+    expect(bridge.addInputImages("s1", [image.id])).toBe(false);
+  });
+});
+
+describe("observable image sources and pruning", () => {
+  it("publishes stable snapshots and isolates replacement bindings and stale notifications", () => {
+    const bridge = bridgeOver(scopeDouble());
+    const source = bridge.inputImagesSource("s1");
+    expect(bridge.inputImagesSource("s1")).toBe(source);
+    const image = { kind: "image" as const, id: "image-one" as never, file: {} as File, previewUrl: "blob:one" };
+    let images = [image];
+    let notify!: () => void;
+    const stop = vi.fn();
+    const ops = {
+      getImages: () => [...images], canAdd: () => true, addImages() {}, removeImage() {},
+      subscribeImages: (listener: () => void) => { notify = listener; return stop; },
+    };
+    const seen: unknown[] = [];
+    source.subscribe(() => seen.push(source.getSnapshot()));
+    expect(source.getSnapshot()).toBeUndefined();
+    const old = bridge.bindImages!("s1", ops);
+    const first = source.getSnapshot();
+    expect(first).toEqual([image]);
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(source.getSnapshot()).toBe(first);
+    images = [];
+    notify();
+    expect(source.getSnapshot()).toEqual([]);
+    expect(first).toEqual([image]);
+    const replacement = bridge.bindImages!("s1", { ...ops, getImages: () => [image], subscribeImages: undefined });
+    const count = seen.length;
+    notify();
+    old();
+    old();
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(seen).toHaveLength(count);
+    expect(bridge.inputImagesFor("s1")).toEqual([image]);
+    expect(bridge.inputImagesFor("s2")).toBeUndefined();
+    replacement();
+    expect(source.getSnapshot()).toBeUndefined();
+    expect(seen).toHaveLength(count + 1);
+  });
+
+  it("routes maintenance pruning independently of admission locks", () => {
+    const bridge = bridgeOver(scopeDouble());
+    const pruneImages = vi.fn();
+    const off = bridge.bindImages!("s1", { getImages: () => [], canAdd: () => false, addImages() {}, removeImage() {}, pruneImages });
+    bridge.pruneInputImages("s1", ["still-live" as never]);
+    bridge.pruneInputImages("other", []);
+    expect(pruneImages).toHaveBeenCalledTimes(1);
+    expect(pruneImages).toHaveBeenCalledWith(["still-live"]);
+    off();
+    bridge.pruneInputImages("s1", []);
+    expect(pruneImages).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+it("rejects a cached public revision after editor replacement and translates fresh revisions", () => {
+  const bridge = bridgeOver(scopeDouble());
+  const occurrence = { occurrenceId: 1, source: "files", ref: "one", label: "One", clipboardText: "@one", offset: 0, length: 4 };
+  let snapshot = { draft: "@One", draftRev: 0, occurrences: [occurrence], phase: "plain" as const };
+  const oldOff = bridge.bindEditor("s1", { ...opsDouble(true), readInputDraft: () => snapshot });
+  const old = bridge.inputDraftFor("s1")!;
+  snapshot = { ...snapshot, draft: "@One!", draftRev: 7 };
+  // Even with no public subscribers, replacement must account for final local edits.
+  const write = vi.fn(() => true);
+  const local = { draft: "@Other", draftRev: 0, occurrences: [{ ...occurrence, ref: "other", label: "Other", length: 6 }], phase: "plain" as const };
+  const off = bridge.bindEditor("s1", { ...opsDouble(true), readInputDraft: () => local, setInputDraft: write });
+  oldOff();
+  const current = bridge.inputDraftFor("s1")!;
+  expect(current.draftRev).toBe(8);
+  expect(current.occurrences[0].occurrenceId).not.toBe(old.occurrences[0].occurrenceId);
+  expect(bridge.inputDraftSource("s1").getSnapshot()).toBe(current);
+  expect(bridge.setInputDraft("s1", "stale", old.draftRev)).toBe(false);
+  expect(write).not.toHaveBeenCalled();
+  expect(bridge.setInputDraft("s1", "fresh", current.draftRev)).toBe(true);
+  expect(write).toHaveBeenCalledWith("fresh", 0);
+  off();
+  bridge.bindEditor("s1", { ...opsDouble(true), readInputDraft: () => local });
+  expect(bridge.inputDraftFor("s1")!.draftRev).toBe(9);
 });

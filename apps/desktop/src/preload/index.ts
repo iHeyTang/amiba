@@ -1,3 +1,4 @@
+import type { WorkspaceDocumentReadRequest, WorkspaceDocumentReadResult } from '@amiba/app-runtime/platform';
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { randomUUID } from "node:crypto";
 import { getWindowChrome } from "../shared/window-chrome";
@@ -76,6 +77,11 @@ const api = {
   windowChrome: getWindowChrome(process.platform),
 
   dshClient: {
+    uploadOpen: (url: string): Promise<string> => ipcRenderer.invoke('dsh-client:upload-open', url),
+    uploadWrite: (id: string, bytes: Uint8Array): Promise<void> => ipcRenderer.invoke('dsh-client:upload-write', id, bytes),
+    uploadFinish: (id: string): Promise<{status:number;body:string}> => ipcRenderer.invoke('dsh-client:upload-finish', id),
+    uploadCancel: (id: string): Promise<void> => ipcRenderer.invoke('dsh-client:upload-cancel', id),
+    download: (url: string) => ipcRenderer.invoke("dsh-client:download", url),
     boot: () => ipcRenderer.invoke("dsh-client:boot"),
     fetch: (request: {
       url: string;
@@ -151,6 +157,10 @@ const api = {
       ipcRenderer.invoke("workspace:get-default-root"),
     bind: (sessionId: string, p: string): Promise<void> =>
       ipcRenderer.invoke("workspace:bind", { sessionId, path: p }),
+    bindIfUnbound: (sessionId: string, p: string): Promise<string | null> =>
+      ipcRenderer.invoke("workspace:bind-if-unbound", { sessionId, path: p }),
+    resolveRuntimeCwd: (sessionId: string, cwd: string): Promise<string> =>
+      ipcRenderer.invoke("workspace:resolve-runtime-cwd", { sessionId, cwd }),
     unbind: (sessionId: string): Promise<void> =>
       ipcRenderer.invoke("workspace:unbind", sessionId),
     getCurrent: (sessionId: string): Promise<string | null> =>
@@ -182,6 +192,36 @@ const api = {
       ipcRenderer.invoke("files:search", { sessionId, query }),
     read: (sessionId: string, path: string) =>
       ipcRenderer.invoke("files:read", { sessionId, path }),
+    observe: (sessionId: string, path: string, changed: () => void) => {
+      const id = randomUUID();
+      let disposed = false;
+      const handler = (_event: unknown, observed: string) => {
+        if (!disposed && observed === id) changed();
+      };
+      ipcRenderer.on("files:resource-changed", handler);
+      const ready: Promise<void> = ipcRenderer.invoke("files:observe-resource", { id, sessionId, path });
+      const dispose = () => {
+        if (disposed) return;
+        disposed = true;
+        ipcRenderer.removeListener("files:resource-changed", handler);
+        void ipcRenderer.invoke("files:unobserve-resource", id).catch(() => {});
+      };
+      // Observe registration failures even if a caller disposes before awaiting ready.
+      void ready.catch(dispose);
+      return { ready, dispose };
+    },
+    stat: (sessionId: string, path: string) =>
+      ipcRenderer.invoke("files:stat", { sessionId, path }),
+    readDocument: (sessionId: string, path: string, request: WorkspaceDocumentReadRequest) => {
+      const id = randomUUID();
+      const result: Promise<WorkspaceDocumentReadResult> = ipcRenderer.invoke("files:read-document", { id, sessionId, path, request });
+      let disposed = false;
+      return { result, dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        void ipcRenderer.invoke("files:cancel-document", id).catch(() => {});
+      } };
+    },
     readBytes: (sessionId: string, path: string) =>
       ipcRenderer.invoke("files:read-bytes", { sessionId, path }),
     reveal: (sessionId: string, path: string): Promise<void> =>

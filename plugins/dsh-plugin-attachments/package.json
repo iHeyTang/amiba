@@ -18,7 +18,8 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "lib"
+    "lib",
+    "LICENSE.deepseek"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && vite build",
@@ -34,7 +35,10 @@
     "@amiba/ui": "workspace:*",
     "@amiba/extension-sdk": "workspace:*",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "@deepseek-ai/dsh-agent": "catalog:",
+    "@deepseek-ai/dsh-scope": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-session": "catalog:"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
@@ -51,14 +55,18 @@
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
     "vite": "^5.4.11",
-    "lucide-react": "^0.460.0"
+    "lucide-react": "^0.460.0",
+    "@deepseek-ai/dsh-fs-local": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-llm": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-compaction-basic": "0.1.1-rc.2"
   },
   "dsh": {
     "client": {
       "external": [
         "react",
         "react-dom",
-        "react/jsx-runtime"
+        "react/jsx-runtime",
+        "@deepseek-ai/cordis"
       ],
       "inject": [
         "@deepseek-ai/dsh-client-runtime"

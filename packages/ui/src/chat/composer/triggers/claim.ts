@@ -1,3 +1,4 @@
+import { commandAcceptsImages } from "../command-contract";
 /**
  * Command-mode state: the client half of the official `CommandClaim`
  * lifecycle.
@@ -14,7 +15,7 @@
  * 366-375 of the built client bundle).
  */
 
-import type { CommandClaim } from "./contracts";
+import type { CommandClaim, ComposerInputStatus } from "./contracts";
 
 /**
  * Strip the claim token off a draft to yield submit args. Leading whitespace
@@ -42,6 +43,31 @@ export class CommandClaimStore {
 
   get(): CommandClaim | null {
     return this.current;
+  }
+
+  private attempt: { phase: "adjudicating" | "submitting"; claim: CommandClaim | null } | null = null;
+  private inputStatus: ComposerInputStatus = Object.freeze({ phase: "plain" });
+
+  getInputStatus(): ComposerInputStatus {
+    const phase = this.attempt?.phase ?? (this.current ? "claimed" : "plain");
+    const claim = phase === "submitting" ? this.attempt?.claim : phase === "claimed" ? this.current : null;
+    const next: ComposerInputStatus = {
+      phase,
+      ...(claim ? { claim: Object.freeze({ token: claim.token,
+        ...(claim.hint !== undefined ? { hint: claim.hint } : {}),
+        ...(claim.images !== undefined || "attachments" in claim ? { images: commandAcceptsImages(claim) } : {}),
+        ...("attachments" in claim && typeof claim.attachments === "boolean" ? { attachments: claim.attachments } : {}),
+        ...("name" in claim && typeof claim.name === "string" ? { name: claim.name } : {}),
+      }) } : {}),
+    };
+    if (JSON.stringify(next) !== JSON.stringify(this.inputStatus)) this.inputStatus = Object.freeze(next);
+    return this.inputStatus;
+  }
+
+  setAttemptPhase(phase: "adjudicating" | "submitting" | null): void {
+    if ((this.attempt?.phase ?? null) === phase) return;
+    this.attempt = phase ? { phase, claim: phase === "submitting" && this.current ? { ...this.current } : null } : null;
+    this.emit();
   }
 
   /** Enter command mode. */

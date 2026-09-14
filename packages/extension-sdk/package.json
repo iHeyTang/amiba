@@ -38,7 +38,10 @@
     "@deepseek-ai/dsh-client-ui-settings-plugins": "catalog:",
     "@deepseek-ai/dsh-client-ui-slots": "catalog:",
     "@deepseek-ai/dsh-client-ui-tool": "catalog:",
-    "react": "^18.0.0"
+    "react": "^18.0.0",
+    "@deepseek-ai/dsh-client-ui-workspace": "catalog:",
+    "@deepseek-ai/dsh-client-ui-trajectory": "catalog:",
+    "@deepseek-ai/dsh-api-remotes": "catalog:"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "catalog:",
@@ -52,7 +55,10 @@
     "@deepseek-ai/dsh-client-ui-tool": "catalog:",
     "typescript": "5.6.3",
     "@types/react": "18.3.12",
-    "react": "18.3.1"
+    "react": "18.3.1",
+    "@deepseek-ai/dsh-client-ui-workspace": "catalog:",
+    "@deepseek-ai/dsh-client-ui-trajectory": "catalog:",
+    "@deepseek-ai/dsh-api-remotes": "catalog:"
   },
   "dependencies": {
     "@amiba/markdown": "workspace:*"

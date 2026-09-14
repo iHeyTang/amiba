@@ -4,6 +4,10 @@
  * Runtime adapters translate their native event stream at this boundary.
  */
 
+import type { ImageAttachmentRef } from "@amiba/extension-sdk";
+
+export type MessageImage = { readonly attachment: ImageAttachmentRef };
+
 export type ChatRole = "system" | "user" | "assistant" | "tool";
 
 /**
@@ -68,6 +72,8 @@ export interface MessageNotice {
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  /** Durable Host image references in content order; never local staging IDs. */
+  images?: readonly MessageImage[];
   name?: string;
   /** Local-only id used by presentation surfaces. */
   uiId?: string;
@@ -324,6 +330,11 @@ export interface SubmitPayload {
   modelSelection?: RuntimeModelSelection;
 }
 
+/** Host admission, distinct from the eventual model/command outcome. */
+export type SubmitReceipt =
+  | { kind: "accepted"; command?: { kind: "success" | "error"; text?: string } }
+  | { kind: "rejected" | "unconfirmed"; error: string };
+
 /** Presentation evidence from DSH's compaction lifecycle, scoped to one session. */
 export interface CompactionProgress {
   compactionId: string;
@@ -338,8 +349,23 @@ export interface CompactionProgress {
 
 export type CompactionUpdate = Pick<CompactionProgress, "compactionId"> & Partial<Omit<CompactionProgress, "compactionId">>;
 
+export interface AssistantTextSourceRange {
+  start: number;
+  end: number;
+  runtimeStep?: number;
+  runtimeSeq?: number;
+}
+
 export type AssistantTimelineItem =
-  | { kind: "text"; id: string; text: string }
+  | {
+      kind: "text";
+      id: string;
+      text: string;
+      /** Exact finalized assistant/message event, absent for unattributed chunks. */
+      runtimeSeq?: number;
+      /** Source ranges within unchanged, possibly merged streaming text. */
+      sourceRanges?: AssistantTextSourceRange[];
+    }
   | { kind: "reasoning"; id: string; text: string; startedAt?: number; endedAt?: number }
   | { kind: "tool"; id: string; toolCallId: string }
   | { kind: "approval"; id: string; approvalId: string }
@@ -358,6 +384,8 @@ export interface ChatRuntimeState {
   assistantText: string;
   /** Durable identity of the completed turn’s closing assistant, when available. */
   assistantMessageId?: string;
+  /** Exact DSH engine turn number, never a display ordinal. */
+  runtimeTurn?: number;
   reasoning: string;
   /** Wall-clock bounds of the reasoning stream; null until the first delta. */
   reasoningStartedAt: number | null;
@@ -397,7 +425,10 @@ export type ClientToEngineMessage =
       answers: UserQuestionAnswerItem[];
     };
 
-export type SnapshotFrame =
+export type SnapshotFrame = {
+  /** Authoritative session activity when this renderer does not own the turn. */
+  hostRunning?: boolean;
+} & (
   | {
       type: "snapshot";
       sessionId: string;
@@ -428,7 +459,8 @@ export type SnapshotFrame =
       sessionId: string;
       kind: "completed";
       state: ChatRuntimeState;
-    };
+    }
+);
 
 export type EngineToClientMessage =
   | SnapshotFrame
@@ -437,13 +469,15 @@ export type EngineToClientMessage =
 export type StreamEvent =
   | { kind: "begin"; assistantUiId: string }
   | { kind: "assistantMessage"; messageId: string }
-  | { kind: "chunk"; text: string }
+  | { kind: "chunk"; text: string; runtimeStep?: number }
+  | { kind: "assistantTextSource"; phase: "reset"; runtimeStep: number }
+  | { kind: "assistantTextSource"; phase: "final"; runtimeStep: number; runtimeSeq: number; text: string }
   | { kind: "reasoning"; text: string }
   | { kind: "toolCalls"; calls: ToolCall[] }
   | { kind: "toolProgress"; event: ToolProgress }
   | { kind: "compaction"; event: CompactionUpdate }
   | { kind: "session"; sessionId: string }
-  | { kind: "turn"; turnId: string }
+  | { kind: "turn"; turnId: string; runtimeTurn?: number }
   | { kind: "approvalRequest"; request: ApprovalRequest }
   | { kind: "approvalResolved"; approvalId: string }
   | { kind: "questionRequest"; request: UserQuestionRequest }
@@ -461,6 +495,8 @@ export type StreamEvent =
       kind: "userMessage";
       uiId: string;
       content: string;
+      images?: ChatMessage["images"];
+      attachmentBadges?: Array<Omit<RuntimeAttachment, "attachmentId"> & { uiId: string; attachmentId?: string; thumbDataUrl?: string }>;
       /** Wall-clock time of the durable user-message event. */
       sentAt: number;
       origin?: ChatMessage["origin"];
@@ -481,6 +517,8 @@ export interface ChatEngineClient {
   subscribe(sessionId: string): void;
   requestSnapshot(sessionId: string): void;
   submit(payload: SubmitPayload): void;
+  /** Optional for older transports. Unconfirmed admission must not imply safe retry. */
+  submitWithReceipt?(payload: SubmitPayload): Promise<SubmitReceipt>;
   abort(sessionId: string): void;
   clear(sessionId: string): void;
   clearApproval(sessionId: string, approvalId: string): void;

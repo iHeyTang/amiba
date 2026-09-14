@@ -1,3 +1,4 @@
+import { createComposerDraftSource } from "../../composer-draft-store";
 /**
  * The APPLIED-TRUTH contract of the four scoped `slash/input-*` verbs.
  *
@@ -15,8 +16,10 @@ import {
   createEditor,
   type LexicalNode,
 } from "lexical";
-import { describe, expect, it } from "vitest";
-import { MentionNode } from "../MentionNode";
+import { describe, expect, it, vi } from "vitest";
+import { composerDraftDocument, composerDraftDisplayText, legacyDraftDocument, updatePublicDraftDocument } from "../../composer-draft-document";
+import { $readComposerParts } from "../composer-parts";
+import { $createMentionNode, MentionNode } from "../MentionNode";
 import type { MentionData } from "../providers/types";
 import { CommandClaimStore } from "../triggers/claim";
 import {
@@ -240,4 +243,239 @@ describe("the claim integrity watch", () => {
     claims.watch("/goa");
     expect(claims.get()).toBeNull();
   });
+});
+
+
+describe("public input draft projection", () => {
+  it("keeps full display offsets and distinct stable identities without changing trigger coordinates", () => {
+    const {editor,ops,revision}=setup("");
+    const ref={source:"fixture",ref:"same",label:"文档",clipboardText:"@original"};
+    expect(ops.insertReference(ref,span(0,0))).toBe(true);
+    expect(ops.insertReference(ref,span(2,2))).toBe(true);
+    const first=ops.readInputDraft!();
+    expect(first.draft).toBe("@文档 @文档 ");
+    expect(first.occurrences.map(item=>[item.offset,item.length,item.clipboardText])).toEqual([[0,3,"@original"],[4,3,"@original"]]);
+    expect(first.occurrences[0].occurrenceId).not.toBe(first.occurrences[1].occurrenceId);
+    expect(ops.readInputDraft!()).toBe(first);
+    expect(draftOf(editor)).toBe(`${PLACEHOLDER} ${PLACEHOLDER} `);
+    expect(ops.insertText("😀 ",span(0,0))).toBe(true);
+    revision.bump();
+    const next=ops.readInputDraft!();
+    expect(next.draftRev).toBe(1);
+    expect(next.occurrences.map(item=>item.offset)).toEqual([3,7]);
+    expect(next.occurrences.map(item=>item.occurrenceId)).toEqual(first.occurrences.map(item=>item.occurrenceId));
+    expect(first.draft).toBe("@文档 @文档 ");
+    expect(Object.isFrozen(next.occurrences[0])).toBe(true);
+  });
+
+  it("preserves native tokens and paragraph boundaries without inventing reference owners", () => {
+    const {editor,ops}=setup("Before");
+    editor.update(()=>{
+      const paragraph=$createParagraphNode();
+      paragraph.append(new MentionNode({type:"file",payload:{path:"notes.txt"},display:"notes.txt"}));
+      $getRoot().append(paragraph);
+    },{discrete:true});
+    expect(ops.readInputDraft!()).toMatchObject({draft:"Before\n\n@[file:notes.txt]",occurrences:[]});
+  });
+});
+
+
+it("publishes live editor changes with stable snapshots and an independent public revision", () => {
+  const {ops}=setup("first");
+  const first=ops.readInputDraft!();
+  const notify=vi.fn(()=>ops.readInputDraft!());
+  const off=ops.subscribeInputDraft!(notify);
+  expect(ops.insertText("!",span(5,5))).toBe(true);
+  expect(notify).toHaveBeenCalled();
+  const next=ops.readInputDraft!();
+  expect(next).toMatchObject({draft:"first!",draftRev:first.draftRev+1});
+  expect(ops.readInputDraft!()).toBe(next);
+  expect(first.draft).toBe("first");
+  notify.mockClear();
+  off();
+  expect(ops.insertText("?",span(6,6))).toBe(true);
+  expect(notify).not.toHaveBeenCalled();
+});
+
+
+it("advances the public revision when edits return to the same draft between reads", () => {
+  const {ops}=setup("text");
+  const first=ops.readInputDraft!();
+  const off=ops.subscribeInputDraft!(()=>{});
+  ops.insertText("!",span(4,4));
+  ops.insertText("",span(4,5));
+  const next=ops.readInputDraft!();
+  expect(next.draft).toBe(first.draft);
+  expect(next.draftRev).toBe(first.draftRev+2);
+  expect(next).not.toBe(first);
+  off();
+});
+
+
+describe("public draft writes", () => {
+  it("preserves untouched reference nodes while replacing surrounding text", () => {
+    const {ops}=setup("");
+    ops.insertReference({source:"fixture",ref:"one",label:"文档",clipboardText:"@one"},span(0,0));
+    ops.insertReference({source:"fixture",ref:"two",label:"文档",clipboardText:"@two"},span(2,2));
+    const before=ops.readInputDraft!();
+    expect(ops.setInputDraft!("😀 @文档 @文档 ",before.draftRev)).toBe(true);
+    const after=ops.readInputDraft!();
+    expect(after.draft).toBe("😀 @文档 @文档 ");
+    expect(after.occurrences.map(item=>item.occurrenceId)).toEqual(before.occurrences.map(item=>item.occurrenceId));
+    expect(after.occurrences.map(item=>item.offset)).toEqual([3,7]);
+    expect(ops.setInputDraft!("stale",before.draftRev)).toBe(false);
+    expect(ops.readInputDraft!()).toBe(after);
+  });
+
+  it("dissolves only a reference edited through its label", () => {
+    const {ops}=setup("");
+    ops.insertReference({source:"fixture",ref:"one",label:"Alpha",clipboardText:"@one"},span(0,0));
+    ops.insertReference({source:"fixture",ref:"two",label:"Beta",clipboardText:"@two"},span(2,2));
+    const before=ops.readInputDraft!();
+    expect(ops.setInputDraft!("@Al!pha @Beta ")).toBe(true);
+    const after=ops.readInputDraft!();
+    expect(after.draft).toBe("@Al!pha @Beta ");
+    expect(after.occurrences).toHaveLength(1);
+    expect(after.occurrences[0].occurrenceId).toBe(before.occurrences[1].occurrenceId);
+  });
+
+  it.each(["", "first\nsecond", "全新文字 😀"])("writes a plain draft %j", next => {
+    const {ops}=setup("original");
+    expect(ops.setInputDraft!(next)).toBe(true);
+    expect(ops.readInputDraft!().draft).toBe(next);
+    expect(ops.setInputDraft!(next)).toBe(false);
+  });
+
+  it("replaces part of a paragraph separator and preserves text", () => {
+    const {editor,ops}=setup("first");
+    editor.update(()=>$getRoot().append($createParagraphNode().append($createTextNode("second"))),{discrete:true});
+    expect(ops.setInputDraft!("first\nsecond")).toBe(true);
+    expect(ops.readInputDraft!().draft).toBe("first\nsecond");
+  });
+
+  it("refuses writes when the editor is read-only or admission is frozen", () => {
+    const {editor,ops,claims,revision}=setup("keep");
+    editor.setEditable(false);
+    expect(ops.setInputDraft!("changed")).toBe(false);
+    editor.setEditable(true);
+    const frozen=createTriggerEditorOps(editor,claims,revision,()=>false);
+    expect(frozen.setInputDraft!("changed")).toBe(false);
+    expect(ops.readInputDraft!().draft).toBe("keep");
+  });
+});
+
+
+it.each([["", "", "ready"], ["first", "", "first"], ["", "last", "last"]])("writes across empty paragraph boundaries %j / %j", (first, last, next) => {
+  const {editor,ops}=setup(first);
+  editor.update(()=>{
+    const paragraph=$createParagraphNode();
+    if(last) paragraph.append($createTextNode(last));
+    $getRoot().append(paragraph);
+  },{discrete:true});
+  expect(ops.setInputDraft!(next)).toBe(true);
+  expect(ops.readInputDraft!().draft).toBe(next);
+});
+
+
+it("reports a public draft change even when the native placeholder string stays identical", () => {
+  const {ops}=setup("");
+  ops.insertReference({source:"fixture",ref:"one",label:"Alpha",clipboardText:"@one"},span(0,0));
+  expect(ops.setInputDraft!(`${PLACEHOLDER} `)).toBe(true);
+  expect(ops.readInputDraft!()).toMatchObject({draft:`${PLACEHOLDER} `,occurrences:[]});
+});
+
+
+describe("public input phase projection", () => {
+  it("publishes claim and attempt transitions without changing the draft revision", () => {
+    const {ops,claims}=setup("/command args");
+    const before=ops.readInputDraft!();
+    const observed:string[]=[];
+    const off=ops.subscribeInputDraft!(()=>observed.push(ops.readInputDraft!().phase));
+    const command={token:"/command ",hint:"args",images:true,submit:async()=>({kind:"success" as const})};
+    claims.begin(command);
+    const claimed=ops.readInputDraft!();
+    expect(claimed).toMatchObject({phase:"claimed",claim:{token:"/command ",hint:"args",images:true}});
+    expect(claimed.claim).not.toHaveProperty("submit");
+    expect(ops.readInputDraft!()).toBe(claimed);
+    claims.setAttemptPhase("submitting");
+    claims.release(); // Edits can release the live claim; the transaction keeps its snapshot.
+    expect(ops.readInputDraft!()).toMatchObject({phase:"submitting",claim:{token:"/command "}});
+    expect(ops.setInputDraft!("replaced")).toBe(false);
+    claims.setAttemptPhase(null);
+    expect(ops.readInputDraft!()).toMatchObject({phase:"plain",draftRev:before.draftRev});
+    expect(ops.readInputDraft!().claim).toBeUndefined();
+    expect(observed).toEqual(["claimed","submitting","submitting","plain"]);
+    off();
+  });
+
+  it("reports adjudication independently of the current draft's command token", () => {
+    const {ops,claims}=setup("/pending");
+    claims.setAttemptPhase("adjudicating");
+    expect(ops.readInputDraft!()).toMatchObject({phase:"adjudicating"});
+    expect(ops.readInputDraft!().claim).toBeUndefined();
+    expect(ops.setInputDraft!("changed")).toBe(false);
+    claims.setAttemptPhase(null);
+    expect(ops.setInputDraft!("changed")).toBe(true);
+  });
+});
+
+
+it.each(["adjudicating", "submitting"] as const)("allows user draft edits during %s while preserving strict writes", phase => {
+  const { editor, claims, revision } = setup("old");
+  const ops = createTriggerEditorOps(editor, claims, revision, () => false);
+  claims.setAttemptPhase(phase);
+  expect(ops.setInputDraft!("strict")).toBe(false);
+  expect(ops.editInputDraft!("新草稿😀")).toBe(true);
+  expect(ops.readInputDraft!()).toMatchObject({ draft: "新草稿😀", phase });
+  editor.setEditable(false);
+  expect(ops.editInputDraft!("readonly")).toBe(false);
+  expect(ops.readInputDraft!().draft).toBe("新草稿😀");
+});
+
+
+describe("mounted and resident public draft edit agreement", () => {
+  const literal = "@[dsh.reference:missing|id|literal|clip]";
+  const initial = composerDraftDocument([
+    {kind:"text",text:"before😀 "},
+    ...legacyDraftDocument("@[dsh.reference:files|a|同😀|clip]").parts,
+    {kind:"text",text:"\n\n between "},
+    ...legacyDraftDocument("@[dsh.reference:files|b|末尾|clip]").parts,
+    {kind:"text",text:" literal "+literal},
+  ]);
+  const display = composerDraftDisplayText(initial);
+  it.each([
+    display, display+" suffix", "prefix "+display,
+    display.replace("同😀","改😀"), display.replace("末尾","尾"),
+    display.replace("before😀 ",""), display.replace("\n\n", "\n"),
+    display.replace("@同😀\n\n between @末尾", "replacement"),
+    display+" "+literal, "", literal,
+  ])("produces the same actual nodes for %j", next => {
+    const editor=makeEditor("");
+    editor.update(()=>{
+      const paragraph=$createParagraphNode();
+      for(const part of initial.parts) paragraph.append(part.kind==="text" ? $createTextNode(part.text) : $createMentionNode(part.mention));
+      $getRoot().clear().append(paragraph);
+    },{discrete:true});
+    const ops=createTriggerEditorOps(editor,new CommandClaimStore(),new DraftRevision());
+    ops.editInputDraft!(next);
+    const resident=updatePublicDraftDocument(initial,next);
+    let mounted=initial;
+    editor.getEditorState().read(()=>{mounted=composerDraftDocument($readComposerParts());});
+    expect(resident).toEqual(mounted);
+    expect(composerDraftDisplayText(resident)).toBe(next);
+    if(next===display) expect(resident).toBe(initial);
+  });
+});
+
+it.each(["file", "folder", "session"] as const)("retains %s appearance through mounted and resident reference projections", appearance => {
+  const { editor, ops } = setup("");
+  expect(ops.insertReference({ source: "fixture", ref: "id", label: "Label", clipboardText: "clip", appearance }, span(0, 0))).toBe(true);
+  expect(ops.readInputDraft!().occurrences[0]).toMatchObject({ source: "fixture", ref: "id", appearance });
+  const parts = editor.getEditorState().read($readComposerParts);
+  const source = createComposerDraftSource();
+  source.setParts(parts);
+  expect(source.readInputDraft().occurrences[0]).toMatchObject({ appearance });
+  const restored = createComposerDraftSource();
+  restored.set(source.getSnapshot());
+  expect(restored.readInputDraft().occurrences[0]).toMatchObject({ appearance });
 });

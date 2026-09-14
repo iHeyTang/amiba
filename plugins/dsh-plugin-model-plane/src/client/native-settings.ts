@@ -103,6 +103,11 @@ export class NativeProviderSettings implements ProviderSettingsController {
           : [];
         return {
           official,
+          providerCard: {
+            provider: official,
+            configured: ns !== undefined && (official.settingsPath.length === 0 || at(ns.value, official.settingsPath) !== undefined),
+            keyConfigured: false,
+          },
           id: official.provider,
           displayName: official.displayName,
           protocol:
@@ -129,7 +134,10 @@ export class NativeProviderSettings implements ProviderSettingsController {
     const refs = [
       ...new Set(
         providers.flatMap(
-          (p) => p.configuration?.credentialFields.map((f) => f.ref) ?? [],
+          (p) => [
+            ...(p.configuration?.credentialFields.map((f) => f.ref) ?? []),
+            modelCardKeyRef(p),
+          ],
         ),
       ),
     ];
@@ -142,6 +150,8 @@ export class NativeProviderSettings implements ProviderSettingsController {
     // remain supported: only credential references actually declared by the
     // owning plugin are required here.
     for (const provider of providers) {
+      if (provider.providerCard) provider.providerCard.keyConfigured =
+        credentials[modelCardKeyRef(provider)]?.configured === true;
       provider.availability = !provider.official?.active
         ? "unconfigured"
         : provider.configuration?.credentialFields.some(
@@ -394,4 +404,12 @@ export class NativeProviderSettings implements ProviderSettingsController {
       return this.snapshot();
     });
   }
+}
+
+/** The official card's apiKeyEnv/derived-key fact is independent of native auth fields. */
+function modelCardKeyRef(provider: ModelProviderProfileShape): string {
+  const named = provider.configuration?.value.apiKeyEnv;
+  return typeof named === "string" && named.length > 0
+    ? named
+    : `${provider.id.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}_API_KEY`;
 }

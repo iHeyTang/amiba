@@ -9,7 +9,7 @@ vi.mock("@amiba/i18n", () => ({
 import { Bubble, MessageTurns } from "../bubble/Bubble";
 import type { UiMessage } from "../internal/types";
 import { WorkspaceControl } from "../WorkspaceControl";
-import { WorkspaceFileOpenerContext } from "../workspace-file-links";
+import { WorkspaceTextMentionsContext, WorkspaceFileOpenerContext } from "../workspace-file-links";
 
 /** Expand the aggregated process disclosure a completed bubble folds
  *  its tool evidence behind. */
@@ -1456,4 +1456,241 @@ it("adds actions only for the completed canonical assistant and preserves empty-
   expect(screen.queryByRole("button",{name:"Action for canonical-id"})).not.toBeInTheDocument();
   rerender(<MessageTurns messages={[{...messages[0]!,assistantMessageId:undefined}]} assistantActions={action}/>);
   expect(screen.queryByRole("button",{name:"Action for canonical-id"})).not.toBeInTheDocument();
+});
+
+it("places one tail per exact engine turn and preserves empty-slot DOM", () => {
+  const messages: UiMessage[] = [
+    {uiId:"u1",role:"user",content:"first"},
+    {uiId:"a1",role:"assistant",content:"part one",runtimeTurn:7},
+    {uiId:"u2",role:"user",content:"follow up"},
+    {uiId:"a2",role:"assistant",content:"part two",runtimeTurn:7},
+  ];
+  const openFile = vi.fn();
+  const {container,rerender} = render(<MessageTurns messages={messages}/>);
+  const baseline = container.innerHTML;
+  rerender(<MessageTurns messages={messages} openTurnFile={openFile} turnTail={()=>null}/>);
+  expect(container.innerHTML).toBe(baseline);
+  const tail = vi.fn((turn:number,open:(path:string)=>void)=><button onClick={()=>open("report.html")}>Tail {turn}</button>);
+  rerender(<MessageTurns messages={messages} openTurnFile={openFile} turnTail={tail}/>);
+  expect(screen.getAllByRole("button",{name:"Tail 7"})).toHaveLength(1);
+  expect(tail).toHaveBeenCalledTimes(1);
+  expect(tail).toHaveBeenCalledWith(7,openFile);
+  rerender(<MessageTurns messages={[...messages.slice(0,-1),{...messages.at(-1)!,streaming:true}]} openTurnFile={openFile} turnTail={tail}/>);
+  expect(screen.queryByRole("button",{name:"Tail 7"})).toBeNull();
+});
+
+
+it("keeps execution-only and empty-row tails without changing the declined layout", () => {
+  const messages: UiMessage[] = [
+    {uiId:"u",role:"user",content:"run"},
+    {uiId:"tools",role:"assistant",content:"",runtimeTurn:7,toolProgress:[{tool:"bash",toolCallId:"tail-call",status:"completed",args:{command:"echo ok"}}]},
+    {uiId:"empty",role:"assistant",content:"",runtimeTurn:8},
+  ];
+  const {container,rerender}=render(<MessageTurns messages={messages}/>);
+  const baseline=container.innerHTML;
+  rerender(<MessageTurns messages={messages} openTurnFile={()=>{}} turnTail={()=>null}/>);
+  expect(container.innerHTML).toBe(baseline);
+  rerender(<MessageTurns messages={messages} openTurnFile={()=>{}} turnTail={turn=><button>Tail {turn}</button>}/>);
+  expect(screen.getAllByRole("button",{name:/Tail [78]/}).map(n=>n.textContent)).toEqual(["Tail 7","Tail 8"]);
+  expect(container.querySelector('[data-conversation-user-turn]')?.textContent).toContain("Tail 8");
+});
+
+
+it("inserts unrepresented closed-turn tails by engine sequence without stored messages or idle wrappers", () => {
+  const anchors=[{runtimeTurn:7,endSeq:12},{runtimeTurn:8,endSeq:25}];
+  const messages: UiMessage[]=[
+    {uiId:"user-seven",role:"user",content:"first request",runtimeSeq:10},
+    {uiId:"user-eight",role:"user",content:"second request",runtimeSeq:20},
+  ];
+  const {container,rerender}=render(<MessageTurns messages={messages}/>);
+  const baseline=container.innerHTML;
+  rerender(<MessageTurns messages={messages} turnTailAnchors={anchors} openTurnFile={()=>{}} turnTail={()=>null}/>);
+  expect(container.innerHTML).toBe(baseline);
+  rerender(<MessageTurns messages={messages} turnTailAnchors={anchors} openTurnFile={()=>{}} turnTail={turn=><button>Tail {turn}</button>}/>);
+  expect(container.querySelector('[data-conversation-user-turn="user-seven"]')?.textContent).toContain("Tail 7");
+  expect(container.querySelector('[data-conversation-user-turn="user-eight"]')?.textContent).toContain("Tail 8");
+  expect(messages).toHaveLength(2);
+  rerender(<MessageTurns messages={[]} turnTailAnchors={anchors} openTurnFile={()=>{}} turnTail={()=>null}/>);
+  expect(container.innerHTML).toBe("");
+  rerender(<MessageTurns messages={[]} turnTailAnchors={anchors} openTurnFile={()=>{}} turnTail={turn=><button>Tail {turn}</button>}/>);
+  expect(container.children).toHaveLength(2);
+  expect(container.firstElementChild?.tagName).toBe("BUTTON");
+});
+
+
+it("resolves only finalized prose ranges while retaining existing explicit path links", () => {
+  const open=vi.fn(),resolve=vi.fn((seq:number|undefined,value:string)=>seq===20 && value==="same.txt"?{open:()=>open("out/same.txt"),label:"Open produced file",title:"out/same.txt"}:undefined);
+  const message:UiMessage={uiId:"merged",role:"assistant",content:"Earlier `same.txt`\n\nFinal `same.txt` and `src/existing.ts`",assistantTimeline:[
+    {kind:"text",id:"earlier",text:"Earlier `same.txt`\n\n",runtimeSeq:10},
+    {kind:"text",id:"final",text:"Final `same.txt` and `src/existing.ts`",runtimeSeq:20},
+  ]};
+  const {container,rerender}=render(<WorkspaceFileOpenerContext.Provider value={open}><Bubble m={message}/></WorkspaceFileOpenerContext.Provider>);
+  const baseline=container.innerHTML;
+  rerender(<WorkspaceFileOpenerContext.Provider value={open}><WorkspaceTextMentionsContext.Provider value={()=>undefined}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider></WorkspaceFileOpenerContext.Provider>);
+  expect(container.innerHTML).toBe(baseline);
+  rerender(<WorkspaceFileOpenerContext.Provider value={open}><WorkspaceTextMentionsContext.Provider value={resolve}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider></WorkspaceFileOpenerContext.Provider>);
+  expect(screen.getAllByRole("button",{name:"Open produced file"})).toHaveLength(1);
+  expect(container.querySelectorAll('code')[0].closest('button')).toBeNull();
+  fireEvent.click(screen.getByRole("button",{name:"Open produced file"}));
+  expect(open).toHaveBeenCalledWith("out/same.txt");
+  expect(container.querySelector('[data-workspace-file="src/existing.ts"]')).not.toBeNull();
+});
+
+it("keeps final file mentions scoped through condensed tool/assistant rendering", () => {
+  const resolve=vi.fn((seq:number|undefined,value:string)=>seq===12 && value==="file.txt"?{open:()=>{},label:"Final file",title:"file.txt"}:undefined);
+  const message:UiMessage={uiId:"with-tool",role:"assistant",content:"Before `file.txt`Final `file.txt`",toolProgress:[{tool:"bash",toolCallId:"c",status:"completed"}],assistantTimeline:[
+    {kind:"text",id:"before",text:"Before `file.txt`",runtimeSeq:3},
+    {kind:"tool",id:"tool",toolCallId:"c"},
+    {kind:"text",id:"after",text:"Final `file.txt`",runtimeSeq:12},
+  ]};
+  render(<WorkspaceTextMentionsContext.Provider value={resolve}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider>);
+  expect(screen.getByRole("button",{name:"Final file"})).toBeInTheDocument();
+  expect(resolve).not.toHaveBeenCalledWith(3,"file.txt");
+});
+
+
+it("retains closing-message file links inside folded narration without altering its layout", () => {
+  const message:UiMessage={uiId:"folded-closing",role:"assistant",content:"First `file.txt`Last `file.txt`",assistantTimeline:[
+    {kind:"text",id:"first",text:"First `file.txt`",runtimeSeq:12},
+    {kind:"reasoning",id:"thinking",text:"thinking"},
+    {kind:"text",id:"last",text:"Last `file.txt`",runtimeSeq:12},
+  ]};
+  const {container,rerender}=render(<Bubble m={message}/>);
+  expandProcess();
+  const baseline=container.innerHTML;
+  rerender(<WorkspaceTextMentionsContext.Provider value={()=>undefined}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider>);
+  expandProcess();
+  expect(container.innerHTML).toBe(baseline);
+  const resolve=(seq:number|undefined,value:string)=>seq===12 && value==="file.txt"?{open:()=>{},label:"Open final file",title:"file.txt"}:undefined;
+  rerender(<WorkspaceTextMentionsContext.Provider value={resolve}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider>);
+  expect(screen.getAllByRole("button",{name:"Open final file"})).toHaveLength(2);
+});
+
+
+it("keeps prose file links after inline thinking cleanup and leaves extracted thinking inert", () => {
+  const text="Before `one.txt`<think>private `secret.txt`</think>\n\n\nAfter `two.txt`";
+  const message:UiMessage={uiId:"thought-tags",role:"assistant",content:text,assistantTimeline:[{kind:"text",id:"final",text,runtimeSeq:40}]};
+  const resolver=(seq:number|undefined,value:string)=>seq===40?{open:()=>{},label:"Open "+value,title:value}:undefined;
+  const {container}=render(<WorkspaceTextMentionsContext.Provider value={resolver}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider>);
+  expect(screen.getByRole("button",{name:"Open one.txt"})).toBeInTheDocument();
+  expect(screen.getByRole("button",{name:"Open two.txt"})).toBeInTheDocument();
+  expandProcess();
+  for(const button of Array.from(container.querySelectorAll('button[aria-expanded="false"]')))fireEvent.click(button);
+  expect(screen.queryByRole("button",{name:"Open secret.txt"})).toBeNull();
+});
+
+it("passes pending step identity through native prose but never enables streaming links", () => {
+  const text="Done <think>private</think>`file.txt`";
+  const message:UiMessage={uiId:"interrupted",role:"assistant",content:text,assistantTimeline:[
+    {kind:"text",id:"pending",text,sourceRanges:[{start:0,end:text.length,runtimeStep:2}]},
+  ]};
+  const resolve=vi.fn((seq:number|undefined,value:string,step?:number)=>seq===undefined && step===2 ? {open:vi.fn(),label:"Interrupted file",title:value}:undefined);
+  const {rerender}=render(<WorkspaceTextMentionsContext.Provider value={resolve}><Bubble m={{...message,streaming:true}}/></WorkspaceTextMentionsContext.Provider>);
+  expect(screen.queryByRole("button",{name:"Interrupted file"})).toBeNull();
+  rerender(<WorkspaceTextMentionsContext.Provider value={resolve}><Bubble m={message}/></WorkspaceTextMentionsContext.Provider>);
+  expect(screen.getByRole("button",{name:"Interrupted file"})).toBeInTheDocument();
+  expect(resolve).toHaveBeenCalledWith(undefined,"file.txt",2);
+});
+
+it("maps historical draft-only prose without inserting a display row or changing tool layout", () => {
+  const text="Draft `file.txt`";
+  const message:UiMessage={uiId:"history-draft",role:"assistant",content:text,toolProgress:[{tool:"bash",toolCallId:"c",status:"completed"}],assistantTimeline:[{kind:"tool",id:"c",toolCallId:"c"}]};
+  const {container,rerender}=render(<Bubble m={message}/>);
+  const baseline=container.innerHTML;
+  const sourced:UiMessage={...message,assistantDraftSource:{kind:"text",id:"source",text,sourceRanges:[{start:0,end:text.length,runtimeStep:2}]}};
+  rerender(<Bubble m={sourced}/>);
+  expect(container.innerHTML).toBe(baseline);
+  const resolve=(seq:number|undefined,value:string,step?:number)=>step===2?{open:vi.fn(),title:value,label:"Historical file"}:undefined;
+  rerender(<WorkspaceTextMentionsContext.Provider value={resolve}><Bubble m={sourced}/></WorkspaceTextMentionsContext.Provider>);
+  expect(screen.getByRole("button",{name:"Historical file"})).toBeInTheDocument();
+});
+
+
+it("places command extensions between native turns without storing messages or adding empty markup", () => {
+  const messages: UiMessage[] = [
+    { uiId: "u1", role: "user", content: "first", runtimeSeq: 10 },
+    { uiId: "a1", role: "assistant", content: "answer", runtimeSeq: 12 },
+    { uiId: "u2", role: "user", content: "second", runtimeSeq: 20 },
+  ];
+  const { container, rerender } = render(<MessageTurns messages={messages} />);
+  const baseline = container.innerHTML;
+  const rows = [{ id: "before", seq: 5, content: null }, { id: "between", seq: 15, content: null }];
+  rerender(<MessageTurns messages={messages} timelineRows={rows} />);
+  expect(container.innerHTML).toBe(baseline);
+  rerender(<MessageTurns messages={messages} timelineRows={rows.map(row => ({ ...row, content: <button>{row.id}</button> }))} />);
+  const first = container.querySelector('[data-conversation-user-turn="u1"]')!;
+  expect(first.textContent).toContain("between");
+  expect(container.firstElementChild?.textContent).toBe("before");
+  expect(first.compareDocumentPosition(screen.getByText("second")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(messages).toHaveLength(3);
+  rerender(<MessageTurns messages={[]} timelineRows={[{ id: "only", seq: 1, content: <button>standalone command</button> }]} />);
+  expect(container.children).toHaveLength(1);
+  expect(container.firstElementChild?.tagName).toBe("BUTTON");
+});
+
+
+it("keeps native execution grouping unchanged around an unoccupied command row", () => {
+  const messages: UiMessage[] = [
+    { uiId: "request", role: "user", content: "work", runtimeSeq: 1 },
+    { uiId: "call1", role: "assistant", content: "", runtimeSeq: 10, toolProgress: [{ tool: "bash", toolCallId: "one", status: "completed", args: { command: "echo one" } }] },
+    { uiId: "call2", role: "assistant", content: "", runtimeSeq: 30, toolProgress: [{ tool: "bash", toolCallId: "two", status: "completed", args: { command: "echo two" } }] },
+  ];
+  const { container, rerender } = render(<MessageTurns messages={messages} />);
+  const before = container.innerHTML;
+  rerender(<MessageTurns messages={messages} timelineRows={[{ id: "middle", seq: 20, content: null }]} />);
+  expect(container.innerHTML).toBe(before);
+  rerender(<MessageTurns messages={messages} timelineRows={[{ id: "middle", seq: 20, content: <span>command during execution</span> }]} />);
+  expect(screen.getByText("command during execution")).toBeInTheDocument();
+});
+
+
+it("upgrades one durable command result and restores it when the plugin unregisters", () => {
+  const messages: UiMessage[] = [
+    { uiId: "dsh:command:c1:input", role: "user", content: "/probe", runtimeSeq: 10 },
+    { uiId: "dsh:command:c1:result", role: "assistant", content: "native result", runtimeSeq: 12 },
+  ];
+  const { container, rerender } = render(<MessageTurns messages={messages} />);
+  const baseline = container.innerHTML;
+  rerender(<MessageTurns messages={messages} timelineRows={[{ id: "command:c1", seq: 10, replaceMessageId: "dsh:command:c1:result", content: <span>plugin result</span> }]} />);
+  expect(screen.getByText("plugin result")).toBeInTheDocument();
+  expect(screen.queryByText("native result")).toBeNull();
+  expect(screen.getByText("/probe")).toBeInTheDocument();
+  expect(messages).toHaveLength(2);
+  rerender(<MessageTurns messages={messages} />);
+  expect(container.innerHTML).toBe(baseline);
+});
+
+
+describe("durable image extension rendering", () => {
+  const image = { attachment: {
+    attachmentId: "image" as import("@amiba/extension-sdk").ImageAttachmentRef["attachmentId"],
+    mediaType: "image/png" as const, bytes: 3, width: 1, height: 1,
+  } };
+  const message: UiMessage = { uiId: "photo", role: "user", content: "Original text", images: [image],
+    attachmentBadges: [{ uiId: "file", kind: "text", name: "notes.txt", mime: "text/plain", size: 12 }] };
+  it("passes durable references from MessageTurns while retaining original text and badges", () => {
+    const renderImages = vi.fn(() => <div>Plugin image gallery</div>);
+    const view = render(<MessageTurns messages={[message]} messageImages={renderImages} />);
+    expect(renderImages).toHaveBeenCalledWith([image]);
+    expect(screen.getByText("Original text")).toBeInTheDocument();
+    expect(screen.getByText("notes.txt")).toBeInTheDocument();
+    expect(screen.getByText("Plugin image gallery")).toBeInTheDocument();
+    view.rerender(<MessageTurns messages={[message]} />);
+    expect(screen.queryByText("Plugin image gallery")).not.toBeInTheDocument();
+    expect(screen.getByText("Original text")).toBeInTheDocument();
+    expect(screen.getByText("notes.txt")).toBeInTheDocument();
+  });
+  it("leaves the original message DOM unchanged when the image seat returns nothing", () => {
+    const view = render(<Bubble m={message} />); const before = view.container.innerHTML;
+    view.rerender(<Bubble m={message} messageImages={() => null} />);
+    expect(view.container.innerHTML).toBe(before);
+  });
+  it("isolates synchronous image plugin failures from native message content", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(<Bubble m={message} messageImages={() => { throw new Error("broken image plugin"); }} />);
+      expect(screen.getByText("Original text")).toBeInTheDocument();
+      expect(screen.getByText("notes.txt")).toBeInTheDocument();
+    } finally { errors.mockRestore(); }
+  });
 });

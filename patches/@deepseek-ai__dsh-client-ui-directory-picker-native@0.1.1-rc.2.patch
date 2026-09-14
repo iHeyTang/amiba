@@ -1,0 +1,49 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -20,10 +20,10 @@
+ 		* @returns nothing — the native chooser renders on the host display.
+ 		*/
+ 		function NativeDirectoryFlow(props) {
+-			const { open, pick } = props;
+-			const armed = (0, react.useRef)(false);
+-			const outcome = (0, react.useRef)(props);
+-			outcome.current = props;
++			const { open } = props;
++			// An embedding shell may preserve its native chooser and starting path.
++			const pick = props.amibaNativePicker ?? props.pick;
++			const request = (0, react.useRef)(null);
+ 			const alive = (0, react.useRef)(true);
+ 			(0, react.useEffect)(() => {
+ 				alive.current = true;
+@@ -33,18 +33,21 @@
+ 			}, []);
+ 			(0, react.useEffect)(() => {
+ 				if (!open) {
+-					armed.current = false;
++					request.current = null;
+ 					return;
+ 				}
+-				if (armed.current) return;
+-				armed.current = true;
+-				pick().then((path) => {
+-					if (!alive.current) return;
+-					if (path === null) outcome.current.onCancel();
+-					else outcome.current.onPicked(path);
++				if (request.current) return;
++				// Keep callbacks with their request; a late chooser must never
++				// report into a later open cycle through the latest props.
++				const pending = { outcome: props };
++				request.current = pending;
++				Promise.resolve().then(() => pick()).then((path) => {
++					if (!alive.current || request.current !== pending) return;
++					if (path === null) pending.outcome.onCancel();
++					else pending.outcome.onPicked(path);
+ 				}, (reason) => {
+-					if (!alive.current) return;
+-					outcome.current.onError(reason instanceof Error ? reason.message : String(reason));
++					if (!alive.current || request.current !== pending) return;
++					pending.outcome.onError(reason instanceof Error ? reason.message : String(reason));
+ 				});
+ 			}, [open, pick]);
+ 			return null;

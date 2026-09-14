@@ -1,4 +1,4 @@
-import { open } from "node:fs/promises";
+import { open, stat } from "node:fs/promises";
 import { basename, extname } from "node:path";
 
 export const MAX_FILE_VIEW_BYTES = 2 * 1024 * 1024;
@@ -69,4 +69,18 @@ export async function readPreviewFile(
   } finally {
     await handle.close();
   }
+}
+
+/** Metadata only; the caller must first authorize and canonicalize the session path. */
+export async function statWorkspaceFile(resolved: { path: string }) {
+  const info = await stat(resolved.path, { bigint: true });
+  if (!info.isFile())
+    throw new Error("The selected workspace resource is not a file.");
+  return {
+    absolutePath: resolved.path,
+    // Opaque identity/freshness token. Include inode and ctime so replacement
+    // and writes restoring the previous mtime are not mistaken for old data.
+    version: `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`,
+    bytes: Number(info.size),
+  };
 }

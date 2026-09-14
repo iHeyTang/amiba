@@ -1,3 +1,4 @@
+import { ConversationViewRegion, type ConversationViewEntry } from "./ConversationViewRegion";
 import { createToolNavigation } from "./bubble/tool-navigation";
 import type { WorkbenchPanelOwner } from "@amiba/extension-sdk";
 import type { MessageNoticeRenderer } from "./bubble/Bubble";
@@ -73,6 +74,7 @@ import {
   useWorkspacePane,
 } from "./WorkspacePane";
 import {
+  WorkbenchViewBoundary,
   WorkbenchExtensionHosts,
   WorkbenchExtensionToolbar,
 } from "./workbench-extensions";
@@ -164,6 +166,8 @@ export interface FullScreenChatViewProps {
   capabilities?: ChatSurfaceCapabilities;
   /** Slots forwarded to ChatSurface. */
   slots?: {
+    mainPanel?: { id: string; content: ReactNode };
+    onNativeNavigation?: () => void;
     /**
      * Rendered in the main pane when no session is active. Desktop hands
      * in ``<HomeView panelMode />`` so the home composer doubles as the
@@ -195,8 +199,16 @@ export interface FullScreenChatViewProps {
      * contributes.
      */
     headerActions?: ReactNode;
+    /** Optional ancestry controls; the original editable title remains mounted. */
+    headerLineage?: ReactNode;
+    conversationViews?: readonly ConversationViewEntry[];
+    conversationView?: (id: string) => ReactNode;
+    conversationViewSelection?: { sessionId: string; id: string } | null;
+    onConversationViewSelect?: (id: string | null) => void;
     /** Additive controls in the active chat header action cluster. */
     headerAfter?: ReactNode;
+    /** Optional session corner control after the existing right-edge controls. */
+    headerCorner?: ReactNode;
     /** Frame-wide overlay for chat modules; entries opt into pointer events. */
     contentOverlay?: ReactNode;
     /**
@@ -214,6 +226,11 @@ export interface FullScreenChatViewProps {
      * seat, forwarded through ChatSurface to the internal Composer's card.
      */
     inputOverlay?: ReactNode;
+    inputAttachments?: import("./Composer").ComposerAttachmentsRenderer;
+    inputDock?: ReactNode;
+    composerDock?: ReactNode;
+    inputLeft?: ReactNode;
+    inputRight?: ReactNode;
     /** Session-scoped plugin notices and tool annotations. */
     notice?: MessageNoticeRenderer;
     progress?: () => ReactNode;
@@ -225,7 +242,13 @@ export interface FullScreenChatViewProps {
      * conversation. Omit it (Quick-Ask, any host outside a DSH plugin
      * runtime) and every row renders Amiba's own tool chip.
      */
+    messageImages?: (images: NonNullable<import("@amiba/app-runtime/protocol").ChatMessage["images"]>) => ReactNode;
+    approvalDetail?: (callId: string) => ReactNode;
     assistantActions?: (messageId: string) => ReactNode;
+    turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
+    messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
+    timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[];
+    turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
     toolView?: ToolCallSeatRenderer;
     /**
      * renderSlot-backed dispatch of Amiba's keyed
@@ -374,6 +397,8 @@ function FullScreenChatViewInner({
   const [messagesWidth, setMessagesWidth] = useState<MessagesMaxWidth>(
     DEFAULT_MESSAGES_WIDTH,
   );
+  const nativeNavigationRef = useRef(slots?.onNativeNavigation);
+  nativeNavigationRef.current = slots?.onNativeNavigation;
   const [sidebarView, setSidebarView] =
     useState<ActivityViewId>(DEFAULT_SIDEBAR_VIEW);
   const [sidebarWidth, setSidebarWidth] = useState(APP_SIDEBAR_DEFAULT_WIDTH);
@@ -440,14 +465,14 @@ function FullScreenChatViewInner({
 
   useEffect(() => {
     const acknowledge = () => {
-      if (sidebarView === "chats" && sessions.activeId && !document.hidden && document.hasFocus())
+      if ((sidebarView === "chats" && !slots?.mainPanel) && sessions.activeId && !document.hidden && document.hasFocus())
         void sessions.markRead(sessions.activeId);
     };
     window.addEventListener("focus", acknowledge);
     document.addEventListener("visibilitychange", acknowledge);
     acknowledge();
     return () => { window.removeEventListener("focus", acknowledge); document.removeEventListener("visibilitychange", acknowledge); };
-  }, [sessions.activeId, sessions.markRead, sidebarView]);
+  }, [sessions.activeId, sessions.markRead, sidebarView, slots?.mainPanel?.id]);
 
   useEffect(() => { void getPlatform().desktopPet?.setLanguage(language); }, [language]);
 
@@ -487,7 +512,7 @@ function FullScreenChatViewInner({
       }
     });
     const unsubscribeEvents = client.onStreamEvent((sessionId, event) => {
-      const visibleSessionId = sidebarView === "chats" ? sessions.activeId : "";
+      const visibleSessionId = (sidebarView === "chats" && !slots?.mainPanel) ? sessions.activeId : "";
       const completedInBackground =
         (sessionId !== visibleSessionId || document.hidden || !document.hasFocus()) &&
         (event.kind === "done" || event.kind === "error");
@@ -520,6 +545,7 @@ function FullScreenChatViewInner({
     sessions.markUnread,
     sessions.markRead,
     sidebarView,
+    slots?.mainPanel?.id,
   ]);
 
 
@@ -651,6 +677,7 @@ function FullScreenChatViewInner({
       (changes: StorageChangeMap) => {
         const ch = changes[SIDEBAR_VIEW_KEY];
         if (ch && isSidebarView(ch.newValue)) {
+          nativeNavigationRef.current?.();
           setSidebarView(ch.newValue === "tasks" ? "chats" : ch.newValue);
         }
       },
@@ -735,6 +762,7 @@ function FullScreenChatViewInner({
 
   const onSidebarViewChange = useCallback((next: ActivityViewId) => {
     if (next === "tasks") next = "chats";
+    nativeNavigationRef.current?.();
     setSidebarView(next);
     void getPlatform().storage.set({ [SIDEBAR_VIEW_KEY]: next });
   }, []);
@@ -776,8 +804,7 @@ function FullScreenChatViewInner({
     [sessions, onSidebarViewChange],
   );
 
-  const primaryWorkspaceActive = sidebarView === "chats";
-  const pluginWorkspaceActive = !primaryWorkspaceActive;
+  const pluginWorkspaceActive = sidebarView !== "chats" && !slots?.mainPanel;
   const showSidebarExpandControl = sidebarCollapsed && sidebarMotion === "idle";
   const showSidebarCollapseControl =
     !sidebarCollapsed && sidebarMotion === "idle";
@@ -789,7 +816,7 @@ function FullScreenChatViewInner({
   // the whole workbench — pane, terminal drawer and edge controls alike —
   // stays off there.
   const workbenchVisible =
-    sidebarView === "chats" && Boolean(sessions.activeId);
+    (sidebarView === "chats" && !slots?.mainPanel) && Boolean(sessions.activeId);
 
   // Measure the edge-control row so the workbench tab strip can reserve its
   // width. The row floats over the pane at `z-50`; without this the tabs
@@ -947,13 +974,14 @@ function FullScreenChatViewInner({
         >
           <div className="amiba-chat-column relative flex min-h-0 min-w-0 flex-1 flex-col">
             <PrimaryWorkspaceView
-              active={sidebarView === "chats"}
+              active={(sidebarView === "chats" && !slots?.mainPanel)}
               testId="chats-view"
             >
               <ContentHeader
                 title={chatTopBarPlaceholder}
                 icon={<Folder className="h-4 w-4" />}
                 actions={slots?.headerActions}
+                lineage={slots?.headerLineage}
                 onRenameTitle={
                   canRenameActiveChatTitle ? renameActiveChatTitle : undefined
                 }
@@ -969,7 +997,7 @@ function FullScreenChatViewInner({
                 )}
                 seamless
               />
-              <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <ConversationViewRegion selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
                 <ChatSurface
                   messagesMaxWidth={messagesWidth}
                   client={client}
@@ -981,8 +1009,13 @@ function FullScreenChatViewInner({
                   triggerRuntime={triggerRuntime}
                   messageSourceLabel={messageSourceLabel}
                 />
-              </main>
+              </ConversationViewRegion>
             </PrimaryWorkspaceView>
+            {slots?.mainPanel && (
+              <PrimaryWorkspaceView active testId="official-main-panel">
+                {slots.mainPanel.content}
+              </PrimaryWorkspaceView>
+            )}
             <PrimaryWorkspaceView
               active={pluginWorkspaceActive}
               testId="plugin-workspace-view"
@@ -1030,6 +1063,16 @@ function FullScreenChatViewInner({
               showUnavailable
             />
             <WorkspacePaneToggle showUnavailable />
+            {slots?.headerCorner && (
+              <div
+                data-conversation-header-corner=""
+                className="flex shrink-0 items-center empty:hidden"
+              >
+                <WorkbenchViewBoundary key={sessions.activeId} fallback={null}>
+                  {slots.headerCorner}
+                </WorkbenchViewBoundary>
+              </div>
+            )}
           </div>
         )}
         {slots?.contentOverlay ? (
@@ -1178,6 +1221,7 @@ interface ContentHeaderProps {
    * unoccupied seat costs neither a box nor a flex gap.
    */
   actions?: ReactNode;
+  lineage?: ReactNode;
   onRenameTitle?: (title: string) => void;
   sidebarCollapsed: boolean;
   showExpandControl?: boolean;
@@ -1193,6 +1237,7 @@ function ContentHeader({
   title,
   icon,
   actions,
+  lineage,
   onRenameTitle,
   sidebarCollapsed,
   showExpandControl = sidebarCollapsed,
@@ -1269,6 +1314,16 @@ function ContentHeader({
               onEditingChange={setTitleEditing}
             />
           )}
+          {lineage ? (
+            <div
+              data-content-header-lineage
+              className="app-no-drag flex min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] empty:hidden"
+            >
+              <WorkbenchViewBoundary fallback={null} resetKey={lineage}>
+                {lineage}
+              </WorkbenchViewBoundary>
+            </div>
+          ) : null}
           {/* Title-adjacent action row. `empty:hidden` is load-bearing: an
               unoccupied seat renders no DOM inside this wrapper, and a
               zero-child flex item would still spend one parent gap. Hidden

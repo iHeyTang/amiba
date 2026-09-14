@@ -1,0 +1,79 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -609,7 +609,7 @@
+ 	mediaType: imageMediaTypeSchema,
+ 	data: z$1.string(),
+ 	name: z$1.string().optional()
+-})]);
++}), z$1.object({ type: z$1.literal("file"), receiptId: z$1.string().min(1) })]);
+ /** session.prompt request payload, including optional browser-local request provenance. */
+ const sessionPromptRequestSchema = z$1.object({
+ 	sessionId: sessionIdSchema,
+@@ -886,6 +886,7 @@
+ const MESSAGE_TYPES = new Set(["user/message", "assistant/message"]);
+ /** Validate one prompt as a batch before publishing any durable image object. */
+ async function durablePromptContent(ctx, content) {
++ for (const part of content) if (part.type === "file" && !part.attachment) throw new AttachmentError("File was not uploaded for this session.", "FILE_NOT_STAGED");
+ 	if (content.every((part) => part.type === "text")) return content.map((part) => ({
+ 		type: "text",
+ 		text: part.text
+@@ -895,7 +896,7 @@
+ 	return content.map((part) => part.type === "text" ? {
+ 		type: "text",
+ 		text: part.text
+-	} : {
++	} : part.type === "file" ? {type:"file",attachment:part.attachment} : {
+ 		type: "image",
+ 		attachment: refs[next++]
+ 	});
+@@ -2758,12 +2759,23 @@
+ 								details: { reason: "MODEL_DOES_NOT_SUPPORT_IMAGES" }
+ 							});
+ 						}
+-						const message = createUserMessage({
+-							content: await durablePromptContent(ctx, content),
+-							source
++						const uploads = ctx.get("fileUploads");
++						const receipts = new Set();
++						const admitted = content.map(part => {
++							if (part.type !== "file") return part;
++							const attachment = uploads?.resolve(agent, part.receiptId);
++							if (!attachment) throw new AttachmentError("File was not uploaded for this session.", "FILE_NOT_STAGED");
++							receipts.add(part.receiptId);
++							return {type:"file",attachment};
+ 						});
+-						if (mode === "steer") agent.steer(message);
+-						else agent.followup(message);
++						const message = createUserMessage({content: await durablePromptContent(ctx, admitted),source});
++						if (ctx.agents.get(agent.id) !== agent) throw new AttachmentError("Session was disposed during prompt admission.", "FILE_NOT_STAGED");
++						const binding = receipts.size ? uploads.bindPrompt(agent, [...receipts], request.rpcId) : undefined;
++						try {
++							if (mode === "steer") agent.steer(message);
++							else agent.followup(message);
++							binding?.commit();
++						} finally { binding?.[Symbol.dispose](); }
+ 					} catch (error) {
+ 						if (error instanceof AttachmentError) return err(request, {
+ 							code: "attachment-error",
+--- a/lib/types/api/sessions.schema.js
++++ b/lib/types/api/sessions.schema.js
+@@ -221,7 +221,7 @@
+ export const promptContentPartSchema = z.discriminatedUnion('type', [
+     z.object({ type: z.literal('text'), text: z.string() }),
+     z.object({ type: z.literal('image'), mediaType: imageMediaTypeSchema, data: z.string(), name: z.string().optional() }),
+-]);
++, z.object({ type: z.literal("file"), receiptId: z.string().min(1) })]);
+ /** session.prompt request payload, including optional browser-local request provenance. */
+ export const sessionPromptRequestSchema = z.object({
+     sessionId: sessionIdSchema,
+--- a/lib/types/api/sessions.d.ts
++++ b/lib/types/api/sessions.d.ts
+@@ -91,7 +91,7 @@
+     mediaType: ImageMediaType;
+     data: string;
+     name?: string;
+-};
++} | { type: 'file'; receiptId: string };
+ /** Complete model selection for one session. */
+ export interface ModelSelection {
+     /** Registered provider route. */

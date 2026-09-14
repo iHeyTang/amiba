@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 
 import {
   createSessionsBridge,
@@ -20,11 +22,13 @@ function officialSessionsDouble(initial?: {
 }) {
   let ids: string[] = initial?.ids ?? [];
   let current: string | undefined = initial?.current;
+  const addresses = new Map<string, { parentSessionId: string; childSessionId: string; mode: "one-shot" | "continuable" }>();
   const listeners = new Set<() => void>();
   const notify = () => {
     for (const listener of [...listeners]) listener();
   };
   const face: OfficialSessionsFace = {
+    subagentAddress: (id) => addresses.get(id),
     list: {
       getSnapshot: (): OfficialSessionListSnapshot => ({ ids, current }),
       subscribe: (listener) => {
@@ -33,7 +37,7 @@ function officialSessionsDouble(initial?: {
       },
     },
     open: vi.fn((id: string) => {
-      if (!ids.includes(id)) {
+      if (!ids.includes(id) && !addresses.has(id)) {
         throw new Error(`sessions.select: unknown session ${id}`);
       }
       current = id;
@@ -46,6 +50,14 @@ function officialSessionsDouble(initial?: {
   };
   return {
     face,
+    retainAddress(id: string) {
+      addresses.set(id, { parentSessionId: "parent", childSessionId: id, mode: "continuable" });
+      notify();
+    },
+    forgetAddress(id: string) {
+      addresses.delete(id);
+      notify();
+    },
     /** Simulate the host list gaining rows (stream/list refresh). */
     setIds(next: string[]) {
       ids = next;
@@ -56,15 +68,135 @@ function officialSessionsDouble(initial?: {
       current = next;
       notify();
     },
+    requestOpen(id: string, source = "explicit") {
+      Object.assign(face, { lastOpenRequest: { sessionId: id, source } });
+      face.open(id);
+    },
+    requestClear() {
+      Object.assign(face, {lastClearRequest: {}});
+      face.clear();
+    },
     get current() {
       return current;
     },
   };
 }
 
-const flushMicrotasks = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+const flushMicrotasks = () =>
+  new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("sessions selection bridge", () => {
+  it("forwards the actual pinned openSubagent method from Home and restores intent on failure", () => {
+    const source = readFileSync(createRequire(import.meta.url).resolve("@deepseek-ai/dsh-client-runtime/client"), "utf8");
+    const body = source.match(/\n\t{3}openSubagent\(address\) \{([\s\S]*?)\n\t{3}\}/)?.[1];
+    expect(body).toBeDefined();
+    const openSubagent = new Function("address", body!);
+    const official = officialSessionsDouble({ ids: ["parent"] });
+    official.retainAddress("child");
+    const onExternalOpen = vi.fn();
+    const bridge = createSessionsBridge(official.face, onExternalOpen);
+    const manager = { selectSubagent: (address: { childSessionId: string }) => official.face.open(address.childSessionId) };
+    Object.assign(official.face, { manager });
+    const address = official.face.subagentAddress!("child")!;
+    openSubagent.call(official.face, address);
+    expect(onExternalOpen).toHaveBeenCalledWith("child", address);
+    expect(official.current).toBe("child");
+    const before = official.face.lastOpenRequest;
+    manager.selectSubagent = () => { throw new Error("not a healthy catalog child"); };
+    expect(() => openSubagent.call(official.face, address)).toThrow("not a healthy");
+    expect(official.face.lastOpenRequest).toBe(before);
+    expect(onExternalOpen).toHaveBeenCalledTimes(1);
+    bridge.dispose();
+  });
+
+  it("forwards the retained direct-parent address when a plugin opens a child", () => {
+    const official = officialSessionsDouble({ ids: ["parent"], current: "parent" });
+    official.retainAddress("child");
+    const onExternalOpen = vi.fn();
+    const bridge = createSessionsBridge(official.face, onExternalOpen);
+    bridge.setActive("parent");
+    official.requestOpen("child");
+    expect(onExternalOpen).toHaveBeenCalledTimes(1);
+    expect(onExternalOpen).toHaveBeenCalledWith("child", {
+      parentSessionId: "parent", childSessionId: "child", mode: "continuable",
+    });
+    const sent = onExternalOpen.mock.calls[0]![1];
+    expect(sent).not.toBe(official.face.subagentAddress!("child"));
+    bridge.dispose();
+  });
+
+  it("defers a failed immediate child open and retries on the next catalog update", async () => {
+    const official = officialSessionsDouble({ ids: ["parent"], current: "parent" });
+    official.retainAddress("child");
+    const open = official.face.open;
+    official.face.open = vi.fn().mockImplementationOnce(() => {
+      throw new Error("catalog changed while selecting");
+    }).mockImplementation(open);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const bridge = createSessionsBridge(official.face, vi.fn());
+    try {
+      bridge.setActive("child");
+      expect(official.current).toBeUndefined();
+      official.retainAddress("child");
+      await flushMicrotasks();
+      expect(official.current).toBe("child");
+      expect(official.face.open).toHaveBeenCalledTimes(2);
+    } finally {
+      bridge.dispose();
+      log.mockRestore();
+    }
+  });
+
+  it("reopens a retained catalog child absent from the root list", () => {
+    const official = officialSessionsDouble({ ids: ["parent"] });
+    official.retainAddress("child");
+    const onExternalOpen = vi.fn();
+    const bridge = createSessionsBridge(official.face, onExternalOpen);
+    bridge.setActive("child");
+    bridge.setActive("parent");
+    bridge.setActive("child");
+    expect(official.current).toBe("child");
+    expect(official.face.open).toHaveBeenNthCalledWith(3, "child");
+    expect(onExternalOpen).not.toHaveBeenCalled();
+    bridge.dispose();
+  });
+
+  it("resolves a deferred child when its address arrives without a root-list row", async () => {
+    const official = officialSessionsDouble({ ids: ["parent"] });
+    const bridge = createSessionsBridge(official.face, vi.fn());
+    bridge.setActive("child");
+    official.retainAddress("child");
+    await flushMicrotasks();
+    expect(official.current).toBe("child");
+    bridge.dispose();
+  });
+
+  it("rechecks a queued child's address and retries when it becomes available again", async () => {
+    const official = officialSessionsDouble({ ids: ["parent"] });
+    const bridge = createSessionsBridge(official.face, vi.fn());
+    bridge.setActive("child");
+    official.retainAddress("child");
+    official.forgetAddress("child");
+    await flushMicrotasks();
+    expect(official.face.open).not.toHaveBeenCalled();
+    official.retainAddress("child");
+    await flushMicrotasks();
+    expect(official.current).toBe("child");
+    bridge.dispose();
+  });
+
+  it("does not reopen a deferred child after Amiba deselects", async () => {
+    const official = officialSessionsDouble();
+    const bridge = createSessionsBridge(official.face, vi.fn());
+    bridge.setActive("child");
+    official.retainAddress("child");
+    bridge.setActive("");
+    await flushMicrotasks();
+    expect(official.face.open).not.toHaveBeenCalled();
+    expect(official.current).toBeUndefined();
+    bridge.dispose();
+  });
+
   it("opens listed ids directly and suppresses the echo", () => {
     const official = officialSessionsDouble({ ids: ["s1", "s2"] });
     const onExternalOpen = vi.fn();
@@ -133,7 +265,10 @@ describe("sessions selection bridge", () => {
   });
 
   it("forwards an official-ecosystem open and settles without ping-pong", () => {
-    const official = officialSessionsDouble({ ids: ["s1", "s9"], current: "s1" });
+    const official = officialSessionsDouble({
+      ids: ["s1", "s9"],
+      current: "s1",
+    });
     const onExternalOpen = vi.fn();
     const bridge = createSessionsBridge(official.face, onExternalOpen);
     bridge.setActive("s1");
@@ -237,4 +372,95 @@ describe("sessions selection bridge", () => {
     expect(official.face.open).not.toHaveBeenCalled();
     expect(onExternalOpen).not.toHaveBeenCalled();
   });
+});
+
+describe("explicit navigation intent", () => {
+  it("follows a plugin open from home but suppresses initial workspace selection", () => {
+    const official = officialSessionsDouble({ ids: ["s1"] });
+    const opened = vi.fn();
+    const bridge = createSessionsBridge(official.face, opened);
+    bridge.setActive("");
+    official.requestOpen("s1", "initial");
+    expect(opened).not.toHaveBeenCalled();
+    expect(official.current).toBeUndefined();
+    official.requestOpen("s1");
+    expect(opened).toHaveBeenCalledWith("s1");
+    bridge.setActive("s1");
+    expect(official.current).toBe("s1");
+    expect(opened).toHaveBeenCalledTimes(1);
+    bridge.dispose();
+  });
+
+  it("does not let a queued draft projection override a newer plugin open", async () => {
+    const official = officialSessionsDouble({ ids: ["s1"] });
+    const opened = vi.fn();
+    const bridge = createSessionsBridge(official.face, opened);
+    bridge.setActive("draft");
+    official.setIds(["s1", "draft"]);
+    official.requestOpen("s1");
+    await flushMicrotasks();
+    expect(opened).toHaveBeenCalledWith("s1");
+    expect(official.current).toBe("s1");
+    bridge.setActive("s1");
+    bridge.dispose();
+  });
+
+  it("consumes intent once and does not mistake a later restore for another open", () => {
+    const official = officialSessionsDouble({ ids: ["s1"] });
+    const opened = vi.fn();
+    const bridge = createSessionsBridge(official.face, opened);
+    official.requestOpen("s1");
+    bridge.setActive("s1");
+    bridge.setActive("");
+    official.setCurrent("s1");
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect(official.current).toBeUndefined();
+    bridge.dispose();
+    official.requestOpen("s1");
+    expect(opened).toHaveBeenCalledTimes(1);
+  });
+});
+
+it("preserves catalog-style navigation after an earlier marked open", () => {
+  const official = officialSessionsDouble({ ids: ["s1", "s2"] });
+  const opened = vi.fn();
+  const bridge = createSessionsBridge(official.face, opened);
+  official.requestOpen("s1");
+  bridge.setActive("s1");
+  opened.mockClear();
+  official.setCurrent("s2");
+  expect(opened).toHaveBeenCalledWith("s2");
+  bridge.dispose();
+});
+
+it("forwards explicit clear into deselect without closing or reopening a session", async () => {
+  const official=officialSessionsDouble({ids:["s1"]});
+  const open=vi.fn(),clear=vi.fn();
+  const bridge=createSessionsBridge(official.face,open,clear);
+  bridge.setActive("s1");
+  official.requestClear();
+  expect(clear).toHaveBeenCalledTimes(1);
+  expect(official.current).toBeUndefined();
+  bridge.setActive("");
+  expect(clear).toHaveBeenCalledTimes(1);
+  bridge.setActive("pending");
+  official.requestClear();
+  official.setIds(["s1","pending"]);
+  await flushMicrotasks();
+  expect(official.current).toBeUndefined();
+  expect(clear).toHaveBeenCalledTimes(2);
+  bridge.dispose();
+});
+it("suppresses bridge clear echoes and retains unmarked runtime-loss behavior", () => {
+  const official=officialSessionsDouble({ids:["s1"]});
+  const originalClear=official.face.clear;
+  official.face.clear=()=>{Object.assign(official.face,{lastClearRequest:{}});originalClear();};
+  const clear=vi.fn();
+  const bridge=createSessionsBridge(official.face,vi.fn(),clear);
+  bridge.setActive("s1");
+  official.setCurrent(undefined);
+  expect(official.current).toBe("s1");
+  bridge.setActive("draft");
+  expect(clear).not.toHaveBeenCalled();
+  bridge.dispose();
 });

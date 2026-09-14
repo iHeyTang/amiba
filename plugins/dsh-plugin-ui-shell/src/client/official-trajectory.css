@@ -1,0 +1,44 @@
+/* Pinned official trajectory view only. Never install the global DSH theme. */
+[data-conversation-view="trajectory"] {
+  --dsw-font-family: ui-sans-serif, system-ui, sans-serif;
+  --ds-font-family-code: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --dsw-font-xs-13: 400 13px/20px var(--dsw-font-family);
+  --dsw-font-xs-strong-13: 600 13px/20px var(--dsw-font-family);
+  --dsw-font-xxs-12: 400 12px/18px var(--dsw-font-family);
+  --dsw-font-xxxs-11: 400 11px/16px var(--dsw-font-family);
+  --ds-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dsw-alias-bg-base: hsl(var(--background));
+  --dsw-alias-bg-layer-1: hsl(var(--background));
+  --dsw-alias-bg-layer-2: hsl(var(--muted));
+  --dsw-alias-bg-module-platform: hsl(var(--muted));
+  --dsw-specific-sidebar-fill: hsl(var(--muted));
+  --dsw-alias-border-l1: hsl(var(--border) / 0.5);
+  --dsw-alias-border-l2: hsl(var(--border));
+  --dsw-alias-border-l3: hsl(var(--border));
+  --dsw-alias-interactive-bg-active: hsl(var(--accent));
+  --dsw-alias-interactive-bg-hover: hsl(var(--accent));
+  --dsw-alias-label-primary: hsl(var(--foreground));
+  --dsw-alias-label-secondary: hsl(var(--muted-foreground));
+  --dsw-alias-label-tertiary: hsl(var(--muted-foreground));
+  --dsw-alias-label-caption: hsl(var(--muted-foreground) / 0.75);
+  --dsw-alias-label-dimmed: hsl(var(--muted-foreground) / 0.5);
+  --dsw-alias-markdown-citation: hsl(var(--primary));
+  --dsw-alias-markdown-code-block: hsl(var(--muted));
+  --dsw-alias-scrollbar-bg-l2: hsl(var(--muted-foreground) / 0.25);
+  --dsw-alias-scrollbar-hover-l2: hsl(var(--muted-foreground) / 0.45);
+  --dsw-alias-state-business-primary: hsl(var(--primary));
+  --dsw-alias-state-business-tertiary: hsl(var(--primary) / 0.1);
+  --dsw-alias-brand-primary-new-colorprimary-new-color: hsl(var(--primary));
+  --dsw-static-blue-500: hsl(var(--primary));
+  --dsw-alias-state-error-primary: hsl(var(--destructive));
+  --dsw-alias-state-error-secondary: hsl(var(--destructive) / 0.7);
+  --dsw-alias-state-success-primary: hsl(var(--success));
+  --dsw-alias-state-success-tertiary: hsl(var(--success) / 0.1);
+  --dsw-alias-state-warn-label: hsl(var(--warning));
+  --dsw-alias-state-warn-tertiary: hsl(var(--warning) / 0.1);
+  --dsw-shadow-lv2: 0 8px 24px rgb(0 0 0 / 0.15);
+  /* Amiba keeps its composer in the mounted, hidden native Chat panel. */
+  --dsh-composer-height: 0px;
+  font: var(--dsw-font-xs-13);
+  color: var(--dsw-alias-label-primary);
+}

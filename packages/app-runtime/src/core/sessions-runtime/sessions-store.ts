@@ -349,7 +349,20 @@ export class SessionsStore {
     const retained = this.state.sessions.filter(
       (session) => open.has(session.id) && !known.has(session.id),
     );
-    this.commit({ sessions: retained.length ? [...retained, ...next] : next });
+    // Catalog addresses are discovered separately from the root history index.
+    // An older index (including another window's snapshot) may contain the row
+    // without that address. Its absence must not change the child's transport
+    // or read-only mode. An explicit incoming address/parent remains authoritative.
+    const current = new Map(this.state.sessions.map((session) => [session.id, session]));
+    const merged = next.map((session) => {
+      const address = current.get(session.id)?.subagentAddress;
+      if (!address || session.subagentAddress ||
+        (session.parentSessionId && session.parentSessionId !== address.parentSessionId)) {
+        return session;
+      }
+      return { ...session, subagentAddress: { ...address }, parentSessionId: address.parentSessionId };
+    });
+    this.commit({ sessions: retained.length ? [...retained, ...merged] : merged });
     for (const [id, activityAt] of this.pendingUnread) {
       if (!known.has(id)) continue;
       this.pendingUnread.delete(id);
@@ -371,6 +384,16 @@ export class SessionsStore {
     this.schedulePersistMessages();
   };
 
+  /** Address asynchronous UI updates without evaluating them against another session. */
+  updateActiveMessagesFor = (
+    sessionId: string,
+    action: (prev: SessionMessage[]) => SessionMessage[],
+  ): boolean => {
+    if (!sessionId || this.state.activeId !== sessionId) return false;
+    this.setActiveMessages(action);
+    return true;
+  };
+
   // -------------------------------------------------------------------------
   // Action: active-id transitions
   // -------------------------------------------------------------------------
@@ -380,7 +403,8 @@ export class SessionsStore {
    * load its messages. ``activeId`` is per-window in-memory state, so
    * no persistence is involved — the commit is purely local.
    */
-  private async activateOpen(id: string): Promise<void> {
+  private async activateOpen(id: string, token = ++this.switchToken, reload = false): Promise<void> {
+    if (token !== this.switchToken) return;
     if (!id) {
       // Returning to Home is a UI state transition, so publish it before
       // waiting for the outgoing session's best-effort persistence. This is
@@ -388,18 +412,17 @@ export class SessionsStore {
       // cancellation/flush can be slow, but it must never leave the
       // composer visually attached to the conversation the user just left.
       const flush = this.flushActiveBeforeSwitch();
-      ++this.switchToken;
       this.commit({ activeId: "", activeMessages: [] });
       await flush;
       return;
     }
-    if (id === this.state.activeId) {
+    if (id === this.state.activeId && !reload) {
       await this.markRead(id);
       return;
     }
     await this.flushActiveBeforeSwitch();
-    const token = ++this.switchToken;
-    const next = await loadMessages(id);
+    if (token !== this.switchToken) return;
+    const next = await loadMessages(id, this.state.sessions.find((session) => session.id === id)?.subagentAddress);
     if (token !== this.switchToken) return;
     this.commit({ activeId: id, activeMessages: next });
     await this.markRead(id);
@@ -432,26 +455,32 @@ export class SessionsStore {
    * row to select.
    */
   deselect = async (): Promise<void> => {
-    if (!this.state.activeId) return;
+    // Also cancel a pending open when Home is still the visible state.
     await this.activateOpen("");
   };
 
-  openTab = async (id: string): Promise<void> => {
+  openTab = async (id: string, subagent?: SessionMeta["subagentAddress"]): Promise<void> => {
     if (!id) return;
-    if (!this.state.sessions.some((session) => session.id === id)) {
+    const token = ++this.switchToken;
+    const previousAddress = this.state.sessions.find((session) => session.id === id)?.subagentAddress;
+    if (subagent || !this.state.sessions.some((session) => session.id === id)) {
       // Open-by-id may target a session the history index dropped (a host-
       // or plugin-created session with no user turn yet). Surface its real
       // identity — the agent preset it already runs, its title — before it
       // becomes active, or the composer would treat it as a fresh draft.
-      const meta = await loadSessionMeta(id);
-      if (meta) this.commit({ sessions: [meta, ...this.state.sessions] });
+      const meta = await loadSessionMeta(id, subagent);
+      if (token !== this.switchToken) return;
+      if (meta) this.commit({ sessions: this.state.sessions.some((session) => session.id === id)
+        ? this.state.sessions.map((session) => session.id === id ? { ...session, subagentAddress: meta.subagentAddress, parentSessionId: meta.parentSessionId } : session)
+        : [meta, ...this.state.sessions] });
     }
     if (!this.state.openTabIds.includes(id)) {
       // Append at the end so existing tabs keep their relative order.
       const nextTabs = [...this.state.openTabIds, id];
       this.commit({ openTabIds: nextTabs });
     }
-    await this.activateOpen(id);
+    const address = this.state.sessions.find((session) => session.id === id)?.subagentAddress;
+    await this.activateOpen(id, token, JSON.stringify(previousAddress) !== JSON.stringify(address));
   };
 
   closeTab = async (id: string): Promise<void> => {
@@ -627,7 +656,7 @@ export class SessionsStore {
     return {
       export_version: 2,
       runtime: "dsh",
-      session: { ...session, messages: await loadMessages(id) },
+      session: { ...session, messages: await loadMessages(id, session?.subagentAddress) },
     };
   };
 
@@ -638,7 +667,7 @@ export class SessionsStore {
     id: string,
     userOrdinal: number,
   ): Promise<number | null> => {
-    const messages = await loadMessages(id);
+    const messages = await loadMessages(id, this.state.sessions.find((session) => session.id === id)?.subagentAddress);
     const message = messages.filter((item) => item.role === "user")[userOrdinal] as
       | (SessionMessage & { runtimeSeq?: number })
       | undefined;

@@ -12,13 +12,12 @@ from `@deepseek-ai/dsh-client-ui-settings`, `shell.overlay` from
 `@deepseek-ai/dsh-client-ui-layout`, the `conversation.*` family from
 `@deepseek-ai/dsh-client-ui-conversation`, `tool.call.toolview` from
 `@deepseek-ai/dsh-client-ui-tool`, and `conversation.input.overlay` from
-`@deepseek-ai/dsh-client-ui-input-trigger`. Twelve seats are adopted from those
-four packages, with their owner contracts re-derived here.
+`@deepseek-ai/dsh-client-ui-input-trigger`. Adopted seats retain their official owner contracts.
 
 ### The `settings.*` family
 
-All eight official settings seats are now available in the Web composition. Every one of
-them is root-scoped, and the owner column is the whole contract — several are
+The following settings seats are available in the Web composition. Each
+is root-scoped, and the owner column is the whole contract — several are
 the empty marker interface, which means "self-sufficient", not "starved".
 
 | seat | kind | owner | render site in Amiba |
@@ -207,9 +206,11 @@ How Amiba supplies that owner share: `callId` from the canonical call id,
 (and reused as the dispatch `entryKey`), `block` rebuilt from the verbatim
 `tool/call` / `tool/result` material both Amiba tool producers retain, `cwd`
 from the conversation's workspace binding, `openFile` from the workspace
-pane's file-open path. `inspect` is deliberately OMITTED (it is optional): it
-means "inspect this call in the trajectory view", and Amiba disables the
-official `ui-trajectory` plugin and ships no equivalent. `block.subCalls` retains the nested
+pane's file-open path. The shell supplies optional `inspect` when a
+`trajectory` view is registered: it opens that view with the real call ID.
+The view receives `inspect` and `onInspectDone` for the one-shot handoff.
+Session switches and view removal invalidate old callbacks; no trajectory
+plugin is automatically enabled or substituted for the native Chat. `block.subCalls` retains the nested
 Code Mode dispatch tree, including running children and completed/error results,
 in both live sessions and restored history. Calls without dispatch events keep
 an empty array. The existing Amiba tool rows remain unchanged; registered
@@ -224,19 +225,15 @@ vendor extensions with no official counterpart; only those appear in
 `SlotMap` — plugins need no extra dependency. Note the inheritance makes ALL
 conversation.* keys type-visible while Amiba runtime-declares only the
 adopted seats: registering into an undeclared key waits in `ctx.slots.inject`
-with no render site. Remaining examples include the following contracts:
-`conversation.chat.turnTail` (`TurnLocation` is an engine-owned boundary with
-a business-value reader over machinery Amiba does not run). Render site, not
-contract: `conversation.chat.assistant-actions`, whose `MessageId` is on the
-wire but whose render site folds a whole turn into one bubble. Own machinery,
-not contract: `conversation.input.dock` / `.composer.dock` / `.input.left` /
-`.input.right` — their `InputZone` share is an OWNER share Amiba passes at its
-own dispatch site (as it already does for `conversation.input.plan`), and the
-blockers are two `InputState` members Amiba must first make truthful,
-`occurrences` (one U+FFFC placeholder per entry) and `imageIds` (a
-browser-owned draft id space). Not the `sessions.provide` channel — see
-`src/slots.ts` for the corrected record, including why a faithful
-`useInput`/`inputActions` bundle is out of reach entirely.
+with no render site. Remaining work includes `conversation.chat.turnTail`, whose `TurnLocation`
+requires the original turn/step boundaries and business-value reader, and the
+input zones, whose `InputState` needs faithful reference offsets and draft image
+identities. These are adapter requirements, not proof of permanent incompatibility.
+
+`conversation.chat.assistant-actions` now receives the canonical closing
+assistant MessageId in live and restored sessions. A merged visual bubble does
+not prevent this: action dispatch follows the official finalized-step selection.
+
 See `src/slots.ts` for the field-level record. The ui-conversation members of the session standard kit
 (`useInput`/`inputActions`) are type-visible but NOT provided by Amiba's
 runtime yet (recorded Phase-2 deferral) — the framework members
@@ -435,3 +432,19 @@ keyboard activation, session recovery and presentation arbitration. Engine
 events and composition events are injected test data; this does not exercise a
 live agent or the operating system's IME candidate window. The probe is excluded
 from the production build and requires no Mofli package.
+
+
+### Additional conversation views
+
+`conversation.view` is a session-scoped list. Register an `id`, optional `label`
+(string or localized thunk), `order`, and your component. Amiba adds a view tab
+only while an entry is registered and a session is active. The native chat stays
+mounted; switching views preserves its draft and engine subscriptions. Unloading
+the selected entry or changing session returns to the native chat.
+
+The owner is the official `ConvViewOwnerProps`. No inspect request is supplied
+until a real inspect handoff is available. The framework supplies the actual
+session identity and snapshot hooks. This slot does not supply the separate
+`ui-conversation` input machine, and a view depending on that machine still needs
+its dedicated adapter. Labels are read from registration metadata without calling
+session-scoped inject factories outside a session.

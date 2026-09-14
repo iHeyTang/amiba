@@ -26,7 +26,7 @@ export const inject = ["slots", "remote", "connection"];
 const SECTION_ID = "models";
 
 
-type ModelPlaneSectionProps = PropsRuntime<"settings.section"> & PropsRenderSlots<"amiba.models.extension"> & {
+type ModelPlaneSectionProps = PropsRuntime<"settings.section"> & PropsRenderSlots<"amiba.models.extension" | "settings.models.footer" | "settings.models.provider-card"> & {
   adapter: ProviderSettingsController;
 };
 
@@ -56,6 +56,8 @@ function ModelPlaneSettings({ adapter, renderSlot }: ModelPlaneSectionProps): Re
           adapter={adapter}
           inventory={Object.values(inventories).flat()}
           assignments={renderSlot("amiba.models.extension", {onModelsChange})}
+          footer={renderSlot("settings.models.footer", {})}
+          renderProviderCard={owner => renderSlot("settings.models.provider-card", owner, { entryKey: owner.provider.settingsNs })}
         />
       </PageContent>
     </ScrollArea>
@@ -140,7 +142,11 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           {
             name: "settings.section",
             id: SECTION_ID,
-            children: { "amiba.models.extension": { kind: "list", scope: "root" } },
+            children: {
+              "amiba.models.extension": { kind: "list", scope: "root" },
+              "settings.models.footer": { kind: "list", scope: "root" },
+              "settings.models.provider-card": { kind: "keyed", scope: "root" },
+            },
             // Below every other plugin section (catalog/mcp start at 100)
             // so 模型与服务 stays directly after the agent-preset plugin's
             // 智能体预设 entry (5), keeping its old registry position.

@@ -10,16 +10,18 @@
                                               host-composed client plugin graph.
                                               Script files themselves remain
                                               limited by script-src-elem to the
-                                              app bundle and loopback DSH host.
+                                              app bundle, loopback DSH host and
+                                              packed document Blob resources.
         - frame-src / child-src             — the visible browser pane may open
                                               loopback development pages in its
-                                              isolated webview partition.
+                                              isolated webview partition; Blob frames
+                                              host opaque document previews.
         - connect-src                       — local dev servers + remote API traffic +
                                               the authenticated DSH/native endpoints.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline' http://127.0.0.1:*; font-src 'self' data: http://127.0.0.1:*; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src-elem 'self' 'unsafe-inline' http://127.0.0.1:*; frame-src 'self' http://127.0.0.1:* http://localhost:*; child-src 'self' http://127.0.0.1:* http://localhost:*"
+      content="default-src 'self'; style-src 'self' blob: 'unsafe-inline' http://127.0.0.1:*; font-src 'self' data: http://127.0.0.1:*; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src-elem 'self' blob: 'unsafe-inline' http://127.0.0.1:*; frame-src 'self' blob: http://127.0.0.1:* http://localhost:*; child-src 'self' blob: http://127.0.0.1:* http://localhost:*"
     />
     <script>
       (() => {

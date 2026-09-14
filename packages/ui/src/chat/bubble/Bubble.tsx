@@ -1,3 +1,8 @@
+import { toolCallTreeContains } from "./nested-tool-calls";
+import { toolCallBlockFromProgress } from "./tool-call-block";
+import { WorkbenchViewBoundary } from "../workbench-extensions";
+import { messageTextTimeline, joinTextSources, sliceTextSources, timelineTextSource, thinkingBodySource, type TextSourceRange } from "../text-source-ranges";
+import { WorkspaceMarkdown } from "../workspace-file-links";
 import { CompactionRow } from "./CompactionRow";
 import type { CompactionProgress } from "@amiba/app-runtime/protocol";
 import { Fragment } from "react";
@@ -206,6 +211,7 @@ function MessageNoticeRow({
 
 export interface BubbleProps {
   m: UiMessage;
+  messageImages?: (images: NonNullable<UiMessage["images"]>) => ReactNode;
   /** Turn-level renderers use this after moving execution details into one summary. */
   suppressTrace?: boolean;
   /** MessageTurns renders terminal run state after the whole execution segment. */
@@ -242,6 +248,7 @@ function hasInterleavedAssistantTimeline(message: UiMessage): boolean {
  */
 export function Bubble({
   m,
+  messageImages,
   suppressTrace = false,
   suppressRunBoundary = false,
   onOpenAgentDestination,
@@ -312,6 +319,11 @@ export function Bubble({
         {hasContent && (
           <div className="whitespace-pre-wrap break-words"><ReferenceText text={bodyText} /></div>
         )}
+        {m.images?.length && messageImages ? (
+          <WorkbenchViewBoundary key={m.uiId} fallback={null}>
+            <MessageImages images={m.images} render={messageImages} />
+          </WorkbenchViewBoundary>
+        ) : null}
       </div>
     );
   }
@@ -443,7 +455,8 @@ export function Bubble({
           </div>
         )}
         {hasBody && (
-          <Streamdown
+          <WorkspaceMarkdown
+            sources={sliceTextSources(thinkingBodySource(joinTextSources(messageTextTimeline(m).filter(item=>item.kind==="text").map(timelineTextSource),"")),trace.bodyText)}
             components={chatMarkdownComponents}
             mode={m.streaming ? "streaming" : "static"}
             parseIncompleteMarkdown
@@ -452,7 +465,7 @@ export function Bubble({
             className="chat-md break-words"
           >
             {trace.bodyText}
-          </Streamdown>
+          </WorkspaceMarkdown>
         )}
         {showRunning && <TurnRunningIndicator />}
         {!m.streaming && m.agentFinalUrl && onOpenAgentDestination && (
@@ -750,6 +763,7 @@ type TurnTraceDetail =
       kind: "narration";
       id: string;
       text: string;
+      sources?: TextSourceRange[];
     }
   | {
       kind: "tool";
@@ -833,7 +847,7 @@ function ExecutionDisclosure({
   const navigation = useToolCallSeat()?.navigation;
   const navigationRequest = useSyncExternalStore(navigation?.subscribe ?? noNavigationSubscribe, navigation?.getSnapshot ?? noNavigationRequest);
   const handledNavigation = useRef(0);
-  useEffect(()=>{if(navigationRequest.version !== handledNavigation.current && tools.some(tool=>tool.toolCallId === navigationRequest.callId)){handledNavigation.current=navigationRequest.version;setExpanded(true);}},[navigationRequest, tools]);
+  useEffect(()=>{if(navigationRequest.version !== handledNavigation.current && tools.some(tool=>{const block=toolCallBlockFromProgress(tool);return tool.toolCallId === navigationRequest.callId || (block && toolCallTreeContains(block,navigationRequest.callId));})){handledNavigation.current=navigationRequest.version;setExpanded(true);}},[navigationRequest, tools]);
 
   if (details.length === 0 && !latestProgress) return null;
 
@@ -959,7 +973,8 @@ function ExecutionDisclosure({
             }
             if (detail.kind === "narration") {
               return (
-                <Streamdown
+                <WorkspaceMarkdown
+                  sources={detail.sources}
                   components={chatMarkdownComponents}
                   key={detail.id}
                   mode="static"
@@ -967,7 +982,7 @@ function ExecutionDisclosure({
                   className="chat-md chat-md--reasoning break-words px-1.5 text-xs text-muted-foreground/85"
                 >
                   {detail.text}
-                </Streamdown>
+                </WorkspaceMarkdown>
               );
             }
             if (detail.kind === "tool") {
@@ -1186,7 +1201,7 @@ function buildTurnReplyItems(replies: UiMessage[]): TurnReplyItem[] {
 
 type AssistantFlowItem =
   | { kind: "compaction"; id: string; compaction: CompactionProgress }
-  | { kind: "text"; id: string; text: string }
+  | { kind: "text"; id: string; text: string; sources: TextSourceRange[] }
   | {
       kind: "execution";
       id: string;
@@ -1222,11 +1237,11 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
     pendingDetails = [];
     pendingTools = [];
   };
-  const appendText = (id: string, text: string) => {
+  const appendText = (id: string, text: string, sources: TextSourceRange[] = []) => {
     const body = splitThinkingFromBody(text).body;
     if (!body.trim()) return;
     flushExecution();
-    flow.push({ kind: "text", id, text: body });
+    flow.push({ kind: "text", id, text: body, sources: sliceTextSources(thinkingBodySource({text,sources}),body) });
   };
   const appendTool = (id: string, toolCallId: string) => {
     if (seenTools.has(toolCallId)) return;
@@ -1246,7 +1261,7 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
 
   for (const item of timeline) {
     if (item.kind === "text") {
-      appendText(item.id, item.text);
+      appendText(item.id, item.text, timelineTextSource(item).sources);
     } else if (item.kind === "reasoning") {
       pendingDetails.push({kind:"reasoning",id:item.id,text:item.text,reasoningMs:item.startedAt !== undefined && item.endedAt !== undefined ? Math.max(0,item.endedAt-item.startedAt) : undefined});
     } else if (item.kind === "tool") {
@@ -1270,7 +1285,8 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
     rawBody.startsWith(timelineText) &&
     rawBody.length > timelineText.length
   ) {
-    appendText(`${message.uiId}:text-tail`, rawBody.slice(timelineText.length));
+    const tail = rawBody.slice(timelineText.length);
+    appendText(`${message.uiId}:text-tail`, tail, message.assistantDraftSource ? sliceTextSources(timelineTextSource(message.assistantDraftSource), tail) : []);
   }
 
   for (const event of message.toolProgress ?? []) {
@@ -1318,7 +1334,7 @@ function InterleavedAssistantFlow({
     (segment) =>
       segment.kind === "execution"
         ? segment.details
-        : segment.kind === "text" ? [{ kind: "narration" as const, id: segment.id, text: segment.text }] : [],
+        : segment.kind === "text" ? [{ kind: "narration" as const, id: segment.id, text: segment.text, sources: segment.sources }] : [],
   );
   processDetails.push(
     ...(executionNotices.get(message.uiId) ?? []).map((notice) => ({
@@ -1330,10 +1346,8 @@ function InterleavedAssistantFlow({
   const processTools: ToolProgress[] = processSegments.flatMap((segment) =>
     segment.kind === "execution" ? segment.tools : [],
   );
-  const resultText = resultSegments
-    .map((segment) => (segment.kind === "text" ? segment.text : ""))
-    .join("\n\n")
-    .trim();
+  const resultSource = joinTextSources(resultSegments.map(segment=>segment.kind === "text" ? segment : {text:"",sources:[]}), "\n\n");
+  const resultText = resultSource.text.trim();
   const resultStreaming = !!message.streaming;
   const processStreaming = resultStreaming && resultText.length === 0;
   const hasCompactions = flow.some(segment => segment.kind === "compaction");
@@ -1443,7 +1457,8 @@ function InterleavedAssistantFlow({
                   key={segment.id}
                   data-live-tail={index === flow.length - 1 ? "" : undefined}
                 >
-                  <Streamdown
+                  <WorkspaceMarkdown
+                    sources={segment.sources}
                     components={chatMarkdownComponents}
                     mode={resultStreaming ? "streaming" : "static"}
                     parseIncompleteMarkdown
@@ -1454,7 +1469,7 @@ function InterleavedAssistantFlow({
                     className="chat-md break-words"
                   >
                     {segment.text}
-                  </Streamdown>
+                  </WorkspaceMarkdown>
                 </div>
               ) : (
                 <ExecutionDisclosure
@@ -1482,7 +1497,8 @@ function InterleavedAssistantFlow({
             )}
             {resultText.length > 0 && (
               <div data-turn-result>
-                <Streamdown
+                <WorkspaceMarkdown
+                  sources={sliceTextSources(resultSource,resultText)}
                   components={chatMarkdownComponents}
                   mode={resultStreaming ? "streaming" : "static"}
                   parseIncompleteMarkdown
@@ -1491,7 +1507,7 @@ function InterleavedAssistantFlow({
                   className="chat-md break-words"
                 >
                   {resultText}
-                </Streamdown>
+                </WorkspaceMarkdown>
               </div>
             )}
           </>
@@ -1526,6 +1542,7 @@ function InterleavedAssistantFlow({
  */
 export function UserStickyBubble({
   m,
+  messageImages,
   onOpenAgentDestination,
   userOrdinal,
   onBranch,
@@ -1534,6 +1551,7 @@ export function UserStickyBubble({
   timeLocale,
 }: {
   m: UiMessage;
+  messageImages?: BubbleProps["messageImages"];
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
   userOrdinal: number;
   onBranch?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
@@ -1594,7 +1612,7 @@ export function UserStickyBubble({
               )}
             >
               <div ref={innerRef}>
-                <Bubble m={m} onOpenAgentDestination={onOpenAgentDestination} />
+                <Bubble m={m} messageImages={messageImages} onOpenAgentDestination={onOpenAgentDestination} />
               </div>
             </div>
             {isClipping && (
@@ -1686,7 +1704,13 @@ export function UserStickyBubble({
  * stays visible — Cursor-style.
  */
 export function MessageTurns({
+  messageText,
+  turnTail,
+  timelineRows,
+  turnTailAnchors,
+  openTurnFile,
   assistantActions,
+  messageImages,
   messages,
   sessionId,
   onOpenAgentDestination,
@@ -1695,7 +1719,13 @@ export function MessageTurns({
   onRestoreBeforeTurn,
   restorableTurnOrdinals,
 }: {
+  messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
+  messageImages?: BubbleProps["messageImages"];
   assistantActions?: (messageId: string) => ReactNode;
+  turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
+  timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[];
+  turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
+  openTurnFile?: (path: string) => void;
   messages: UiMessage[];
   sessionId?: string;
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
@@ -1719,6 +1749,33 @@ export function MessageTurns({
     replies: UiMessage[];
     userOrdinal: number;
   };
+  // Presentation-only anchors never enter the session store or submission history.
+  const replacedMessages = new Set((timelineRows ?? []).flatMap(row => row.replaceMessageId ? [row.replaceMessageId] : []));
+  const anchoredMessages = messages.filter(message => !replacedMessages.has(message.uiId));
+  const presentTurns = new Set(messages.filter(message => message.role === "assistant").map(message => message.runtimeTurn));
+  for (const anchor of [...(turnTailAnchors ?? [])].sort((a, b) => a.endSeq - b.endSeq)) {
+    if (presentTurns.has(anchor.runtimeTurn)) continue;
+    presentTurns.add(anchor.runtimeTurn);
+    const next = anchoredMessages.findIndex(message => message.runtimeSeq !== undefined && message.runtimeSeq > anchor.endSeq);
+    anchoredMessages.splice(next < 0 ? anchoredMessages.length : next, 0, {
+      uiId: `turn-tail-anchor:${anchor.runtimeTurn}`, role: "assistant", content: "",
+      runtimeTurn: anchor.runtimeTurn, runtimeSeq: anchor.endSeq,
+    });
+  }
+  const extensionRows = new Map<string, ReactNode>();
+  for (const row of [...(timelineRows ?? [])].sort((a, b) => a.seq - b.seq)) {
+    const id = `extension-row:${row.id}`;
+    extensionRows.set(id, row.content);
+    const next = anchoredMessages.findIndex(message => message.runtimeSeq !== undefined && message.runtimeSeq > row.seq);
+    anchoredMessages.splice(next < 0 ? anchoredMessages.length : next, 0, {
+      uiId: id, role: "assistant", content: "", runtimeSeq: row.seq,
+    });
+  }
+  const lastMessageForTurn = new Map<number, string>();
+  for (const message of anchoredMessages) {
+    if (message.role === "assistant" && message.runtimeTurn !== undefined)
+      lastMessageForTurn.set(message.runtimeTurn, message.uiId);
+  }
   const turns: Turn[] = [];
   let cur: Turn | null = null;
   let userOrdinal = 0;
@@ -1728,7 +1785,7 @@ export function MessageTurns({
     if (message.role !== "assistant") continue;
     for (const event of message.toolProgress ?? []) callOwners.set(event.toolCallId, message);
   }
-  const visibleMessages = messages.filter(message => {
+  const visibleMessages = anchoredMessages.filter(message => {
     const placement = message.notice?.placement;
     if (placement?.kind !== "execution" || !sessionId || placement.sessionId !== sessionId) return true;
     const target = callOwners.get(placement.callId);
@@ -1754,6 +1811,30 @@ export function MessageTurns({
     <>
       {turns.map((turn, i) => {
         const replyItems = buildTurnReplyItems(turn.replies);
+        // Rendering can fold assistant rows into an execution disclosure or omit
+        // an empty row. Locate the tail after the row's final rendered item,
+        // without splitting the existing disclosure or adding idle DOM.
+        const lastItemForMessage = new Map<string, number>();
+        replyItems.forEach((item, index) => {
+          if (item.kind === "message") lastItemForMessage.set(item.message.uiId, index);
+          else if (item.kind === "execution") {
+            for (const message of item.messages) lastItemForMessage.set(message.uiId, index);
+          } else lastItemForMessage.set(item.id.slice("boundary:".length), index);
+        });
+        const extrasAfter = new Map<number, ReactNode[]>();
+        const appendExtra = (index: number, node: ReactNode) => extrasAfter.set(index, [...(extrasAfter.get(index) ?? []), node]);
+        let previousItem = -1;
+        for (const message of turn.replies) {
+          previousItem = Math.max(previousItem, lastItemForMessage.get(message.uiId) ?? -1);
+          if (extensionRows.has(message.uiId)) appendExtra(previousItem, <Fragment key={message.uiId}>{extensionRows.get(message.uiId)}</Fragment>);
+          if (message.role !== "assistant" || message.streaming || message.runtimeTurn === undefined ||
+              lastMessageForTurn.get(message.runtimeTurn) !== message.uiId) continue;
+          if (openTurnFile && turnTail) appendExtra(previousItem, <Fragment key={`tail:${message.runtimeTurn}`}>{turnTail(message.runtimeTurn, openTurnFile)}</Fragment>);
+        }
+        const renderTailsAfter = (index: number) => extrasAfter.get(index);
+        if (!turn.user && replyItems.length === 0) {
+          return <Fragment key={`empty-turns-${i}`}>{renderTailsAfter(-1)}</Fragment>;
+        }
         const reviewResource = turn.replies.some((message) => message.streaming)
           ? null
           : workspaceReviewResourceFromEvents(
@@ -1769,6 +1850,7 @@ export function MessageTurns({
           >
             {turn.user && (
               <UserStickyBubble
+                messageImages={messageImages}
                 m={turn.user}
                 onOpenAgentDestination={onOpenAgentDestination}
                 userOrdinal={turn.userOrdinal}
@@ -1783,26 +1865,36 @@ export function MessageTurns({
               />
             )}
             <ExecutionNoticesContext.Provider value={executionNotices}>
-            {replyItems.map((item) => {
+            {renderTailsAfter(-1)}
+            {replyItems.map((item, itemIndex) => {
               if (item.kind === "execution") {
                 return (
-                  <TurnExecutionDisclosure
-                    key={item.id}
+                  <Fragment key={item.id}><TurnExecutionDisclosure
                     messages={item.messages}
-                  />
+                  />{renderTailsAfter(itemIndex)}</Fragment>
                 );
               }
               if (item.kind === "boundary") {
-                return <RunBoundary key={item.id} state={item.state} />;
+                return <Fragment key={item.id}><RunBoundary state={item.state} />{renderTailsAfter(itemIndex)}</Fragment>;
               }
 
               return (
-                <Fragment key={item.id}><Bubble
+                <Fragment key={item.id}>{item.message.role === "assistant" && messageText && openTurnFile
+                  ? messageText(item.message.runtimeTurn, <Bubble
                   m={item.message}
+                  messageImages={messageImages}
                   suppressTrace={item.suppressTrace}
                   suppressRunBoundary={item.suppressRunBoundary}
                   onOpenAgentDestination={onOpenAgentDestination}
-                />
+                />, openTurnFile, messageTextTimeline(item.message))
+                  : <Bubble
+                  m={item.message}
+                  messageImages={messageImages}
+                  suppressTrace={item.suppressTrace}
+                  suppressRunBoundary={item.suppressRunBoundary}
+                  onOpenAgentDestination={onOpenAgentDestination}
+                />}
+                {renderTailsAfter(itemIndex)}
                 {item.message.role === "assistant" && !item.message.streaming && item.message.assistantMessageId
                   ? assistantActions?.(item.message.assistantMessageId) : null}
                 {item.message.role === "assistant" && <MessageDecoration sessionId={sessionId} messageId={item.message.uiId} streaming={!!item.message.streaming} />}
@@ -1965,3 +2057,8 @@ function UserActionButton({
     </Tooltip>
   );
 }
+
+function MessageImages({ images, render }: {
+  images: NonNullable<UiMessage["images"]>;
+  render: NonNullable<BubbleProps["messageImages"]>;
+}) { return render(images); }

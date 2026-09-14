@@ -1,3 +1,5 @@
+import { File, Folder, MessageSquare } from "lucide-react";
+import type { ReferenceAppearance } from "./reference-appearance";
 import { useState, type ReactNode } from "react";
 
 /** UI-only, provider-neutral intent. Extensions own resolution and permissions. */
@@ -22,11 +24,14 @@ export function ReferenceButton({
   source,
   reference,
   children,
+  appearance,
 }: {
   source: string;
   reference: string;
   children: ReactNode;
+  appearance?: ReferenceAppearance;
 }) {
+  const Icon = appearance === "file" ? File : appearance === "folder" ? Folder : appearance === "session" ? MessageSquare : undefined;
   const [unavailable, setUnavailable] = useState(false);
   const zh =
     typeof document !== "undefined" &&
@@ -35,6 +40,7 @@ export function ReferenceButton({
     <span className="inline-flex items-center gap-1">
       <button
         type="button"
+        data-reference-appearance={appearance}
         className="rounded px-1 text-primary underline decoration-primary/30 underline-offset-2 hover:bg-muted focus-visible:outline focus-visible:outline-2"
         onClick={() => {
           const event = new CustomEvent<ReferenceRequest>(REFERENCE_EVENT, {
@@ -44,6 +50,7 @@ export function ReferenceButton({
           setUnavailable(window.dispatchEvent(event));
         }}
       >
+        {Icon && <Icon aria-hidden="true" size={12} className="mr-1 inline align-text-bottom" />}
         {children}
       </button>
       {unavailable && (

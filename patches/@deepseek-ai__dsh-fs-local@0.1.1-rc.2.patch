@@ -1,0 +1,20 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -710,6 +710,7 @@
+ 			displayPath: local.displayPath
+ 		};
+ 	}
++	processPathFromHostPath(hostPath) { return isAbsolute(hostPath) ? resolve(hostPath) : undefined; }
+ 	processPath(target) {
+ 		return String(target.targetKey);
+ 	}
+--- a/lib/types/index.d.ts
++++ b/lib/types/index.d.ts
+@@ -43,6 +43,7 @@
+         signal?: AbortSignal;
+     }): Promise<FsTarget>;
+     processPath(target: FsTarget): string;
++    processPathFromHostPath(hostPath: string): string | undefined;
+     fileUrl(target: FsTarget): string;
+     contains(parent: FsTarget, child: FsTarget): boolean;
+     stat(target: FsTarget, signal?: AbortSignal): Promise<FsInfo | undefined>;

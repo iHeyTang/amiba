@@ -49,8 +49,9 @@ export function stripManagedResourceContext(text: string): string {
  * blocks joined with blank lines). Both fields are trimmed; either may be
  * empty.
  */
-export function splitThinkingFromBody(text: string): { body: string; thinking: string } {
+export function splitThinkingFromBody(text: string, onBodySlice?: (start: number, end: number) => void): { body: string; thinking: string } {
   if (!text || !text.includes("<")) {
+    onBodySlice?.(0, text.length)
     return { body: text, thinking: "" }
   }
   // Non-greedy `[\s\S]*?` so back-to-back blocks don't get glued.
@@ -63,11 +64,13 @@ export function splitThinkingFromBody(text: string): { body: string; thinking: s
   for (const match of text.matchAll(re)) {
     if (match.index === undefined) continue
     body += text.slice(lastEnd, match.index)
+    onBodySlice?.(lastEnd, match.index)
     const inner = (match[2] ?? "").trim()
     if (inner) parts.push(inner)
     lastEnd = match.index + match[0].length
   }
   body += text.slice(lastEnd)
+  onBodySlice?.(lastEnd, text.length)
   return {
     body: body.replace(/\n{3,}/g, "\n\n").trim(),
     thinking: parts.join("\n\n").trim()

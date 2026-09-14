@@ -1,3 +1,4 @@
+import { referenceAppearance } from "../../reference-appearance"
 import type { BuiltinMentionType, MentionData } from "./providers/types"
 
 // Built-in mention types: payload field order for the colon/pipe body.
@@ -39,16 +40,20 @@ function fieldsFor(type: string): string[] | null {
 const TOKEN_RE = /@\[([a-z][a-z0-9.]*):((?:[^\]\\]|\\.)*)\]/g
 
 function esc(v: string): string {
-  // escape pipe + closing bracket so the body parses unambiguously
-  return v.replace(/%/g, "%25").replace(/\|/g, "%7C").replace(/\]/g, "%5D")
+  // Escape backslashes too: the token scanner treats a raw backslash as
+  // quoting its next character, including the closing token delimiter.
+  return v.replace(/%/g, "%25").replace(/\\/g, "%5C").replace(/\|/g, "%7C").replace(/\]/g, "%5D")
 }
 function unesc(v: string): string {
-  return v.replace(/%5D/g, "]").replace(/%7C/g, "|").replace(/%25/g, "%")
+  return v.replace(/%5C/g, "\\").replace(/%5D/g, "]").replace(/%7C/g, "|").replace(/%25/g, "%")
 }
 
 export function encodeMention(m: MentionData): string {
   const fields = fieldsFor(m.type) ?? []
-  const body = fields.map((f) => esc(m.payload[f] ?? "")).join("|")
+  const values = fields.map((f) => esc(m.payload[f] ?? ""))
+  const appearance = m.type === "dsh.reference" ? referenceAppearance(m.payload.appearance) : undefined
+  if (appearance) values.push(appearance) // Optional tail; old tokens keep their exact encoding.
+  const body = values.join("|")
   return `@[${m.type}:${body}]`
 }
 
@@ -62,6 +67,10 @@ function decode(type: string, body: string): MentionData | null {
   const parts = body.length ? body.split("|") : []
   const payload: Record<string, string> = {}
   fields.forEach((f, i) => { payload[f] = unesc(parts[i] ?? "") })
+  if (type === "dsh.reference") {
+    const appearance = referenceAppearance(parts[4] === undefined ? undefined : unesc(parts[4]))
+    if (appearance) payload.appearance = appearance
+  }
   const display =
     payload.label || payload.title || payload.name || payload.key || payload.path || payload.id || type
   return { type, payload, display }

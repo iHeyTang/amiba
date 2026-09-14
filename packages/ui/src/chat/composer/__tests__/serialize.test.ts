@@ -50,3 +50,33 @@ describe("token serialize/parse", () => {
     expect(parts.every((p) => p.kind === "text")).toBe(true)
   })
 })
+
+
+it.each(["C:\\workspace\\", "a\\\nb", "%5C|]\\", "引用😀\\"])("restores a reference containing %j without consuming adjacent text", value => {
+  const mention: MentionData = {
+    type: "dsh.reference", display: value,
+    payload: { source: "files", ref: value, label: value, clipboardText: value },
+  }
+  const token = encodeMention(mention)
+  expect(parseTokens(`before ${token} after`)).toEqual([
+    { kind: "text", text: "before " },
+    { kind: "mention", mention, raw: token },
+    { kind: "text", text: " after" },
+  ])
+})
+
+it("keeps previously valid raw backslashes and percent-escaped literal strings", () => {
+  expect(parseTokens("@[file:C:\\work\\file.txt]")[0]).toMatchObject({
+    kind: "mention", mention: { payload: { path: "C:\\work\\file.txt" } },
+  })
+  expect(parseTokens("@[file:%255C]")[0]).toMatchObject({
+    kind: "mention", mention: { payload: { path: "%5C" } },
+  })
+})
+
+it.each(["file", "folder", "session"])("round-trips optional official appearance %s without changing legacy token encoding", appearance => {
+  const base: MentionData = { type: "dsh.reference", display: "Label", payload: { source: "fixture", ref: "id", label: "Label", clipboardText: "clip" } };
+  expect(encodeMention(base)).toBe("@[dsh.reference:fixture|id|Label|clip]");
+  const decorated = { ...base, payload: { ...base.payload, appearance } };
+  expect(parseTokens(encodeMention(decorated))[0]).toMatchObject({ kind: "mention", mention: decorated });
+});

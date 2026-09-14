@@ -1,3 +1,4 @@
+import { durableContentImages } from "@amiba/app-runtime/dsh-client";
 import type { ToolProgress } from "@amiba/app-runtime/core";
 import type {
   RunningToolCall,
@@ -157,4 +158,9 @@ export function toolCallDurationMs(block: ToolCallBlock): number | undefined {
 /** Epoch ms when a still-running call was logged (for live tickers). */
 export function toolCallStartedAt(block: ToolCallBlock): number | undefined {
   return "kind" in block ? undefined : block.time;
+}
+
+/** Durable images owned by this call, without borrowing nested calls' results. */
+export function toolCallResultImages(block: ToolCallBlock) {
+  return durableContentImages(toolCallSettled(block)?.content);
 }

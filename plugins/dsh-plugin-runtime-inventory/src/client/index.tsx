@@ -1,3 +1,4 @@
+import { registerBuiltinConfigCards } from "./builtin-config-cards.js";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type {
   PropsRuntime,
@@ -84,6 +85,7 @@ function ConfigurablePluginCards({
 }
 
 export async function apply(ctx: ClientContext): Promise<void> {
+  registerBuiltinConfigCards(ctx);
   const sectionFiber = ctx.inject(
     ["slots", "remote.pluginInventory", "settingsScope"],
     (injectedCtx) => {

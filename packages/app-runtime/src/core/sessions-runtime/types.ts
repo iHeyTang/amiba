@@ -39,6 +39,8 @@ export interface SessionsState {
  * issues them once at construction time.
  */
 export interface SessionsController {
+  /** Current authoritative state for asynchronous target-addressed operations. */
+  getSnapshot: () => SessionsState;
   /** True once the DSH session projection is loaded. */
   ready: boolean;
   /** Every session in storage (the History view). */
@@ -61,6 +63,8 @@ export interface SessionsController {
    * shape keep compiling.
    */
   setActiveMessages: Dispatch<SetStateAction<SessionMessage[]>>;
+  /** Returns false without invoking the updater when another session is selected. */
+  updateActiveMessagesFor: (sessionId: string, action: (prev: SessionMessage[]) => SessionMessage[]) => boolean;
 
   /** Returns the active id, creating + opening a new tab if there's none. */
   ensureActive: () => Promise<string>;
@@ -69,7 +73,7 @@ export interface SessionsController {
    * Open the session as a tab (appending if not already open) and
    * activate it. Used when picking a session from History.
    */
-  openTab: (id: string) => Promise<void>;
+  openTab: (id: string, subagent?: SessionMeta["subagentAddress"]) => Promise<void>;
 
   /**
    * Close the tab without touching the underlying session. If `id` was

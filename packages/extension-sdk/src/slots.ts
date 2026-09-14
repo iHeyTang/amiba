@@ -44,7 +44,7 @@
  * official ones.
  */
 
-import type { OwnerOf, SlotMap } from "@deepseek-ai/dsh-client-ui-slots";
+import type { OwnerOf, PropsRuntime, SlotMap } from "@deepseek-ai/dsh-client-ui-slots";
 export type { SidebarFooterActionOwnerProps } from "@deepseek-ai/dsh-client-ui-sidebar/client";
 export type { SettingsPluginItemOwnerProps } from "@deepseek-ai/dsh-client-ui-settings-plugins/client";
 
@@ -60,11 +60,10 @@ import type {} from "@deepseek-ai/dsh-client-ui-settings/client";
 // Amiba's runtime declares only the adopted keys on the ui-shell root;
 // a registration into any other type-visible conversation.* key simply
 // waits in ctx.slots.inject with no render site — authoring implication,
-// not a hazard. CAVEAT (recorded Phase-2 deferral): the merge also makes
-// `useInput`/`inputActions` type-visible on every session-scope component,
-// but amiba runs no ui-conversation runtime and registers no
-// sessions.provide bundle for them, so they are `undefined` at runtime
-// until a later phase provides an input machine. The framework members
+// not a hazard. The shell provides standard `useInput` and `inputActions`
+// from the original editor and its resident native draft. Offscreen text
+// reads/writes remain available; offscreen image additions retain browser
+// registrations until native admission. Submission still requires its mounted owner. The framework members
 // (`sessionId`/`useSession`/`useProjection`) ARE live — dsh-client-runtime
 // itself binds those once a session is current.
 import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
@@ -190,7 +189,7 @@ export type SettingsOwnerDerivationsHold = AssertAllTrue<{
  * interfaces, so the anchor is the header entry's injected face and every
  * adopted owner contract is re-derived below via {@link OwnerOf}.
  */
-export type { ConversationSessionHeaderInjected } from "@deepseek-ai/dsh-client-ui-conversation/client";
+export type { ComposerAttachment, ConversationSessionHeaderInjected } from "@deepseek-ai/dsh-client-ui-conversation/client";
 
 /**
  * Official owner contract of `conversation.session.header.utilities`
@@ -373,6 +372,8 @@ declare module "@deepseek-ai/dsh-client-ui-tool/client" {
     presentation?: "row" | "summary";
     revealToolCall?: (callId: string) => void;
     revealVersion?: number;
+    /** Available on image-aware hosts; rc.2 tool owners predate this member. */
+    loadImage?: ToolImageLoader;
   }
 }
 export type { ToolCallOwnerProps } from "@deepseek-ai/dsh-client-ui-tool/client";
@@ -414,27 +415,18 @@ export type {
  *                  (`platform.workspaces.getCurrent(sessionId)`).
  *   - `openFile` — the workspace pane's `openFile(path)`, the host file-open
  *                  path already behind Amiba's own tool rows.
- *   - `inspect`  — deliberately OMITTED (the member is optional). It means
- *                  "inspect this call in the TRAJECTORY view"; Amiba disables
- *                  the official `ui-trajectory` plugin and ships no
- *                  equivalent, so any callback here would lead nowhere.
- *                  Amiba's own row affordances are NOT it: the workspace pane
- *                  opens the tool's RESOURCE (a file / terminal / browser),
- *                  and the inline detail fold belongs to the very row an
- *                  occupant replaces.
+ *   - `inspect`  — supplied by the shell only while a `trajectory` view is
+ *                  registered. Opens that view with the actual call ID and
+ *                  a one-shot acknowledgement. Session switches and view
+ *                  removal invalidate old callbacks. Native resource-open
+ *                  and inline detail controls retain their existing meaning.
  *
- * `subCalls: []` on the block is the FAITHFUL value here, not a stub:
- * upstream's builder emits `[]` for every ROOT call and fills children only
- * from `tool/code-dispatch-start` / `tool/code-dispatch`. Those events exist
- * only under Code Mode, whose `run_code` transport requires a mounted
- * `ctx.codeRuntime`; Amiba's bundles compose no code runtime and no plugin
- * requests one, so its sessions emit neither event and every call is a root.
+ * `block.subCalls` carries Code Mode dispatch children from live events and
+ * restored history. Calls without dispatch events have an empty array.
  */
 export type ToolCallToolviewOwnerProps = OwnerOf<"tool.call.toolview">;
 
-// Official seats deliberately NOT adopted (recorded so authors know why
-// these names resolve to no render site here; `tool.call.toolview` was on
-// this list in Phase 3 and is now adopted above). The rule:
+// Official adoption requirements and recently resolved gaps. The rule:
 // an official name may only be taken when its official owner contract can
 // be supplied faithfully — an official key with a divergent owner is worse
 // than a vendor key, because entries written against the upstream types
@@ -447,23 +439,17 @@ export type ToolCallToolviewOwnerProps = OwnerOf<"tool.call.toolview">;
 //     OWNER share passed at Amiba's own dispatch site, exactly like
 //     `{ locked }` for `conversation.input.plan`, and the seat contract tells
 //     occupants to read the owner share and never subscribe `useInput`.
-//     `session` is already available (`ctx.sessions.binding(id)`, and the
-//     official ConversationSnapshot is real here — its `views`/`chat`/`nodes`
-//     are the documented empty values for a composition with no registered
-//     view Definitions). What blocks adoption is exactly two `InputState`
-//     members: `occurrences` (each entry must address ONE U+FFFC placeholder
-//     in the draft; Amiba's MentionNode projects a multi-character token, so
-//     honouring it means moving that token to the clipboard/model projection
-//     and keeping a side table) and `imageIds` (browser-owned unsent draft
-//     ids; Amiba's attachments are host-staged, so it needs its own id space
-//     in front of that). `draftRev` and a narrowed `phase` follow for free.
-//     SEPARATELY, and permanently unless upstream splits the interface: a
-//     faithful `sessions.provide` for `useInput`/`inputActions` is NOT
-//     possible — three of five `InputActions` members (`addImages`,
-//     `removeImage`, `pruneImages`) traffic in `DraftAttachmentId`s minted and
-//     resolved by the `conversation` service, which Amiba must not own (it
-//     bundles send/cancel/loadOlder/updateQueue/resolveImage, all of which
-//     Amiba implements through its own engine).
+//     `session` comes from ctx.sessions.binding(id). The native input bridge
+//     now composes real draft/phase/reference state, browser image IDs, and
+//     the actual Host inbox into the exact installed InputState type while
+//     all owners are bound. References use full @label UTF-16 ranges in rc.2,
+//     not the native trigger scanner's single-placeholder coordinates.
+//     The four input-region owner dispatches are mounted while these real
+//     sources are available. Standard useInput is also registered through
+//     sessions.provide, with resident text after editor release. An unavailable session must not be masked by
+//     an invented empty complete state; local pending messages are not Host
+//     inbox rows. Full conversation service adoption also requires the same
+//     image authority and native send/cancel semantics.
 // `settings.plugins.tab` is now declared by runtime-inventory. Its real
 // panels preserve the existing inventory filters. `settings.plugin.item`
 // follows the installed package's keyed-by-namespace contract.
@@ -475,8 +461,8 @@ export type ToolCallToolviewOwnerProps = OwnerOf<"tool.call.toolview">;
 //     canonical MessageId. Installed rc.2 selects the last finalized step
 //     with nonblank prose, including interrupted synthetic steps (which have
 //     no message identity and therefore no actions). The merged Amiba bubble
-//     is not a blocker: adoption needs this exact closing-step projection,
-//     carried through live events and history, without changing the bubble.
+//     is not a blocker: this projection is now carried through live events
+//     and history to the action render site, without changing the bubble.
 
 export interface SurfaceActivitySnapshot {
   sessionId: string;
@@ -716,7 +702,12 @@ export interface AmibaConversationQuestionOwner {
 }
 
 declare module "@deepseek-ai/dsh-client-ui-slots" {
+  interface GlobalStandardProps {
+    usePanelInfo: import("@deepseek-ai/dsh-client-ui-slots").SnapshotSelectorHook<{ readonly activePanelId: string | null }>;
+  }
   interface SlotMap {
+    "main": { kind: "keyed"; scope: "root" };
+    "sidebar.panellist": { kind: "list"; scope: "root"; owner: { size: number; active: boolean } };
     "amiba.message.decoration": { kind: "list"; scope: "root"; owner: MessageDecorationOwner };
     "amiba.composer.accessory": { kind: "list"; scope: "root"; owner: ComposerAccessoryOwner };
     "amiba.emptyState.visual": { kind: "list"; scope: "root"; owner: EmptyStateVisualOwner };
@@ -782,13 +773,113 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
 }
 /** A plugin-owned tab and panel in the session workbench. */
 export interface WorkbenchPanelOwner {
+  /** Native workspace identity; may lag the runtime selection during navigation. */
+  workbenchSessionId?: string;
   openResource(resource: import("./workbench.js").WorkbenchResource): void;
   placement: "tab" | "content";
   activePanel: string | null;
   openPanel(id: string): void;
+  /** Close only this extension panel, restoring the previously selected view. */
+  closePanel?(id: string): void;
   inspectToolCall(callId: string): boolean;
   renderMarkdown(text: string): ReturnType<typeof import("@amiba/markdown").ChatMarkdown>;
 }
 
 /** Canonical closing-message identity supplied to completed-turn actions. */
 export type AssistantActionOwnerProps = OwnerOf<"conversation.chat.assistant-actions">;
+
+/** Additive conversation view; inspect handoff fields are optional. */
+export type { ConvViewOwnerProps } from "@deepseek-ai/dsh-client-ui-conversation/client";
+
+export type { DirectoryFlowOwnerProps } from "@deepseek-ai/dsh-client-ui-workspace/client";
+
+/** Exact input-state currency of the installed official input region. */
+export type ConversationInputState = OwnerOf<"conversation.input.left">["input"];
+
+export type ConversationInputZoneOwner = OwnerOf<"conversation.input.left">;
+
+export type ConversationInputActions = PropsRuntime<"conversation.input.left">["inputActions"];
+
+export type ComposerAttachmentsOwner = OwnerOf<"conversation.input.attachments">;
+
+export type CommandRowOwner = OwnerOf<"conversation.chat.commandview">;
+
+/** Additive approval contract from official c291e796, absent in the rc.2 SDK. */
+export interface ApprovalDetailOwnerProps {
+  callId: ToolCallToolviewOwnerProps["callId"];
+}
+declare module "@deepseek-ai/dsh-client-ui-slots" {
+  interface SlotMap {
+    "conversation.approval.detail": {
+      kind: "single";
+      scope: "session";
+      owner: ApprovalDetailOwnerProps;
+    };
+  }
+}
+
+/** Official c291e796 corner owner: state comes from the standard session kit. */
+export interface ConversationHeaderCornerOwnerProps {
+  children?: never;
+}
+declare module "@deepseek-ai/dsh-client-ui-slots" {
+  interface SlotMap {
+    "conversation.session.header.corner": {
+      kind: "single";
+      scope: "session";
+      owner: ConversationHeaderCornerOwnerProps;
+    };
+  }
+}
+
+/** Canonical durable image currency already present in the installed rc.2 API. */
+export type ImageAttachmentRef = import("@deepseek-ai/dsh-client-ui-conversation/client").MessageImagesOwnerProps["images"][number]["attachment"];
+
+/** Tool image contract mirrored from c291e796; rc.2 has only message images. */
+export type ToolImageSource = { readonly attachment: ImageAttachmentRef } | {
+  readonly preview: { readonly url: string; readonly name?: string; readonly width?: number; readonly height?: number };
+};
+export type ToolImageLoader = ((attachment: ImageAttachmentRef) => Promise<string>) & {
+  peek?: (attachment: ImageAttachmentRef) => string | undefined;
+};
+export interface ToolImagesOwnerProps {
+  images: readonly ToolImageSource[];
+  loadImage: ToolImageLoader;
+  align: "start" | "end";
+}
+declare module "@deepseek-ai/dsh-client-ui-slots" {
+  interface SlotMap {
+    "tool.call.images": { kind: "single"; scope: "session"; owner: ToolImagesOwnerProps };
+  }
+}
+
+/** Trajectory owns its image slot declaration; importing its contract retains the merge. */
+export type { TrajectoryImagesOwnerProps } from "@deepseek-ai/dsh-client-ui-trajectory/client";
+declare module "@deepseek-ai/dsh-client-ui-conversation/client" {
+  interface ConvViewOwnerProps {
+    /** Shared session-authorized loader supplied by image-aware shells. */
+    loadImage?: ToolImageLoader;
+  }
+}
+
+/** Keep the installed official lineage owner, including its branded session ID. */
+export type { ConversationHeaderLineageOwnerProps } from "@deepseek-ai/dsh-client-ui-conversation/client";
+
+/** Model settings additions from the fixed official models-page contract. */
+export interface ModelsFooterOwnerProps { children?: never }
+export type ModelsProviderDirectoryEntry =
+  Omit<Readonly<import("@deepseek-ai/dsh-api-remotes/client").ConfigurableProviderView>, "settingsPath"> &
+  { readonly settingsPath: readonly string[] };
+export interface ProviderCardExtrasOwnerProps {
+  provider: ModelsProviderDirectoryEntry;
+  configured: boolean;
+  keyConfigured: boolean;
+}
+declare module "@deepseek-ai/dsh-client-ui-slots" {
+  interface SlotMap {
+    "settings.models.footer": { kind: "list"; scope: "root"; owner: ModelsFooterOwnerProps };
+    "settings.models.provider-card": { kind: "keyed"; scope: "root"; owner: ProviderCardExtrasOwnerProps };
+  }
+}
+
+export type { DetailsToolOwnerProps } from "@deepseek-ai/dsh-client-ui-conversation/client";

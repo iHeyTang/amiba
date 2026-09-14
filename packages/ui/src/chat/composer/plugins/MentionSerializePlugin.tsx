@@ -1,53 +1,67 @@
+import { consumeRestoredDocument } from "./ComposerHistoryPlugin"
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
 import { $getRoot, $createParagraphNode, $createTextNode } from "lexical"
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useSyncExternalStore } from "react"
 import { $createMentionNode } from "../MentionNode"
 import { parseTokens } from "../serialize"
+import { $readComposerParts } from "../composer-parts"
+import type { ComposerDraftSource } from "../../composer-draft-store"
+import type { ComposerDraftDocument } from "../../composer-draft-document"
 
-/** Two-way sync between Lexical (text + MentionNode) and the canonical value string. */
-export function MentionSerializePlugin({
-  value,
-  onChange,
-}: {
+const noSubscribe = () => () => {}
+const noDocument = () => undefined
+const RESTORE_TAG = "amiba-composer-document-restore"
+
+/** Native documents own node identity; older embedders retain string synchronization. */
+export function MentionSerializePlugin({ value, onChange, draftSource }: {
   value: string
   onChange: (next: string) => void
+  draftSource?: ComposerDraftSource
 }) {
   const [editor] = useLexicalComposerContext()
+  const document = useSyncExternalStore(draftSource?.subscribe ?? noSubscribe,
+    draftSource?.getDocument ?? noDocument, draftSource?.getDocument ?? noDocument)
   const lastEmitted = useRef<string | null>(null)
+  const lastDocument = useRef<ComposerDraftDocument | undefined>()
+  const lastSource = useRef<ComposerDraftSource | undefined>()
 
-  useEffect(() => {
-    return editor.registerUpdateListener(({ editorState }) => {
-      editorState.read(() => {
-        const text = $getRoot().getTextContent() // MentionNode.getTextContent == token
-        if (text !== lastEmitted.current) {
-          lastEmitted.current = text
-          onChange(text)
-        }
-      })
+  useEffect(() => editor.registerUpdateListener(({ editorState, tags }) => {
+    if (tags.has(RESTORE_TAG)) return
+    editorState.read(() => {
+      const text = $getRoot().getTextContent()
+      if (draftSource) {
+        draftSource.setParts($readComposerParts())
+        lastSource.current = draftSource
+        lastDocument.current = draftSource.getDocument()
+      }
+      if (text !== lastEmitted.current) {
+        lastEmitted.current = text
+        onChange(text)
+      }
     })
-  }, [editor, onChange])
+  }), [editor, onChange, draftSource])
 
   useEffect(() => {
-    if (value === lastEmitted.current) return
-    lastEmitted.current = value
+    if (draftSource && document) {
+      if (lastSource.current === draftSource && lastDocument.current === document) return
+    } else if (!lastSource.current && value === lastEmitted.current) return
+    lastSource.current = draftSource
+    lastDocument.current = document
+    lastEmitted.current = document?.text ?? value
+    if (document && consumeRestoredDocument(editor, document)) return
+    const parts = document?.parts ?? parseTokens(value)
     editor.update(() => {
       const root = $getRoot()
       root.clear()
       const p = $createParagraphNode()
-      for (const part of parseTokens(value)) {
+      for (const part of parts) {
         if (part.kind === "text") {
           if (part.text) p.append($createTextNode(part.text))
-        } else {
-          p.append($createMentionNode(part.mention))
-        }
+        } else p.append($createMentionNode({ ...part.mention, payload: { ...part.mention.payload } }))
       }
       root.append(p)
-      // Programmatic fills (drafts, hand-offs) land with the caret at the
-      // END — this branch only runs for external value sets, never for the
-      // user's own typing (which updates lastEmitted first).
       p.selectEnd()
-    })
-  }, [editor, value])
-
+    }, { tag: RESTORE_TAG })
+  }, [editor, value, document, draftSource])
   return null
 }

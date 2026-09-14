@@ -1,3 +1,4 @@
+import { appendAssistantText, applyAssistantTextSource } from "../dsh-client/assistant-text-source";
 import { ClosingAssistant } from "../dsh-client/closing-assistant";
 import { compactionUpdate, upsertCompactionTimeline, interruptOpenCompactions } from "../dsh-client/compaction";
 import type { AssistantTimelineItem } from "../protocol";
@@ -34,8 +35,11 @@ type RuntimeSessionMessage = SessionMessage & {
   processMs?: number;
   toolProgress?: ToolProgress[];
   assistantTimeline?: AssistantTimelineItem[];
+  /** Source metadata for the existing draft-only body; not a new display row. */
+  assistantDraftSource?: Extract<AssistantTimelineItem, {kind:"text"}>;
   runtimeSeq?: number;
   assistantMessageId?: string;
+  runtimeTurn?: number;
 };
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -91,9 +95,11 @@ function messageFromEvent(event: AgentSessionEvent): Record<string, unknown> | n
 
 interface AssistantTurn {
   turn: number;
+  runtimeTurn?: number;
   firstSeq: number;
   text: string;
   draftText: string;
+  draftTimeline: AssistantTimelineItem[];
   reasoning: string;
   reasoningStartAt: number | null;
   reasoningEndAt: number | null;
@@ -109,9 +115,11 @@ function beginTurn(event: AgentSessionEvent): AssistantTurn {
   return {
     turn:
       typeof event.data.turn === "number" ? event.data.turn : event.seq,
+    ...(Number.isSafeInteger(event.data.turn) && (event.data.turn as number) >= 0 ? { runtimeTurn: event.data.turn as number } : {}),
     firstSeq: event.seq,
     text: "",
     draftText: "",
+    draftTimeline: [],
     reasoning: "",
     reasoningStartAt: null,
     reasoningEndAt: null,
@@ -135,6 +143,7 @@ function finishTurn(
 ): void {
   if (!turn) return;
   const content = turn.text || turn.draftText;
+  const draftSource = !turn.text && turn.draftTimeline[0]?.kind === "text" ? turn.draftTimeline[0] : undefined;
   const tools = [...turn.tools.values()].map(tool => turn.dispatches.project(tool));
   if (!content && !turn.reasoning && tools.length === 0 && !turn.timeline?.length) return;
   const reasoningMs =
@@ -150,12 +159,14 @@ function finishTurn(
     content,
     uiId: `dsh:turn:${turn.firstSeq}`,
     runtimeSeq: turn.firstSeq,
+    ...(turn.runtimeTurn === undefined ? {} : { runtimeTurn: turn.runtimeTurn }),
     ...(turn.closing.getMessageId() ? { assistantMessageId: turn.closing.getMessageId()! } : {}),
     ...(turn.reasoning ? { reasoning: turn.reasoning } : {}),
     ...(turn.reasoning && reasoningMs !== undefined ? { reasoningMs } : {}),
     ...(processMs !== undefined ? { processMs } : {}),
     ...(tools.length ? { toolProgress: tools } : {}),
     ...(turn.timeline?.length ? { assistantTimeline: turn.timeline } : {}),
+    ...(draftSource?.sourceRanges?.length ? {assistantDraftSource: draftSource} : {}),
   });
 }
 
@@ -315,10 +326,11 @@ export function projectRuntimeSessionHistory(
       // Words and attachment envelopes are separated by the same shared
       // helper the live bridge uses, so a message reads identically whether
       // it arrived on the wire or was reloaded from the durable log.
-      const { text, badges } = userMessageText(message?.content);
+      const { text, badges, images } = userMessageText(message?.content);
       output.push({
         role: "user",
         content: text,
+        ...(images.length ? { images } : {}),
         ...(visible.origin ? { origin: visible.origin } : {}),
         ...(visible.notice ? { notice: visible.notice } : {}),
         ...(badges.length ? { attachmentBadges: badges } : {}),
@@ -330,6 +342,10 @@ export function projectRuntimeSessionHistory(
     }
     if (!turn) turn = beginTurn(event);
     turn.closing.apply(event);
+    const runtimeStep = Number.isSafeInteger(event.data.step) && (event.data.step as number) >= 0 ? event.data.step as number : undefined;
+    if (event.type === "llm/retry" && runtimeStep !== undefined) {
+      applyAssistantTextSource(turn.draftTimeline, {kind:"assistantTextSource",phase:"reset",runtimeStep});
+    }
     if (event.type === "assistant/chunk") {
       const chunk = record(event.data.chunk);
       if (typeof chunk?.text !== "string") continue;
@@ -341,7 +357,10 @@ export function projectRuntimeSessionHistory(
         if (turn.reasoningStartAt === null) turn.reasoningStartAt = event.time;
         turn.reasoningEndAt = event.time;
         markProcessActivity(turn, event.time);
-      } else if (chunk.type === "text-delta") turn.draftText += chunk.text;
+      } else if (chunk.type === "text-delta") {
+        turn.draftText += chunk.text;
+        appendAssistantText(turn.draftTimeline, chunk.text, () => `dsh:turn:${turn!.firstSeq}:text-tail`, runtimeStep);
+      }
       continue;
     }
     if (event.type === "assistant/message") {
@@ -353,9 +372,11 @@ export function projectRuntimeSessionHistory(
           kind: "text",
           id: `dsh:text:${event.seq}`,
           text,
+          runtimeSeq: event.seq,
         });
       }
       turn.draftText = "";
+      turn.draftTimeline = [];
       continue;
     }
     if (event.type === "tool/code-dispatch-start" || event.type === "tool/code-dispatch") {

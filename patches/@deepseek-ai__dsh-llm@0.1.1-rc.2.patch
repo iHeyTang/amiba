@@ -1,0 +1,127 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -608,6 +608,37 @@
+ * @param content - typed model content blocks.
+ * @returns whether any nested block is an image.
+ */
++
++// File request projection adapted from deepseek-harness c291e796 (MIT).
++function contentHasFile(content) {
++ return content.some(block => block.type === "file" || (block.type === "tool-result" && contentHasFile(block.content)));
++}
++function fileHandleText(ref, readonlyPath) {
++ const digest = String(ref.attachmentId).slice(7, 15);
++ const identity = `File ${JSON.stringify(ref.name)} (${ref.bytes} bytes, sha256:${digest})`;
++ if (readonlyPath === undefined) return `[${identity} was uploaded, but the current execution environment cannot access a readable path. Report that limitation if its contents are needed; do not claim to have read it.]`;
++ return `[${identity}: verbatim read-only copy saved at ${JSON.stringify(readonlyPath)}. Read that path with your file tools when its contents are needed; copy it to a writable location before modifying it. When delegating file work, include this saved path in the delegation prompt; only subagents sharing this execution environment can read it.]`;
++}
++function replaceFilesWithHandles(blocks, resolvePath) {
++ let next;
++ for (const [index, block] of blocks.entries()) {
++  if (block.type === "file") { next ??= blocks.slice(0,index); next.push({type:"text",text:fileHandleText(block.attachment,resolvePath(block.attachment))}); continue; }
++  if (block.type === "tool-result") {
++   const content = replaceFilesWithHandles(block.content,resolvePath);
++   if (content !== block.content) { next ??= blocks.slice(0,index); next.push({...block,content}); continue; }
++  }
++  next?.push(block);
++ }
++ return next ?? blocks;
++}
++function projectFilesToText(messages, resolvePath) {
++ if (!messages.some(message => contentHasFile(message.content))) return messages;
++ return messages.map(message => {
++  const content = replaceFilesWithHandles(message.content,resolvePath);
++  return content === message.content ? message : {...message,content};
++ });
++}
++
+ function contentHasImage(content) {
+ 	return content.some((block) => block.type === "image" || block.type === "tool-result" && contentHasImage(block.content));
+ }
+@@ -1556,6 +1587,13 @@
+ 	* and iteration failures become one terminal failure chunk. Middleware and
+ 	* downstream consumer failures remain thrown plugin or consumer errors.
+ 	*/
++	fileReadPath(ref) {
++		try {
++			const hostPath = this.ctx.get("attachments")?.fileHostPath?.(ref);
++			return hostPath === undefined ? undefined : this.ctx.get("fs")?.processPathFromHostPath?.(hostPath);
++		} catch { return undefined; }
++	}
++	fileRequestText(ref) { return fileHandleText(ref, this.fileReadPath(ref)); }
+ 	async *adapterStream(options, prepared) {
+ 		let iterator;
+ 		try {
+@@ -1582,13 +1620,9 @@
+ 				...options,
+ 				...resolvedConfig
+ 			};
+-			const projectedOptions = modelInfo.inputModalities !== void 0 && !modelInfo.inputModalities.includes("image") && resolvedOptions.messages.some((message) => contentHasImage(message.content)) ? Object.isFrozen(resolvedOptions) ? deepFreeze({
+-				...resolvedOptions,
+-				messages: projectImagesForTextModel(resolvedOptions.messages)
+-			}) : {
+-				...resolvedOptions,
+-				messages: projectImagesForTextModel(resolvedOptions.messages)
+-			} : resolvedOptions;
++			let projectedMessages = projectFilesToText(resolvedOptions.messages, ref => this.fileReadPath(ref));
++			if (modelInfo.inputModalities !== void 0 && !modelInfo.inputModalities.includes("image") && projectedMessages.some(message => contentHasImage(message.content))) projectedMessages = projectImagesForTextModel(projectedMessages);
++			const projectedOptions = projectedMessages === resolvedOptions.messages ? resolvedOptions : Object.isFrozen(resolvedOptions) ? deepFreeze({...resolvedOptions,messages:projectedMessages}) : {...resolvedOptions,messages:projectedMessages};
+ 			iterator = dispatch(this.forAdapter(projectedOptions, adapter))[Symbol.asyncIterator]();
+ 		} catch (error) {
+ 			yield adapterFailureChunk(error, options.signal);
+@@ -1655,4 +1689,4 @@
+ 	};
+ }
+ //#endregion
+-export { APP_IDENTITY, BlockAssembler, CONTEXT_SUMMARY_MAX_CHARS, CONTEXT_WINDOW_EXCEEDED_CODE, CallId, EMPTY_RESPONSE_CODE, HarnessError, INVALID_CREDENTIAL_CODE, LlmAdapter, LlmError, LlmRuntime, LlmRuntime as default, MessageId, OFFLOADED_IMAGE_TEXT, ProviderRequestId, QUOTA_EXCEEDED_CODE, ReasoningEffortId, RetryPolicySchema, assertNever, assertUsableApiKey, attributionHeaders, boundContextSummary, callConfigEquals, contentHasImage, createAssistantMessage, createMessage, createToolResultMessage, createUserMessage, deepFreeze, errorChain, freezeMessage, isAgentLoopRequest, isContextWindowExceededError, isHarnessError, isQuotaExceededError, isTokenDelta, markAgentLoopRequest, normalizeApiKey, offloadRequestImages, offloadRequestImagesWithPolicy, projectImagesForTextModel, requestImageHandleText, resolveRetryPolicy, textOnlyImageText, userAgent };
++export { contentHasFile, fileHandleText, projectFilesToText, APP_IDENTITY, BlockAssembler, CONTEXT_SUMMARY_MAX_CHARS, CONTEXT_WINDOW_EXCEEDED_CODE, CallId, EMPTY_RESPONSE_CODE, HarnessError, INVALID_CREDENTIAL_CODE, LlmAdapter, LlmError, LlmRuntime, LlmRuntime as default, MessageId, OFFLOADED_IMAGE_TEXT, ProviderRequestId, QUOTA_EXCEEDED_CODE, ReasoningEffortId, RetryPolicySchema, assertNever, assertUsableApiKey, attributionHeaders, boundContextSummary, callConfigEquals, contentHasImage, createAssistantMessage, createMessage, createToolResultMessage, createUserMessage, deepFreeze, errorChain, freezeMessage, isAgentLoopRequest, isContextWindowExceededError, isHarnessError, isQuotaExceededError, isTokenDelta, markAgentLoopRequest, normalizeApiKey, offloadRequestImages, offloadRequestImagesWithPolicy, projectImagesForTextModel, requestImageHandleText, resolveRetryPolicy, textOnlyImageText, userAgent };
+--- a/lib/types/types.d.ts
++++ b/lib/types/types.d.ts
+@@ -4,7 +4,7 @@
+  * mapped interfaces make the content, source, and finish unions extensible.
+  */
+ import type { Branded } from '@deepseek-ai/dsh-brand';
+-import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment';
++import type { FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment';
+ import type { CallId, ProviderRequestId, ReasoningEffortId } from './brand.ts';
+ import type { Message } from './message.ts';
+ declare module '@deepseek-ai/cordis' {
+@@ -80,6 +80,7 @@
+     'text': TextBlock;
+     'reasoning': ReasoningBlock;
+     'image': ImageBlock;
++    'file': FileBlock;
+     'tool-call': ToolCallBlock;
+     'tool-result': ToolResultBlock;
+ }
+@@ -366,4 +367,6 @@
+      */
+     purpose?: 'compaction' | 'session-title';
+ }
+-//# sourceMappingURL=types.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=types.d.ts.map
++/** Stored as structured history; always projected to handle text before dispatch. */
++export interface FileBlock { type: "file"; attachment: FileAttachmentRef }
+--- a/lib/types/content.d.ts
++++ b/lib/types/content.d.ts
+@@ -68,4 +68,7 @@
+  * @returns original messages below both bounds, otherwise shallow copies with deterministic placeholders.
+  */
+ export declare function offloadRequestImagesWithPolicy(messages: readonly Message[], policy: RequestImageOffloadPolicy): readonly Message[];
+-//# sourceMappingURL=content.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=content.d.ts.map
++export declare function contentHasFile(content: readonly import("./types.ts").ContentBlock[]): boolean;
++export declare function fileHandleText(ref: import("@deepseek-ai/dsh-attachment").FileAttachmentRef, readonlyPath: string | undefined): string;
++export declare function projectFilesToText(messages: readonly import("./message.ts").Message[], resolvePath: (ref: import("@deepseek-ai/dsh-attachment").FileAttachmentRef) => string | undefined): readonly import("./message.ts").Message[];
+--- a/lib/types/index.d.ts
++++ b/lib/types/index.d.ts
+@@ -345,6 +345,7 @@
+      * and iteration failures become one terminal failure chunk. Middleware and
+      * downstream consumer failures remain thrown plugin or consumer errors.
+      */
++    fileRequestText(ref: import("@deepseek-ai/dsh-attachment").FileAttachmentRef): string;
+     private adapterStream;
+     /**
+      * Stream one model call as raw chunks (token-level deltas). Replay state is

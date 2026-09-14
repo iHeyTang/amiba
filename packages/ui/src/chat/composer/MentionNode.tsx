@@ -1,3 +1,4 @@
+import { referenceAppearance } from "../../reference-appearance"
 import { DecoratorNode, type NodeKey, type SerializedLexicalNode, type Spread } from "lexical"
 import type { ReactNode } from "react"
 import { encodeMention } from "./serialize"
@@ -41,7 +42,7 @@ export class MentionNode extends DecoratorNode<ReactNode> {
 
   decorate(): ReactNode {
     const m = this.__mention
-    if (m.type === "dsh.reference") return <span contentEditable={false}><ReferenceButton source={m.payload.source ?? ""} reference={m.payload.ref ?? ""}>@{m.display}</ReferenceButton></span>
+    if (m.type === "dsh.reference") return <span contentEditable={false}><ReferenceButton source={m.payload.source ?? ""} reference={m.payload.ref ?? ""} appearance={referenceAppearance(m.payload.appearance)}>@{m.display}</ReferenceButton></span>
     return (
       <span
         className={cn(

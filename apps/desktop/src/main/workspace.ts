@@ -104,6 +104,12 @@ async function validateBindTarget(target: string): Promise<string> {
 class WorkspaceManager extends EventEmitter {
   private bindings = new Map<string, Binding>()
   private loaded = false
+  private mutations: Promise<unknown> = Promise.resolve()
+  private mutate<T>(work: () => Promise<T>): Promise<T> {
+    const result = this.mutations.then(work)
+    this.mutations = result.catch(() => {})
+    return result
+  }
 
   async init(): Promise<void> {
     if (this.loaded) return
@@ -158,6 +164,14 @@ class WorkspaceManager extends EventEmitter {
 
   getForSession(sessionId: string): string | null {
     return this.bindings.get(sessionId)?.path ?? getDefaultWorkspaceRoot()
+  }
+
+  /** Preserve Host's immutable cwd spelling when it names this same directory. */
+  async resolveRuntimeCwd(sessionId: string, hostCwd: string): Promise<string> {
+    const root = this.getForSession(sessionId)!
+    const [local, host] = await Promise.all([fs.realpath(root), fs.realpath(hostCwd)])
+    if (this.getForSession(sessionId) !== root) return this.resolveRuntimeCwd(sessionId, hostCwd)
+    return local === host ? hostCwd : root
   }
 
   getDefaultRoot(): string {
@@ -222,7 +236,19 @@ class WorkspaceManager extends EventEmitter {
     return this.resolvePathForSession(sessionId, candidate)
   }
 
-  async bind(sessionId: string, target: string): Promise<void> {
+  bind(sessionId: string, target: string): Promise<void> {
+    return this.mutate(() => this.bindNow(sessionId, target))
+  }
+
+  /** Restore a Host-created session without replacing a chosen local root. */
+  bindIfUnbound(sessionId: string, target: string): Promise<string | null> {
+    return this.mutate(async () => {
+      if (!this.bindings.has(sessionId)) await this.bindNow(sessionId, target)
+      return this.getForSession(sessionId)
+    })
+  }
+
+  private async bindNow(sessionId: string, target: string): Promise<void> {
     if (!sessionId) throw new Error("workspace.bind: sessionId required")
     // $HOME is the implicit default, not a persisted exceptional binding.
     // Treat selecting it as "use the default" and, importantly, do not attach
@@ -253,7 +279,11 @@ class WorkspaceManager extends EventEmitter {
     } satisfies WorkspaceChange)
   }
 
-  async unbind(sessionId: string): Promise<void> {
+  unbind(sessionId: string): Promise<void> {
+    return this.mutate(() => this.unbindNow(sessionId))
+  }
+
+  private async unbindNow(sessionId: string): Promise<void> {
     if (!sessionId) return
     if (!this.bindings.has(sessionId)) return
     await this.stopBinding(sessionId)

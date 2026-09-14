@@ -1,3 +1,4 @@
+import { useDirectoryChooser } from "../directory-chooser";
 import { EmptyStateVisual } from "../primitives/empty-state-visual";
 import {
   WorkbenchResourceView,
@@ -261,6 +262,8 @@ interface WorkspacePaneContextValue {
   openFile(path: string, line?: number): void;
   openReview(resource: WorkspaceReviewResource): void;
   beginTurn(turnIndex: number): Promise<void>;
+  /** Prepare the addressed workspace without selecting it or opening its pane. */
+  beginTurnFor(sessionId: string, turnIndex: number): Promise<void>;
   refreshCheckpoints(): Promise<void>;
   restoreCheckpoint(checkpointId: string): Promise<void>;
   restoreBeforeTurn(turnIndex: number): Promise<void>;
@@ -300,6 +303,7 @@ const EMPTY_CONTEXT: WorkspacePaneContextValue = {
   openFile: () => {},
   openReview: () => {},
   beginTurn: async () => {},
+  beginTurnFor: async () => {},
   refreshCheckpoints: async () => {},
   restoreCheckpoint: async () => {},
   restoreBeforeTurn: async () => {},
@@ -704,6 +708,7 @@ export function WorkspacePaneProvider({
     Record<string, WorkspaceCheckpoint[]>
   >({});
   const activeTurnCheckpointIds = useRef(new Map<string, string>());
+  const checkpointAttempts = useRef(new Map<string, object>());
   const markedCheckpointIds = useRef(new Set<string>());
   const extensions = useWorkbenchExtensions();
   const enabled = Boolean(sessionId && (capability || extensions.length));
@@ -845,6 +850,16 @@ export function WorkspacePaneProvider({
     },
     [updateActiveSession],
   );
+  useEffect(() => {
+    if (!enabled) return;
+    const onLayoutAction = (event: Event) => {
+      const action = (event as CustomEvent<{ action?: unknown }>).detail?.action;
+      if (action === "open-details") persistOpen(true);
+      else if (action === "close-details") persistOpen(false);
+    };
+    window.addEventListener("amiba:dsh-layout-action", onLayoutAction);
+    return () => window.removeEventListener("amiba:dsh-layout-action", onLayoutAction);
+  }, [enabled, persistOpen]);
   const setMode = useCallback(
     (mode: WorkbenchMode) => {
       updateActiveSession((state) =>
@@ -1091,35 +1106,41 @@ export function WorkspacePaneProvider({
     [extensions, resources, sessionId, openResourceIn],
   );
 
-  const beginTurn = useCallback(
-    async (turnIndex: number) => {
-      if (!sessionId) return;
+  const beginTurnFor = useCallback(
+    async (targetSessionId: string, turnIndex: number) => {
+      if (!targetSessionId) return;
       const development = capability?.development;
       if (development) {
+        const attempt = {};
+        checkpointAttempts.current.set(targetSessionId, attempt);
+        const latest = () => checkpointAttempts.current.get(targetSessionId) === attempt;
         try {
           const checkpoint = await development.createCheckpoint(
-            sessionId,
+            targetSessionId,
             `Before task ${turnIndex + 1}`,
             { kind: "turn-start", turnIndex },
           );
           if (!checkpoint) {
             // Workspace isn't a Git repository — checkpoints simply don't
             // apply to this session.
-            activeTurnCheckpointIds.current.delete(sessionId);
+            if (latest()) activeTurnCheckpointIds.current.delete(targetSessionId);
             return;
           }
-          activeTurnCheckpointIds.current.set(sessionId, checkpoint.id);
-          updateCheckpoints((current) => [
+          if (latest()) activeTurnCheckpointIds.current.set(targetSessionId, checkpoint.id);
+          updateSessionCheckpoints(targetSessionId, (current) => [
             checkpoint,
             ...current.filter((item) => item.id !== checkpoint.id),
           ]);
         } catch {
-          activeTurnCheckpointIds.current.delete(sessionId);
+          if (latest()) activeTurnCheckpointIds.current.delete(targetSessionId);
+        } finally {
+          if (latest()) checkpointAttempts.current.delete(targetSessionId);
         }
       }
     },
-    [capability?.development, sessionId, updateCheckpoints],
+    [capability?.development, updateSessionCheckpoints],
   );
+  const beginTurn = useCallback((turnIndex: number) => beginTurnFor(sessionId, turnIndex), [beginTurnFor, sessionId]);
 
   const markActiveCheckpointChanged = useCallback(
     (targetSessionId: string) => {
@@ -1271,6 +1292,7 @@ export function WorkspacePaneProvider({
       openFile,
       openReview,
       beginTurn,
+      beginTurnFor,
       refreshCheckpoints,
       restoreCheckpoint,
       restoreBeforeTurn,
@@ -1292,6 +1314,7 @@ export function WorkspacePaneProvider({
       activeState.terminalOpen,
       activeTab,
       beginTurn,
+      beginTurnFor,
       canOpenToolEvent,
       capability,
       checkpoints,
@@ -2615,7 +2638,7 @@ function WorkspaceProjectStrip({
   }, [development, sessionId, workspaces]);
 
   const mutate = useCallback(
-    async (operation: () => Promise<unknown>) => {
+    async (operation: () => Promise<unknown>, propagate = false) => {
       setBusy(true);
       setError(null);
       try {
@@ -2623,6 +2646,7 @@ function WorkspaceProjectStrip({
         await refresh();
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause));
+        if (propagate) throw cause;
       } finally {
         setBusy(false);
       }
@@ -2630,30 +2654,35 @@ function WorkspaceProjectStrip({
     [refresh],
   );
 
+  const chooseDirectory = useDirectoryChooser("workspace");
   const chooseNewProject = useCallback(async () => {
-    if (!workspaces?.chooseDirectory || !development) return;
-    const path = await workspaces.chooseDirectory(project?.folders[0]);
-    if (!path) return;
-    await mutate(async () => {
-      const created = await development.createProject("", [path]);
-      await development.bindProjectLocation(
-        sessionId,
-        created.id,
-        created.folders[0]!,
-      );
-      setProjectMenuOpen(false);
-    });
-  }, [development, mutate, project?.folders, sessionId, workspaces]);
+    if (!chooseDirectory || !development) return;
+    try {
+      await chooseDirectory(project?.folders[0], async (path) => {
+        await mutate(async () => {
+          const created = await development.createProject("", [path]);
+          await development.bindProjectLocation(sessionId, created.id, created.folders[0]!);
+          setProjectMenuOpen(false);
+        }, true);
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }, [chooseDirectory, development, mutate, project?.folders, sessionId]);
 
   const addFolder = useCallback(async () => {
-    if (!workspaces?.chooseDirectory || !development || !project) return;
-    const path = await workspaces.chooseDirectory(project.folders[0]);
-    if (!path) return;
-    await mutate(async () => {
-      const updated = await development.addProjectFolder(project.id, path);
-      await development.bindProjectLocation(sessionId, updated.id, path);
-    });
-  }, [development, mutate, project, sessionId, workspaces]);
+    if (!chooseDirectory || !development || !project) return;
+    try {
+      await chooseDirectory(project.folders[0], async (path) => {
+        await mutate(async () => {
+          const updated = await development.addProjectFolder(project.id, path);
+          await development.bindProjectLocation(sessionId, updated.id, path);
+        }, true);
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }, [chooseDirectory, development, mutate, project, sessionId]);
 
   useEffect(() => {
     void refresh();
@@ -2775,7 +2804,7 @@ function WorkspaceProjectStrip({
                 })}
               </div>
             ) : null}
-            {workspaces?.chooseDirectory ? (
+            {chooseDirectory ? (
               <button
                 type="button"
                 role="menuitem"
@@ -2789,7 +2818,7 @@ function WorkspaceProjectStrip({
             ) : null}
           </PopoverContent>
         </Popover>
-        {workspaces?.chooseDirectory ? (
+        {chooseDirectory ? (
           <button
             type="button"
             data-workspace-project-add
@@ -4086,17 +4115,26 @@ export function WorkspacePane({
   // to show a PREVIEW (a browser tab, a diff, a file the agent touched), and a
   // directory tree unfolding beside it on every open reads as clutter.
   const { mode, setMode, fileTreeOpen, setFileTreeOpen } = pane;
+  const previousPanelModes = useRef(new Map<string, WorkbenchMode>());
   const openPanel = useCallback(
     (id: string) => {
+      if (mode !== `extension:${id}`) previousPanelModes.current.set(pane.sessionId, mode);
       pane.setMode(`extension:${id}`);
       pane.setOpen(true);
     },
-    [pane.setMode, pane.setOpen],
+    [pane.setMode, pane.setOpen, pane.sessionId, mode],
   );
+  const closePanel = useCallback((id: string) => {
+    if (mode !== `extension:${id}`) return;
+    pane.setMode(previousPanelModes.current.get(pane.sessionId) ?? "preview");
+    previousPanelModes.current.delete(pane.sessionId);
+  }, [pane.setMode, pane.sessionId, mode]);
   const panelOwner = {
+    workbenchSessionId: pane.sessionId,
     openResource: pane.openResource,
     activePanel: mode.startsWith("extension:") ? mode.slice(10) : null,
     openPanel,
+    closePanel,
     inspectToolCall,
     renderMarkdown: (text: string) => <ChatMarkdown>{text}</ChatMarkdown>,
   };

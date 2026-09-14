@@ -1,4 +1,4 @@
-import { getPlatform, type AgentSessionHistoryEntry } from "@amiba/app-runtime/platform";
+import { getPlatform, type AgentSessionHistoryEntry, type AgentSubagentAddress } from "@amiba/app-runtime/platform";
 import { shortId } from "@amiba/app-runtime/utils";
 
 import {
@@ -77,6 +77,8 @@ async function writeLocalMeta(
 
 function pickLocalFields(session: SessionMeta): SessionLocalMeta {
   const result: SessionLocalMeta = {};
+  const address = retainedAddress(session.id, session.subagentAddress);
+  if (address) result.subagentAddress = address;
   if (session.unread) result.unread = true;
   if (session.readAt !== undefined) result.readAt = session.readAt;
   if (session.titleManual) result.titleManual = true;
@@ -95,8 +97,19 @@ function localMetaEqual(a: SessionLocalMeta, b: SessionLocalMeta): boolean {
     Boolean(a.titleManual) === Boolean(b.titleManual) &&
     JSON.stringify(a.agent ?? null) === JSON.stringify(b.agent ?? null) &&
     a.parentSessionId === b.parentSessionId &&
+    JSON.stringify(a.subagentAddress ?? null) === JSON.stringify(b.subagentAddress ?? null) &&
     a.branchMessageId === b.branchMessageId
   );
+}
+
+/** Persisted addresses are hints, never authority to resume a root Agent. */
+function retainedAddress(id: string, value: unknown): AgentSubagentAddress | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const address = value as Partial<AgentSubagentAddress>;
+  if (address.childSessionId !== id || typeof address.parentSessionId !== "string" ||
+      !address.parentSessionId || address.parentSessionId === id ||
+      (address.mode !== "one-shot" && address.mode !== "continuable")) return undefined;
+  return { parentSessionId: address.parentSessionId, childSessionId: id, mode: address.mode };
 }
 
 type SessionSummaryLike = Awaited<
@@ -114,6 +127,7 @@ function toSessionMeta(
 ): SessionMeta {
   return {
     id: summary.sessionId,
+    subagentAddress: retainedAddress(summary.sessionId, sidecar?.subagentAddress),
     title: summary.title ?? "",
     createdAt: summary.updatedAt,
     updatedAt: summary.updatedAt,
@@ -145,15 +159,27 @@ function toSessionMeta(
  */
 export async function loadSessionMeta(
   id: string,
+  subagent?: AgentSubagentAddress,
 ): Promise<SessionMeta | undefined> {
+  if (subagent && !retainedAddress(id, subagent)) throw new Error("Invalid subagent navigation address");
   const [summaries, local, archivedIds] = await Promise.all([
     sessionsAdapter().list(),
     readLocalMeta(),
     loadArchivedSessionIds(),
   ]);
+  const address = retainedAddress(id, subagent ?? local[id]?.subagentAddress);
   const summary = summaries.find((item) => item.sessionId === id);
-  if (!summary) return undefined;
-  return toSessionMeta(summary, local[id], archivedIds);
+  if (address && summary?.parentSessionId && summary.parentSessionId !== address.parentSessionId) {
+    throw new Error("Subagent navigation address conflicts with the Host parent");
+  }
+  if (!summary && !address) return undefined;
+  // Catalog children may intentionally have no root-list row. The address
+  // supplies identity only; transcript reads still go through Host validation.
+  const meta = toSessionMeta(summary ?? {
+    sessionId: id, updatedAt: 0, running: false, blank: false,
+    origin: "subagent", parentSessionId: address!.parentSessionId,
+  }, local[id], archivedIds);
+  return address ? { ...meta, subagentAddress: address, parentSessionId: address.parentSessionId } : meta;
 }
 
 export async function loadIndex(): Promise<SessionMeta[]> {
@@ -249,12 +275,13 @@ export async function saveIndex(index: SessionMeta[]): Promise<void> {
   );
 }
 
-export async function loadMessages(id: string): Promise<SessionMessage[]> {
+export async function loadMessages(id: string, subagent?: AgentSubagentAddress): Promise<SessionMessage[]> {
   if (!id) return [];
   const events: AgentSessionHistoryEntry[] = [];
   let beforeSeq: number | undefined;
   for (;;) {
     const page = await sessionsAdapter().history(id, {
+      ...(subagent ? { subagent } : {}),
       ...(beforeSeq === undefined ? {} : { beforeSeq }),
       maxMessages: 200,
     });
@@ -264,7 +291,24 @@ export async function loadMessages(id: string): Promise<SessionMessage[]> {
     if (nextBefore === beforeSeq) break;
     beforeSeq = nextBefore;
   }
-  return projectRuntimeSessionHistory(events);
+  const messages = projectRuntimeSessionHistory(events);
+  const attachments = getPlatform().agentAttachments;
+  if (attachments?.retainForSession) {
+    // Only IDs reconstructed from the existing attachment envelope projection.
+    // Bare text, filenames and inline image hashes are not ownership evidence.
+    const ids = new Set(messages.flatMap(message => message.attachmentBadges ?? [])
+      .map(badge => badge.attachmentId).filter((value): value is string =>
+        typeof value === "string" && /^att_[0-9a-f]{32}$/u.test(value)));
+    for (const attachmentId of ids) {
+      try {
+        await attachments.retainForSession(attachmentId, id);
+      } catch (error) {
+        // Old files can already be absent. Keep the original history readable.
+        console.warn("[agent-sessions] historical attachment retention failed", error);
+      }
+    }
+  }
+  return messages;
 }
 
 /** DSH persists the canonical event log; UI message snapshots are not written. */

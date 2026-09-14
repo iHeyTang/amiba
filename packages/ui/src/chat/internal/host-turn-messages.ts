@@ -71,6 +71,8 @@ export function withHostUserMessage(
   message: {
     uiId: string;
     content: string;
+    images?: ChatMessage["images"];
+    attachmentBadges?: UiMessage["attachmentBadges"];
     sentAt?: number;
     origin?: ChatMessage["origin"];
     notice?: ChatMessage["notice"];
@@ -85,9 +87,26 @@ export function withHostUserMessage(
       uiId: message.uiId,
       role: "user",
       content: message.content,
+      ...(message.images?.length ? { images: message.images } : {}),
+      ...(message.attachmentBadges?.length ? { attachmentBadges: message.attachmentBadges } : {}),
       ...(message.sentAt !== undefined ? { sentAt: message.sentAt } : {}),
       ...(message.origin ? { origin: message.origin } : {}),
       ...(message.notice ? { notice: message.notice } : {}),
     },
   ];
+}
+
+/** Locate the same assistant across durable history IDs and transient engine IDs.
+ * Content is deliberately not an identity: consecutive turns may be identical.
+ */
+export function findSnapshotAssistant(
+  messages: readonly UiMessage[],
+  snapshot: { assistantUiId?: string | null; assistantMessageId?: string; runtimeTurn?: number },
+): number {
+  const exact = messages.findIndex(message => message.role === "assistant" && message.uiId === snapshot.assistantUiId);
+  if (exact >= 0) return exact;
+  return messages.findIndex(message => message.role === "assistant" && (
+    (!!snapshot.assistantMessageId && message.assistantMessageId === snapshot.assistantMessageId) ||
+    (Number.isSafeInteger(snapshot.runtimeTurn) && snapshot.runtimeTurn! >= 0 && message.runtimeTurn === snapshot.runtimeTurn)
+  ));
 }

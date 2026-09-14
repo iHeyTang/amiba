@@ -1,0 +1,61 @@
+--- a/lib/types/index.d.ts
++++ b/lib/types/index.d.ts
+@@ -344,9 +344,24 @@
+  * compartment (when declared) arrives as bound `use<Name>` selector hooks;
+  * every other member passes through verbatim.
+  */
+-export type InjectFace<I extends object> = I extends {
+-    hooks: infer HS extends HooksSources;
+-} ? Omit<I, 'hooks'> & PropsHooks<HS> : I;
++export type KeyedStandardSource<T = unknown> = (key: string) => HostObservable<T> | undefined;
++export type KeyedHooksSources = Record<string, KeyedStandardSource>;
++export type KeyedSnapshotSelectorHook<T> = {
++    (key: string): T | undefined;
++    <S>(key: string, selector: (value: T | undefined) => S, equal?: (left: S, right: S) => boolean): S;
++};
++export type PropsKeyedHooks<HS extends KeyedHooksSources> = {
++    [N in keyof HS & string as `use${Capitalize<N>}`]: KeyedSnapshotSelectorHook<HS[N] extends (key: string) => HostObservable<infer T> | undefined ? T : never>;
++};
++export type InjectFace<I extends object> =
++    I extends { hooks: infer HS extends HooksSources }
++        ? I extends { keyedHooks: infer KS extends KeyedHooksSources }
++            ? Omit<I, 'hooks' | 'keyedHooks'> & PropsHooks<HS> & PropsKeyedHooks<KS>
++            : Omit<I, 'hooks'> & PropsHooks<HS>
++        : I extends { keyedHooks: infer KS extends KeyedHooksSources }
++            ? Omit<I, 'keyedHooks'> & PropsKeyedHooks<KS>
++            : I;
++
+ /**
+  * The composed component props intersection: runtime share (SlotMap) +
+  * child-render share (children declaration) + store share (declared handle) +
+@@ -710,4 +725,18 @@
+     private notifyDeclaration;
+     private flush;
+ }
+-//# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=index.d.ts.map
++/** Protocol owners merge their resource value types into this lexical table. */
++export interface ResourceProtocolMap {}
++/** Domain-owned root sources, adopted for the registering caller's lifetime. */
++export interface RootStandardSourceContribution {
++    readonly hooks?: Readonly<Record<string, HostObservable<unknown>>>;
++    readonly keyedHooks?: Readonly<Record<string, (key: string) => HostObservable<unknown> | undefined>>;
++    readonly props?: Readonly<Record<string, unknown>>;
++}
++export interface RootStandardSourceBinding {
++    readonly key: undefined;
++    readonly hooks: Readonly<Record<string, HostObservable<unknown>>>;
++    readonly keyedHooks: Readonly<Record<string, (key: string) => HostObservable<unknown> | undefined>>;
++    readonly props: Readonly<Record<string, unknown>>;
++}
+--- a/lib/types/renderer.d.ts
++++ b/lib/types/renderer.d.ts
+@@ -96,6 +96,7 @@
+ }
+ /** Host API the runtime SlotRegistry presents to the installed renderer. */
+ export interface SlotRendererHost {
++    readonly root?: HostObservable<import('./index.ts').RootStandardSourceBinding>;
+     /**
+      * Subscribe to a key's registration changes (microtask-batched).
+      * @param key - slot key.

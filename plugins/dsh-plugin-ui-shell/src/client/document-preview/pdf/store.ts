@@ -1,0 +1,49 @@
+// Adapted from DeepSeek c291e796, MIT. See LICENSE.deepseek.
+/** Restorable PDF viewing preferences; document objects and canvases remain component-local. */
+import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
+import type { TabId } from '../../sidebar-right/dockkit/index.js'
+
+/** One tab's last visible page. */
+export interface PdfView {
+  readonly page: number
+}
+
+/** Initial viewing position before a tab reaches another page. */
+export const DEFAULT_PDF_VIEW: PdfView = { page: 1 }
+
+/** Page state isolated by the owning tab record. */
+export interface PdfState {
+  byTab: Record<TabId, PdfView>
+}
+
+type PdfActions = {
+  page: (draft: PdfState, tabId: TabId, page: number) => void
+  forget: (draft: PdfState, tabId: TabId) => void
+}
+
+/**
+ * Declare the last visible page isolated by tab identity.
+ * @returns a store declaration instantiated by the document slot for each Session.
+ */
+export function createPdfStore(): EngineStoreHandle<PdfState, PdfActions> {
+  return defineStore({
+    init: (): PdfState => ({ byTab: {} }),
+    actions: {
+      /** @param draft - view state. @param tabId - owning tab. @param page - selected 1-based page. */
+      page: (draft, tabId: TabId, page: number) => {
+        if (draft.byTab[tabId]?.page !== page) draft.byTab[tabId] = { page }
+      },
+      /** @param draft - view state. @param tabId - closed tab whose preferences are discarded. */
+      forget: (draft, tabId: TabId) => {
+        const remaining: PdfState['byTab'] = {}
+        for (const [id, view] of Object.entries(draft.byTab) as [TabId, PdfView][]) {
+          if (id !== tabId) remaining[id] = view
+        }
+        draft.byTab = remaining
+      },
+    },
+  })
+}
+
+/** Store declaration used by the PDF body registration. */
+export type PdfStore = ReturnType<typeof createPdfStore>

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { durableContentImages } from "./content-images"
 
 import { projectRuntimeSessionHistory } from "../core/runtime-session-history"
 import { DshAmibaEventBridge } from "./amiba-event-bridge"
@@ -125,6 +126,21 @@ const PRODUCERS: Array<[string, (entries: Array<{ event: DshSessionEvent; view?:
 ]
 
 describe.each(PRODUCERS)("%s retains tool wire material", (_name, fold) => {
+  it("retains direct image occurrences independently of text and nested results", () => {
+    const image = { attachmentId: "image-owned-by-call", mediaType: "image/png", bytes: 90, width: 1, height: 1 };
+    const content = [
+      { type: "text", text: "before" },
+      { type: "image", attachment: image },
+      { type: "tool-result", toolCallId: "child", content: [{ type: "image", attachment: { ...image, attachmentId: "child-image" } }] },
+      { type: "image", attachment: { attachmentId: "staging" } },
+      { type: "image", attachment: image },
+      { type: "text", text: "after" },
+    ];
+    const row = fold([callEvent(), resultEvent({ content })]);
+    expect(row.wire?.result?.content).toEqual(content);
+    expect(durableContentImages(row.wire?.result?.content)).toEqual([{ attachment: image }, { attachment: image }]);
+  });
+
   it("retains every call-side member of a running call", () => {
     const row = fold([callEvent()])
 

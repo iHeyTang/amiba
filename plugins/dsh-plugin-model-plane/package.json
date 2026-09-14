@@ -60,7 +60,8 @@
     "@deepseek-ai/dsh-client-ui-slots": "catalog:",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "@amiba/dsh-plugin-onboarding": "workspace:*"
+    "@amiba/dsh-plugin-onboarding": "workspace:*",
+    "@amiba/extension-sdk": "^0.1.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "catalog:",
@@ -80,7 +81,8 @@
     "vite": "^5.4.11",
     "vitest": "^2.1.4",
     "@amiba/dsh-plugin-onboarding": "workspace:*",
-    "lucide-react": "^0.460.0"
+    "lucide-react": "^0.460.0",
+    "@amiba/extension-sdk": "workspace:*"
   },
   "peerDependenciesMeta": {
     "@amiba/dsh-plugin-onboarding": {

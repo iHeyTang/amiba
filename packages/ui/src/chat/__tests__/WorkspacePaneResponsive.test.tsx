@@ -1,9 +1,10 @@
 import type { ComponentProps } from "react";
+import { DirectoryChooserContext } from "../../directory-chooser";
 import type { WorkbenchViewProps } from "@amiba/extension-sdk";
 import { WorkbenchExtensionsProvider } from "../workbench-extensions";
 import { WorkspaceFileView } from "../../../../../plugins/dsh-plugin-file-preview/src/client/FileView";
 import { defaultFileRenderers } from "../../../../../plugins/dsh-plugin-file-preview/src/client/defaults";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -260,6 +261,66 @@ describe("WorkspacePane responsive behavior", () => {
     expect(toggle).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("prepares and marks an addressed background checkpoint without changing the foreground pane", async () => {
+    const checkpoint = { id: "background-point", sessionId: "background", label: "Before task 5", createdAt: 1,
+      changedFiles: 0, kind: "turn-start" as const, turnIndex: 4, hasChanges: false, complete: true };
+    let finish!: (value: typeof checkpoint) => void;
+    let stored: typeof checkpoint[] = [];
+    const development = {
+      listCheckpoints: vi.fn(async (id: string) => id === "background" ? stored : []),
+      createCheckpoint: vi.fn(() => new Promise<typeof checkpoint>(resolve => { finish = resolve; })
+        .then(value => { stored = [value]; return value; })),
+      markCheckpointChanged: vi.fn(async () => { stored = [{ ...checkpoint, hasChanges: true }]; return stored[0]; }),
+    };
+    const capability = { files: {}, development } as unknown as WorkspaceInspectorCapability;
+    let pane!: ReturnType<typeof useWorkspacePane>;
+    function AddressProbe() { pane = useWorkspacePane(); return <RecoveryProbe />; }
+    const view = (id: string) => <WorkspacePaneProvider capability={capability} sessionId={id}><AddressProbe /></WorkspacePaneProvider>;
+    const { rerender } = render(view("front"));
+    let pending!: Promise<void>;
+    act(() => { pending = pane.beginTurnFor("background", 4); });
+    expect(development.createCheckpoint).toHaveBeenCalledWith("background", "Before task 5", { kind: "turn-start", turnIndex: 4 });
+    rerender(view("different-front"));
+    await act(async () => { finish(checkpoint); await pending; });
+    expect(pane.checkpoints).toEqual([]);
+    expect(pane.open).toBe(false);
+    expect(pane.tabs).toEqual([]);
+    act(() => pane.observeToolEvent({ tool: "write", toolCallId: "background-write", status: "completed", args: { path: "file" } }, "background"));
+    await waitFor(() => expect(development.markCheckpointChanged).toHaveBeenCalledWith("background", "background-point"));
+    expect(pane.checkpoints).toEqual([]);
+    rerender(view("background"));
+    await waitFor(() => expect(pane.checkpoints).toEqual([{ ...checkpoint, hasChanges: true }]));
+    expect(pane.open).toBe(false);
+    expect(pane.tabs).toEqual([]);
+  });
+
+  it.each(["success", "failure", "not-git"])("does not let an older %s replace a newer background turn's checkpoint", async outcome => {
+    const checkpoint = { id: "latest", sessionId: "background", label: "Before task 2", createdAt: 2,
+      changedFiles: 0, kind: "turn-start" as const, turnIndex: 1, hasChanges: false, complete: true };
+    let finish!: (value: typeof checkpoint | null) => void, fail!: (error: Error) => void;
+    const first = new Promise<typeof checkpoint | null>((resolve, reject) => { finish = resolve; fail = reject; });
+    const development = {
+      listCheckpoints: vi.fn(async () => []),
+      createCheckpoint: vi.fn().mockReturnValueOnce(first).mockResolvedValueOnce(checkpoint),
+      markCheckpointChanged: vi.fn(async () => ({ ...checkpoint, hasChanges: true })),
+    };
+    const capability = { files: {}, development } as unknown as WorkspaceInspectorCapability;
+    let pane!: ReturnType<typeof useWorkspacePane>;
+    function AddressProbe() { pane = useWorkspacePane(); return null; }
+    render(<WorkspacePaneProvider capability={capability} sessionId="front"><AddressProbe /></WorkspacePaneProvider>);
+    let older!: Promise<void>;
+    act(() => { older = pane.beginTurnFor("background", 0); });
+    await act(async () => { await pane.beginTurnFor("background", 1); });
+    await act(async () => {
+      if (outcome === "failure") fail(new Error("late failure"));
+      else finish(outcome === "not-git" ? null : { ...checkpoint, id: "older", turnIndex: 0, createdAt: 1 });
+      await older;
+    });
+    act(() => pane.observeToolEvent({ tool: "write", toolCallId: "write", status: "completed", args: { path: "file" } }, "background"));
+    await waitFor(() => expect(development.markCheckpointChanged).toHaveBeenCalledWith("background", "latest"));
+    expect(pane.checkpoints).toEqual([]);
+  });
+
   it("creates one task-linked recovery point and marks it after a write", async () => {
     const checkpoint = {
       id: "checkpoint-1",
@@ -440,10 +501,16 @@ describe("WorkspacePane responsive behavior", () => {
     } as unknown as WorkspaceInspectorCapability;
 
     render(
-      <WorkspacePaneProvider capability={capability} sessionId="session-1">
-        <Probe />
-        <WorkspacePane />
-      </WorkspacePaneProvider>,
+      <DirectoryChooserContext.Provider value={{ workspace: async (defaultPath, adopt) => {
+        const selected = await workspaces.chooseDirectory(defaultPath);
+        if (selected) await adopt(selected);
+        return selected;
+      } }}>
+        <WorkspacePaneProvider capability={capability} sessionId="session-1">
+          <Probe />
+          <WorkspacePane />
+        </WorkspacePaneProvider>
+      </DirectoryChooserContext.Provider>,
     );
 
     await userEvent.click(

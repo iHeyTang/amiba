@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   set: vi.fn(),
   removed: [] as string[],
   archiveSession: vi.fn(),
+  retainForSession: vi.fn(async (_attachmentId: string, _sessionId: string) => {}),
+  history: vi.fn(async () => ({ events: [] as Array<{ event: { type: string; seq: number; time: number; data: Record<string, unknown> } }>, hasMore: false })),
 }));
 
 vi.mock("@amiba/app-runtime/platform", () => ({
@@ -41,11 +43,12 @@ vi.mock("@amiba/app-runtime/platform", () => ({
       },
       watch: () => () => {},
     },
+    agentAttachments: { retainForSession: mocks.retainForSession },
     agentSessions: {
       list: async () => mocks.summaries,
       search: async () => [],
       create: async () => ({ sessionId: "new" }),
-      history: async () => ({ events: [], hasMore: false }),
+      history: mocks.history,
       rename: async () => ({ title: "", seq: 0 }),
       fork: async () => ({ sessionId: "child" }),
     },
@@ -56,7 +59,21 @@ vi.mock("@amiba/app-runtime/platform", () => ({
   }),
 }));
 
-import { archiveSession, loadIndex, loadSessionMeta } from "./store";
+import { archiveSession, loadIndex, loadSessionMeta, loadMessages } from "./store";
+
+it("retains the same direct-parent address for every child history page", async () => {
+  const address = { parentSessionId: "parent", childSessionId: "child", mode: "one-shot" as const };
+  mocks.history.mockClear();
+  mocks.history.mockResolvedValueOnce({
+    events: [{ event: { type: "session/created", seq: 20, time: 1, data: {} } }],
+    hasMore: true,
+  }).mockResolvedValueOnce({ events: [], hasMore: false });
+  await loadMessages("child", address);
+  expect(mocks.history.mock.calls).toEqual([
+    ["child", { subagent: address, maxMessages: 200 }],
+    ["child", { subagent: address, beforeSeq: 20, maxMessages: 200 }],
+  ]);
+});
 
 const LOCAL_META_KEY = "sessions.local-meta";
 
@@ -143,4 +160,37 @@ it("projects durable subagent origin on reload while retaining direct access", a
   ]));
   expect(await loadSessionMeta("child")).toMatchObject({id:"child",origin:"subagent"});
   expect(JSON.stringify(mocks.storage[LOCAL_META_KEY] ?? {})).not.toContain('"origin"');
+});
+
+
+function legacyAttachmentEvent(id:string,seq=1) {
+  return {event:{type:"user/message",seq,time:seq,data:{id:"message-"+seq,source:{kind:"user"},content:[{type:"text",text:
+    '<file-attachment>\nName: "old.txt"\nKind: "text"\nMime: "text/plain"\nSize: 3 bytes\nAttachment-ID: "'+id+'"\n</file-attachment>\n\nOriginal words'
+  }]}}};
+}
+it("migrates deduplicated real Host attachment IDs across historical pages",async()=>{
+  const id="att_0123456789abcdef0123456789abcdef";
+  mocks.retainForSession.mockClear();
+  mocks.history.mockResolvedValueOnce({events:[legacyAttachmentEvent(id,2)],hasMore:true});
+  mocks.history.mockResolvedValueOnce({events:[legacyAttachmentEvent(id),legacyAttachmentEvent("sha256:inline",3)],hasMore:false});
+  const messages=await loadMessages("old-session");
+  expect(mocks.retainForSession.mock.calls).toEqual([[id,"old-session"]]);
+  expect(messages.filter(message=>message.role==="user").map(message=>message.content)).toEqual(["Original words","Original words","Original words"]);
+});
+it("does not treat a bare attachment ID as a historical file reference",async()=>{
+  mocks.retainForSession.mockClear();
+  mocks.history.mockResolvedValueOnce({events:[{event:{type:"user/message",seq:1,time:1,data:{id:"u",source:{kind:"user"},content:[{type:"text",text:"att_0123456789abcdef0123456789abcdef"}]}}}],hasMore:false});
+  await loadMessages("plain");
+  expect(mocks.retainForSession).not.toHaveBeenCalled();
+});
+it("missing old files do not block history, and archive does not release its references",async()=>{
+  mocks.retainForSession.mockClear();
+  mocks.retainForSession.mockRejectedValueOnce(new Error("File missing"));
+  const warning=vi.spyOn(console,"warn").mockImplementation(()=>{});
+  mocks.history.mockResolvedValueOnce({events:[legacyAttachmentEvent("att_0123456789abcdef0123456789abcdef")],hasMore:false});
+  const messages=await loadMessages("old");
+  expect(messages[0].content).toBe("Original words");
+  await archiveSession("old");
+  expect(mocks.retainForSession).toHaveBeenCalledOnce();
+  warning.mockRestore();
 });

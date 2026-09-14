@@ -40,6 +40,15 @@ export function applyManagedRuntimePatches(appDir, workspaceDir) {
   for (const [specifier, patchFile] of Object.entries(patches)) {
     const split = specifier.lastIndexOf('@');
     const directory = path.join(appDir, 'node_modules', specifier.slice(0, split));
+    // ui-primitives is embedded in the shipped frontend, not installed as a
+    // Host package. Its paired frontend patch is mandatory in that layout.
+    if (specifier === '@deepseek-ai/dsh-client-ui-primitives@0.1.1-rc.2') {
+      try { readFileSync(path.join(directory, 'package.json'), 'utf8'); }
+      catch (error) {
+        if (error.code !== 'ENOENT' || !patches['@deepseek-ai/dsh-web-frontend@0.1.1-rc.2']) throw error;
+        continue;
+      }
+    }
     const installed = JSON.parse(readFileSync(path.join(directory, 'package.json'), 'utf8'));
     if (installed.version !== specifier.slice(split + 1)) throw new Error(`Patch version mismatch for ${specifier}`);
     applyRuntimePatch(directory, path.resolve(workspaceDir, patchFile));

@@ -1,13 +1,74 @@
+import { fileStorageFixture } from "./file-storage-fixture.mjs";
+import { smokeDocumentPreview } from './document-preview-smoke.mjs';
+import { smokeDocumentRead } from './document-read-smoke.mjs';
+import { smokeSidebarRight } from './sidebar-right-smoke.mjs';
+import { smokeFileProvider } from "./file-provider-smoke.mjs";
+import { smokeFileStat } from "./file-stat-smoke.mjs";
+import { smokeResources } from "./resources-smoke.mjs";
+import { smokeRightTabRegistry } from "./right-tab-registry-smoke.mjs";
+import { smokeMainPanelList } from "./main-panel-list-smoke.mjs";
+import { smokeMainPanels } from "./main-panels-smoke.mjs";
+import { smokeRootProviders } from "./root-providers-smoke.mjs";
+import { smokeLayoutNavigation } from "./layout-navigation-smoke.mjs";
+import { legacyToolLiveFixture } from "./legacy-tool-live-fixture.mjs";
+import { smokeLegacyToolDetails } from "./legacy-tool-details-smoke.mjs";
+import { smokeModelSettingsSlots } from "./model-settings-slots-smoke.mjs";
+import { lineageLoaderFixture } from "./lineage-loader-fixture.mjs";
+import { messageImageFixture } from "./message-image-fixture.mjs";
+import { legacyAttachmentFixture } from "./legacy-attachment-fixture.mjs";
+import { trajectoryLoaderFixture } from "./trajectory-loader-fixture.mjs";
+import { cordisBusinessFixture } from "./cordis-business-fixture.mjs";
+import { continuableChildFixture } from './continuable-child-fixture.mjs';
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile, readFile, mkdir, symlink } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile, readdir, mkdir, symlink, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import http from "node:http";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 const require = createRequire(import.meta.url);
 const WebSocket = require("ws");
 import assert from "node:assert/strict";
+if (process.argv.includes("--child-cold-restart") && !["--compat", "--child-navigation", "--child-continuation"].every(flag => process.argv.includes(flag))) {
+  throw new Error("--child-cold-restart requires --compat --child-navigation --child-continuation");
+}
+if (process.argv.includes("--child-nested-restart") && !process.argv.includes("--child-cold-restart")) {
+  throw new Error("--child-nested-restart requires --child-cold-restart");
+}
+if (process.argv.includes("--native-admission") && !["--compat", "--child-continuation"].every(flag => process.argv.includes(flag))) {
+  throw new Error("--native-admission requires --compat --child-continuation");
+}
+if (process.argv.includes("--resident-queue") && !["--compat", "--child-continuation"].every(flag => process.argv.includes(flag))) {
+  throw new Error("--resident-queue requires --compat --child-continuation");
+}
+if (process.argv.includes("--background-queue") && !["--compat", "--child-continuation"].every(flag => process.argv.includes(flag))) {
+  throw new Error("--background-queue requires --compat --child-continuation");
+}
+if (process.argv.includes("--redirect-queue") && !process.argv.includes("--background-queue")) {
+  throw new Error("--redirect-queue requires --background-queue");
+}
+if (process.argv.includes("--approval-detail") && !["--compat", "--child-continuation"].every(flag => process.argv.includes(flag))) {
+  throw new Error("--approval-detail requires --compat --child-continuation");
+}
+if (process.argv.includes("--lineage-layout") && !process.argv.includes("--header-lineage")) throw new Error("--lineage-layout requires --header-lineage");
+if (process.argv.includes("--lineage-loader") && !process.argv.includes("--header-lineage")) throw new Error("--lineage-loader requires --header-lineage");
+if (process.argv.includes("--header-lineage") && !["--compat", "--child-continuation"].every(flag=>process.argv.includes(flag))) throw new Error("--header-lineage requires --compat --child-continuation");
+if (process.argv.includes("--header-corner") && !process.argv.includes("--compat")) {
+  throw new Error("--header-corner requires --compat");
+}
+if (process.argv.includes("--message-images") && !process.argv.includes("--compat")) throw new Error("--message-images requires --compat");
+if (process.argv.includes("--tool-images") && !process.argv.includes("--message-images")) throw new Error("--tool-images requires --message-images");
+if (process.argv.includes("--nested-tools") && !process.argv.includes("--tool-images")) throw new Error("--nested-tools requires --tool-images");
+if (process.argv.includes("--trajectory-images") && !["--message-images", "--tool-images", "--trajectory-loader", "--cordis-business"].every(flag=>process.argv.includes(flag))) throw new Error("--trajectory-images requires --message-images --tool-images --trajectory-loader --cordis-business");
+if (process.argv.includes("--model-settings-slots") && !process.argv.includes("--compat")) throw new Error("--model-settings-slots requires --compat");
+if (process.argv.includes("--legacy-tool-details") && !process.argv.includes("--compat")) throw new Error("--legacy-tool-details requires --compat");
+if (process.argv.includes("--legacy-tool-live") && !process.argv.includes("--legacy-tool-details")) throw new Error("--legacy-tool-live requires --legacy-tool-details");
+if (process.argv.includes("--resources") && !process.argv.includes("--compat")) throw new Error("--resources requires --compat");
+if (process.argv.includes("--right-tab-registry") && !process.argv.includes("--compat")) throw new Error("--right-tab-registry requires --compat");
+if (process.argv.includes("--panel-list") && !process.argv.includes("--main-panels")) throw new Error("--panel-list requires --main-panels");
+if (process.argv.includes("--main-panels") && !process.argv.includes("--compat")) throw new Error("--main-panels requires --compat");
+if (process.argv.includes("--root-providers") && !process.argv.includes("--compat")) throw new Error("--root-providers requires --compat");
+if (process.argv.includes("--layout-navigation") && !process.argv.includes("--compat")) throw new Error("--layout-navigation requires --compat");
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const profile = await mkdtemp(path.join(tmpdir(), "amiba-plugin-app-"));
 async function port() {
@@ -20,12 +81,13 @@ async function port() {
 const debugPort = await port(),
   dshPort = await port();
 const author = process.argv.includes("--author");
-const native = process.argv.includes("--native");
+const native = process.argv.includes("--native") || process.argv.includes("--compat");
 const { workspacePackages } = await import("./dsh-client-dependencies.mjs");
 const authorProjects = author ? [...(await workspacePackages(root)).values()].filter(pkg => pkg.directory.startsWith(path.join(root, "plugins") + path.sep)).map(pkg => pkg.directory) : undefined;
 const env = {
   ...process.env,
   AMIBA_USER_DATA_DIR: profile,
+  ...(process.argv.includes("--browse-directory") ? { SSH_CONNECTION: "amiba-directory-test" } : {}),
   ...(authorProjects ? { AMIBA_DSH_DEV_PROJECTS: JSON.stringify(authorProjects) } : {}),
   AMIBA_DSH_DEV_PORT: String(dshPort),
   AMIBA_DSH_RUNTIME_DIR: path.join(
@@ -61,10 +123,14 @@ async function wait(check) {
       throw new Error("App exited: " + logs.slice(-5000));
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  if (socket?.readyState === 1) logs += JSON.stringify(await evaluate("(async()=>({hmr:Array.from(window.__probeCtx?.loader.entries()??[]).filter(e=>e.options.name.includes('hmr')||e.options.name.includes('probe')).map(e=>({name:e.options.name,state:e.fiber?.state,inject:e.fiber?.inject})),frames:window.__probeFrames?.map(s=>{try{const f=JSON.parse(s);return {type:f.type,id:f.id,rev:f.rev}}catch{return s}}),diagnostics:(await window.amiba.agentDiagnostics.logs({limit:100})).entries.filter(e=>/PROBE|hmr|error/i.test(e.message))}))()").catch(String));
+  if (socket?.readyState === 1) logs += JSON.stringify(await evaluate("(async()=>({body:document.body.innerText.slice(-8000),hmr:Array.from(window.__probeCtx?.loader.entries()??[]).filter(e=>e.options.name.includes('hmr')||e.options.name.includes('probe')).map(e=>({name:e.options.name,state:e.fiber?.state,inject:e.fiber?.inject})),frames:window.__probeFrames?.map(s=>{try{const f=JSON.parse(s);return {type:f.type,id:f.id,rev:f.rev}}catch{return s}}),diagnostics:(await window.amiba.agentDiagnostics.logs({limit:100})).entries.filter(e=>/PROBE|DOWNLOAD|hmr|error/i.test(e.message))}))()").catch(String));
+  logs += "\nNative events: " + await readFile(path.join(profile,"native-events.jsonl"),"utf8").catch(String);
   throw new Error("App UI timeout: " + logs.slice(-18000) + "\nCLI: " + cliLogs);
 }
-function call(method, params = {}) {
+async function call(method, params = {}) {
+  if (method === "Page.captureScreenshot" && process.argv.includes("--compat")) {
+    await evaluate("(async()=>window.amiba.nativeExtensions.call(await window.amiba.nativeExtensions.connect('dsh-plugin-probe'),'show-main'))()");
+  }
   const id = ++next;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
@@ -72,6 +138,15 @@ function call(method, params = {}) {
   });
 }
 async function evaluate(expression) {
+  // Chromium suspends animation frames in an occluded test window. Make the
+  // existing probe window visible before waiting for a real editor frame.
+  if (process.argv.includes("--compat") && expression.includes("requestAnimationFrame")) {
+    await call("Runtime.evaluate", {
+      expression: "(async()=>{if(document.hidden)await window.amiba.nativeExtensions.call(await window.amiba.nativeExtensions.connect('dsh-plugin-probe'),'show-main')})()",
+      awaitPromise: true,
+      returnByValue: true,
+    });
+  }
   const response = await call("Runtime.evaluate", {
     expression,
     awaitPromise: true,
@@ -99,7 +174,7 @@ try {
   socket = new WebSocket(target.webSocketDebuggerUrl);
   socket.on("message", (bytes) => {
     const message = JSON.parse(String(bytes));
-    if (!message.id) { if (message.method === "Runtime.consoleAPICalled" || message.method === "Runtime.exceptionThrown" || message.method === "Log.entryAdded" || (message.method === "Network.responseReceived" && message.params.response.url.includes("dsh-plugin-probe"))) logs += JSON.stringify(message.params) + "\n"; return; }
+    if (!message.id) { if (message.method?.startsWith("Browser.download") || message.method === "Network.loadingFailed" || message.method === "Runtime.consoleAPICalled" || message.method === "Runtime.exceptionThrown" || message.method === "Log.entryAdded" || (message.method === "Network.responseReceived" && /dsh-plugin-probe|session.export/.test(message.params.response.url))) logs += JSON.stringify(message.params) + "\n"; return; }
     const request = pending.get(message.id);
     if (!request) return;
     pending.delete(message.id);
@@ -120,16 +195,21 @@ try {
   await symlink(path.join(root, "apps/desktop/node_modules"), path.join(project, "node_modules"), "dir");
   await writeFile(path.join(project, "package.json"), JSON.stringify({ name: "dsh-plugin-probe", version: "0.0.0", type: "module", main: "lib/index.js", exports: { ".": "./lib/index.js", "./client": "./lib/client.js", "./package.json": "./package.json" }, scripts: { build: "tsc -p tsconfig.build.json && vite build" + (native ? " && vite build --config vite.native.config.mjs" : "") }, dsh: { ...(native ? { native: "./lib/native.cjs" } : {}), client: { inject: ["@deepseek-ai/dsh-client-runtime"], platform: "web" } } }));
   await writeFile(path.join(project, "tsconfig.build.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "Bundler", rootDir: "src", outDir: "lib", skipLibCheck: true }, include: ["src"] }));
-  await writeFile(path.join(project, "vite.config.mjs"), `export default { build: { emptyOutDir:false, lib: {entry:'src/client.ts',formats:['cjs'],fileName:()=> 'client.js'}, rollupOptions: {output: {banner:'window.__ModuleLoader__.load({id:"dsh-plugin-probe",factory:(require)=>{const module={exports:{}};const exports=module.exports;',footer:'return module.exports;}});'}}}}`);
+  await writeFile(path.join(project, "vite.config.mjs"), `export default { build: { emptyOutDir:false, lib: {entry:'src/client.ts',formats:['cjs'],fileName:()=> 'client.js'}, rollupOptions: {external:["react"],output: {banner:'window.__ModuleLoader__.load({id:"dsh-plugin-probe",factory:(require)=>{const module={exports:{}};const exports=module.exports;window.__probeRequire=require;',footer:'return module.exports;}});'}}}}`);
   const hostSource = version => `export function apply(ctx: any) { ctx.effect(() => { console.log('AMIBA_PROBE_HOST_${version}'); return () => console.log('AMIBA_PROBE_DISPOSE_${version}'); }); }`;
-  const clientSource = version => `${process.argv.includes("--compat") ? "export const inject = [\"slots\", \"settingsScope\", \"layout\"];" : ""}export function apply(ctx: any) { (window as any).__probeCtx=ctx; ctx.effect(() => { const node=document.createElement('div');node.id='amiba-plugin-probe';node.textContent='client-${version}';document.body.append(node);return ()=>node.remove(); }); }`;
+  const clientSource = version => `import {createElement} from "react";${process.argv.includes("--compat") ? "export const inject = [\"slots\", \"settingsScope\", \"layout\", \"sessions\", \"sessionLogDownload\", \"inputTriggers\", \"composerInputs\", \"composerImages\", \"remote\", \"remote.dynamicCordisRunner\", \"remote.commands\"];" : ""}export function apply(ctx: any) { (window as any).__probeCreateElement=createElement; (window as any).__probeCtx=ctx; ctx.effect(() => { const node=document.createElement('div');node.id='amiba-plugin-probe';node.textContent='client-${version}';document.body.append(node);return ()=>node.remove(); }); }`;
   const nativeEvents = path.join(profile, "native-events.jsonl");
-  const nativeSource = version => `import {appendFileSync} from 'node:fs';export function create(){appendFileSync(${JSON.stringify(nativeEvents)},'native-start-${version}\\n');return {call(){return 'native-${version}'},rendererCall(){return 'native-${version}'},dispose(){appendFileSync(${JSON.stringify(nativeEvents)},'native-stop-${version}\\n')}}}`;
+  const canonicalProfile = await realpath(profile);
+  const nativeSource = version => `import {appendFileSync} from 'node:fs';${process.argv.includes("--compat") ? "import {session,dialog,shell,BrowserWindow} from 'electron';" : ""}export function create(){appendFileSync(${JSON.stringify(nativeEvents)},'native-start-${version}\\n');${process.argv.includes("--compat") ? `const originalOpenPath=shell.openPath;shell.openPath=async(target)=>{if(${JSON.stringify([profile, canonicalProfile])}.includes(target)){appendFileSync(${JSON.stringify(nativeEvents)},'turn-open-directory '+target+'\\n');return '';}return originalOpenPath(target);};const originalPicker=dialog.showOpenDialog;dialog.showOpenDialog=async(...args)=>{const options=args.at(-1);if(!options?.properties?.includes('openDirectory'))return originalPicker.apply(dialog,args);appendFileSync(${JSON.stringify(nativeEvents)},'picker-options '+JSON.stringify({defaultPath:options.defaultPath,properties:options.properties})+'\\n');return {canceled:false,filePaths:[${JSON.stringify(path.join(profile,'native-picked'))}]};};const save=(_event,item)=>{item.setSavePath(${JSON.stringify(path.join(profile,"downloads"))}+'/'+item.getFilename());item.on('done',(_event,state)=>appendFileSync(${JSON.stringify(nativeEvents)},'download-'+state+' '+item.getReceivedBytes()+'/'+item.getTotalBytes()+' '+item.getSavePath()+'\\n'));};session.defaultSession.on('will-download',save);` : ""}return {call(){return 'native-${version}'},rendererCall(_owner,method){${process.argv.includes("--compat") ? "if(method==='show-main'){const win=BrowserWindow.getAllWindows().find(w=>/out\\/renderer\\/index.html/.test(w.webContents.getURL()));if(!win)throw new Error('missing test window');win.webContents.setBackgroundThrottling(false);win.showInactive();return 'shown';}" : ""}return 'native-${version}'},dispose(){${process.argv.includes("--compat") ? "session.defaultSession.removeListener('will-download',save);dialog.showOpenDialog=originalPicker;shell.openPath=originalOpenPath;" : ""}appendFileSync(${JSON.stringify(nativeEvents)},'native-stop-${version}\\n')}}}`;
+
   if (native) {
     await writeFile(path.join(project, "src/native.ts"), nativeSource(1));
-    await writeFile(path.join(project, "vite.native.config.mjs"), `export default {build:{emptyOutDir:false,lib:{entry:'src/native.ts',formats:['cjs'],fileName:()=> 'native.cjs'},rollupOptions:{external:['node:fs']}}}`);
+    await writeFile(path.join(project, "vite.native.config.mjs"), `export default {build:{emptyOutDir:false,lib:{entry:'src/native.ts',formats:['cjs'],fileName:()=> 'native.cjs'},rollupOptions:{external:['node:fs','electron']}}}`);
   }
-  const source = version => native ? `export const inject=['amibaRuntimeGateway']; export async function apply(ctx:any) { let lease:string|undefined;let disposed=false;ctx.effect(()=>async()=>{disposed=true;if(lease)await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease})});lease=await ctx.amibaRuntimeGateway.call('amiba_native_attach',{packageName:'dsh-plugin-probe',instanceId:'probe-'+Date.now()});if(disposed){await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease});return}console.log('AMIBA_PROBE_HOST_${version}'); }` : hostSource(version);
+  // Write only to this smoke's temporary session, through the real Host log.
+  const fixtureCwd = await realpath(profile);
+  const turnFixture = process.argv.includes("--compat") ? `let fixtureSession:any;let fileStorageChecked=false;ctx.on('session/created',(s:any)=>{if(s.header.origin==='subagent'||!${JSON.stringify([profile, fixtureCwd])}.includes(s.header.cwd)||s.events.some((e:any)=>e.type==='turn/start'&&e.data.turn===7))return;fixtureSession=s;${fileStorageFixture.replace('COMPAT_LLM_MODULE_URL',pathToFileURL(path.join(root,'packages/app-runtime/resources/dsh-runtime/app/node_modules/@deepseek-ai/dsh-llm/lib/index.js')).href)}s.append('turn/start',{turn:7});s.append('user/message',{id:'compat-user',role:'user',source:{kind:'user'},content:[{type:'text',text:'COMPAT_TURN_INPUT'}]},{surfaceOp:'append'});s.append('step/start',{turn:7,step:1});s.append('assistant/message',{turn:7,step:1,message:{id:'compat-assistant',role:'assistant',source:{kind:'model',provider:'compat',model:'fixture'},content:[{type:'text',text:'COMPAT_TURN_REPLY'}]}},{surfaceOp:'append'});s.append('step/end',{turn:7,step:1});s.append('turn/end',{turn:7,reason:{kind:'completed'}});if(${JSON.stringify(process.argv.includes('--command-rows'))})s.append('command/run',{commandId:'compat-row-command',name:'compat-row',args:'  原始😀'});console.log('AMIBA_PROBE_TURN '+s.id);});ctx.effect(()=>{const watcher=watch(${JSON.stringify(profile)},()=>{const s=fixtureSession;if(!s)return;if(existsSync(${JSON.stringify(path.join(profile,'command-row-done'))})&&!s.events.some((e:any)=>e.type==='command/done'&&e.data.commandId==='compat-row-command'))s.append('command/done',{commandId:'compat-row-command',kind:'success',text:'COMPAT_COMMAND_RESULT'});if(existsSync(${JSON.stringify(path.join(profile,'child-create'))})&&!ctx.sessions.get('compat-child')){const child=ctx.sessions.create('compat-child',{meta:{cwd:s.header.cwd,parentSession:s.id,origin:'subagent',delegationDepth:1}});child.append('turn/start',{turn:1});child.append('subagent/descriptor',{version:2,mode:'one-shot',provider:'compat',label:'Compatibility child'});child.append('user/message',{id:'compat-child-user',role:'user',source:{kind:'user'},content:[{type:'text',text:'COMPAT_CHILD_INPUT'}]},{surfaceOp:'append'});child.append('step/start',{turn:1,step:1});child.append('assistant/message',{turn:1,step:1,message:{id:'compat-child-assistant',role:'assistant',source:{kind:'model',provider:'compat',model:'fixture'},content:[{type:'text',text:'COMPAT_CHILD_REPLY'}]}},{surfaceOp:'append'});child.append('step/end',{turn:1,step:1});child.append('turn/end',{turn:1,reason:{kind:'completed'}});console.log('AMIBA_PROBE_CHILD '+child.id);}if(existsSync(${JSON.stringify(path.join(profile,'turn-tail-open'))})&&!s.events.some((e:any)=>e.type==='turn/start'&&e.data.turn===8)){s.append('turn/start',{turn:8});s.append('user/message',{id:'compat-empty-user',role:'user',source:{kind:'plugin',plugin:'compat-test',form:'relay'},content:[{type:'text',text:'COMPAT_EMPTY_TURN_INPUT'}]},{surfaceOp:'append'});}if(existsSync(${JSON.stringify(path.join(profile,'turn-tail-close'))})&&!s.events.some((e:any)=>e.type==='turn/end'&&e.data.turn===8)){s.append('turn/end',{turn:8,reason:{kind:'blocked'}});}if(existsSync(${JSON.stringify(path.join(profile,'turn-tail-deliverables'))})&&!s.events.some((e:any)=>e.type==='turn/start'&&e.data.turn===9)){s.append('turn/start',{turn:9});s.append('user/message',{id:'compat-produced-user',role:'user',source:{kind:'plugin',plugin:'compat-test',form:'relay'},content:[{type:'text',text:'COMPAT_PRODUCED_INPUT'}]},{surfaceOp:'append'});s.append('step/start',{turn:9,step:1});for(let i=0;i<7;i++){const filePath=${JSON.stringify(path.join(profile,'compat-produced'))}+(i===0?'':String(i+1))+'.txt';const callId='compat-write-call-'+i;s.append('tool/call',{turn:9,step:1,callId,name:'write',arguments:JSON.stringify({file_path:filePath,content:'COMPAT_PRODUCED_FILE_CONTENT'})});s.append('tool/result',{turn:9,step:1,message:{id:'compat-write-result-'+i,role:'user',source:{kind:'tool',callId},content:[{type:'tool-result',toolCallId:callId,content:[{type:'text',text:'Written'}]}]}},{surfaceOp:'append'});}s.append('step/end',{turn:9,step:1});s.append('step/start',{turn:9,step:2});const mention=String.fromCharCode(96)+'compat-produced.txt'+String.fromCharCode(96);const prefix='COMPAT_PRODUCED_PREFIX '+mention;const suffix='COMPAT_PRODUCED_REPLY <think>COMPAT_PRIVATE_THOUGHT</think> '+mention;s.append('assistant/chunk',{turn:9,step:2,chunk:{type:'text-delta',index:0,text:prefix}});s.append('assistant/chunk',{turn:9,step:2,chunk:{type:'reasoning-delta',index:1,text:'COMPAT_SOURCE_THOUGHT'}});s.append('assistant/chunk',{turn:9,step:2,chunk:{type:'text-delta',index:2,text:suffix}});if(!${JSON.stringify(process.argv.includes('--interrupted-prose'))})s.append('assistant/message',{turn:9,step:2,message:{id:'compat-produced-reply',role:'assistant',source:{kind:'model',provider:'compat',model:'fixture'},content:[{type:'text',text:prefix},{type:'reasoning',text:'COMPAT_SOURCE_THOUGHT'},{type:'text',text:suffix}]}},{surfaceOp:'append'});s.append('step/end',{turn:9,step:2});s.append('turn/end',{turn:9,reason:{kind:${JSON.stringify(process.argv.includes('--interrupted-prose') ? 'blocked' : 'completed')}}});}});return()=>watcher.close();});` : "";
+  const source = version => native ? `import {watch,existsSync,readFileSync,writeFileSync} from 'node:fs';export const inject=['amibaRuntimeGateway','sessions'${(process.argv.includes('--trajectory-loader') || process.argv.includes('--lineage-loader')) ? ",'clientModules'" : ''}${process.argv.includes('--cordis-business') ? ",'dynamicCordisRunner'" : ''}${process.argv.includes('--child-continuation') ? ",'agents','subagents','llm'" : ''}${process.argv.includes('--input-state') && !process.argv.includes('--child-continuation') ? ",'agents'" : ''}${process.argv.includes('--input-state') ? ",'commands'" : ''}${process.argv.includes('--message-images') ? ",'attachments'" : ''}${process.argv.includes('--approval-detail') ? ",'approval'" : ''}${process.argv.includes('--redirect-queue') ? ",'amibaConversations'" : ''}]; export async function apply(ctx:any) { ${process.argv.includes('--child-continuation') ? continuableChildFixture(root, profile, process.argv.includes('--redirect-queue'), process.argv.includes('--approval-detail')) : ''} if(!existsSync(${JSON.stringify(path.join(profile,'cold-restart'))})){ ${turnFixture} ${process.argv.includes("--legacy-tool-live") ? legacyToolLiveFixture(profile) : ""} ${process.argv.includes("--message-images") ? messageImageFixture(profile,fixtureCwd,process.argv.includes("--tool-images"),process.argv.includes("--nested-tools")) : ""} ${process.argv.includes("--legacy-file-refs") ? legacyAttachmentFixture(profile) : ""} ${process.argv.includes("--trajectory-loader") ? trajectoryLoaderFixture(profile) : ""} ${process.argv.includes("--lineage-loader") ? lineageLoaderFixture(profile) : ""} ${process.argv.includes('--cordis-business') ? cordisBusinessFixture(profile,fixtureCwd) : ''} } let lease:string|undefined;let disposed=false;ctx.effect(()=>async()=>{disposed=true;if(lease)await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease})});lease=await ctx.amibaRuntimeGateway.call('amiba_native_attach',{packageName:'dsh-plugin-probe',instanceId:'probe-'+Date.now()});if(disposed){await ctx.amibaRuntimeGateway.call('amiba_native_detach',{lease});return}console.log('AMIBA_PROBE_HOST_${version}'); }` : hostSource(version);
   await writeFile(path.join(project, "src/index.ts"), source(1));
   await writeFile(path.join(project, "src/client.ts"), clientSource(1));
   cli = spawn(process.execPath, [process.env.AMIBA_SMOKE_CLI || path.join(root, "apps/cli/dist/cli.js"), "--dsh-home", home, "plugin", "dev"], { cwd: project, env: {...process.env}, stdio: ["ignore", "pipe", "pipe"] });
@@ -157,6 +237,92 @@ try {
     assert.equal((await evaluate("window.amiba.agentDiagnostics.status()")).pid, runtimeBefore.pid);
   }
   if (process.argv.includes("--compat")) {
+    const muxTransport = await evaluate(`(async () => {
+      const socket = new WebSocket('ws://dsh.internal/api/events.mux');
+      try {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('mux open timeout')), 10000);
+          socket.addEventListener('open', () => { clearTimeout(timeout); resolve(); }, {once:true});
+          socket.addEventListener('error', () => { clearTimeout(timeout); reject(new Error('mux open failed')); }, {once:true});
+        });
+        return socket.readyState;
+      } finally { socket.close(); }
+    })()`);
+    assert.equal(muxTransport, 1, "child mux must establish over the real Desktop WebSocket bridge");
+    console.log("compat child mux WebSocket readiness verified");
+    const directorySessionsBefore = await evaluate("window.__probeCtx.sessions.list.getSnapshot().ids");
+    await evaluate(`(() => {
+      window.__directoryOff = window.__probeCtx.slots.register({
+        name:'conversation.hero.workspace.directoryFlow', id:'compat-directory', priority:-100,
+      }, owner => { window.__directoryOwner=owner; return owner.open ? 'COMPAT_DIRECTORY_OPEN' : null; });
+    })()`);
+    const directoryButton = "document.querySelector('[role=group][aria-label=\"Execution context\"] button, [role=group][aria-label=\"执行上下文\"] button')";
+    await wait(() => evaluate(`Boolean(${directoryButton})`));
+    await evaluate(`${directoryButton}.click()`);
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_DIRECTORY_OPEN')"));
+    await evaluate("window.__oldDirectoryOwner=window.__directoryOwner;window.__directoryOwner.onCancel();void 0");
+    await wait(() => evaluate("!document.body.textContent.includes('COMPAT_DIRECTORY_OPEN')"));
+    await evaluate(`${directoryButton}.click()`);
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_DIRECTORY_OPEN')"));
+    await evaluate("window.__oldDirectoryOwner.onPicked('/stale-directory')");
+    assert.ok(await evaluate("document.body.textContent.includes('COMPAT_DIRECTORY_OPEN')"), "old callback must not finish the new flow");
+    await evaluate(`window.__directoryOwner.onPicked(${JSON.stringify(profile)})`);
+    await wait(() => evaluate(`!document.body.textContent.includes('COMPAT_DIRECTORY_OPEN') && ${directoryButton}?.title===${JSON.stringify(profile)}`));
+    assert.deepEqual(await evaluate("window.__probeCtx.sessions.list.getSnapshot().ids"), directorySessionsBefore, "choosing a Home path must not create a session");
+    await writeFile(path.join(tmpdir(), "amiba-directory-home.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+    await evaluate("window.__directoryOff();void 0");
+    assert.ok(await evaluate("window.__probeCtx.slots.entriesOfSlot('conversation.hero.workspace.directoryFlow').length > 0 && window.__probeCtx.slots.entriesOfSlot('sidebar.workspaces.directoryFlow').length > 0"), "default picker registrations must remain in both directory slots");
+    console.log("Home directory slot passed real registration, cancellation, reopen, stale callback rejection and existing path adoption.");
+    if (process.argv.includes("--browse-directory")) {
+      await evaluate(`${directoryButton}.click()`);
+      await wait(() => evaluate("Boolean(document.querySelector('[role=dialog]'))"));
+      await writeFile(path.join(tmpdir(), "amiba-directory-browser.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+      const directoryStyle = await evaluate("({background:getComputedStyle(document.querySelector('[role=dialog]')).backgroundColor,foreground:getComputedStyle(document.querySelector('[role=dialog]')).color,shellAlias:getComputedStyle(document.querySelector('[data-amiba-product-shell]')).getPropertyValue('--dsw-alias-bg-layer-2')})");
+      assert.notEqual(directoryStyle.background, 'rgba(0, 0, 0, 0)', "browser picker must have an opaque dialog background");
+      assert.notEqual(directoryStyle.background, directoryStyle.foreground);
+      assert.equal(directoryStyle.shellAlias, '', "official aliases must stay local to the plugin dialog");
+      await evaluate("Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).find(n=>n.textContent==='Cancel'||n.textContent==='取消').click()");
+      await wait(() => evaluate("!document.querySelector('[role=dialog]')"));
+      await evaluate(`${directoryButton}.click()`);
+      await wait(() => evaluate("Boolean(document.querySelector('button[aria-label=\"Edit path\"]'))"));
+      await evaluate("document.querySelector('button[aria-label=\"Edit path\"]').click()");
+      await wait(() => evaluate("Boolean(document.querySelector('input[aria-label=\"Edit path\"]'))"));
+      await evaluate(`(() => {const input=document.querySelector('input[aria-label="Edit path"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(profile)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+      await evaluate("document.querySelector('input[aria-label=\"Edit path\"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))");
+      await wait(() => evaluate(`!document.querySelector('input[aria-label="Edit path"]') && document.querySelector('[role=dialog]')?.textContent.includes(${JSON.stringify(path.basename(profile))})`));
+      await evaluate("Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).find(n=>n.textContent==='New folder').click()");
+      await wait(() => evaluate("Boolean(document.querySelector('input[aria-label=\"Folder name\"]'))"));
+      await writeFile(path.join(tmpdir(), "amiba-directory-browser-create.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+      await evaluate("(() => {const input=document.querySelector('input[aria-label=\"Folder name\"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'browser-created');input.dispatchEvent(new Event('input',{bubbles:true}));})()");
+      await evaluate("document.querySelector('input[aria-label=\"Folder name\"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))");
+      await wait(() => evaluate("!document.querySelector('input[aria-label=\"Folder name\"]') && document.querySelector('[role=dialog]')?.textContent.includes('browser-created')"));
+      const createdBrowserPath = await realpath(path.join(profile, "browser-created"));
+      await wait(() => evaluate("Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).some(n=>n.textContent==='Open'&&!n.disabled)"));
+      await evaluate("Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).find(n=>n.textContent==='Open').click()");
+      await wait(() => evaluate(`!document.querySelector('[role=dialog]') && ${directoryButton}?.title.endsWith('/browser-created')`));
+      assert.equal(await realpath(await evaluate(`${directoryButton}.title`)), createdBrowserPath);
+      assert.deepEqual(await evaluate("window.__probeCtx.sessions.list.getSnapshot().ids"), directorySessionsBefore);
+      console.log("Official browser picker passed local styles, cancellation, path editing, real directory creation and Home selection without creating a session.");
+    } else {
+    // Exercise the installed native occupant through preload + main IPC, replacing
+    // only the OS-dialog boundary in the temporary native fixture.
+    await mkdir(path.join(profile, "native-picked"), { recursive: true });
+    await evaluate(`${directoryButton}.click()`);
+    await wait(() => evaluate(`${directoryButton}?.title===${JSON.stringify(path.join(profile, "native-picked"))}`));
+    const pickerEvent = (await readFile(nativeEvents, "utf8")).split("\n").find(line=>line.startsWith("picker-options "));
+    assert.ok(pickerEvent, "default picker must reach the existing Electron dialog boundary");
+    const pickerOptions = JSON.parse(pickerEvent.slice("picker-options ".length));
+    assert.equal(pickerOptions.defaultPath, profile, "native picker must retain the previously selected starting path");
+    assert.ok(pickerOptions.properties.includes("openDirectory"));
+    assert.deepEqual(await evaluate("window.__probeCtx.sessions.list.getSnapshot().ids"), directorySessionsBefore);
+    console.log("Default native picker passed installed component, platform callback and main IPC with preserved defaultPath (OS dialog response stubbed).");
+
+    }
+    assert.ok(await evaluate("window.__probeCtx.get('conversationEvents').entries().some(d=>d.kind==='turn-tail') && window.__probeCtx.get('conversationEvents').entries().some(d=>d.kind==='assistant-step') && window.__probeCtx.get('conversationViews').entries().some(d=>d.target==='chat')"), "headless official data definitions and chat target must be mounted");
+    if (process.argv.includes("--resources")) await smokeResources({ evaluate, wait });
+    if (process.argv.includes("--right-tab-registry")) await smokeRightTabRegistry(evaluate);
+    if (process.argv.includes("--root-providers")) await smokeRootProviders({ evaluate, wait });
+    if (process.argv.includes("--layout-navigation")) await smokeLayoutNavigation(evaluate);
     // Real SlotCore + module-loader + renderer integration on the file: surface.
     const namespace = await evaluate(`(async () => {
       const ctx = window.__probeCtx;
@@ -171,7 +337,7 @@ try {
       const ctx = window.__probeCtx;
       window.__compatDisposers = [
         ctx.slots.register({name:'settings.plugins.tab',id:'compat-probe',label:'Compatibility probe'}, () => 'COMPAT_TAB_CONTENT'),
-        ctx.slots.register({name:'settings.plugin.item',id:'compat-card',key:${JSON.stringify(namespace)}}, () => 'COMPAT_CONFIG_CARD'),
+        ctx.slots.register({name:'settings.plugin.item',id:'compat-card',priority:-1,key:${JSON.stringify(namespace)}}, () => 'COMPAT_CONFIG_CARD'),
         ctx.slots.register({name:'sidebar.footer.action',id:'compat-footer'}, ({wide}) => wide ? 'COMPAT_FOOTER_WIDE' : 'COMPAT_FOOTER_NARROW'),
       ];
       ctx.layout.openSettings('plugins');
@@ -179,11 +345,1844 @@ try {
     await wait(() => evaluate("Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility probe')"));
     await evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(n=>n.textContent==='Compatibility probe').click()");
     await wait(() => evaluate("document.querySelector('[role=tabpanel]:not([hidden])')?.textContent.includes('COMPAT_TAB_CONTENT')"));
-    await evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(n=>/Configurable|可配置/.test(n.textContent)).click()");
+    await evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(n=>/Configuration|配置/.test(n.textContent)).click()");
     await wait(() => evaluate("document.querySelector('[role=tabpanel]:not([hidden])')?.textContent.includes('COMPAT_CONFIG_CARD')"));
+    await evaluate("window.__probeCtx.layout.openChat()");
+    await wait(() => evaluate("/COMPAT_FOOTER_(WIDE|NARROW)/.test(document.body.textContent)"));
+    const wasWide = await evaluate("document.body.textContent.includes('COMPAT_FOOTER_WIDE')");
+    await evaluate("window.__probeCtx.layout.toggleSidebar()");
+    await wait(() => evaluate(`document.body.textContent.includes(${JSON.stringify(wasWide ? 'COMPAT_FOOTER_NARROW' : 'COMPAT_FOOTER_WIDE')})`));
+    await evaluate("window.__probeCtx.layout.toggleSidebar();window.__probeCtx.layout.openSettings('plugins')");
+    await wait(() => evaluate("Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility probe')"));
+    await evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(n=>n.textContent==='Compatibility probe').click()");
     await evaluate("window.__compatDisposers.forEach(dispose=>dispose());delete window.__compatDisposers");
-    await wait(() => evaluate("!document.body.textContent.includes('COMPAT_TAB_CONTENT') && !document.querySelector('[role=tablist]')"));
+    await wait(() => evaluate("!document.body.textContent.includes('COMPAT_TAB_CONTENT') && /inventory|清单/i.test(document.querySelector('[role=tab][aria-selected=true]')?.textContent ?? '')"));
+    await evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(n=>/Configuration|配置/.test(n.textContent)).click()");
+    await wait(() => evaluate("Array.from(document.querySelectorAll('form')).some(n=>/Agent execution|Agent 执行/.test(n.getAttribute('aria-label')??''))"));
+    await evaluate("window.__agentSettings=window.__probeCtx.settingsScope.bind({namespace:'agent-loop'});void 0");
+    await wait(() => evaluate("window.__agentSettings.getSnapshot().status==='ready'"));
+    const beforeLimit=await evaluate("window.__agentSettings.getSnapshot().value.maxParallelToolCalls");
+    const nextLimit=beforeLimit===2?3:2;
+    await evaluate(`(() => {
+      const form=Array.from(document.querySelectorAll('form')).find(n=>/Agent execution|Agent 执行/.test(n.getAttribute('aria-label')??''));
+      window.__agentForm=form;
+      const input=form.querySelector('input');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(String(nextLimit))});
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+    })()`);
+    await wait(() => evaluate("!window.__agentForm.querySelector('button[type=submit]').disabled"));
+    assert.equal(await evaluate("window.__agentSettings.getSnapshot().value.maxParallelToolCalls"),beforeLimit,"editing must not write Host settings");
+    await evaluate("window.__agentForm.querySelector('button[type=submit]').click()");
+    await wait(() => evaluate(`window.__agentSettings.getSnapshot().value.maxParallelToolCalls===${nextLimit} && window.__agentForm.querySelector('button[type=submit]').disabled`));
+    await evaluate("window.__agentForm.querySelector('input').parentElement.querySelector('button').click()");
+    await wait(() => evaluate("!window.__agentForm.querySelector('button[type=submit]').disabled"));
+    await evaluate("window.__agentForm.querySelector('button[type=submit]').click()");
+    await wait(() => evaluate("!Object.hasOwn(window.__agentSettings.getSnapshot().user??{},'maxParallelToolCalls') && window.__agentForm.querySelector('button[type=submit]').disabled"));
+    await writeFile(path.join(tmpdir(), "amiba-plugin-config-cards.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+    for (const spec of [
+      {namespace:"shell",label:"Shell execution|Shell 执行",field:"timeoutMs",text:"61000",value:61000},
+      {namespace:"web-search-deepseek",label:"DeepSeek web search|DeepSeek 网页搜索",field:"baseURL",text:"https://example.test",value:"https://example.test"},
+    ]) {
+      await evaluate(`window.__cardScope=window.__probeCtx.settingsScope.bind({namespace:${JSON.stringify(spec.namespace)}});window.__cardForm=Array.from(document.querySelectorAll('form')).find(n=>new RegExp(${JSON.stringify(spec.label)}).test(n.getAttribute('aria-label')??''));void 0`);
+      await wait(() => evaluate("window.__cardScope.getSnapshot().status==='ready' && Boolean(window.__cardForm)"));
+      const before=await evaluate(`window.__cardScope.getSnapshot().value[${JSON.stringify(spec.field)}]`);
+      await evaluate(`(() => {const input=window.__cardForm.querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(spec.text)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+      await wait(() => evaluate("!window.__cardForm.querySelector('button[type=submit]').disabled"));
+      assert.equal(await evaluate(`window.__cardScope.getSnapshot().value[${JSON.stringify(spec.field)}]`),before);
+      await evaluate("window.__cardForm.querySelector('button[type=submit]').click()");
+      await wait(() => evaluate(`window.__cardScope.getSnapshot().value[${JSON.stringify(spec.field)}]===${JSON.stringify(spec.value)} && window.__cardForm.querySelector('button[type=submit]').disabled`));
+      await evaluate("window.__cardForm.querySelector('input').parentElement.querySelector('button').click()");
+      await wait(() => evaluate("!window.__cardForm.querySelector('button[type=submit]').disabled"));
+      await evaluate("window.__cardForm.querySelector('button[type=submit]').click()");
+      await wait(() => evaluate(`!Object.hasOwn(window.__cardScope.getSnapshot().user??{},${JSON.stringify(spec.field)}) && window.__cardForm.querySelector('button[type=submit]').disabled`));
+    }
+    assert.ok(await evaluate("window.__cardForm.querySelector('input[type=password]')?.value===''") , "search key must never be prefilled");
+    await evaluate("window.__cardForm.scrollIntoView({block:'end'})");
+    await writeFile(path.join(tmpdir(), "amiba-plugin-search-config.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+    console.log("All three official config forms passed actual Host save/reset; the search key remains blank.");
+
+    if (process.argv.includes("--model-settings-slots")) await smokeModelSettingsSlots({ evaluate, wait });
+
+    const downloads = path.join(profile, "downloads");
+    await mkdir(downloads, { recursive: true });
+    // The native fixture saves via Electron DownloadItem, avoiding a save dialog.
+    await evaluate(`(async () => {
+      const ctx = window.__probeCtx;
+      const id = await ctx.sessions.create({cwd:${JSON.stringify(profile)}});
+      ctx.layout.openChat();
+      ctx.sessions.open(id);
+      window.__compatSessionId = id;
+      await ctx.sessionLogDownload.download(id);
+      const state = ctx.sessionLogDownload.store.getSnapshot().bySession[id];
+      if (state.status !== 'success') throw new Error(JSON.stringify(state));
+    })()`);
+    const zip = await wait(async () => {
+      const files = await readdir(downloads);
+      return files.find(name => name.endsWith('.zip'));
+    });
+    const bytes = await readFile(path.join(downloads, zip));
+    assert.equal(bytes.subarray(0, 2).toString(), "PK", "browser must save a ZIP, not an HTML error");
+    assert.ok(bytes.length > 22, "ZIP must include the session archive");
+    assert.ok(await evaluate("Boolean(document.querySelector('[data-amiba-product-shell]'))"), "download must preserve the product page");
+    console.log("Native session ZIP download passed on Desktop file: with an actual saved archive.");
+    await wait(() => evaluate("Boolean(document.querySelector('[role=dialog]'))"));
+    await evaluate("Array.from(document.querySelector('[role=dialog]').querySelectorAll('button')).find(n=>n.textContent==='Close'||n.textContent==='关闭').click()");
+    await wait(() => evaluate("!document.querySelector('[role=dialog]')"));
+    if (process.argv.includes("--main-panels")) await smokeMainPanels({ evaluate, wait });
+    if (process.argv.includes("--panel-list")) await smokeMainPanelList({ evaluate, wait, call,
+      screenshot: async () => writeFile(path.join(tmpdir(), "amiba-global-panel-list.png"), Buffer.from((await call("Page.captureScreenshot", { format: "png" })).data, "base64")),
+    });
+    if (process.argv.includes("--message-images")) {
+      await evaluate("window.__imageOff=window.__probeCtx.slots.register({name:'conversation.message.images',id:'compat-images',priority:-100},owner=>{window.__imageOwner=owner;return window.__probeCreateElement('div',{'data-compat-images':''},window.__probeCreateElement('button',{onClick:async e=>{const target=e.currentTarget.parentElement.querySelector('img');const first=owner.loadImage(owner.images[0].attachment);const second=owner.loadImage(owner.images[0].attachment);window.__imageShared=first===second;target.src=await first;}},'Load real image'),window.__probeCreateElement('img',{'data-compat-image':'',alt:'Compatibility image'}))});void 0");
+      await writeFile(path.join(profile,'message-image-create'),'create');
+      const ref=await wait(async()=>{try{return JSON.parse(await readFile(path.join(profile,'message-image-ref.json'),'utf8'))}catch{return false}});
+      const toolRef=process.argv.includes('--tool-images') ? await wait(async()=>{try{return JSON.parse(await readFile(path.join(profile,'tool-image-ref.json'),'utf8'))}catch{return false}}) : undefined;
+      if(toolRef) assert.notEqual(toolRef.attachmentId,ref.attachmentId,'tool-only image must have its own Host identity');
+      const nestedRef=process.argv.includes('--nested-tools') ? await wait(async()=>{try{return JSON.parse(await readFile(path.join(profile,'nested-image-ref.json'),'utf8'))}catch{return false}}) : undefined;
+      if(nestedRef) assert.equal(new Set([ref.attachmentId,toolRef.attachmentId,nestedRef.attachmentId]).size,3,'nested image must not borrow a user or root-tool reference');
+      const verifyNestedTools = async (phase) => {
+        if (!process.argv.includes("--nested-tools")) return;
+        await evaluate("window.__nestedProbeClicked=undefined;window.__nestedProbeOff=window.__probeCtx.slots.register({name:'tool.call.toolview',key:'compat_nested_probe',id:'nested-probe',priority:-100},owner=>{window.__nestedProbeOwner=owner;return window.__probeCreateElement('button',{'data-nested-probe':owner.callId,onClick:()=>window.__nestedProbeClicked=owner.callId},'Nested plugin')});void 0");
+        await wait(()=>evaluate("(()=>{document.querySelectorAll('[data-execution-summary] > button[aria-expanded=false]').forEach(n=>n.click());const parent=Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('COMPAT_PARENT_CODE'));if(parent?.getAttribute('aria-expanded')==='false')parent.click();return !!document.querySelector('[data-nested-probe]')})()"));
+        assert.equal(await evaluate("document.querySelectorAll('[data-nested-probe]').length"),1,'each nested child must dispatch exactly once');
+        assert.equal(await evaluate("window.__nestedProbeOwner.callId"),'compat-nested-probe');
+        assert.equal(await evaluate("window.__nestedProbeOwner.block.callId"),'compat-nested-probe');
+        assert.equal(await evaluate("window.__nestedProbeOwner.sessionId"),await evaluate("window.__compatSessionId"));
+        assert.equal(await evaluate("typeof window.__nestedProbeOwner.loadImage"),'function');
+        assert.equal(await evaluate("window.__nestedProbeOwner.block.call.argsRaw"),JSON.stringify({path:'original.txt'}));
+        assert.ok(await evaluate("document.body.textContent.includes('COMPAT_PARENT_CODE')&&document.body.textContent.includes('COMPAT_PARENT_RESULT')"));
+        await evaluate("document.querySelector('[data-nested-probe]').click();void 0");
+        assert.equal(await evaluate("window.__nestedProbeClicked"),'compat-nested-probe');
+        await evaluate("window.__toolImageOff=window.__probeCtx.slots.register({name:'tool.call.images',id:'compat-tool-images',priority:-100},window.__toolImageComponent);void 0");
+        await wait(()=>evaluate("(()=>{const original=Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-tool-image.png'));if(original?.getAttribute('aria-expanded')==='true')original.click();const nested=Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-nested-image.png'));if(nested?.getAttribute('aria-expanded')==='false')nested.click();return window.__toolImageOwner?.images.length===1&&!!document.querySelector('[data-compat-tool-images]')})()"));
+        assert.deepEqual(await evaluate("window.__toolImageOwner.images"),[{attachment:nestedRef}]);
+        assert.equal(await evaluate("document.querySelectorAll('[data-compat-tool-images]').length"),1,'only the child image gallery is open');
+        await evaluate("document.querySelector('[data-compat-tool-images] button').click();void 0");
+        await wait(()=>evaluate("document.querySelector('[data-compat-tool-image]')?.naturalWidth===3"));
+        if(phase==='live') await evaluate("window.__nestedOnlyRef=window.__toolImageOwner.images[0].attachment;window.__oldNestedOnlyUrl=document.querySelector('[data-compat-tool-image]').src;void 0");
+        else assert.notEqual(await evaluate("document.querySelector('[data-compat-tool-image]').src"),await evaluate("window.__oldNestedOnlyUrl"));
+        await evaluate("Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('COMPAT_PARENT_CODE')).click();document.querySelectorAll('[data-execution-summary] > button[aria-expanded=true]').forEach(n=>n.click());window.__nestedProbeOwner.revealToolCall('compat-nested-image');void 0");
+        await wait(()=>evaluate("Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('COMPAT_PARENT_CODE'))?.getAttribute('aria-expanded')==='true'&&!!Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-nested-image.png'))"));
+        await evaluate("window.__nestedProbeOff();window.__toolImageOff();void 0");
+        await wait(()=>evaluate("!document.querySelector('[data-nested-probe]')&&!document.querySelector('[data-compat-tool-images]')"));
+        assert.ok(await evaluate("document.body.textContent.includes('COMPAT_PARENT_RESULT')&&!!Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat_nested_probe'))"));
+        await writeFile(path.join(tmpdir(),'amiba-nested-tools.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+        console.log(phase+': Nested tools passed real multi-level Host dispatch, exact child owner/loader, original parent evidence, isolated child images, deep reveal and plugin unload fallback');
+      };
+      await wait(()=>evaluate("!!document.querySelector('[data-compat-images]')"));
+      assert.deepEqual(await evaluate("window.__imageOwner.images"),[{attachment:ref}]);
+      assert.equal(await evaluate("window.__imageOwner.sessionId"),await evaluate("window.__compatSessionId"));
+      await evaluate("document.querySelector('[data-compat-images] button').click();void 0");
+      await wait(()=>evaluate("document.querySelector('[data-compat-image]')?.naturalWidth===1"));
+      assert.equal(await evaluate("window.__imageShared"),true);
+      await evaluate("window.__oldImageUrl=document.querySelector('[data-compat-image]').src;window.__imageRef=window.__imageOwner.images[0].attachment;void 0");
+      assert.equal(await evaluate("window.__imageOwner.loadImage.peek(window.__imageRef)"),await evaluate("window.__oldImageUrl"));
+      if (process.argv.includes("--tool-images")) {
+        await wait(()=>evaluate("(()=>{document.querySelectorAll('[data-execution-summary] > button[aria-expanded=false]').forEach(n=>n.click());return !!Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-tool-image.png'))})()"));
+        await evaluate("window.__toolImageButton=Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-tool-image.png'));window.__toolImageBaseline=window.__toolImageButton.parentElement.cloneNode(true);void 0");
+        assert.equal(await evaluate("window.__toolImageButton.disabled"),true);
+        await evaluate("window.__toolImageOff=window.__probeCtx.slots.register({name:'tool.call.images',id:'compat-tool-images',priority:-100},window.__toolImageComponent=owner=>{window.__toolImageOwner=owner;return window.__probeCreateElement('div',{'data-compat-tool-images':''},window.__probeCreateElement('button',{onClick:async e=>{const targets=e.currentTarget.parentElement.querySelectorAll('img');await Promise.all(owner.images.map(async (source,index)=>{targets[index].src=await owner.loadImage(source.attachment)}))}},'Load tool image'),window.__probeCreateElement('img',{'data-compat-tool-image':'',alt:'Tool image'}),window.__probeCreateElement('img',{'data-compat-tool-only-image':'',alt:'Tool-only image'}))});void 0");
+        try {
+        await wait(()=>evaluate("(()=>{window.__toolImageButton=Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-tool-image.png'));return window.__toolImageButton&&!window.__toolImageButton.disabled&&window.__toolImageButton.getAttribute('aria-expanded')==='false'})()"));
+        } catch (error) {
+          console.log('TOOL_IMAGE_DIAGNOSTIC',await evaluate("({slots:window.__probeCtx.slots.entriesOfSlot('tool.call.images').map(e=>({id:e.id,state:e.fiber?.state,options:e.options})),buttons:Array.from(document.querySelectorAll('button')).filter(n=>n.getAttribute('aria-label')?.includes('compat-tool-image.png')).map(n=>n.outerHTML),images:window.__imageOwner?.images,session:window.__probeCtx.sessions.list.getSnapshot().current,owner:!!window.__toolImageOwner})"));
+          throw error;
+        }
+        assert.equal(await evaluate("!!document.querySelector('[data-compat-tool-images]')"),false);
+        await evaluate("window.__toolImageButton.click();void 0");
+        await wait(()=>evaluate("!!document.querySelector('[data-compat-tool-images]')"));
+        assert.deepEqual(await evaluate("window.__toolImageOwner.images"),[{attachment:ref},{attachment:toolRef}]);
+        assert.equal(await evaluate("window.__toolImageOwner.align"),'start');
+        assert.equal(await evaluate("window.__toolImageOwner.sessionId"),await evaluate("window.__compatSessionId"));
+        await evaluate("document.querySelector('[data-compat-tool-images] button').click();void 0");
+        await wait(()=>evaluate("document.querySelector('[data-compat-tool-image]')?.naturalWidth===1&&document.querySelector('[data-compat-tool-only-image]')?.naturalWidth===2"));
+        assert.equal(await evaluate("document.querySelector('[data-compat-tool-image]').src"),await evaluate("window.__oldImageUrl"),'tool and message must reuse the same authorized session cache');
+        await evaluate("window.__toolOnlyRef=window.__toolImageOwner.images[1].attachment;window.__oldToolOnlyUrl=document.querySelector('[data-compat-tool-only-image]').src;void 0");
+        assert.equal(await evaluate("window.__imageOwner.images.some(image=>image.attachment.attachmentId===window.__toolOnlyRef.attachmentId)"),false,'the user message must not authorize the tool-only image');
+        await writeFile(path.join(tmpdir(),'amiba-tool-image.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+        await evaluate("window.__toolImageOff();void 0");
+        await wait(()=>evaluate("(()=>{window.__toolImageButton=Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-tool-image.png'));return !document.querySelector('[data-compat-tool-images]')&&window.__toolImageButton?.disabled})()"));
+        assert.equal(await evaluate("window.__toolImageButton.parentElement.isEqualNode(window.__toolImageBaseline)"),true,'unload must restore the original tool row DOM');
+        console.log('Tool image slot passed real Host result, collapsed loading, session identity, shared authorized URL and exact unload DOM restoration');
+      }
+      await verifyNestedTools("live");
+      await mkdir(path.join(profile,'foreign-image-session'),{recursive:true});
+      await evaluate(`(async()=>{const id=await window.__probeCtx.sessions.create({cwd:${JSON.stringify(path.join(profile,'foreign-image-session'))}});window.__foreignImageSession=id;window.__probeCtx.sessions.open(id)})()`);
+      await wait(()=>evaluate("window.__probeCtx.sessions.list.getSnapshot().current===window.__foreignImageSession&&!document.querySelector('[data-compat-images]')"));
+      const denied=await evaluate("window.__probeCtx.sessions.binding(window.__foreignImageSession).session.readAttachment(window.__imageRef.attachmentId)");
+      assert.equal(denied.ok,false,'foreign session must not read an unreferenced image');
+      assert.equal(denied.error.message,'Image is not referenced by this session.');
+      await wait(()=>evaluate("new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(false);image.onerror=()=>resolve(true);image.src=window.__oldImageUrl})"));
+      if(toolRef) {
+        const toolDenied=await evaluate("window.__probeCtx.sessions.binding(window.__foreignImageSession).session.readAttachment(window.__toolOnlyRef.attachmentId)");
+        assert.equal(toolDenied.ok,false);
+        assert.equal(toolDenied.error.message,'Image is not referenced by this session.');
+        await wait(()=>evaluate("new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(false);image.onerror=()=>resolve(true);image.src=window.__oldToolOnlyUrl})"));
+      }
+
+      if(nestedRef) {
+        const nestedDenied=await evaluate("window.__probeCtx.sessions.binding(window.__foreignImageSession).session.readAttachment(window.__nestedOnlyRef.attachmentId)");
+        assert.equal(nestedDenied.ok,false);
+        assert.equal(nestedDenied.error.message,'Image is not referenced by this session.');
+        await wait(()=>evaluate("new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(false);image.onerror=()=>resolve(true);image.src=window.__oldNestedOnlyUrl})"));
+      }
+      await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+      await wait(()=>evaluate("!!document.querySelector('[data-compat-images]')"));
+      assert.deepEqual(await evaluate("window.__imageOwner.images"),[{attachment:ref}]);
+      await evaluate("document.querySelector('[data-compat-images] button').click();void 0");
+      await wait(()=>evaluate("document.querySelector('[data-compat-image]')?.naturalWidth===1"));
+      assert.notEqual(await evaluate("document.querySelector('[data-compat-image]').src"),await evaluate("window.__oldImageUrl"));
+      if (process.argv.includes("--tool-images")) {
+        await wait(()=>evaluate("(()=>{document.querySelectorAll('[data-execution-summary] > button[aria-expanded=false]').forEach(n=>n.click());return !!Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-tool-image.png'))})()"));
+        await evaluate("window.__toolImageOff=window.__probeCtx.slots.register({name:'tool.call.images',id:'compat-tool-images',priority:-100},window.__toolImageComponent);void 0");
+        await wait(()=>evaluate("(()=>{const button=Array.from(document.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.includes('compat-tool-image.png'));if(button?.getAttribute('aria-expanded')==='false')button.click();return !!document.querySelector('[data-compat-tool-images]')})()"));
+        assert.deepEqual(await evaluate("window.__toolImageOwner.images"),[{attachment:ref},{attachment:toolRef}]);
+        await evaluate("document.querySelector('[data-compat-tool-images] button').click();void 0");
+        await wait(()=>evaluate("document.querySelector('[data-compat-tool-image]')?.naturalWidth===1&&document.querySelector('[data-compat-tool-only-image]')?.naturalWidth===2"));
+        assert.equal(await evaluate("document.querySelector('[data-compat-tool-image]').src"),await evaluate("document.querySelector('[data-compat-image]').src"));
+        await evaluate("window.__toolImageOff();void 0");
+        await wait(()=>evaluate("!document.querySelector('[data-compat-tool-images]')"));
+        assert.notEqual(await evaluate("window.__toolImageOwner.loadImage.peek(window.__toolOnlyRef)"),await evaluate("window.__oldToolOnlyUrl"));
+        console.log('Tool-only image passed real Host authorization, exact foreign-session rejection, URL revocation and history reloading; shared image still reuses the message cache');
+      }
+      await verifyNestedTools("history");
+      await writeFile(path.join(tmpdir(),'amiba-message-image.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+      await evaluate("window.__imageOff();delete window.__imageOff;void 0");
+      await wait(()=>evaluate("!document.querySelector('[data-compat-images]')&&document.body.textContent.includes('COMPAT_NATIVE_IMAGE')&&document.body.textContent.includes('COMPAT_TURN_REPLY')"));
+      console.log('Durable image plugin passed real Host storage, live/reloaded refs, authorized bytes, shared cache, foreign-session denial, URL revocation and unload preservation');
+    }
+    if (process.argv.includes("--header-corner")) {
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>{const row=document.querySelector('[data-workspace-edge-toggle]');window.__cornerBaseline={width:row.getBoundingClientRect().width,controls:Array.from(row.querySelectorAll('button')),title:document.querySelector('[data-content-header-title]').outerHTML};resolve()}))");
+      await evaluate("window.__cornerOff=window.__probeCtx.slots.register({name:'conversation.session.header.corner',id:'compat-corner',inject:id=>({injectedSessionId:id})},props=>{window.__cornerProps=props;return window.__probeCreateElement('button',{'data-compat-corner':props.sessionId,'data-injected-session':props.injectedSessionId,onClick:()=>window.__cornerClicked=props.sessionId},'Corner')});void 0");
+      await wait(()=>evaluate("document.querySelector('[data-compat-corner]')?.dataset.compatCorner===window.__compatSessionId"));
+      assert.ok(await evaluate("(()=>{const row=document.querySelector('[data-workspace-edge-toggle]');const corner=document.querySelector('[data-conversation-header-corner]');return corner===row.lastElementChild&&window.__cornerBaseline.controls.every((button,i)=>row.querySelectorAll('button')[i]===button)&&document.querySelector('[data-content-header-title]').outerHTML===window.__cornerBaseline.title&&document.querySelector('[data-compat-corner]').dataset.injectedSession===window.__compatSessionId})()"));
+      await evaluate("document.querySelector('[data-compat-corner]').click();window.__cornerProps.inputActions.setDraft('CORNER_PRESERVED_DRAFT');void 0");
+      assert.equal(await evaluate("window.__cornerClicked"),await evaluate("window.__compatSessionId"));
+      await mkdir(path.join(profile, 'header-corner'), {recursive:true});
+      await evaluate(`(async()=>{const id=await window.__probeCtx.sessions.create({cwd:${JSON.stringify(path.join(profile,'header-corner'))}});window.__cornerOtherSession=id;window.__probeCtx.sessions.open(id)})()`);
+      await wait(()=>evaluate("document.querySelector('[data-compat-corner]')?.dataset.compatCorner===window.__cornerOtherSession"));
+      await evaluate("window.__probeCtx.sessions.clear();void 0");
+      await wait(()=>evaluate("!document.querySelector('[data-compat-corner]')"));
+      await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+      await wait(()=>evaluate("document.querySelector('[data-compat-corner]')?.dataset.compatCorner===window.__compatSessionId&&Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).some(n=>n.textContent==='CORNER_PRESERVED_DRAFT')"));
+      await writeFile(path.join(tmpdir(), 'amiba-header-corner.png'), Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+      await evaluate("window.__cornerProps.inputActions.setDraft('');window.__cornerOff();window.__cornerOff=window.__probeCtx.slots.register({name:'conversation.session.header.corner',id:'compat-empty-corner'},()=>null);void 0");
+      await wait(()=>evaluate("!document.querySelector('[data-compat-corner]')&&document.querySelector('[data-conversation-header-corner]').getBoundingClientRect().width===0"));
+      assert.equal(await evaluate("document.querySelector('[data-workspace-edge-toggle]').getBoundingClientRect().width"),await evaluate("window.__cornerBaseline.width"));
+      await evaluate("window.__cornerOff();window.__cornerOff=window.__probeCtx.slots.register({name:'conversation.session.header.corner',id:'compat-broken-corner'},()=>{throw new Error('COMPAT_CORNER_FAILURE')});void 0");
+      await wait(()=>evaluate("document.querySelector('[data-conversation-header-corner]').getBoundingClientRect().width===0&&!!document.querySelector('[data-content-header-title]')"));
+      await evaluate("window.__cornerOff();delete window.__cornerOff;void 0");
+      assert.equal(await evaluate("document.querySelector('[data-workspace-edge-toggle]').getBoundingClientRect().width"),await evaluate("window.__cornerBaseline.width"));
+      console.log('Header corner passed actual session scope, inject, action, preserved native controls/draft, empty width, error isolation and unload recovery');
+    }
+    await evaluate(`(() => {
+      window.__compatViewOff = window.__probeCtx.slots.register({
+        name:'conversation.view', id:'compat-view', label:'Compatibility view',
+        inject: (sessionId) => ({injectedSessionId:sessionId}),
+      }, ({sessionId,injectedSessionId,useSession,useInput}) => { window.__compatViewInput=useInput(s=>s); window.__compatChatSnapshot=useSession(s=>s.chat); return 'COMPAT_VIEW:' + sessionId + ':' + injectedSessionId; });
+    })()`);
+    await wait(() => evaluate("Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility view')"));
+    await evaluate("window.__nativeChatNode=document.querySelector('main[role=tabpanel]');Array.from(document.querySelectorAll('[role=tab]')).find(n=>n.textContent==='Compatibility view').click()");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_VIEW:'+window.__compatSessionId+':'+window.__compatSessionId)"));
+    assert.ok(await evaluate("window.__nativeChatNode.isConnected && window.__nativeChatNode.hidden"), "native chat stays mounted while viewing plugin");
+    assert.ok(await evaluate("Array.isArray(window.__compatChatSnapshot.timeline.turnOrder) && window.__compatChatSnapshot.timeline.turns instanceof Map && typeof window.__compatChatSnapshot.nodes.values==='function'"), "a real session must expose the headless chat snapshot to plugin views");
+    assert.ok(await evaluate("typeof window.__compatViewInput.draft==='string' && Array.isArray(window.__compatViewInput.occurrences) && Array.isArray(window.__compatViewInput.imageIds)"), "standard useInput must render through the official framework in a plugin view");
+    await writeFile(path.join(tmpdir(), "amiba-conversation-plugin-view.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+    await evaluate("window.__compatViewOff();delete window.__compatViewOff");
+    await wait(() => evaluate("window.__nativeChatNode.isConnected && !window.__nativeChatNode.hidden && !document.body.textContent.includes('COMPAT_VIEW:') && !Array.from(document.querySelectorAll('[role=tab]')).some(n=>n.textContent==='Compatibility view')"));
+    await writeFile(path.join(tmpdir(), "amiba-conversation-native-view.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+    console.log("Conversation view passed: actual session props/injection, selection, preserved native chat and unload fallback.");
+    if (process.argv.includes("--cordis-business")) {
+      const definition = JSON.parse(await readFile(path.join(profile, "cordis-definition.json"), "utf8"));
+      assert.equal(definition.sessionId, await evaluate("window.__compatSessionId"));
+      assert.equal(definition.hasHostHalf, true);
+      await evaluate(`window.__cordisDefinition=${JSON.stringify(definition)};void 0`);
+      assert.ok(await evaluate("!!window.__probeCtx.get('dynamicCordisRunner')"));
+      await evaluate("window.__probeCtx.get('dynamicCordisRunner').startUserRun({agentId:window.__compatSessionId,pluginId:window.__cordisDefinition.pluginId,packageId:window.__cordisDefinition.packageId,mode:'run',hasClientHalf:true})");
+      const loaded = await wait(() => evaluate("window.__probeCtx.get('dynamicCordisRunner').getSnapshot().find(row=>row.pluginId===window.__cordisDefinition.pluginId)"));
+      await writeFile(path.join(profile, "cordis-card.json"), JSON.stringify({pluginRunId:loaded.pluginRunId}));
+      await wait(() => evaluate("(()=>{document.querySelectorAll('[data-execution-summary] > button[aria-expanded=false]').forEach(n=>n.click());return !!document.querySelector('[data-compat-dynamic]')})()"));
+      assert.deepEqual(await evaluate("(()=>{const n=document.querySelector('[data-compat-dynamic]');return {pluginId:n.dataset.plugin,packageId:n.dataset.package,pluginRunId:n.dataset.run}})()"), {pluginId:definition.pluginId,packageId:definition.packageId,pluginRunId:loaded.pluginRunId});
+      await evaluate("document.querySelector('[data-compat-dynamic]').click();void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_DYNAMIC 1')"));
+      assert.equal(await evaluate("document.querySelector('[data-compat-dynamic]').dataset.hostEcho"), "RPC_中文😀");
+      const wrongRun = await evaluate(`window.__probeCtx.remote.dynamicCordisRunner.invoke(${JSON.stringify(definition.pluginId)},${JSON.stringify(loaded.pluginRunId+'-stale')},'increment',{})`);
+      assert.equal(wrongRun.ok, true);
+      assert.equal(wrongRun.value.code, "stale-run");
+      await writeFile(path.join(tmpdir(), "amiba-cordis-business.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+      assert.ok(await evaluate("Array.from(document.querySelectorAll('style[data-dyn]')).some(n=>n.dataset.dyn===window.__cordisDefinition.pluginId)"));
+      const stopped = await evaluate("window.__probeCtx.remote.dynamicCordisRunner.stopFromPanel(window.__compatSessionId,window.__cordisDefinition.pluginId)");
+      assert.equal(stopped.ok, true);
+      await wait(() => evaluate("!document.querySelector('[data-compat-dynamic]')&&!window.__probeCtx.get('dynamicCordisRunner').isLoaded(window.__cordisDefinition.pluginId)"));
+      assert.ok(await evaluate("!Array.from(document.querySelectorAll('style[data-dyn]')).some(n=>n.dataset.dyn===window.__cordisDefinition.pluginId)"));
+      const afterStop = await evaluate(`window.__probeCtx.remote.dynamicCordisRunner.invoke(${JSON.stringify(definition.pluginId)},${JSON.stringify(loaded.pluginRunId)},'increment',{})`);
+      assert.equal(afterStop.ok, true);
+      assert.equal(afterStop.value.code, "plugin-not-running");
+      await evaluate("window.__probeCtx.get('dynamicCordisRunner').startUserRun({agentId:window.__compatSessionId,pluginId:window.__cordisDefinition.pluginId,packageId:window.__cordisDefinition.packageId,mode:'run',hasClientHalf:true})");
+      const restarted = await wait(() => evaluate("window.__probeCtx.get('dynamicCordisRunner').getSnapshot().find(row=>row.pluginId===window.__cordisDefinition.pluginId)"));
+      assert.notEqual(restarted.pluginRunId, loaded.pluginRunId);
+      const oldRun = await evaluate(`window.__probeCtx.remote.dynamicCordisRunner.invoke(${JSON.stringify(definition.pluginId)},${JSON.stringify(loaded.pluginRunId)},'increment',{})`);
+      assert.equal(oldRun.value.code, "stale-run");
+      const freshRun = await evaluate(`window.__probeCtx.remote.dynamicCordisRunner.invoke(${JSON.stringify(definition.pluginId)},${JSON.stringify(restarted.pluginRunId)},'increment',{text:'fresh'})`);
+      assert.deepEqual(freshRun.value, {ok:true,value:{count:1,text:'fresh',origin:'Host'}});
+      assert.ok(await evaluate("!document.querySelector('[data-compat-dynamic]')"), "an earlier tool result must not host a new activation");
+      await writeFile(path.join(profile, "cordis-update"), "update");
+      const nextDefinition = await wait(async () => { try { return JSON.parse(await readFile(path.join(profile, "cordis-next-definition.json"), "utf8")); } catch { return undefined; } });
+      assert.equal(nextDefinition.pluginId, definition.pluginId);
+      assert.notEqual(nextDefinition.packageId, definition.packageId);
+      await evaluate(`window.__probeCtx.get('dynamicCordisRunner').startUserRun({agentId:window.__compatSessionId,pluginId:${JSON.stringify(nextDefinition.pluginId)},packageId:${JSON.stringify(nextDefinition.packageId)},mode:'update',hasClientHalf:true})`);
+      const upgraded = await wait(() => evaluate(`window.__probeCtx.get('dynamicCordisRunner').getSnapshot().find(row=>row.packageId===${JSON.stringify(nextDefinition.packageId)})`));
+      assert.notEqual(upgraded.pluginRunId, restarted.pluginRunId);
+      await writeFile(path.join(profile, "cordis-next-card.json"), JSON.stringify({pluginRunId:upgraded.pluginRunId}));
+      await wait(() => evaluate("(()=>{for(const button of document.querySelectorAll('[data-execution-summary] > button[aria-expanded=false]'))button.click();return document.body.textContent.includes('COMPAT_DYNAMIC_V2 0')})()"));
+      assert.equal(await evaluate("document.querySelectorAll('[data-compat-dynamic]').length"), 1);
+      assert.equal(await evaluate("document.querySelector('[data-compat-dynamic]').dataset.package"), nextDefinition.packageId);
+      await evaluate("document.querySelector('[data-compat-dynamic]').click();void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_DYNAMIC_V2 1')"));
+      const updatedHost = await evaluate(`window.__probeCtx.remote.dynamicCordisRunner.invoke(${JSON.stringify(definition.pluginId)},${JSON.stringify(upgraded.pluginRunId)},'increment',{text:'updated'})`);
+      assert.deepEqual(updatedHost.value, {ok:true,value:{count:2,text:'updated',origin:'Host-v2'}});
+      const obsolete = await evaluate(`window.__probeCtx.remote.dynamicCordisRunner.invoke(${JSON.stringify(definition.pluginId)},${JSON.stringify(restarted.pluginRunId)},'increment',{})`);
+      assert.equal(obsolete.value.code, "stale-run");
+      await evaluate("window.__cordisOriginalEditor=document.querySelector('[data-composer-card] [contenteditable=true]');window.__cordisOriginalGroup=document.querySelector('[data-execution-summary]');document.querySelector('[data-compat-dynamic]').click();void 0");
+      await wait(() => evaluate("window.__probeCtx.get('dynamicCordisRunner').renderFailures.getSnapshot().get(window.__cordisDefinition.pluginId)?.message.includes('COMPAT_RENDER_FAILURE')"));
+      const renderFailure = await evaluate("window.__probeCtx.get('dynamicCordisRunner').renderFailures.getSnapshot().get(window.__cordisDefinition.pluginId)");
+      assert.equal(renderFailure.slot, "tool.view.cordis");
+      assert.ok(await evaluate("window.__cordisOriginalEditor.isConnected&&window.__cordisOriginalEditor===document.querySelector('[data-composer-card] [contenteditable=true]')&&window.__cordisOriginalGroup.isConnected"));
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'COMPAT_POST_CRASH_DRAFT')"), true);
+      await wait(() => evaluate("window.__cordisOriginalEditor.textContent==='COMPAT_POST_CRASH_DRAFT'"));
+      await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'');void 0");
+      await writeFile(path.join(tmpdir(), "amiba-cordis-render-failure.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+      console.log("Dynamic render failure was contained to its slot; native editor and tool group survived", {abdicated:renderFailure.abdicated});
+      await evaluate("window.__probeCtx.remote.dynamicCordisRunner.stopFromPanel(window.__compatSessionId,window.__cordisDefinition.pluginId)");
+      await wait(() => evaluate("!window.__probeCtx.get('dynamicCordisRunner').isLoaded(window.__cordisDefinition.pluginId)"));
+      assert.ok(await evaluate("!window.__probeCtx.get('dynamicCordisRunner').renderFailures.getSnapshot().has(window.__cordisDefinition.pluginId)"));
+      assert.ok(await evaluate("!Array.from(document.querySelectorAll('style[data-dyn]')).some(n=>n.dataset.dyn===window.__cordisDefinition.pluginId)"));
+      console.log("Dynamic Cordis Client-to-Host RPC preserved Unicode, rejected stopped/stale runs and isolated Host state after restart and package update; native cards and cleanup remained intact");
+    }
+    if (process.argv.includes("--trajectory") || process.argv.includes("--trajectory-loader")) {
+      assert.ok(process.argv.includes("--cordis-business"), "trajectory smoke needs real tool-result fixtures");
+      const trajectorySessionId = await evaluate("window.__compatSessionId");
+      if (process.argv.includes("--trajectory-loader")) {
+        await writeFile(path.join(profile,"trajectory-enable"),"enable");
+        await wait(async () => {
+          const error = await readFile(path.join(profile,"trajectory-loader-error.txt"),"utf8").catch(()=>null);
+          if (error) throw new Error(error);
+          return readFile(path.join(profile,"trajectory-enabled.json"),"utf8").catch(()=>false);
+        });
+        const receipt = JSON.parse(await readFile(path.join(profile,"trajectory-enabled.json"),"utf8"));
+        assert.ok(receipt.graph.some(e=>e.id==='@deepseek-ai/dsh-client-ui-trajectory'));
+        assert.ok(!receipt.graph.some(e=>e.id==='@deepseek-ai/dsh-client-ui-conversation'));
+        console.log("Official Host graph includes trajectory and excludes the replacement conversation root");
+        await evaluate("window.__trajectoryBootBefore=true");
+        await call("Page.reload",{});
+        await wait(() => evaluate("!window.__trajectoryBootBefore && Boolean(window.__probeCtx?.sessions)"));
+        await evaluate(`window.__compatSessionId=${JSON.stringify(trajectorySessionId)};window.__probeCtx.sessions.open(window.__compatSessionId);void 0`);
+      } else {
+        const officialBundle = await readFile(path.join(root,"packages/app-runtime/resources/dsh-runtime/app/node_modules/@deepseek-ai/dsh-client-ui-trajectory/lib/client.js"),"utf8");
+        await evaluate(officialBundle);
+        await evaluate("window.__trajectoryFiber=window.__probeCtx.plugin(window.__probeRequire('@deepseek-ai/dsh-client-ui-trajectory'));void 0");
+      }
+      if(process.argv.includes("--trajectory-loader")) console.log("Client trajectory dependencies",await evaluate("({entries:Array.from(window.__probeCtx.loader.entries()).filter(e=>/trajectory|conversation/.test(e.options.name)).map(e=>({id:e.id,name:e.options.name,state:e.fiber?.state,inject:e.fiber?.inject})),boot:window.__DSH_BOOT__.entries.filter(e=>/trajectory|conversation/.test(e.id))})"));
+      await wait(() => evaluate("window.__probeCtx.slots.entriesOfSlot('conversation.view').some(e=>e.options.id==='trajectory')"));
+      await evaluate(`window.__inspectRowOff=window.__probeCtx.slots.register({name:'tool.call.toolview',key:'cordis_run',priority:-100},owner=>{window.__inspectOwner=owner;return window.__probeCreateElement('button',{'data-compat-inspect':owner.callId,onClick:owner.inspect},'Inspect '+owner.callId)});void 0`);
+      await wait(() => evaluate("(()=>{document.querySelectorAll('[data-execution-summary] > button[aria-expanded=false]').forEach(n=>n.click());return !!document.querySelector('[data-compat-inspect=compat-cordis-next-call]') && typeof window.__inspectOwner?.inspect==='function'})()"));
+      await evaluate("window.__trajectoryEditor=document.querySelector('[data-composer-card] [contenteditable=true]');window.__trajectoryCard=document.querySelector('[data-composer-card]');window.__trajectoryBefore={height:window.__trajectoryCard.getBoundingClientRect().height,font:getComputedStyle(window.__trajectoryEditor).font,alias:getComputedStyle(window.__trajectoryEditor).getPropertyValue('--dsw-font-xs-13')};window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'COMPAT_TRAJECTORY_DRAFT');document.querySelector('[data-compat-inspect=compat-cordis-next-call]').click();void 0");
+      await wait(() => evaluate("Boolean(document.querySelector('tr[data-record-index][aria-selected=true]'))"));
+      const state = await evaluate("({selected:Array.from(document.querySelectorAll('tr[aria-selected=true]')).map(n=>n.textContent),viewFont:getComputedStyle(document.querySelector('[data-conversation-view=trajectory]')).fontSize,nativeConnected:window.__trajectoryEditor.isConnected})");
+      console.log("Trajectory inspection rendered", state);
+      assert.ok(state.nativeConnected);
+      assert.equal(state.selected.length, 1);
+      const inspectedDefinition = JSON.parse(await readFile(path.join(profile,"cordis-next-definition.json"),"utf8"));
+      assert.ok(state.selected[0].includes(JSON.stringify(inspectedDefinition.packageId)));
+      assert.ok(state.selected[0].includes("COMPAT_DYNAMIC_OUTPUT"));
+      assert.equal(state.viewFont,"13px");
+      if(process.argv.includes("--trajectory-images")) {
+        await evaluate("Array.from(document.querySelectorAll('[role=tab]')).find(n=>n.textContent==='Chat'||n.textContent==='对话').click();window.__traceToolOff=window.__probeCtx.slots.register({name:'tool.call.toolview',key:'read_image',priority:-100},owner=>{if(owner.callId==='compat-tool-image')window.__traceToolOwner=owner;return window.__probeCreateElement('button',{'data-trace-image-call':owner.callId,onClick:owner.inspect},'Inspect image trace')});void 0");
+        await wait(()=>evaluate("(()=>{document.querySelectorAll('[data-execution-summary] > button[aria-expanded=false]').forEach(n=>n.click());return !!document.querySelector('[data-trace-image-call=compat-tool-image]')})()"));
+        await evaluate("document.querySelector('[data-trace-image-call=compat-tool-image]').click();void 0");
+        await wait(()=>evaluate("document.querySelector('[data-conversation-view=trajectory] tr[data-record-index][aria-selected=true]')?.textContent.includes('compat-tool-image.png')"));
+        const traceRefs=[JSON.parse(await readFile(path.join(profile,'message-image-ref.json'),'utf8')),JSON.parse(await readFile(path.join(profile,'tool-image-ref.json'),'utf8'))];
+        await evaluate("window.__traceImageBefore={selected:document.querySelector('[data-conversation-view=trajectory] tr[aria-selected=true]').getAttribute('data-record-index'),headers:Array.from(document.querySelectorAll('[data-conversation-view=trajectory] th')).map(n=>n.textContent)};window.__trajectoryImageOwners={};window.__traceImagesOff=window.__probeCtx.slots.register({name:'conversation.trajectory.images',id:'compat-trajectory-images',priority:-100},owner=>{for(const image of owner.images)window.__trajectoryImageOwners[image.attachment.attachmentId]=owner;return window.__probeCreateElement('div',{'data-trajectory-compact':String(owner.compact)},...owner.images.map(({attachment},index)=>window.__probeCreateElement('div',{key:index,'data-trajectory-image-id':attachment.attachmentId},window.__probeCreateElement('button',{onClick:async e=>{const img=e.currentTarget.parentElement.querySelector('img');img.src=await owner.loadImage(attachment)}},'Load trajectory image'),window.__probeCreateElement('img',{alt:'Trajectory image'}))))});void 0");
+        for(const ref of traceRefs) {
+          const selector='[data-trajectory-image-id='+JSON.stringify(ref.attachmentId)+']';
+          await wait(()=>evaluate(`!!document.querySelector(${JSON.stringify(selector)})`));
+          assert.equal(await evaluate(`window.__trajectoryImageOwners[${JSON.stringify(ref.attachmentId)}].sessionId`),trajectorySessionId);
+          assert.equal(await evaluate(`window.__trajectoryImageOwners[${JSON.stringify(ref.attachmentId)}].loadImage===window.__traceToolOwner.loadImage`),true,'trajectory must reuse the current shell session loader');
+          await evaluate(`document.querySelector(${JSON.stringify(selector)}).querySelector('button').click();void 0`);
+          await wait(()=>evaluate(`document.querySelector(${JSON.stringify(selector)}).querySelector('img').naturalWidth===${ref.width}`));
+        }
+        await writeFile(path.join(tmpdir(),'amiba-trajectory-images.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+        await evaluate("window.__traceImagesOff();void 0");
+        await wait(()=>evaluate("!document.querySelector('[data-trajectory-image-id]')"));
+        assert.deepEqual(await evaluate("({selected:document.querySelector('[data-conversation-view=trajectory] tr[aria-selected=true]').getAttribute('data-record-index'),headers:Array.from(document.querySelectorAll('[data-conversation-view=trajectory] th')).map(n=>n.textContent)})"),await evaluate("window.__traceImageBefore"));
+        assert.equal(await evaluate("window.__trajectoryEditor.isConnected&&window.__trajectoryEditor.textContent==='COMPAT_TRAJECTORY_DRAFT'"),true);
+        await evaluate("window.__traceNullOff=window.__probeCtx.slots.register({name:'conversation.trajectory.images',id:'compat-trajectory-null',priority:-100},()=>null);void 0");
+        await wait(()=>evaluate("document.querySelector('[data-conversation-view=trajectory]')?.textContent.includes('COMPAT_TOOL_IMAGE_META')"));
+        assert.equal(await evaluate("window.__trajectoryEditor.isConnected&&window.__trajectoryEditor.textContent==='COMPAT_TRAJECTORY_DRAFT'"),true);
+        await evaluate("window.__traceNullOff();window.__traceErrorOff=window.__probeCtx.slots.register({name:'conversation.trajectory.images',id:'compat-trajectory-error',priority:-100},()=>{window.__traceErrorCalls=(window.__traceErrorCalls??0)+1;throw new Error('COMPAT_TRAJECTORY_IMAGE_FAILURE')});void 0");
+        await wait(()=>evaluate("window.__traceErrorCalls>0&&window.__probeCtx.slots.entriesOfSlot('conversation.trajectory.images').length===0&&document.querySelector('[data-conversation-view=trajectory]')?.textContent.includes('tool-only.png')"));
+        assert.equal(await evaluate("window.__trajectoryEditor.isConnected&&window.__trajectoryEditor.textContent==='COMPAT_TRAJECTORY_DRAFT'"),true);
+        await evaluate("window.__traceErrorOff();void 0");
+        await wait(()=>evaluate("!document.querySelector('[data-conversation-view=trajectory]')?.textContent.includes('COMPAT_TRAJECTORY_IMAGE_FAILURE')&&document.querySelector('[data-conversation-view=trajectory]')?.textContent.includes('COMPAT_TOOL_IMAGE_META')"));
+        assert.deepEqual(await evaluate("({selected:document.querySelector('[data-conversation-view=trajectory] tr[aria-selected=true]').getAttribute('data-record-index'),headers:Array.from(document.querySelectorAll('[data-conversation-view=trajectory] th')).map(n=>n.textContent)})"),await evaluate("window.__traceImageBefore"));
+        await evaluate("window.__traceToolOff();void 0");
+        console.log('Trajectory image slot passed actual installed view, true image refs and decoding, shared authorized loader, unchanged selection/headers/editor and unload fallback');
+      }
+      await writeFile(path.join(tmpdir(),"amiba-trajectory-inspection.png"),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+      if (process.argv.includes("--trajectory-loader")) {
+        await writeFile(path.join(profile,"trajectory-disable"),"disable");
+        await wait(() => readFile(path.join(profile,"trajectory-disabled.json"),"utf8").catch(()=>false));
+        await evaluate("window.__trajectoryBootBefore=true");
+        await call("Page.reload",{});
+        await wait(() => evaluate("!window.__trajectoryBootBefore && Boolean(window.__probeCtx?.sessions)"));
+        await evaluate(`window.__compatSessionId=${JSON.stringify(trajectorySessionId)};window.__probeCtx.sessions.open(window.__compatSessionId);void 0`);
+        await wait(() => evaluate("Boolean(document.querySelector('[data-composer-card] [contenteditable=true]')) && !window.__probeCtx.slots.entriesOfSlot('conversation.view').some(e=>e.options.id==='trajectory')"));
+        assert.equal(await evaluate("document.querySelectorAll('[data-amiba-product-shell]').length"),1);
+        console.log("Official trajectory activation and removal passed normal Host configuration and renderer boot; default Chat retained");
+      } else {
+      await evaluate("window.__trajectoryFiber.dispose();void 0");
+      await wait(() => evaluate("!window.__probeCtx.slots.entriesOfSlot('conversation.view').some(e=>e.options.id==='trajectory') && typeof window.__inspectOwner?.inspect==='undefined'"));
+      assert.ok(await evaluate("window.__trajectoryEditor===document.querySelector('[data-composer-card] [contenteditable=true]') && window.__trajectoryEditor.textContent==='COMPAT_TRAJECTORY_DRAFT'"));
+      assert.deepEqual(await evaluate("({height:window.__trajectoryCard.getBoundingClientRect().height,font:getComputedStyle(window.__trajectoryEditor).font,alias:getComputedStyle(window.__trajectoryEditor).getPropertyValue('--dsw-font-xs-13')})"),await evaluate("window.__trajectoryBefore"));
+      await evaluate("window.__inspectRowOff();window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'');void 0");
+      console.log("Official trajectory selected the exact tool package and result; unload restored the same native editor, draft and card styles");
+      }
+    }
+    if (process.argv.includes("--command-rows")) {
+      await evaluate("window.__commandRowOff=window.__probeCtx.slots.register({name:'conversation.chat.commandview',key:'compat-row',id:'compat-command-row'},props=>{window.__commandRowOwner=props;return window.__probeCreateElement('div',{'data-compat-command-row':''},props.node.outcome?.text??'COMPAT_COMMAND_EXECUTING')});void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_COMMAND_EXECUTING')"));
+      assert.deepEqual(await evaluate("({name:window.__commandRowOwner.node.name,args:window.__commandRowOwner.node.args,outcome:window.__commandRowOwner.node.outcome,sessionId:window.__commandRowOwner.sessionId})"), {name:'compat-row',args:'  原始😀',outcome:null,sessionId:await evaluate("window.__compatSessionId")});
+      await writeFile(path.join(profile, "command-row-done"), "done");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_COMMAND_RESULT')"));
+      assert.ok(await evaluate("(()=>{const chat=window.__probeCtx.sessions.binding(window.__compatSessionId).session.getSnapshot().chat;return chat.order.some(key=>chat.nodes.get(key)?.data===window.__commandRowOwner.node)})()"));
+      await writeFile(path.join(tmpdir(), "amiba-command-row.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+      await evaluate("window.__commandRowOff();void 0");
+      await wait(() => evaluate("!document.querySelector('[data-compat-command-row]')"));
+      const commandSessionId = await evaluate("window.__compatSessionId");
+      await call("Page.reload", {});
+      await wait(() => evaluate("!!window.__probeCtx?.sessions"));
+      await evaluate(`window.__compatSessionId=${JSON.stringify(commandSessionId)};window.__probeCtx.layout.openChat();window.__probeCtx.sessions.open(window.__compatSessionId);void 0`);
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_COMMAND_RESULT')"));
+      await evaluate("window.__commandRowOff=window.__probeCtx.slots.register({name:'conversation.chat.commandview',key:'compat-row',id:'compat-command-row'},()=>window.__probeCreateElement('div',{'data-compat-command-row':''},'COMPAT_CUSTOM_RESULT'));void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_CUSTOM_RESULT')&&!document.body.textContent.includes('COMPAT_COMMAND_RESULT')"));
+      await evaluate("window.__commandRowOff();void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_COMMAND_RESULT')&&!document.body.textContent.includes('COMPAT_CUSTOM_RESULT')"));
+      console.log("Official keyed command row received the actual Host lifecycle and args; renderer reload upgraded one durable result without duplication, and unregister restored its native presentation");
+    }
+    if (process.argv.includes("--resident-draft")) {
+      const originalId = await evaluate("window.__compatSessionId");
+      const otherCwd = path.join(profile,"draft-other");
+      await mkdir(otherCwd,{recursive:true});
+      const otherId = await evaluate(`window.__probeCtx.sessions.create({cwd:${JSON.stringify(otherCwd)}})`);
+      const expectedReference = {appearance:'file',source:'compat-resident-ref',ref:'C:\\file|id]\\',label:'引用😀',clipboardText:'clip|]😀\\'};
+      const sourceCode = `window.__draftReferenceOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-resident-ref',trigger:'@',order:-100,candidates:async()=>[],onPick:()=>({}),matchSpace:(_session,token)=>token==='@keep'?{insert:${JSON.stringify(expectedReference)}}:undefined,codec:{serialize:ref=>'<resident>'+ref+'</resident>'}});void 0`;
+      await evaluate(sourceCode);
+      await wait(() => evaluate("Boolean(window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId))"));
+      await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'@keep');void 0");
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor(window.__compatSessionId).onSpace()"),true);
+      await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.occurrences.length===1"));
+      let originalDraft = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
+      assert.deepEqual(Object.fromEntries(Object.keys(expectedReference).map(k=>[k,originalDraft.occurrences[0][k]])),expectedReference);
+      assert.ok(await evaluate("!!document.querySelector('[data-reference-appearance=file] svg')"));
+      await writeFile(path.join(tmpdir(), "amiba-reference-appearance.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+      const mixedDraft = originalDraft.draft + ' literal @[dsh.reference:missing-example|id|literal|clip]';
+      assert.equal(await evaluate(`window.__probeCtx.composerInputs.editInputDraft(window.__compatSessionId,${JSON.stringify(mixedDraft)})`),true);
+      await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===${JSON.stringify(mixedDraft)}`));
+      originalDraft = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
+      assert.equal(originalDraft.occurrences.length,1);
+      const copiedText = originalDraft.draft.slice(0, originalDraft.occurrences[0].offset) + expectedReference.clipboardText + originalDraft.draft.slice(originalDraft.occurrences[0].offset + originalDraft.occurrences[0].length);
+      await evaluate("(()=>{const editor=document.querySelector('[data-auto-grow-editor]');editor.focus();const range=document.createRange();range.selectNodeContents(editor);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);document.dispatchEvent(new Event('selectionchange'))})()");
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      const copied = await evaluate("(()=>{const data=new DataTransfer();const event=new ClipboardEvent('copy',{bubbles:true,cancelable:true,clipboardData:data});document.querySelector('[data-auto-grow-editor]').dispatchEvent(event);return {text:data.getData('text/plain'),handled:event.defaultPrevented}})()");
+      assert.deepEqual(copied,{text:copiedText,handled:true});
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft"),originalDraft.draft);
+
+      const cut = await evaluate("(()=>{const data=new DataTransfer();const event=new ClipboardEvent('cut',{bubbles:true,cancelable:true,clipboardData:data});document.querySelector('[data-auto-grow-editor]').dispatchEvent(event);return {text:data.getData('text/plain'),handled:event.defaultPrevented}})()");
+      assert.deepEqual(cut,{text:copiedText,handled:true});
+      await wait(()=>evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft==='' && window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).occurrences.length===0"));
+      const undoModifier = await evaluate("/Mac/.test(navigator.platform) ? 4 : 2");
+      const historyChord = async redo => {
+        await evaluate("document.querySelector('[data-auto-grow-editor]').focus()");
+        await call('Input.dispatchKeyEvent',{type:'keyDown',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:undoModifier+(redo?8:0)});
+        await call('Input.dispatchKeyEvent',{type:'keyUp',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:undoModifier+(redo?8:0)});
+      };
+      await historyChord(false);
+      await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===${JSON.stringify(originalDraft.draft)}`));
+      const undoDraft = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
+      assert.deepEqual(undoDraft.occurrences,originalDraft.occurrences,"undo must restore reference ID, range and cached appearance");
+      assert.ok(undoDraft.draftRev>originalDraft.draftRev);
+      await historyChord(true);
+      await wait(()=>evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===''") );
+      await historyChord(false);
+      await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===${JSON.stringify(originalDraft.draft)}`));
+      assert.deepEqual(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).occurrences"),originalDraft.occurrences);
+      console.log('Native reference cut, keyboard undo/redo and repeated restoration preserved identity, appearance and literal text.');
+      await evaluate(`window.__probeCtx.sessions.open(${JSON.stringify(otherId)})`);
+      await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft===''`));
+      await historyChord(false);
+      assert.equal(await evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)}).draft`),'');
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputStateSource(window.__compatSessionId).getSnapshot().draft"),originalDraft.draft);
+      await evaluate(`window.__probeCtx.sessions.open(${JSON.stringify(originalId)})`);
+      await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===${JSON.stringify(originalDraft.draft)}`));
+      await historyChord(true);
+      await wait(()=>evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===''") );
+      await historyChord(false);
+      await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===${JSON.stringify(originalDraft.draft)}`));
+      assert.deepEqual(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).occurrences"),originalDraft.occurrences);
+      console.log('Session revisit retained redo/undo and reference identity; undo in the other session did not affect the original draft.');
+
+      await evaluate("window.__residentInputActions=window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions;void 0");
+      assert.equal(await evaluate("typeof window.__residentInputActions?.setDraft"),"function");
+      await evaluate(`window.__otherDraftFrames=[];window.__otherDraftOff=window.__probeCtx.composerInputs.inputDraftSource(${JSON.stringify(otherId)}).subscribe(()=>window.__otherDraftFrames.push(window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft));window.__probeCtx.sessions.open(${JSON.stringify(otherId)});void 0`);
+      await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft===''`));
+      assert.ok((await evaluate("window.__otherDraftFrames")).filter(value=>value!==null).every(value=>value===''), "new session must never publish the previous session draft");
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)===undefined"),true);
+      await evaluate("window.__offscreenInput=window.__probeCtx.composerInputs.inputStateSource(window.__compatSessionId);window.__offscreenSeen=[];window.__offscreenOff=window.__offscreenInput.subscribe(()=>window.__offscreenSeen.push(window.__offscreenInput.getSnapshot()));window.__offscreenBefore=window.__offscreenInput.getSnapshot();void 0");
+      assert.deepEqual(await evaluate("({phase:window.__offscreenBefore.phase,images:window.__offscreenBefore.imageIds,refs:window.__offscreenBefore.occurrences.length})"),{phase:'plain',images:[],refs:1});
+      assert.equal(await evaluate("window.__offscreenBefore.occurrences[0].occurrenceId"), originalDraft.occurrences[0].occurrenceId, "unchanged reference must retain its ID when the editor unmounts");
+      await evaluate(`(()=>{const data=new DataTransfer();data.setData('text/plain',${JSON.stringify(copiedText)});const editor=document.querySelector('[data-auto-grow-editor]');editor.focus();editor.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}))})()`);
+      await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft===${JSON.stringify(copiedText)}`));
+      assert.equal(await evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)}).occurrences.length`),0,"plain clipboard text must not mint token-shaped references");
+      await evaluate(`window.__probeCtx.composerInputs.setInputDraft(${JSON.stringify(otherId)},'')`);
+      await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft===''`));
+      originalDraft={...originalDraft,draft:originalDraft.draft+' OFFSCREEN_APPEND😀'};
+      await evaluate(`window.__residentInputActions.setDraft(${JSON.stringify(originalDraft.draft)});void 0`);
+      assert.equal(await evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)}).draft`),"");
+      assert.equal(await evaluate("window.__offscreenInput.getSnapshot().draft"),originalDraft.draft);
+      assert.ok(await evaluate("window.__offscreenSeen.some(s=>s.draft.endsWith(' OFFSCREEN_APPEND😀'))"));
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'STALE_OFFSCREEN',window.__offscreenBefore.draftRev)"),false);
+      await evaluate("window.__offscreenOff();void 0");
+      console.log("Standard inputActions and resident input snapshot stayed synchronized offscreen; stale writes rejected");
+      await evaluate(`window.__probeCtx.composerInputs.setInputDraft(${JSON.stringify(otherId)},'COMPAT_SECOND_DRAFT');window.__otherDraftOff();window.__probeCtx.sessions.open(${JSON.stringify(originalId)});void 0`);
+      await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(originalId)})?.draft===${JSON.stringify(originalDraft.draft)}`));
+      const reboundDraft = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
+      assert.ok(reboundDraft.draftRev > originalDraft.draftRev, "public draft revision must advance across a session revisit");
+      assert.equal(reboundDraft.occurrences[0].occurrenceId, originalDraft.occurrences[0].occurrenceId, "resident reference must retain its ID when the editor remounts");
+      assert.equal(await evaluate(`window.__probeCtx.composerInputs.setInputDraft(${JSON.stringify(originalId)},'COMPAT_STALE_REVISION',${originalDraft.draftRev})`),false);
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft"),originalDraft.draft);
+      await evaluate("window.__draftReferenceOff();window.__residentDraftBoot=true;void 0");
+      await call("Page.reload",{});
+      await wait(() => evaluate("!window.__residentDraftBoot && !!window.__probeCtx?.sessions"));
+      await evaluate(`window.__compatSessionId=${JSON.stringify(originalId)};window.__probeCtx.sessions.open(window.__compatSessionId);void 0`);
+      await evaluate(sourceCode);
+      await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===${JSON.stringify(originalDraft.draft)}`));
+      const restored = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
+      assert.equal(restored.occurrences.length,1,"literal token text must not become an extra reference after renderer reload");
+      assert.deepEqual(Object.fromEntries(Object.keys(expectedReference).map(k=>[k,restored.occurrences[0][k]])),expectedReference);
+      await writeFile(path.join(tmpdir(),"amiba-resident-reference-draft.png"),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+      await evaluate(`window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'');window.__probeCtx.sessions.open(${JSON.stringify(otherId)});void 0`);
+      await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft==='COMPAT_SECOND_DRAFT'`));
+      await evaluate(`window.__probeCtx.composerInputs.setInputDraft(${JSON.stringify(otherId)},'');window.__probeCtx.sessions.open(window.__compatSessionId);window.__draftReferenceOff();void 0`);
+      await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===''") );
+      console.log("Native session drafts and full reference identity survived switching and renderer reload; explicit clears stayed cleared");
+    }
+    if (process.argv.includes("--offscreen-images")) {
+      const originalId = await evaluate("window.__compatSessionId");
+      const otherCwd = path.join(profile, "offscreen-images-other");
+      await mkdir(otherCwd, { recursive: true });
+      const otherId = await evaluate(`window.__probeCtx.sessions.create({cwd:${JSON.stringify(otherCwd)}})`);
+      const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJ1sAAAAASUVORK5CYII=";
+      await evaluate("window.__offscreenImageActions=window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions;void 0");
+      await evaluate(`window.__probeCtx.sessions.open(${JSON.stringify(otherId)});void 0`);
+      await wait(() => evaluate(`!!window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)}) && !window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(originalId)})`));
+      await evaluate(`(() => {
+        window.__offscreenRegistry=window.__probeCtx.get('composerImages');
+        window.__offscreenFiles=['resident-original.png','resident-remove.png','resident-prune.png'].map(name=>new File([Uint8Array.from(atob(${JSON.stringify(png)}),c=>c.charCodeAt(0))],name,{type:'image/png'}));
+        window.__offscreenPictures=window.__offscreenRegistry.createDraftImages(window.__offscreenFiles);
+      })()`);
+      assert.equal(await evaluate("window.__offscreenImageActions.addImages(window.__offscreenPictures.map(image=>image.id))"), true);
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId)[0].file===window.__offscreenFiles[0]"), true);
+      await evaluate("window.__offscreenImageActions.removeImage(window.__offscreenPictures[1].id);window.__offscreenImageActions.pruneImages([window.__offscreenPictures[0].id]);void 0");
+      assert.equal(await evaluate("window.__offscreenRegistry.draftImages(window.__offscreenPictures.map(image=>image.id)).length"), 1);
+      assert.deepEqual(await evaluate(`window.__probeCtx.composerInputs.inputImagesFor(${JSON.stringify(otherId)})`), []);
+      assert.equal(await evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)}).draft`), "");
+      const beforePreparedFiles = new Set((await readdir(profile, { recursive: true })).filter(file => file.endsWith('.bin')));
+      const preparedId = await evaluate("(async()=>{window.__residentPrepared=await window.__probeCtx.composerInputs.prepareInputImages(window.__compatSessionId);const retry=await window.__probeCtx.composerInputs.prepareInputImages(window.__compatSessionId);const same=retry.attachments[0].attachmentId===window.__residentPrepared.attachments[0].attachmentId;retry.release();if(!same)throw new Error('Resident retry uploaded a different file');return window.__residentPrepared.attachments[0].attachmentId})()");
+      const preparedFiles = (await readdir(profile, { recursive: true })).filter(file => file.endsWith('.bin') && !beforePreparedFiles.has(file));
+      assert.equal(preparedFiles.length, 1);
+      assert.ok(preparedFiles[0].endsWith('/' + preparedId + '.bin'));
+      await evaluate(`window.__residentImageSeatOff=window.__probeCtx.slots.register({name:'conversation.input.attachments',id:'resident-image-seat',priority:-100},props=>{window.__residentImageSeat=props;return null});window.__probeCtx.sessions.open(${JSON.stringify(originalId)});void 0`);
+      await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)"));
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      assert.equal(await evaluate("window.__residentImageSeat?.attachments.some(image=>image.id===window.__offscreenPictures[0].id) ?? false"), false);
+      await evaluate("window.__residentPrepared.release();void 0");
+      await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId) && window.__residentImageSeat?.attachments.some(image=>image.file===window.__offscreenFiles[0] && image.id===window.__offscreenPictures[0].id) && document.body.textContent.includes('resident-original.png')"));
+      assert.deepEqual((await readdir(profile, { recursive: true })).filter(file => file.endsWith('.bin') && !beforePreparedFiles.has(file)), preparedFiles);
+      await evaluate(`window.__offscreenImageActions.setDraft('/resident-image verify');window.__residentImagePayloads=[];
+        window.__residentImageClaim={token:'/resident-image ',images:true,submit:async(args,_ctx,images)=>{window.__residentImagePayloads.push({args,images});return {kind:'success',text:'RESIDENT_IMAGE_OK'}}};
+        window.__residentImageClaimOff=window.__probeCtx.inputTriggers.registerSource({name:'resident-image-command',trigger:'/',order:-100,candidates:async()=>[],onPick:()=>({claim:window.__residentImageClaim}),matchEnter:(_ctx,line)=>line.startsWith('/resident-image ')?{claim:window.__residentImageClaim}:undefined});void 0`);
+      await wait(() => evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).some(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')&&!n.disabled)"));
+      await evaluate("window.__offscreenImageActions.submit();void 0");
+      await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).phase==='claimed'"));
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      await evaluate("window.__offscreenImageActions.submit();void 0");
+      await wait(() => evaluate("window.__residentImagePayloads.length===1 && window.__offscreenRegistry.draftImages([window.__offscreenPictures[0].id]).length===0 && !document.body.textContent.includes('resident-original.png')"));
+      assert.deepEqual(await evaluate("window.__residentImagePayloads[0]"), { args: 'verify', images: [{ mediaType: 'image/png', data: png, name: 'resident-original.png' }] });
+      await evaluate("window.__residentImageSeatOff();window.__residentImageClaimOff();void 0");
+      console.log("Offscreen image preparation reused one Host file across retry, held native handoff until release, preserved original browser identity without reupload and delivered exact command bytes");
+    }
+    if (process.argv.includes("--input-state")) {
+      await evaluate("window.__inputSource=window.__probeCtx.composerInputs.inputDraftSource(window.__compatSessionId);window.__inputObserved=[];window.__inputOff=window.__inputSource.subscribe(()=>{const s=window.__inputSource.getSnapshot();window.__inputObserved.push(s?{draft:s.draft,phase:s.phase}:null)});window.__initialInput=window.__inputSource.getSnapshot();void 0");
+      assert.equal(await evaluate("window.__initialInput.phase"), "plain");
+      await evaluate("window.__regionCard=Array.from(document.querySelectorAll('[data-composer-card]')).find(n=>n.getClientRects().length>0);window.__regionEditor=window.__regionCard.querySelector('[contenteditable]');window.__regionBaseline={className:window.__regionCard.className,height:window.__regionCard.getBoundingClientRect().height,width:window.__regionCard.getBoundingClientRect().width};window.__regionNames=['conversation.input.dock','conversation.composer.dock','conversation.input.left','conversation.input.right'];window.__regionOwners={};window.__regionOffs=window.__regionNames.map(name=>window.__probeCtx.slots.register({name,id:'compat-input-region'},props=>{const standard=props.useInput(s=>s);window.__officialInputActions=props.inputActions;window.__regionOwners[name]={standardMatches:standard===props.input,standardDraft:standard.draft,sessionId:props.sessionId,draft:props.input.draft,imageIds:props.input.imageIds,queueMatches:props.input.queue===props.session.queue};return window.__probeCreateElement(name.endsWith('.dock')?'div':'span',{'data-compat-input-region':name},({'conversation.input.dock':'Input dock','conversation.composer.dock':'Composer dock','conversation.input.left':'Left extension','conversation.input.right':'Right extension'})[name])}));void 0");
+      await wait(() => evaluate("document.querySelectorAll('[data-compat-input-region]').length===4"));
+      assert.ok(await evaluate("(()=>{const card=window.__regionCard;const region=name=>document.querySelector('[data-compat-input-region=\"'+name+'\"]');const branch=(el,parent)=>{while(el&&el.parentElement!==parent)el=el.parentElement;return el};const above=region('conversation.input.dock'),below=region('conversation.composer.dock'),left=region('conversation.input.left'),right=region('conversation.input.right');const send=Array.from(card.querySelectorAll('button')).find(n=>n.getAttribute('aria-label')?.startsWith('Send'));return branch(above,card.parentElement)&&branch(below,card.parentElement)&&!card.contains(above)&&!card.contains(below)&&(above.compareDocumentPosition(card)&Node.DOCUMENT_POSITION_FOLLOWING)&&(card.compareDocumentPosition(below)&Node.DOCUMENT_POSITION_FOLLOWING)&&card.contains(left)&&card.contains(right)&&branch(right,send.parentElement)?.nextElementSibling===send&&window.__regionEditor===card.querySelector('[contenteditable]')})()"));
+      assert.ok(await evaluate("window.__regionNames.every(name=>window.__regionOwners[name].sessionId===window.__compatSessionId&&window.__regionOwners[name].queueMatches&&window.__regionOwners[name].standardMatches)"));
+      await evaluate("window.__attachmentSeatOff=window.__probeCtx.slots.register({name:'conversation.input.attachments',id:'compat-attachment-seat',priority:-100},props=>{window.__attachmentSeatOwner=props;return window.__probeCreateElement('span',{'data-compat-attachment-seat':''},'Attachment extension')});void 0");
+      await wait(() => evaluate("!!document.querySelector('[data-composer-card] [data-compat-attachment-seat]')&&!!window.__attachmentSeatOwner"));
+      await writeFile(path.join(tmpdir(), "amiba-input-regions.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+      await evaluate("window.__wholeInputSource=window.__probeCtx.composerInputs.inputStateSource(window.__compatSessionId);window.__wholeInputObserved=[];window.__wholeInputOff=window.__wholeInputSource.subscribe(()=>{const s=window.__wholeInputSource.getSnapshot();window.__wholeInputObserved.push(s?{draft:s.draft,phase:s.phase,imageIds:s.imageIds,queue:s.queue}:null)});void 0");
+      assert.ok(await evaluate("(()=>{const state=window.__wholeInputSource.getSnapshot();return state!==undefined&&state.draft===window.__initialInput.draft&&state.imageIds.length===0&&state.queue===window.__probeCtx.sessions.binding(window.__compatSessionId).session.getSnapshot().queue&&state===window.__wholeInputSource.getSnapshot()})()"));
+      assert.equal(await evaluate("(()=>{window.__initialInput=window.__inputSource.getSnapshot();return window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'COMPAT_INPUT_读取😀',window.__initialInput.draftRev)})()"), true);
+      await wait(() => evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).some(n=>n.getClientRects().length>0&&n.textContent==='COMPAT_INPUT_读取😀')"));
+      assert.equal(await evaluate("window.__inputSource.getSnapshot().draft"), "COMPAT_INPUT_读取😀");
+      assert.equal(await evaluate("window.__wholeInputSource.getSnapshot().draft"), "COMPAT_INPUT_读取😀");
+      await wait(() => evaluate("window.__regionNames.every(name=>window.__regionOwners[name].draft==='COMPAT_INPUT_读取😀'&&window.__regionOwners[name].standardDraft==='COMPAT_INPUT_读取😀')"));
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'STALE_INPUT',window.__initialInput.draftRev)"), false);
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'')"), true);
+      await wait(() => evaluate("window.__inputSource.getSnapshot().draft===''") );
+      assert.ok(await evaluate("window.__inputObserved.some(s=>s?.draft==='COMPAT_INPUT_读取😀')"));
+      console.log("Real editor input snapshot, subscription, public write and stale revision rejection verified");
+      await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_FILE_STORAGE '})")).entries.some(entry=>entry.message.includes('AMIBA_PROBE_FILE_STORAGE ')));
+      const fileStorageLogs = await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_FILE_STORAGE '})");
+      const fileStorageEntry = fileStorageLogs.entries.find(entry=>entry.message.includes('AMIBA_PROBE_FILE_STORAGE '));
+      const fileStorageResult = JSON.parse(fileStorageEntry.message.split('AMIBA_PROBE_FILE_STORAGE ')[1]);
+      assert.match(fileStorageResult.ref.attachmentId,/^sha256:[a-f0-9]{64}$/);
+      const {commandReceiptId,commandSessionId,modelHandle,...fileStorageSummary}=fileStorageResult;
+      assert.ok(modelHandle.includes('verbatim read-only copy saved at'));
+      assert.ok(modelHandle.includes('compat-host-file.bin'));
+      assert.deepEqual({...fileStorageSummary,ref:{...fileStorageResult.ref,attachmentId:'digest'}},{receiptResolved:true,rollbackPreserved:true,committedRetired:true,ref:{attachmentId:'digest',name:'compat-host-file.bin',bytes:5},sameDigest:true,data:'AP8qgAc=',imagePreserved:true,pathHasName:true});
+      console.log("Installed Host attachment service persisted and streamed exact files while retaining its existing image backend");
+      const fileCommandResult=await evaluate(`window.__probeCtx.remote.commands.execute(${JSON.stringify(commandSessionId)},'/compat-file-receipt',[{type:'file',receiptId:${JSON.stringify(commandReceiptId)}}])`);
+      assert.equal(fileCommandResult.ok,true);
+      assert.equal(fileCommandResult.value.result.text,'COMPAT_FILE_RECEIPT_OK');
+      const foreignFileResult=await evaluate(`window.__probeCtx.remote.commands.execute(${JSON.stringify(commandSessionId)},'/compat-file-receipt',[{type:'file',receiptId:'not-uploaded'}])`);
+      assert.equal(foreignFileResult.ok,true);
+      assert.equal(foreignFileResult.value.result.kind,'error');
+      const newerFileResult=await evaluate(`(async()=>{const response=await window.amiba.dshClient.fetch({url:'/api/commands/execute',method:'POST',headers:{'content-type':'application/json'},body:new TextEncoder().encode(JSON.stringify({type:'client-request',rpcId:crypto.randomUUID(),method:'commands/execute',payload:{args:{agentId:${JSON.stringify(commandSessionId)},line:'/compat-file-receipt',submittedAttachments:[{type:'file',receiptId:${JSON.stringify(commandReceiptId)}}]}}}))});return JSON.parse(new TextDecoder().decode(response.body)).result;})()`);
+      assert.equal(newerFileResult.ok,true);
+      assert.equal(newerFileResult.value.result.text,'COMPAT_FILE_RECEIPT_OK');
+      console.log('Official remote command admitted the uploaded file receipt and rejected an unknown receipt.');
+      await evaluate("window.__probeCtx.inject(['fileUpload'],ctx=>{window.__compatFileUpload=ctx.fileUpload;});true");
+      await wait(()=>evaluate("!!window.__compatFileUpload"));
+      const browserUpload=await evaluate(`window.__compatFileUpload.upload(${JSON.stringify(commandSessionId)},new Blob([new Uint8Array([0,255,42,128,7])]),'command.bin')`);
+      assert.equal(browserUpload.ok,true);
+      assert.notEqual(browserUpload.value.receiptId,commandReceiptId);
+      assert.equal(browserUpload.value.file.attachmentId,fileStorageResult.ref.attachmentId);
+      const browserFileCommand=await evaluate(`window.__probeCtx.remote.commands.execute(${JSON.stringify(commandSessionId)},'/compat-file-receipt',[{type:'file',receiptId:${JSON.stringify(browserUpload.value.receiptId)}}])`);
+      assert.equal(browserFileCommand.ok,true);assert.equal(browserFileCommand.value.result.text,'COMPAT_FILE_RECEIPT_OK');
+      const abortedUpload=await evaluate(`(async()=>{const abort=new AbortController();abort.abort();try{await window.__compatFileUpload.upload(${JSON.stringify(commandSessionId)},new Uint8Array([1]),'cancel.bin',abort.signal);return false;}catch(error){return error.name==='AbortError';}})()`);
+      assert.equal(abortedUpload,true);
+      console.log('Browser Blob upload returned a real session receipt, executed through the official command, and honored cancellation.');
+      const binaryUpload=await evaluate(`(async()=>{const response=await window.amiba.dshClient.fetch({url:'/api/session/uploadFileBinary?sessionId='+encodeURIComponent(${JSON.stringify(commandSessionId)})+'&name=command.bin',method:'POST',headers:{'content-type':'application/octet-stream'},body:new Uint8Array([0,255,42,128,7])});return {status:response.status,result:JSON.parse(new TextDecoder().decode(response.body))};})()`);
+      assert.equal(binaryUpload.status,200);
+      assert.equal(binaryUpload.result.ok,true);
+      assert.equal(binaryUpload.result.value.file.attachmentId,fileStorageResult.ref.attachmentId);
+      const binaryCommand=await evaluate(`window.__probeCtx.remote.commands.execute(${JSON.stringify(commandSessionId)},'/compat-file-receipt',[{type:'file',receiptId:${JSON.stringify(binaryUpload.result.value.receiptId)}}])`);
+      assert.equal(binaryCommand.ok,true);assert.equal(binaryCommand.value.result.text,'COMPAT_FILE_RECEIPT_OK');
+      console.log('The installed binary upload HTTP route returned an authorized receipt and the official command consumed it.');
+      const streamedUpload=await evaluate(`(async()=>{const progress=[];const stream=new ReadableStream({start(controller){controller.enqueue(new Uint8Array([0,255]));controller.enqueue(new Uint8Array([42,128,7]));controller.close();}});const result=await window.__compatFileUpload.upload(${JSON.stringify(commandSessionId)},stream,'command.bin',undefined,value=>progress.push(value.loaded));return {available:window.__compatFileUpload.available,result,progress};})()`);
+      assert.equal(streamedUpload.available,true);assert.equal(streamedUpload.result.ok,true);
+      assert.equal(streamedUpload.result.value.file.attachmentId,fileStorageResult.ref.attachmentId);
+      assert.deepEqual(streamedUpload.progress,[2,5]);
+      const streamedCommand=await evaluate(`window.__probeCtx.remote.commands.execute(${JSON.stringify(commandSessionId)},'/compat-file-receipt',[{type:'file',receiptId:${JSON.stringify(streamedUpload.result.value.receiptId)}}])`);
+      assert.equal(streamedCommand.ok,true);assert.equal(streamedCommand.value.result.text,'COMPAT_FILE_RECEIPT_OK');
+      const streamCancellation=await evaluate(`(async()=>{const abort=new AbortController();let cancelled=false;let loaded=0;const stream=new ReadableStream({pull(controller){controller.enqueue(new Uint8Array(65536));},cancel(){cancelled=true;}});try{await window.__compatFileUpload.upload(${JSON.stringify(commandSessionId)},stream,'cancel-stream.bin',abort.signal,progress=>{loaded=progress.loaded;if(loaded>=196608)abort.abort();});return {aborted:false};}catch(error){return {aborted:error.name==='AbortError',cancelled,loaded};}})()`);
+      assert.equal(streamCancellation.aborted,true);assert.equal(streamCancellation.cancelled,true);assert.ok(streamCancellation.loaded>=196608);
+      console.log('Desktop background stream upload preserved bytes and progress, executed the file command, and cancelled an active multi-chunk source.');
+      const submitFileModel=async(rpcId)=>evaluate(`(async()=>{const response=await window.amiba.dshClient.fetch({url:'/api/session.prompt',method:'POST',headers:{'content-type':'application/json'},body:new TextEncoder().encode(JSON.stringify({type:'client-request',rpcId:${JSON.stringify(rpcId)},method:'session.prompt',payload:{sessionId:${JSON.stringify(commandSessionId)},mode:'queue',content:[{type:'text',text:'Read the uploaded file'},{type:'file',receiptId:${JSON.stringify(streamedUpload.result.value.receiptId)}}]}}))});return JSON.parse(new TextDecoder().decode(response.body)).result;})()`);
+      assert.equal((await submitFileModel('compat-file-model-1')).ok,false);
+      assert.deepEqual(await submitFileModel('compat-file-model-2'),{ok:true,value:{accepted:true}});
+      const modelLogs=await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_FILE_MODEL '})");
+      const modelAttempts=modelLogs.entries.filter(entry=>entry.message.includes('AMIBA_PROBE_FILE_MODEL ')).map(entry=>JSON.parse(entry.message.split('AMIBA_PROBE_FILE_MODEL ')[1])).sort((a,b)=>a.attempt-b.attempt);
+      assert.deepEqual(modelAttempts.map(entry=>entry.attempt),[1,2]);
+      assert.deepEqual(modelAttempts[1].content.map(part=>part.type),['text','file']);
+      assert.equal(modelAttempts[1].content[1].attachment.attachmentId,fileStorageResult.ref.attachmentId);
+      console.log('The installed session prompt API retained the file receipt after refusal and accepted its retry as structured model content.');
+      const fileHistory=await evaluate(`(async()=>{const response=await window.amiba.dshClient.fetch({url:'/api/session.history',method:'POST',headers:{'content-type':'application/json'},body:new TextEncoder().encode(JSON.stringify({type:'client-request',rpcId:crypto.randomUUID(),method:'session.history',payload:{sessionId:${JSON.stringify(commandSessionId)},maxMessages:100}}))});return JSON.parse(new TextDecoder().decode(response.body)).result;})()`);
+      assert.equal(fileHistory.ok,true);
+      const findFileMessage=value=>{
+        if(!value||typeof value!=='object')return undefined;
+        if(value.role==='user'&&value.source?.rpcId==='compat-file-model-2')return value;
+        for(const child of Object.values(value)){const found=findFileMessage(child);if(found)return found;}
+      };
+      const storedFileMessage=findFileMessage(fileHistory.value);
+      assert.ok(storedFileMessage,'history API must retain the accepted file message');
+      assert.deepEqual(storedFileMessage.content.map(part=>part.type),['text','file']);
+      assert.equal(storedFileMessage.content[1].attachment.attachmentId,fileStorageResult.ref.attachmentId);
+      console.log('The real Host priced the exact model file handle and the session history API preserved its structured file message.');
+
+
+      // Hot lexicons decorate native text without creating reference objects or history edits.
+      await evaluate("window.__officialInputActions.setDraft('/compatlexicon');void 0");
+      await wait(() => evaluate("window.__inputSource.getSnapshot().draft==='/compatlexicon'"));
+      await evaluate("window.__lexiconBefore=window.__inputSource.getSnapshot();window.__lexiconGeometry=window.__regionEditor.getBoundingClientRect().toJSON();window.__lexiconRoll=['compatlexicon'];window.__lexiconListeners=new Set();window.__lexiconOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-hot-lexicon',trigger:'/',candidates:async()=>[],onPick:()=>({}),lexicon:()=>window.__lexiconRoll,subscribeLexicon:(_s,fn)=>{window.__lexiconListeners.add(fn);return ()=>window.__lexiconListeners.delete(fn)}});window.__lexiconText=()=>Array.from(CSS.highlights).filter(([name])=>name.startsWith('amiba-text-reference-')).flatMap(([,highlight])=>Array.from(highlight,range=>range.toString())).join('');void 0");
+      await wait(() => evaluate("window.__lexiconText()==='/compatlexicon'"));
+      await writeFile(path.join(tmpdir(), "amiba-lexicon-native.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+      assert.equal(await evaluate("window.__inputSource.getSnapshot().draftRev"), await evaluate("window.__lexiconBefore.draftRev"));
+      assert.deepEqual(await evaluate("window.__inputSource.getSnapshot().occurrences"), []);
+      assert.deepEqual(await evaluate("window.__regionEditor.getBoundingClientRect().toJSON()"), await evaluate("window.__lexiconGeometry"));
+      await evaluate("window.__lexiconRoll=[];window.__lexiconListeners.forEach(fn=>fn());void 0");
+      await wait(() => evaluate("window.__lexiconText()===''"));
+      await evaluate("window.__lexiconRoll=['compatlexicon'];window.__lexiconListeners.forEach(fn=>fn());void 0");
+      await wait(() => evaluate("window.__lexiconText()==='/compatlexicon'"));
+      await evaluate("window.__lexiconOff();void 0");
+      await wait(() => evaluate("window.__lexiconText()===''"));
+      assert.equal(await evaluate("window.__inputSource.getSnapshot().draft"), '/compatlexicon');
+      await evaluate("window.__officialInputActions.setDraft('');void 0");
+      console.log("Official hot lexicon registration, refresh and removal paint native text without occurrences, draft revision or geometry changes");
+
+      // Exercise the public submit binding in the real editor, including a
+      // synchronous write before React has committed updated Composer props.
+      await evaluate(`window.__inputSubmissions=[];window.__submitClaim={token:'/compat-submit ',submit:async(args)=>{window.__inputSubmissions.push(args);await new Promise(resolve=>{window.__finishInputSubmit=resolve});return {kind:'success',text:'COMPAT_INPUT_SUBMIT_OK'}}};window.__submitSourceOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-submit-source',trigger:'/',order:-100,candidates:async()=>[],onPick:()=>({claim:window.__submitClaim}),matchEnter:async(_session,line)=>line.startsWith('/compat-submit ')?{claim:window.__submitClaim}:undefined});void 0`);
+      assert.deepEqual(await evaluate("(()=>{const bridge=window.__probeCtx.composerInputs;return [bridge.setInputDraft(window.__compatSessionId,'/compat-submit initial'),bridge.submitInput(window.__compatSessionId),bridge.submitInput(window.__compatSessionId)]})()"), [true,true,false]);
+      await wait(() => evaluate("window.__inputSource.getSnapshot().phase==='claimed'"));
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      assert.deepEqual(await evaluate("(()=>{const bridge=window.__probeCtx.composerInputs;window.__officialInputActions.setDraft('/compat-submit 最新😀');window.__officialInputActions.submit();return [true,true,bridge.submitInput(window.__compatSessionId)]})()"), [true,true,false]);
+      await wait(() => evaluate("window.__inputSubmissions.length===1&&typeof window.__finishInputSubmit==='function'"));
+      assert.deepEqual(await evaluate("window.__inputSubmissions"), ["最新😀"]);
+      assert.equal(await evaluate("window.__inputSource.getSnapshot().phase"), "submitting");
+      await evaluate("window.__officialInputActions.setDraft('NEXT_DRAFT_保留😀');void 0");
+      await wait(() => evaluate("window.__inputSource.getSnapshot().draft==='NEXT_DRAFT_保留😀'"));
+      await evaluate("window.__finishInputSubmit();void 0");
+      await wait(() => evaluate("window.__inputSource.getSnapshot().phase==='plain'&&window.__inputSource.getSnapshot().draft==='NEXT_DRAFT_保留😀'"));
+      await evaluate("window.__officialInputActions.setDraft('');void 0");
+      await wait(() => evaluate("window.__inputSource.getSnapshot().phase==='plain'&&window.__inputSource.getSnapshot().draft===''") );
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"), false);
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-unbound-session')"), false);
+      await evaluate("window.__submitSourceOff();void 0");
+      console.log("Public input submission used the latest real editor draft, rejected duplicates and empty/unbound submissions, and settled through the native command path");
+    }
+    if (process.argv.includes("--command-images")) {
+      await evaluate("window.__draftImageRegistry=window.__probeCtx.get('composerImages');window.__createDraftImages=window.__draftImageRegistry.createDraftImages;window.__registeredImages=[];window.__draftImageRegistry.createDraftImages=function(files){const images=window.__createDraftImages.call(this,files);window.__registeredImages.push(...images);return images};void 0");
+      await evaluate("window.__imageInputSource=window.__probeCtx.composerInputs.inputImagesSource(window.__compatSessionId);window.__imageSnapshots=[];window.__imageInputOff=window.__imageInputSource.subscribe(()=>window.__imageSnapshots.push(window.__imageInputSource.getSnapshot()?.map(image=>image.id)??null));void 0");
+      assert.deepEqual(await evaluate("window.__imageInputSource.getSnapshot()"), []);
+      const imagePath = path.join(profile, "command-image.png");
+      const imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJ1sAAAAASUVORK5CYII=";
+      await writeFile(imagePath, Buffer.from(imageData,"base64"));
+      await evaluate(`window.__commandImages=[];window.__imageClaim={token:'/compat-image ',images:true,submit:async(args,ctx,images)=>{window.__commandImages.push({args,images});return {kind:'success',text:'COMPAT_IMAGE_COMMAND_OK'}}};window.__imageSourceOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-image-source',trigger:'/',order:-100,candidates:async()=>[],onPick:()=>({claim:window.__imageClaim}),matchEnter:async(_session,line,_signal,envelope)=>{window.__imageEnvelope=envelope;window.__imageAdjudicated=(window.__imageAdjudicated||0)+1;return line.startsWith('/compat-image ')?{claim:window.__imageClaim}:undefined}});void 0`);
+      await evaluate("Array.from(document.querySelectorAll('[data-composer-card]')).find(n=>n.getClientRects().length>0).parentElement.querySelector('input[type=file]').id='compat-image-input';void 0");
+      const documentNode = await call("DOM.getDocument");
+      const fileNode = await call("DOM.querySelector", {nodeId:documentNode.root.nodeId,selector:'#compat-image-input'});
+      await call("DOM.setFileInputFiles", {nodeId:fileNode.nodeId,files:[imagePath]});
+      await wait(() => evaluate("document.body.textContent.includes('command-image.png')"));
+      await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0).focus();void 0");
+      await call("Input.insertText", {text:"/compat-image describe"});
+      await wait(() => evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).some(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')&&!n.disabled)"));
+      // First submission adjudicates the claim; the second executes it.
+      for (let pass=0;pass<2;pass++) {
+        await evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).find(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')).click();void 0");
+        if(pass===0) {
+          await wait(() => evaluate("window.__imageAdjudicated>0"));
+          await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+        }
+      }
+      await wait(() => evaluate("window.__commandImages.length===1"));
+      assert.deepEqual(await evaluate("window.__imageEnvelope"), {images:1,attachments:1});
+      assert.deepEqual(await evaluate("window.__registeredImages.map(image=>({kind:image.kind,name:image.file.name,size:image.file.size,preview:image.previewUrl.startsWith('blob:')}))"), [{kind:"image",name:"command-image.png",size:Buffer.from(imageData,"base64").length,preview:true}]);
+      assert.equal(await evaluate("(async()=>{const bytes=new Uint8Array(await window.__registeredImages[0].file.arrayBuffer());return btoa(String.fromCharCode(...bytes))})()"), imageData);
+      assert.deepEqual(await evaluate("window.__commandImages[0]"), {args:"describe",images:[{mediaType:"image/png",data:imageData,name:"command-image.png"}]});
+      await wait(() => evaluate("!document.body.textContent.includes('command-image.png')"));
+      assert.equal(await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).find(n=>n.getClientRects().length>0).textContent"), "");
+      await wait(() => evaluate("window.__draftImageRegistry.draftImages(window.__registeredImages.map(image=>image.id)).length===0"));
+      await evaluate(`window.__extensionImage=window.__draftImageRegistry.createDraftImages([new File([Uint8Array.from(atob(${JSON.stringify(imageData)}),c=>c.charCodeAt(0))],'extension-image.png',{type:'image/png'})])[0];void 0`);
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.addInputImages(window.__compatSessionId,[window.__extensionImage.id,'missing-draft-id'])"), false);
+      assert.equal(await evaluate("window.__draftImageRegistry.draftImages([window.__extensionImage.id]).length"), 1);
+      assert.deepEqual(await evaluate("(()=>{const bridge=window.__probeCtx.composerInputs;bridge.setInputDraft(window.__compatSessionId,'/compat-image extension');return [bridge.addInputImages(window.__compatSessionId,[window.__extensionImage.id]),bridge.submitInput(window.__compatSessionId),bridge.inputImagesFor(window.__compatSessionId)[0]?.id===window.__extensionImage.id,bridge.inputStateSource(window.__compatSessionId).getSnapshot()?.imageIds[0]===window.__extensionImage.id]})()"), [true,false,true,true]);
+      await wait(() => evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).some(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')&&!n.disabled)"));
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId)[0].id===window.__extensionImage.id"), true);
+      if (process.argv.includes("--input-state")) await wait(() => evaluate("window.__regionNames.every(name=>window.__regionOwners[name].imageIds[0]===window.__extensionImage.id)"));
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"), true);
+      await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).phase==='claimed'"));
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"), true);
+      await wait(() => evaluate("window.__commandImages.length===2"));
+      assert.deepEqual(await evaluate("window.__commandImages[1]"), {args:"extension",images:[{mediaType:"image/png",data:imageData,name:"extension-image.png"}]});
+      await wait(() => evaluate("window.__draftImageRegistry.draftImages([window.__extensionImage.id]).length===0&&!document.body.textContent.includes('extension-image.png')"));
+      await evaluate("window.__removedImage=window.__draftImageRegistry.createDraftImages([new File([window.__extensionImage.file],'removed-image.png',{type:'image/png'})])[0];window.__probeCtx.composerInputs.addInputImages(window.__compatSessionId,[window.__removedImage.id]);window.__probeCtx.composerInputs.removeInputImage(window.__compatSessionId,window.__removedImage.id);void 0");
+      await wait(() => evaluate("window.__draftImageRegistry.draftImages([window.__removedImage.id]).length===0&&!document.body.textContent.includes('removed-image.png')"));
+      console.log("Extension-created images entered the native upload and command path with original bytes and identity; missing IDs were rejected atomically and immediate removal released the draft");
+      await wait(() => evaluate("window.__probeCtx.composerInputs.addInputImages(window.__compatSessionId,[])"));
+      assert.deepEqual(await evaluate("(()=>{const registry=window.__draftImageRegistry;const bridge=window.__probeCtx.composerInputs;window.__pruneImages=registry.createDraftImages([window.__extensionImage.file,window.__extensionImage.file]);const added=bridge.addInputImages(window.__compatSessionId,window.__pruneImages.map(image=>image.id));bridge.pruneInputImages(window.__compatSessionId,[window.__pruneImages[1].id]);const remaining=window.__imageInputSource.getSnapshot();return [added,remaining.length,remaining[0]?.id===window.__pruneImages[1].id,remaining===window.__imageInputSource.getSnapshot()]})()"), [true,1,true,true]);
+      await evaluate("window.__probeCtx.composerInputs.pruneInputImages(window.__compatSessionId,[]);void 0");
+      await wait(() => evaluate("window.__draftImageRegistry.draftImages(window.__pruneImages.map(image=>image.id)).length===0"));
+      await wait(() => evaluate("window.__probeCtx.composerInputs.addInputImages(window.__compatSessionId,[])"));
+      assert.deepEqual(await evaluate("window.__imageInputSource.getSnapshot()"), []);
+      assert.ok(await evaluate("window.__imageSnapshots.some(ids=>ids?.length===1&&ids[0]===window.__pruneImages[1].id)"));
+      assert.ok(await evaluate("window.__imageSnapshots.every(ids=>Array.isArray(ids))"), "attachment updates must not temporarily detach the bound image source");
+      await evaluate("window.__imageInputOff();void 0");
+      console.log("Real image subscriptions reported synchronous additions and pruning with stable snapshots and no transient detached state");
+      await evaluate("window.__draftImageRegistry.createDraftImages=window.__createDraftImages;void 0");
+      console.log("Native image upload registered the original browser File and released its compatible draft registry entry after successful submission");
+      await evaluate("window.__imageSourceOff();void 0");
+      if (process.argv.includes("--input-state")) {
+        await wait(() => evaluate("window.__attachmentSeatOwner.canAcceptDrop"));
+        await evaluate("window.__attachmentSeatOwner.onAddImages([window.__extensionImage.file]);void 0");
+        await wait(() => evaluate("window.__attachmentSeatOwner.attachments.length===1&&window.__attachmentSeatOwner.canAcceptDrop"));
+        assert.ok(await evaluate("window.__attachmentSeatOwner.attachments[0].file===window.__extensionImage.file&&window.__attachmentSeatOwner.attachments[0].previewUrl.startsWith('blob:')"));
+        await evaluate("window.__attachmentSeatOwner.onRemoveImage(window.__attachmentSeatOwner.attachments[0].id);void 0");
+        await wait(() => evaluate("window.__attachmentSeatOwner.attachments.length===0"));
+        console.log("Official attachment seat received original browser images and added/removed files through the native upload path");
+      }
+      console.log("Official image command received original staged bytes through native composer and consumed its draft attachments");
+      await evaluate("window.__modernCommandPayloads=[];window.__modernImageClaim={name:'compat-modern-image',token:'/compat-modern-image ',attachments:true,submit:async(args,ctx,attachments)=>{window.__modernCommandPayloads.push({args,attachments});return {kind:'success',text:'MODERN_IMAGE_OK'}}};window.__modernImageOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-modern-image',trigger:'/',order:-101,candidates:async()=>[],onPick:()=>({claim:window.__modernImageClaim}),matchEnter:async(_session,line,_signal,envelope)=>{if(!line.startsWith('/compat-modern-image '))return;window.__modernEnvelope=envelope;if(envelope.attachments!==1)throw new Error('modern source missing attachment count');return {claim:window.__modernImageClaim}}});window.__modernImage=window.__draftImageRegistry.createDraftImages([new File([window.__extensionImage.file],'modern-image.png',{type:'image/png'})])[0];window.__probeCtx.composerInputs.addInputImages(window.__compatSessionId,[window.__modernImage.id]);window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'/compat-modern-image describe');void 0");
+      await wait(() => evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).some(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')&&!n.disabled)"));
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"),true);
+      await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).phase==='claimed'"));
+      assert.deepEqual(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).claim"),{name:'compat-modern-image',token:'/compat-modern-image ',images:true,attachments:true});
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"),true);
+      await wait(() => evaluate("window.__modernCommandPayloads.length===1&&window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft===''"));
+      assert.deepEqual(await evaluate("window.__modernEnvelope"),{images:1,attachments:1});
+      assert.deepEqual(await evaluate("window.__modernCommandPayloads[0]"),{args:'describe',attachments:[{type:'image',mediaType:'image/png',data:imageData,name:'modern-image.png'}]});
+      await wait(() => evaluate("window.__draftImageRegistry.draftImages([window.__modernImage.id]).length===0&&!document.body.textContent.includes('modern-image.png')"));
+      await evaluate("window.__modernImageOff();void 0");
+      console.log("Newer attachment command received the actual total and typed original image payload; legacy image commands retained their original shape");
+      const nativeFilePath=path.join(profile,'native-command.txt');await writeFile(nativeFilePath,'COMPAT_NATIVE_FILE');
+      await evaluate("Array.from(document.querySelectorAll('[data-composer-card]')).find(n=>n.getClientRects().length>0).parentElement.querySelector('input[type=file]').id='compat-native-file-input';void 0");
+      const nativeFileDoc=await call('DOM.getDocument',{});const nativeFileNode=await call('DOM.querySelector',{nodeId:nativeFileDoc.root.nodeId,selector:'#compat-native-file-input'});
+      await call('DOM.setFileInputFiles',{nodeId:nativeFileNode.nodeId,files:[nativeFilePath]});
+      await wait(()=>evaluate("document.body.textContent.includes('native-command.txt')"));
+      await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'/compat-native-file check');void 0");
+      await wait(()=>evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).some(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')&&!n.disabled)"));
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"),true);
+      await wait(()=>evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).phase==='claimed'"));
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"),true);
+      await wait(()=>evaluate("document.body.textContent.includes('NATIVE_FILE_RETRY')"));
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft"),'/compat-native-file check');
+      assert.equal(await evaluate("document.body.textContent.includes('native-command.txt')"),true);
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).claim.attachments"),true);
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput(window.__compatSessionId)"),true);
+      await wait(()=>evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft===''&&!document.body.textContent.includes('native-command.txt')"));
+      const nativeCommandLogs=await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_NATIVE_FILE '})");
+      const nativeCommandResults=nativeCommandLogs.entries.filter(entry=>entry.message.includes('AMIBA_PROBE_NATIVE_FILE ')).map(entry=>JSON.parse(entry.message.split('AMIBA_PROBE_NATIVE_FILE ')[1]));
+      assert.deepEqual(nativeCommandResults,[{attempt:1,name:'native-command.txt',content:'COMPAT_NATIVE_FILE',result:{kind:'error',text:'NATIVE_FILE_RETRY'}},{attempt:2,name:'native-command.txt',content:'COMPAT_NATIVE_FILE',result:{kind:'success',text:'NATIVE_FILE_OK'}}]);
+      console.log('Native file command retained its original draft and attachment on refusal, then consumed both after real Host success.');
+
+
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft"), "");
+      const sentHistoryModifier = await evaluate("/Mac/.test(navigator.platform) ? 4 : 2");
+      for (const redo of [false, true]) {
+        await evaluate("document.querySelector('[data-auto-grow-editor]').focus()");
+        await call('Input.dispatchKeyEvent',{type:'keyDown',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:sentHistoryModifier+(redo?8:0)});
+        await call('Input.dispatchKeyEvent',{type:'keyUp',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:sentHistoryModifier+(redo?8:0)});
+        await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft"), "", "successful command content must not return through undo or redo");
+      }
+      console.log("Successful image commands cut prior input history; native keyboard undo/redo did not resurrect submitted text.");
+      if(process.argv.includes("--input-state")) {
+        assert.deepEqual(await evaluate("Array.from(new Set(window.__inputObserved.filter(Boolean).map(s=>s.phase))).sort()"), ["adjudicating","claimed","plain","submitting"]);
+        assert.deepEqual(await evaluate("Array.from(new Set(window.__wholeInputObserved.filter(Boolean).map(s=>s.phase))).sort()"), ["adjudicating","claimed","plain","submitting"]);
+        assert.ok(await evaluate("window.__wholeInputObserved.some(s=>s?.imageIds.length===1)"));
+        assert.ok(await evaluate("window.__wholeInputSource.getSnapshot().queue===window.__probeCtx.sessions.binding(window.__compatSessionId).session.getSnapshot().queue"));
+        await evaluate("window.__wholeInputOff();void 0");
+        console.log("Combined input state reported native draft, synchronous image IDs and all four phases with the actual Host inbox projection");
+        await evaluate("window.__inputOff();void 0");
+        console.log("Real command input published all four official phases through the native input subscription");
+      }
+    }
+    if (process.argv.includes("--input-state")) {
+      await evaluate("window.__regionOffs.forEach(off=>off());window.__attachmentSeatOff();void 0");
+      await wait(() => evaluate("document.querySelectorAll('[data-compat-input-region]').length===0"));
+      assert.ok(await evaluate("(()=>{const card=window.__regionCard;const rect=card.getBoundingClientRect();return card.isConnected&&card.querySelector('[contenteditable]')===window.__regionEditor&&card.className===window.__regionBaseline.className&&Math.abs(rect.height-window.__regionBaseline.height)<1&&Math.abs(rect.width-window.__regionBaseline.width)<1})()"));
+      console.log("All four official input regions rendered live native owners in their specified positions; unload preserved the original editor, card styles and dimensions");
+      if (process.argv.includes("--command-images")) {
+        await evaluate("(()=>{const transfer=new DataTransfer();transfer.items.add(window.__extensionImage.file);window.__regionCard.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer}))})();void 0");
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId)?.length===1&&window.__probeCtx.composerInputs.addInputImages(window.__compatSessionId,[])"));
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId).length"), 1);
+        await writeFile(path.join(tmpdir(), "amiba-official-attachment-seat.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+        await evaluate("window.__officialInputActions.removeImage(window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId)[0].id);void 0");
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId).length===0"));
+        console.log("Default official attachment component and native drop handler staged one image without duplicate upload");
+        const beforeMixedPaste = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft");
+        await evaluate("window.__officialInputActions.setDraft('');window.__regionEditor.focus()");
+        await wait(()=>evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft===''") );
+        const mixedText = 'MIXED_PASTE @[dsh.reference:literal|id|label|clip]';
+        await evaluate(`(()=>{const data=new DataTransfer();data.items.add(window.__extensionImage.file);data.setData('text/plain',${JSON.stringify(mixedText)});window.__regionEditor.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}))})()`);
+        await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft===${JSON.stringify(mixedText)} && window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId)?.length===1 && window.__probeCtx.composerInputs.addInputImages(window.__compatSessionId,[])`));
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).occurrences.length"),0);
+        assert.ok(await evaluate("window.__regionEditor.isConnected && window.__regionCard.className===window.__regionBaseline.className"));
+        await evaluate("window.__officialInputActions.removeImage(window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId)[0].id)");
+        await wait(()=>evaluate("window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId).length===0"));
+        await evaluate(`window.__officialInputActions.setDraft(${JSON.stringify(beforeMixedPaste)})`);
+        console.log('Official mixed clipboard paste staged exactly one image and inserted literal text once, preserving native editor and upload cleanup.');
+
+      }
+
+    }
+    if (process.argv.includes("--child-continuation")) {
+      await mkdir(path.join(profile, "continuable"), { recursive: true });
+      await writeFile(path.join(profile, "continuable-create"), "create");
+      await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_CONTINUABLE'})")).entries.some(e=>JSON.stringify(e).includes('AMIBA_PROBE_CONTINUABLE {')));
+      await wait(() => evaluate("(async()=>{await window.__probeCtx.sessions.refreshSubagents('compat-continuable-parent');return window.__probeCtx.sessions.list.getSnapshot().subagentsByParent['compat-continuable-parent']?.entries.some(e=>e.kind==='child'&&e.id==='compat-continuable-child')})()"));
+      await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-parent',childSessionId:'compat-continuable-child',mode:'continuable'});void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_INITIAL_CHILD')"));
+      await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0).focus();void 0");
+      await call("Input.insertText", { text: "COMPAT_NATIVE_FOLLOWUP" });
+      await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+      await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_NATIVE_FOLLOWUP')"));
+      console.log("Real continuable child execution through native composer verified");
+      await wait(() => evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+      if (process.argv.includes("--approval-detail")) {
+        for (const mode of ["detail", "absent", "error"]) {
+          if (mode !== "absent") await evaluate(`window.__approvalDetailOff=window.__probeCtx.slots.register({name:'conversation.approval.detail',id:'compat-approval-detail'},props=>{window.__approvalDetailOwner=props;if(${JSON.stringify(mode)}==='error')throw new Error('COMPAT_APPROVAL_DETAIL_FAILURE');return window.__probeCreateElement('div',{'data-compat-approval-detail':props.callId},'COMPAT_APPROVAL_DETAIL '+props.callId)});void 0`);
+          await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0).focus();void 0");
+          await call("Input.insertText", { text: 'COMPAT_LITERAL_APPROVAL_'+mode });
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-continuable-child')"),true);
+          await wait(() => evaluate("!!document.querySelector('[data-approval-actions]')"));
+          assert.equal(await evaluate("document.querySelectorAll('[data-approval-actions] button').length"),4);
+          if (mode === "detail") {
+            await wait(() => evaluate("document.querySelector('[data-compat-approval-detail]')?.dataset.compatApprovalDetail==='approval-detail'"));
+            await writeFile(path.join(tmpdir(), "amiba-approval-detail.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+          } else assert.equal(await evaluate("!!document.querySelector('[data-compat-approval-detail]')"),false);
+          await evaluate(`document.querySelectorAll('[data-approval-actions] button')[${mode === 'error' ? 3 : 0}].click();void 0`);
+          await wait(async () => (await evaluate(`window.amiba.agentDiagnostics.logs({search:${JSON.stringify('AMIBA_PROBE_APPROVAL approval-'+mode)}})`)).entries.some(e=>e.message.includes(mode === 'error' ? 'rejected' : 'allowed-once')));
+          await wait(() => evaluate("!document.querySelector('[data-approval-actions]') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+          if (mode !== "absent") await evaluate("window.__approvalDetailOff();delete window.__approvalDetailOff;void 0");
+        }
+        console.log("Real Host approvals retained four native decisions with correlated, absent and failed plugin details");
+      }
+      if (process.argv.includes("--header-lineage")) {
+        await evaluate("window.__lineageOwners={};window.__lineageTitle=document.querySelector('[data-content-header-title]');window.__lineageEditor=Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0);window.__lineageTitleBefore=window.__lineageTitle.outerHTML;window.__lineageOff=window.__probeCtx.slots.register({name:'conversation.session.header.lineage',id:'compat-lineage',priority:-100},owner=>{window.__lineageOwners[owner.lineageSessionId]=owner;return window.__probeCreateElement('button',{'data-compat-lineage':owner.lineageSessionId,onClick:owner.openTitle},owner.displayTitle)});void 0");
+        await wait(()=>evaluate("!!document.querySelector('[data-compat-lineage=compat-continuable-child]')"));
+        assert.equal(await evaluate("window.__lineageOwners['compat-continuable-child'].sessionId"),'compat-continuable-child');
+        assert.equal(await evaluate("typeof window.__lineageOwners['compat-continuable-child'].openTitle"),'undefined');
+        assert.equal(await evaluate("window.__lineageTitle===document.querySelector('[data-content-header-title]')&&window.__lineageTitle.outerHTML===window.__lineageTitleBefore&&window.__lineageEditor.isConnected"),true);
+        await evaluate("window.__probeCtx.composerInputs.setInputDraft('compat-continuable-child','COMPAT_NESTED_CREATE');window.__probeCtx.composerInputs.submitInput('compat-continuable-child');void 0");
+        await wait(async()=> (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_NESTED_CREATED'})")).entries.length>0);
+        await wait(()=>evaluate("(async()=>{await window.__probeCtx.sessions.refreshSubagents('compat-continuable-child');return window.__probeCtx.sessions.list.getSnapshot().subagentsByParent['compat-continuable-child']?.entries.some(e=>e.kind==='child'&&e.id==='compat-nested-child')})()"));
+        await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-child',childSessionId:'compat-nested-child',mode:'continuable'});void 0");
+        await wait(()=>evaluate("document.body.textContent.includes('COMPAT_NESTED_REPLY COMPAT_NESTED_INITIAL')&&!!document.querySelector('[data-compat-lineage=compat-nested-child]')&&typeof window.__lineageOwners['compat-continuable-child']?.openTitle==='function'"));
+        assert.deepEqual(await evaluate("Array.from(document.querySelectorAll('[data-compat-lineage]')).map(n=>n.dataset.compatLineage)"),['compat-continuable-child','compat-nested-child']);
+        assert.equal(await evaluate("window.__lineageOwners['compat-continuable-child'].sessionId"),'compat-nested-child','ancestor owner keeps the viewed session standard context');
+        assert.equal(await evaluate("window.__lineageOwners['compat-nested-child'].displayTitle===window.__probeCtx.sessions.list.getSnapshot().byId['compat-nested-child'].displayTitle"),true);
+        await writeFile(path.join(tmpdir(),'amiba-header-lineage.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+        await evaluate("document.querySelector('[data-compat-lineage=compat-continuable-child]').click();void 0");
+        await wait(()=>evaluate("window.__probeCtx.sessions.list.getSnapshot().current==='compat-continuable-child'&&!document.querySelector('[data-compat-lineage=compat-nested-child]')&&document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_NATIVE_FOLLOWUP')"));
+        await evaluate("window.__lineageOff();window.__lineageOff=window.__probeCtx.slots.register({name:'conversation.session.header.lineage',id:'compat-lineage-null',priority:-100},()=>null);void 0");
+        await wait(()=>evaluate("document.querySelector('[data-content-header-lineage]').getBoundingClientRect().width===0"));
+        await evaluate("window.__lineageOff();window.__lineageOff=window.__probeCtx.slots.register({name:'conversation.session.header.lineage',id:'compat-lineage-error',priority:-100},()=>{window.__lineageError=true;throw new Error('COMPAT_LINEAGE_ERROR')});void 0");
+        await wait(()=>evaluate("window.__lineageError&&!!document.querySelector('[data-content-header-title]')&&!document.querySelector('[data-content-header-lineage] [data-slot-error]')&&(window.__probeCtx.slots.entriesOfSlot('conversation.session.header.lineage').length>0||!document.querySelector('[data-content-header-lineage]'))"));
+        await evaluate("window.__lineageOff();void 0");
+        await wait(()=>evaluate("!document.querySelector('[data-compat-lineage]')"));
+        assert.equal(await evaluate("!!Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0)"),true);
+        if (process.argv.includes("--lineage-loader")) {
+          const originalSession = await evaluate("window.__compatSessionId");
+          await writeFile(path.join(profile,"lineage-enable"),"enable");
+          const receipt = await wait(async()=>{
+            const error = await readFile(path.join(profile,"lineage-loader-error.txt"),"utf8").catch(()=>null);
+            if(error) throw new Error(error);
+            return readFile(path.join(profile,"lineage-enabled.json"),"utf8").then(JSON.parse).catch(()=>false);
+          });
+          assert.ok(receipt.graph.some(entry=>entry.id==='@deepseek-ai/dsh-client-ui-subagent'));
+          assert.ok(!receipt.graph.some(entry=>entry.id==='@deepseek-ai/dsh-client-ui-conversation'),'lineage must not enable a replacement conversation root');
+          await evaluate("window.__lineageBootBefore=true;void 0");
+          await call("Page.reload",{});
+          await wait(()=>evaluate("!window.__lineageBootBefore&&!!window.__probeCtx?.sessions&&window.__probeCtx.slots.entriesOfSlot('conversation.session.header.lineage').length>0"));
+          await evaluate(`window.__compatSessionId=${JSON.stringify(originalSession)};void 0`);
+          assert.equal(await evaluate("document.querySelectorAll('[data-amiba-product-shell]').length"),1);
+          console.log("Official lineage activated through Host configuration and normal renderer boot");
+        } else if (await evaluate("window.__probeCtx.slots.entriesOfSlot('conversation.session.header.lineage').length===0")) {
+          await evaluate(await readFile(path.join(root,"packages/app-runtime/resources/dsh-runtime/app/node_modules/@deepseek-ai/dsh-client-ui-subagent/lib/client.js"),"utf8"));
+          await evaluate("window.__lineageOfficialFiber=window.__probeCtx.plugin(window.__probeRequire('@deepseek-ai/dsh-client-ui-subagent'));void 0");
+        }
+        await evaluate("window.__probeCtx.sessions.open('compat-continuable-parent');void 0");
+        await wait(()=>evaluate("window.__probeCtx.sessions.list.getSnapshot().current==='compat-continuable-parent'&&!!document.querySelector('[data-content-header-lineage] button[aria-haspopup=tree]')"));
+        await evaluate("document.querySelector('[data-content-header-lineage] button[aria-haspopup=tree]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));void 0");
+        await wait(()=>evaluate("Array.from(document.querySelectorAll('[role=treeitem]')).some(n=>n.textContent.includes('Continuable compatibility child'))"));
+        const lineageMenuStyle = await evaluate("(()=>{const menu=document.querySelector('[role=tree]');const style=getComputedStyle(menu);return {background:style.backgroundColor,shadow:style.boxShadow,position:style.position}})()");
+        assert.notEqual(lineageMenuStyle.background,'rgba(0, 0, 0, 0)','official portal must have an opaque menu surface');
+        assert.notEqual(lineageMenuStyle.shadow,'none');
+        assert.equal(lineageMenuStyle.position,'fixed');
+        await writeFile(path.join(tmpdir(),'amiba-header-lineage-official.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+        const lineageThemeColors = await evaluate("(()=>{const root=document.documentElement;window.__lineageOriginalTheme=root.className;const menu=document.querySelector('[role=tree]');root.classList.remove('dark');root.classList.add('light');const light=getComputedStyle(menu).backgroundColor;root.classList.remove('light');root.classList.add('dark');return {light,dark:getComputedStyle(menu).backgroundColor,globalMenuAlias:getComputedStyle(root).getPropertyValue('--dsw-specific-menu')}})()");
+        assert.notEqual(lineageThemeColors.light,lineageThemeColors.dark);
+        assert.notEqual(lineageThemeColors.dark,'rgba(0, 0, 0, 0)');
+        assert.equal(lineageThemeColors.globalMenuAlias,'','lineage aliases must not leak to the shell root');
+        await writeFile(path.join(tmpdir(),'amiba-header-lineage-official-dark.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+        await evaluate("document.documentElement.className=window.__lineageOriginalTheme;void 0");
+
+        await evaluate("Array.from(document.querySelectorAll('[role=treeitem]')).find(n=>n.textContent.includes('Continuable compatibility child')).click();void 0");
+        await wait(()=>evaluate("window.__probeCtx.sessions.list.getSnapshot().current==='compat-continuable-child'&&document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_NATIVE_FOLLOWUP')&&!document.querySelector('[role=tree]')"));
+        console.log("Lineage passed actual multi-level Host sessions, current and ancestor owners, parent navigation, native title/editor preservation, empty/error plugins, and installed official catalog keyboard opening and child navigation");
+        if (process.argv.includes("--lineage-layout")) {
+          await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-child',childSessionId:'compat-nested-child',mode:'continuable'});void 0");
+          await wait(()=>evaluate("document.body.textContent.includes('COMPAT_NESTED_REPLY COMPAT_NESTED_INITIAL')&&!!document.querySelector('[data-content-header-lineage]')"));
+          const layouts = [];
+          for (const width of [960,720,1600]) {
+            await call("Emulation.setDeviceMetricsOverride",{width,height:1000,deviceScaleFactor:1,mobile:false});
+            await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+            layouts.push(await evaluate("(()=>{const lineage=document.querySelector('[data-content-header-lineage]').getBoundingClientRect();const title=document.querySelector('[data-content-header-title]').getBoundingClientRect();const edge=document.querySelector('[data-workspace-edge-toggle]').getBoundingClientRect();return {width:innerWidth,titleWidth:title.width,lineageRight:lineage.right,controlsLeft:edge.left}})()"));
+            const navigationButtons = await evaluate("document.querySelectorAll('[data-content-header-lineage] button[aria-haspopup=tree]').length");
+            assert.ok(navigationButtons>=2);
+            for(let index=0;index<navigationButtons;index++) {
+              await evaluate(`document.querySelectorAll('[data-content-header-lineage] button[aria-haspopup=tree]')[${index}].focus();new Promise(resolve=>requestAnimationFrame(resolve))`);
+              const focused = await evaluate("(()=>{const region=document.querySelector('[data-content-header-lineage]').getBoundingClientRect();const button=document.activeElement.getBoundingClientRect();return {left:button.left,right:button.right,width:button.width,regionLeft:region.left,regionRight:region.right}})()");
+              assert.ok(focused.width>=12&&focused.left>=focused.regionLeft-1&&focused.right<=focused.regionRight+1,"each lineage button must remain keyboard-reachable at "+width);
+            }
+            await writeFile(path.join(tmpdir(),'amiba-lineage-layout-'+width+'.png'),Buffer.from((await call('Page.captureScreenshot',{format:'png'})).data,'base64'));
+          }
+          await call("Emulation.clearDeviceMetricsOverride",{});
+          console.log("Lineage header geometry",layouts);
+          for(const layout of layouts) {
+            assert.ok(layout.titleWidth>0,"lineage must not collapse the native title at "+layout.width);
+            assert.ok(layout.lineageRight<=layout.controlsLeft,"lineage must not overlap existing controls at "+layout.width);
+          }
+          await evaluate("window.__probeCtx.sessions.open('compat-continuable-child');void 0");
+          await wait(()=>evaluate("window.__probeCtx.sessions.list.getSnapshot().current==='compat-continuable-child'&&document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_NATIVE_FOLLOWUP')"));
+        }
+
+        if (process.argv.includes("--lineage-loader")) {
+          const originalSession = await evaluate("window.__compatSessionId");
+          await writeFile(path.join(profile,"lineage-disable"),"disable");
+          const receipt = await wait(async()=>{
+            const error = await readFile(path.join(profile,"lineage-loader-error.txt"),"utf8").catch(()=>null);
+            if(error) throw new Error(error);
+            return readFile(path.join(profile,"lineage-disabled.json"),"utf8").then(JSON.parse).catch(()=>false);
+          });
+          assert.ok(!receipt.graph.some(entry=>entry.id==='@deepseek-ai/dsh-client-ui-subagent'));
+          await evaluate("window.__lineageBootBefore=true;void 0");
+          await call("Page.reload",{});
+          await wait(()=>evaluate("!window.__lineageBootBefore&&!!window.__probeCtx?.sessions&&window.__probeCtx.slots.entriesOfSlot('conversation.session.header.lineage').length===0"));
+          await evaluate(`window.__compatSessionId=${JSON.stringify(originalSession)};window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-parent',childSessionId:'compat-continuable-child',mode:'continuable'});void 0`);
+          await wait(()=>evaluate("document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_NATIVE_FOLLOWUP')&&!document.querySelector('[data-content-header-lineage]')"));
+          assert.equal(await evaluate("document.querySelectorAll('[data-amiba-product-shell]').length"),1);
+          console.log("Official lineage removal retained the native shell and continuable child history");
+        }
+
+
+      }
+      const literal = 'COMPAT_LITERAL_ @[dsh.reference:unregistered-example|id|label|clip]';
+      await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0).focus();void 0");
+      await call("Input.insertText", { text: literal });
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-continuable-child')"),true);
+      await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(literal))));
+      console.log("Token-shaped literal text reached the real model input unchanged without resolving an invented reference");
+      await wait(() => evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+      await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0).focus();void 0");
+      await call("Input.insertText", { text: "COMPAT_WAIT_FOR_STOP" });
+      await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+      await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_WAIT_FOR_STOP')"));
+      await wait(() => evaluate("Boolean(document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]'))"));
+      await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]').click();void 0");
+      await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_CHILD_ABORTED'})")).entries.length > 0);
+      await wait(() => evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+      assert.equal(await evaluate("window.__probeCtx.sessions.subagentAddress('compat-continuable-child')?.parentSessionId"), "compat-continuable-parent");
+      console.log("Real continuable child interrupt reached the running model and cleared native busy state");
+      if (process.argv.includes("--native-admission")) {
+        const modifier = await evaluate("/Mac/.test(navigator.platform) ? 4 : 2");
+        for (const redo of [false, true]) {
+          await evaluate("document.querySelector('[data-auto-grow-editor]').focus()");
+          await call('Input.dispatchKeyEvent',{type:'keyDown',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:modifier+(redo?8:0)});
+          await call('Input.dispatchKeyEvent',{type:'keyUp',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:modifier+(redo?8:0)});
+          await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft"), "");
+        }
+        const submitNative = async text => {
+          await evaluate(`window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions.setDraft(${JSON.stringify(text)});void 0`);
+          await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.draft===${JSON.stringify(text)}`));
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-continuable-child')"),true);
+        };
+        const readNativeQueue = () => evaluate("(async()=>{const saved=await window.amiba.storage.get('pendingQueue:compat-continuable-child');return saved['pendingQueue:compat-continuable-child']??[]})()");
+        await submitNative('COMPAT_WAIT_FOR_STOP');
+        await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        await submitNative('COMPAT_NATIVE_BACKLOG');
+        await wait(async()=> (await readNativeQueue()).length===1);
+        await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]').click();void 0");
+        await wait(()=>evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"));
+        const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+        await evaluate(`window.__nativeRejectImages=window.__probeCtx.get('composerImages').createDraftImages([new File([Uint8Array.from(atob(${JSON.stringify(png)}),c=>c.charCodeAt(0))],'native-rejection.png',{type:'image/png'})]);void 0`);
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.addInputImages('compat-continuable-child',window.__nativeRejectImages.map(image=>image.id))"),true);
+        await evaluate("window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions.setDraft('COMPAT_NATIVE_REJECTED_IMAGE');void 0");
+        await wait(()=>evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).some(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')&&!n.disabled)"));
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-continuable-child')"),true);
+        await wait(async()=> (await readNativeQueue()).some(row=>row.text==='COMPAT_NATIVE_REJECTED_IMAGE'));
+        const failedQueue = await readNativeQueue();
+        assert.deepEqual(failedQueue.map(row=>row.text), ['COMPAT_NATIVE_REJECTED_IMAGE','COMPAT_NATIVE_BACKLOG']);
+        assert.equal(failedQueue[0].attachments.length,1);
+        assert.equal(failedQueue[0].draft.text,'COMPAT_NATIVE_REJECTED_IMAGE');
+        await wait(()=>evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        assert.ok(!((await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry=>entry.message.includes('COMPAT_NATIVE_BACKLOG'))));
+        await wait(()=>evaluate("document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Delete]').length===2"));
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Delete]').click();void 0");
+        await wait(async()=> (await readNativeQueue()).length===1);
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Delete]').click();void 0");
+        await wait(async()=> (await readNativeQueue()).length===0);
+        console.log('Native admission confirmed history consumption; real rejected child-image input and the older backlog remained paused and editable without automatic retry.');
+      }
+      if (process.argv.includes("--resident-sender")) {
+        await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+        await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)"));
+        await evaluate("window.__residentForegroundDraft=window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft;window.__residentForegroundEditor=Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).find(n=>n.getClientRects().length);void 0");
+        const receipt = await evaluate("window.__probeCtx.composerInputs.sendResidentTurn({sessionId:'compat-continuable-child',text:'COMPAT_RESIDENT_BACKEND',attachments:[]})");
+        assert.equal(receipt.kind, 'accepted', JSON.stringify(receipt));
+        await wait(() => evaluate("(async()=>{const log=await window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_MODEL compat-continuable-child COMPAT_RESIDENT_BACKEND'});return log.entries.length>0})()"));
+        assert.equal(await evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId) && window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft===window.__residentForegroundDraft && window.__residentForegroundEditor.isConnected"), true);
+        await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-parent',childSessionId:'compat-continuable-child',mode:'continuable'});void 0");
+        await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child') && document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_RESIDENT_BACKEND') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        console.log("Resident backend received actual Host admission, sent to the addressed child without foreground navigation or draft mutation, and restored the real reply on return");
+        if (process.argv.includes("--resident-input")) {
+          await evaluate("window.__residentChildActions=window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions;window.__residentCodecCalls=0;window.__residentRefOff=window.__probeCtx.inputTriggers.registerSource({name:'resident-ref',trigger:'@',candidates:async()=>[],onPick:()=>({}),matchSpace:(_s,token)=>token==='@resident'?{insert:{source:'resident-ref',ref:'id',label:'Resident引用',clipboardText:'resident clip'}}:undefined,codec:{serialize:async ref=>{window.__residentCodecCalls++;return '<resident:'+ref+'>'}}});window.__residentChildActions.setDraft('@resident');void 0");
+          await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor('compat-continuable-child').onSpace()"), true);
+          await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.occurrences.length===1"));
+          const suffix = ' literal @[dsh.reference:unknown|id|label|clip]';
+          await evaluate(`window.__residentChildActions.setDraft(window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft+${JSON.stringify(suffix)});void 0`);
+          await evaluate("window.__residentChildActions.setDraft('COMPAT_LITERAL_RESIDENT '+window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft);void 0");
+          await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.occurrences.length===1 && window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft.startsWith('COMPAT_LITERAL_RESIDENT ')") );
+          await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+          await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId) && !window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')"));
+          const expectedText = await evaluate("(()=>{const s=window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot();const o=s.occurrences[0];return s.draft.slice(0,o.offset)+'<resident:id>'+s.draft.slice(o.offset+o.length)})()");
+          await evaluate("window.__residentStandardEditor=Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).find(n=>n.getClientRects().length);window.__residentStandardDraft=window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft;window.__residentChildActions.submit();window.__residentChildActions.submit();void 0");
+          await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(expectedText))));
+          await wait(() => evaluate("window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot()?.draft==='' && !window.__probeCtx.composerInputs.inputSubmissionSource('compat-continuable-child').getSnapshot().pending && !window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"));
+          assert.equal(await evaluate("window.__residentCodecCalls"), 1);
+          assert.equal(await evaluate("window.__residentStandardEditor.isConnected && window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft===window.__residentStandardDraft"), true);
+          const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJ1sAAAAASUVORK5CYII=";
+          await evaluate(`window.__residentCommandPayloads=[];window.__residentCommandClaim={token:'/resident-standard ',images:true,submit:async(args,actx,images)=>{window.__residentCommandPayloads.push({args,images,realScope:actx===window.__probeCtx.sessions.scope('compat-continuable-child')});return {kind:'success',text:'RESIDENT_STANDARD_OK'}}};window.__residentCommandOff=window.__probeCtx.inputTriggers.registerSource({name:'resident-standard',trigger:'/',candidates:async()=>[],onPick:()=>({claim:window.__residentCommandClaim}),matchEnter:(_ctx,line)=>line.startsWith('/resident-standard ')?{claim:window.__residentCommandClaim}:undefined});window.__residentStandardImages=window.__probeCtx.get('composerImages').createDraftImages([new File([Uint8Array.from(atob(${JSON.stringify(png)}),c=>c.charCodeAt(0))],'resident-standard.png',{type:'image/png'})]);window.__residentChildActions.addImages(window.__residentStandardImages.map(image=>image.id));window.__residentChildActions.setDraft('/resident-standard offscreen');window.__residentChildActions.submit();void 0`);
+          await wait(() => evaluate("window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot()?.phase==='claimed'"));
+          await evaluate("window.__residentChildActions.submit();void 0");
+          await wait(() => evaluate("window.__residentCommandPayloads.length===1 && window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot()?.draft===''"));
+          assert.deepEqual(await evaluate("window.__residentCommandPayloads[0]"), { args: 'offscreen', realScope: true, images: [{ mediaType: 'image/png', data: png, name: 'resident-standard.png' }] });
+          assert.equal(await evaluate("window.__probeCtx.get('composerImages').draftImages(window.__residentStandardImages.map(image=>image.id)).length"), 0);
+          await evaluate("window.__residentChildActions.setDraft('/resident-standard handoff');window.__residentChildActions.submit();void 0");
+          await wait(() => evaluate("window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot()?.phase==='claimed'"));
+          await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-parent',childSessionId:'compat-continuable-child',mode:'continuable'});void 0");
+          await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.phase==='claimed'"));
+          await evaluate("window.__residentChildActions.submit();void 0");
+          await wait(() => evaluate("window.__residentCommandPayloads.length===2 && window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.draft===''") );
+          assert.deepEqual(await evaluate("window.__residentCommandPayloads[1]"), { args: 'handoff', realScope: true, images: [] });
+          await evaluate("window.__residentRefOff();window.__residentCommandOff();void 0");
+          console.log("Standard offscreen submit resolved the actual reference once, preserved literal tokens and foreground input, delivered exact command image bytes, and transferred a retained command claim to the original composer");
+        }
+      }
+      if (process.argv.includes("--resident-queue")) {
+        await evaluate("window.__residentQueuedActions=window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions;window.__residentQueuedActions.setDraft('COMPAT_WAIT_FOR_STOP');window.__residentQueuedActions.submit();void 0");
+        await wait(() => evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child') && !!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        await evaluate("window.__residentQueueCodecCalls=0;window.__residentQueueRefOff=window.__probeCtx.inputTriggers.registerSource({name:'resident-queue-ref',trigger:'@',candidates:async()=>[],onPick:()=>({}),matchSpace:(_s,token)=>token==='@residentqueue'?{insert:{source:'resident-queue-ref',ref:'id',label:'Resident队列引用',clipboardText:'queue clip'}}:undefined,codec:{serialize:async ref=>{window.__residentQueueCodecCalls++;return '<resident-queue:'+ref+'>'}}});window.__residentQueuedActions.setDraft('@residentqueue');void 0");
+        await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor('compat-continuable-child').onSpace()"), true);
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.occurrences.length===1"));
+        await evaluate("window.__residentQueuedActions.setDraft(window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft+' literal @[dsh.reference:unknown|id|label|clip]');void 0");
+        await evaluate("window.__residentQueuedActions.setDraft('COMPAT_LITERAL_RESIDENT_QUEUE '+window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft);void 0");
+        const queuedInput = await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')");
+        assert.equal(queuedInput.occurrences.length, 1);
+        const occurrence = queuedInput.occurrences[0];
+        const expected = (queuedInput.draft.slice(0, occurrence.offset) + '<resident-queue:id>' + queuedInput.draft.slice(occurrence.offset + occurrence.length)).trim();
+        await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+        await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId) && !window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')"));
+        await evaluate("window.__residentQueueForegroundEditor=Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).find(n=>n.getClientRects().length);window.__residentQueueForegroundDraft=window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft;window.__residentQueuedActions.submit();window.__residentQueuedActions.submit();void 0");
+        const readQueue = () => evaluate("(async()=>{const values=await window.amiba.storage.get('pendingQueue:compat-continuable-child');return values['pendingQueue:compat-continuable-child']??[]})()");
+        await wait(async () => (await readQueue()).length === 1);
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot()?.draft==='' && !window.__probeCtx.composerInputs.inputSubmissionSource('compat-continuable-child').getSnapshot().pending"));
+        const [textRow] = await readQueue();
+        assert.equal(textRow.text, expected);
+        assert.equal(textRow.draft.parts.filter(part => part.kind === 'mention').length, 1);
+        assert.ok(textRow.draft.parts.some(part => part.kind === 'text' && part.text.includes('literal @[dsh.reference:unknown')));
+        assert.equal(await evaluate("window.__residentQueueCodecCalls"), 1);
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"), true);
+        assert.equal((await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(expected))), false);
+        const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJ1sAAAAASUVORK5CYII=";
+        await evaluate(`window.__residentQueueImages=window.__probeCtx.get('composerImages').createDraftImages([new File([Uint8Array.from(atob(${JSON.stringify(png)}),c=>c.charCodeAt(0))],'resident-queue.png',{type:'image/png'})]);window.__residentQueuedActions.addImages(window.__residentQueueImages.map(image=>image.id));window.__residentQueuedActions.setDraft('RESIDENT_IMAGE_QUEUE');window.__residentQueuedActions.submit();void 0`);
+        await wait(async () => (await readQueue()).length === 2);
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot()?.draft==='' && window.__probeCtx.composerInputs.inputStateSource('compat-continuable-child').getSnapshot().imageIds.length===0 && !window.__probeCtx.composerInputs.inputSubmissionSource('compat-continuable-child').getSnapshot().pending"));
+        assert.equal(await evaluate("window.__probeCtx.get('composerImages').draftImages(window.__residentQueueImages.map(image=>image.id)).length"), 0);
+        const imageRow = (await readQueue())[1];
+        assert.equal(imageRow.attachments.length, 1);
+        const imageFiles = (await readdir(profile, { recursive: true })).filter(file => file.endsWith('/' + imageRow.attachments[0].attachmentId + '.bin'));
+        assert.equal(imageFiles.length, 1);
+        const imagePath = path.join(profile, imageFiles[0]);
+        assert.equal((await readFile(imagePath)).toString('base64'), png);
+        assert.equal(await evaluate("window.__residentQueueForegroundEditor.isConnected && window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft===window.__residentQueueForegroundDraft"), true);
+        await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-parent',childSessionId:'compat-continuable-child',mode:'continuable'});void 0");
+        await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child') && document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length===2 && !!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]').click();void 0");
+        await wait(() => evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        assert.equal((await readQueue()).length, 2);
+        await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+        await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId) && !window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')"));
+        await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-parent',childSessionId:'compat-continuable-child',mode:'continuable'});void 0");
+        await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child') && document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length===2"));
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"), false);
+        assert.equal((await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(expected))), false);
+        const queueHistoryModifier = await evaluate("/Mac/.test(navigator.platform) ? 4 : 2");
+        for (const redo of [false, true]) {
+          await evaluate("document.querySelector('[data-auto-grow-editor]').focus()");
+          await call('Input.dispatchKeyEvent',{type:'keyDown',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:queueHistoryModifier+(redo?8:0)});
+          await call('Input.dispatchKeyEvent',{type:'keyUp',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:queueHistoryModifier+(redo?8:0)});
+          await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft"), "", "durably queued input must not return through undo or redo");
+          assert.equal((await readQueue()).length, 2);
+        }
+        console.log("Persisted offscreen queue admissions consumed prior input history across navigation; undo/redo left both queued rows intact.");
+        // rc.2 child model input does not support images. Exercise original
+        // queue deletion for that row, then send the supported text row.
+        await evaluate("document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Delete]')[1].click();void 0");
+        await wait(async () => (await readQueue()).length === 1 && await readFile(imagePath).then(() => false, error => error.code === 'ENOENT'));
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]').click();void 0");
+        await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.draft===${JSON.stringify(queuedInput.draft)}`));
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').occurrences.length"), 1);
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=\"Send now\"]').click();void 0");
+        await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(expected))));
+        await wait(() => evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]') && !document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]')"));
+        for (const redo of [false, true]) {
+          await evaluate("document.querySelector('[data-auto-grow-editor]').focus()");
+          await call('Input.dispatchKeyEvent',{type:'keyDown',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:queueHistoryModifier+(redo?8:0)});
+          await call('Input.dispatchKeyEvent',{type:'keyUp',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:queueHistoryModifier+(redo?8:0)});
+          await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft"), "", "accepted edited queue content must not return through history");
+        }
+        await call('Input.insertText',{text:'AFTER_EDITED_SEND'});
+        await wait(()=>evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft==='AFTER_EDITED_SEND'"));
+        for (const [redo, expectedDraft] of [[false, ''], [true, 'AFTER_EDITED_SEND']]) {
+          await call('Input.dispatchKeyEvent',{type:'keyDown',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:queueHistoryModifier+(redo?8:0)});
+          await call('Input.dispatchKeyEvent',{type:'keyUp',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:queueHistoryModifier+(redo?8:0)});
+          await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft===${JSON.stringify(expectedDraft)}`));
+        }
+        await evaluate("window.__probeCtx.composerInputs.setInputDraft('compat-continuable-child','');void 0");
+        console.log('Accepted edited-queue history stayed consumed while subsequent typing retained native undo/redo.');
+        await evaluate("window.__residentQueueRefOff();void 0");
+        console.log("Standard busy offscreen submissions entered the native queue once, retained real reference and image ownership, preserved foreground input, and restored original Stop/Edit/Delete/Send now behavior");
+      }
+      if (process.argv.includes("--background-queue")) {
+        const readQueue = () => evaluate("(async()=>{const values=await window.amiba.storage.get('pendingQueue:compat-continuable-child');return values['pendingQueue:compat-continuable-child']??[]})()");
+        const modelCount = async text => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT',limit:500})")).entries.filter(entry => entry.message.includes('compat-continuable-child '+JSON.stringify(text))).length;
+        const openChild = async () => {
+          await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-parent',childSessionId:'compat-continuable-child',mode:'continuable'});void 0");
+          await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')"));
+        };
+        const openRoot = async () => {
+          await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+          await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId) && !window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')"));
+          await evaluate("window.__backgroundQueueEditor=Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).find(n=>n.getClientRects().length);window.__backgroundQueueDraft=window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft;void 0");
+        };
+        const foregroundUnchanged = () => evaluate("window.__backgroundQueueEditor.isConnected && window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===window.__backgroundQueueDraft");
+        await evaluate("window.__backgroundActions=window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions;window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_HOLD');window.__backgroundActions.submit();void 0");
+        await wait(() => evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child') && !!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        await evaluate("window.__backgroundCodecCalls=0;window.__backgroundRefOff=window.__probeCtx.inputTriggers.registerSource({name:'background-ref',trigger:'@',candidates:async()=>[],onPick:()=>({}),matchSpace:(_s,token)=>token==='@background'?{insert:{source:'background-ref',ref:'id',label:'后台引用',clipboardText:'background clip'}}:undefined,codec:{serialize:async ref=>{window.__backgroundCodecCalls++;return '<background:'+ref+'>'}}});window.__backgroundActions.setDraft('@background');void 0");
+        await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor('compat-continuable-child').onSpace()"), true);
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.occurrences.length===1"));
+        await evaluate("window.__backgroundActions.setDraft(window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft+' literal @[dsh.reference:unknown|id|label|clip]');void 0");
+        await evaluate("window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_FIRST '+window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft);window.__backgroundActions.submit();void 0");
+        await wait(async () => (await readQueue()).length===1);
+        const first = (await readQueue())[0];
+        assert.ok(first.text.includes('<background:id>')); assert.equal(first.draft.parts.filter(part=>part.kind==='mention').length, 1);
+        await openRoot();
+        await evaluate("window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_SECOND');window.__backgroundActions.submit();void 0");
+        await wait(async () => (await readQueue()).length===2);
+        await writeFile(path.join(profile, 'background-release'), 'release');
+        await wait(async () => await modelCount(first.text)===1 && await modelCount('COMPAT_LITERAL_BACKGROUND_SECOND')===1 && (await readQueue()).length===0);
+        await wait(() => evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"));
+        assert.equal(await evaluate("window.__backgroundCodecCalls"), 1);
+        assert.equal(await foregroundUnchanged(), true);
+        await openChild();
+        await wait(() => evaluate("document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_LITERAL_BACKGROUND_SECOND') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        console.log("Successful background completion drained the original mixed-reference row and standard offscreen row in FIFO order, once each, without changing the foreground composer");
+
+        await rm(path.join(profile,'background-release'));
+        await evaluate("window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_HOLD');window.__backgroundActions.submit();void 0");
+        await wait(() => evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"));
+        const preempted='COMPAT_LITERAL_BACKGROUND_PREEMPT_COMPAT_WAIT_FOR_STOP';
+        const replacements=['COMPAT_LITERAL_BACKGROUND_NATIVE_FIRST','COMPAT_LITERAL_BACKGROUND_NATIVE_SECOND','COMPAT_LITERAL_BACKGROUND_NATIVE_THIRD'];
+        for(const [index,text] of [preempted,...replacements].entries()) {
+          await evaluate(`window.__backgroundActions.setDraft(${JSON.stringify(text)});window.__backgroundActions.submit();void 0`);
+          await wait(async () => (await readQueue()).length===index+1);
+        }
+        await openRoot(); await writeFile(path.join(profile,'background-release'),'release');
+        await wait(async () => await modelCount(preempted)===1 && (await readQueue()).length===3);
+        await openChild();
+        await wait(() => evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]') && document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length===3"));
+        const liveTurnCount = () => evaluate(`Array.from(document.querySelectorAll('[data-conversation-user-turn]')).filter(node=>node.textContent.includes(${JSON.stringify(preempted)})).length`);
+        await wait(async () => (await liveTurnCount()) > 0);
+        assert.equal(await liveTurnCount(), 1, "Returning to a live background turn must not duplicate its user/assistant group");
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=\"Send now\"]').click();void 0");
+        await wait(async () => (await Promise.all(replacements.map(modelCount))).every(count=>count===1) && (await readQueue()).length===0);
+        await wait(() => evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        console.log("Native Send now preempted a background-drained turn after navigation; each remaining native queue row reached the model exactly once");
+
+        await evaluate("window.__backgroundActions.setDraft('COMPAT_WAIT_FOR_STOP');window.__backgroundActions.submit();void 0");
+        await wait(() => evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child') && !!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        await evaluate("window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_PAUSED');window.__backgroundActions.submit();void 0");
+        await wait(async () => (await readQueue()).length===1);
+        await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]').click();void 0");
+        await wait(() => evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        await openRoot();
+        assert.equal((await evaluate("window.__probeCtx.composerInputs.sendResidentTurn({sessionId:'compat-continuable-child',text:'COMPAT_LITERAL_BACKGROUND_UNRELATED',attachments:[]})")).kind, 'accepted');
+        await wait(async () => await modelCount('COMPAT_LITERAL_BACKGROUND_UNRELATED')===1);
+        await wait(() => evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"));
+        assert.equal(await modelCount('COMPAT_LITERAL_BACKGROUND_PAUSED'), 0); assert.equal((await readQueue()).length, 1);
+        await evaluate("window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_RESUME');window.__backgroundActions.submit();void 0");
+        await wait(async () => await modelCount('COMPAT_LITERAL_BACKGROUND_RESUME')===1 && await modelCount('COMPAT_LITERAL_BACKGROUND_PAUSED')===1 && (await readQueue()).length===0);
+        await wait(() => evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"));
+        assert.equal(await foregroundUnchanged(), true);
+        console.log("Stop survived navigation and an unrelated background completion; explicit standard submission resumed the retained queue");
+
+        await openChild();
+        await rm(path.join(profile, 'background-release'));
+        await evaluate("window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_HOLD');window.__backgroundActions.submit();void 0");
+        await wait(() => evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"));
+        await openRoot();
+        const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJ1sAAAAASUVORK5CYII=";
+        await evaluate(`window.__backgroundImages=window.__probeCtx.get('composerImages').createDraftImages([new File([Uint8Array.from(atob(${JSON.stringify(png)}),c=>c.charCodeAt(0))],'background-queue.png',{type:'image/png'})]);window.__backgroundActions.addImages(window.__backgroundImages.map(image=>image.id));window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_IMAGE');window.__backgroundActions.submit();void 0`);
+        await wait(async () => (await readQueue()).length===1);
+        const imageRow = (await readQueue())[0];
+        const imageFiles = (await readdir(profile,{recursive:true})).filter(file=>file.endsWith('/'+imageRow.attachments[0].attachmentId+'.bin'));
+        assert.equal(imageFiles.length,1);
+        const imagePath=path.join(profile,imageFiles[0]);
+        await writeFile(path.join(profile,'background-release'),'release');
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputSubmissionSource('compat-continuable-child').getSnapshot().notice?.includes('installed DSH client does not support images in child conversation continuations')"));
+        assert.equal(await foregroundUnchanged(),true);
+        await openChild();
+        await wait(() => evaluate("document.body.textContent.includes('installed DSH client does not support images in child conversation continuations')"));
+        assert.equal((await readQueue())[0].queueId,imageRow.queueId);
+        assert.equal((await readFile(imagePath)).toString('base64'),png);
+        assert.equal(await modelCount('COMPAT_LITERAL_BACKGROUND_IMAGE'),0);
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Delete]').click();window.__backgroundRefOff();void 0");
+        await wait(async () => (await readQueue()).length===0 && await readFile(imagePath).then(()=>false,error=>error.code==='ENOENT'));
+        console.log("Unsupported background child-image preparation retained the original queued row and exact file, surfaced its real failure in the existing composer, and allowed original queue deletion");
+        if (process.argv.includes("--redirect-queue")) {
+          await rm(path.join(profile, 'background-release'));
+          await evaluate("window.__backgroundActions.setDraft('COMPAT_LITERAL_BACKGROUND_HOLD');window.__backgroundActions.submit();void 0");
+          await wait(() => evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"));
+          const redirected=['COMPAT_LITERAL_REDIRECT_FIRST','COMPAT_LITERAL_REDIRECT_SECOND'];
+          for(const [index,text] of redirected.entries()) {
+            await evaluate(`window.__backgroundActions.setDraft(${JSON.stringify(text)});window.__backgroundActions.submit();void 0`);
+            await wait(async () => (await readQueue()).length===index+1);
+          }
+          await openRoot();
+          await writeFile(path.join(profile,'queue-redirect'),'redirect');
+          await writeFile(path.join(profile,'background-release'),'release');
+          const targetCount=async text=>(await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT',limit:500})")).entries.filter(entry=>entry.message.includes('compat-continuable-parent '+JSON.stringify(text))).length;
+          await wait(async () => {
+            const notice = await evaluate("window.__probeCtx.composerInputs.inputSubmissionSource('compat-continuable-child').getSnapshot().notice");
+            if (notice) throw new Error("Redirected queue preparation: " + notice + " rows=" + JSON.stringify(await readQueue()));
+            return (await Promise.all(redirected.map(targetCount))).every(count=>count===1) && (await readQueue()).length===0;
+          });
+          await wait(() => evaluate("!window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-parent')"));
+          assert.deepEqual(await Promise.all(redirected.map(modelCount)),[0,0]);
+          const restoredRoot=path.join(profile,'continuable');
+          assert.equal(await evaluate("window.amiba.workspaces.getCurrent('compat-continuable-parent')"),restoredRoot);
+          assert.equal(await evaluate(`window.amiba.workspaces.bindIfUnbound('compat-continuable-parent',${JSON.stringify(profile)})`),restoredRoot);
+          assert.equal(await evaluate("window.amiba.workspaces.getCurrent('compat-continuable-parent')"),restoredRoot);
+          assert.equal(await foregroundUnchanged(),true);
+          await rm(path.join(profile,'queue-redirect'));
+          await openChild();
+          console.log("Actual conversation-owner redirection delivered both source queue rows once to the prepared target; source model and foreground composer remained unchanged");
+        }
+
+      }
+      if (process.argv.includes("--queue-draft")) {
+        await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_WAIT_FOR_STOP');window.__probeCtx.composerInputs.submitInput('compat-continuable-child');void 0");
+        await wait(() => evaluate("Boolean(document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]'))"));
+        const queueSourceCode="window.__queueCodecCalls=0;window.__queueRefOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-queue-ref',trigger:'@',candidates:async()=>[],onPick:()=>({}),matchSpace:(_s,token)=>token==='@queue'?{insert:{source:'compat-queue-ref',ref:'id',label:'Queue引用😀',clipboardText:'queue clip'}}:undefined,codec:{serialize:async ref=>{window.__queueCodecCalls++;return '<queue:'+ref+'>'}}});void 0";
+        await evaluate(queueSourceCode);
+        await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','@queue');void 0");
+        await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor('compat-continuable-child').onSpace()"),true);
+        await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.occurrences.length===1"));
+        const suffix=' literal @[dsh.reference:missing-example|id|literal|clip]';
+        await evaluate(`window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child',window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft+${JSON.stringify(suffix)});void 0`);
+        await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_LITERAL_QUEUE '+window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft);void 0");
+        const queuedDraft=await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')");
+        assert.equal(queuedDraft.occurrences.length,1);
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-continuable-child')"),true);
+        await wait(() => evaluate("Boolean(document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]'))"));
+        assert.equal(await evaluate("window.__queueCodecCalls"),1);
+        await wait(() => evaluate("(async()=>{const values=await window.amiba.storage.get('pendingQueue:compat-continuable-child');const item=values['pendingQueue:compat-continuable-child']?.[0];return item?.draft?.parts.filter(p=>p.kind==='mention').length===1 && item.draft.parts.some(p=>p.kind==='text'&&p.text.includes('literal @[dsh.reference:missing-example')) && item.text.includes('<queue:id>')})()"));
+        if (process.argv.includes("--queue-reload")) {
+          const rootSessionId=await evaluate("window.__compatSessionId");
+          await evaluate("window.__queueReloadBefore=true;void 0");
+          await call("Page.reload",{});
+          await wait(async()=>{try{return await evaluate("!window.__queueReloadBefore && !!window.__probeCtx?.sessions");}catch{return false;}});
+          await evaluate(`window.__compatSessionId=${JSON.stringify(rootSessionId)};window.__probeCtx.layout.openChat();void 0`);
+          await wait(() => evaluate("(async()=>{await window.__probeCtx.sessions.refreshSubagents('compat-continuable-parent');return window.__probeCtx.sessions.list.getSnapshot().subagentsByParent['compat-continuable-parent']?.entries.some(e=>e.kind==='child'&&e.id==='compat-continuable-child')})()"));
+          await evaluate("window.__probeCtx.sessions.open('compat-continuable-child');void 0");
+          await wait(()=>evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child') && document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length===1"));
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft"), "");
+          await evaluate(queueSourceCode);
+          await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+          console.log("Full renderer reload restored exactly one pending native queue item, kept the cleared composer empty and recovered the running Stop control");
+          if(process.argv.includes("--running-baseline")) {
+            const abortedBefore=await evaluate("(async()=>{const log=await window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_CHILD_ABORTED'});return log.entries.length})()");
+            await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]').click();void 0");
+            await wait(async()=> (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_CHILD_ABORTED'})")).entries.length>abortedBefore);
+            await wait(()=>evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+            assert.equal(await evaluate("document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length"),1);
+            const modelStartsBefore=await evaluate("(async()=>{const log=await window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_MODEL compat-continuable-child COMPAT_WAIT_FOR_STOP'});return log.entries.length})()");
+            assert.equal(await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_WAIT_FOR_STOP')"),true);
+            assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-continuable-child')"),true);
+            await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+            await wait(async()=> (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_MODEL compat-continuable-child COMPAT_WAIT_FOR_STOP'})")).entries.length>modelStartsBefore);
+            await wait(()=>evaluate("window.__probeCtx.sessions.binding('compat-continuable-child').session.getSnapshot().running && !!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+            console.log("Restored native Stop interrupted the actual Host turn, preserved the pending queue and allowed a new turn through the same composer");
+          }
+
+        }
+        let stashedExpected;
+        if (process.argv.includes("--queue-stash")) {
+          await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','@queue');void 0");
+          await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor('compat-continuable-child').onSpace()"),true);
+          await wait(()=>evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.occurrences.length===1"));
+          await evaluate(`window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child',window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft+${JSON.stringify(suffix)});void 0`);
+          await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_LITERAL_STASH '+window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft);void 0");
+          const stash=await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')");
+          const occurrence=stash.occurrences[0];
+          stashedExpected=(stash.draft.slice(0,occurrence.offset)+'<queue:id>'+stash.draft.slice(occurrence.offset+occurrence.length)).trim();
+        }
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]').click();void 0");
+        await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')?.draft===${JSON.stringify(queuedDraft.draft)}`));
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').occurrences.length"),1);
+        await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child',window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft+' edited');void 0");
+        if(process.argv.includes("--queue-reload")) {
+          const restoredState=await evaluate("({running:window.__probeCtx.sessions.binding('compat-continuable-child').session.getSnapshot().running,stopVisible:!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]'),queueVisible:!!document.querySelector('[data-composer-card] button[aria-label=\"Queue: send after the current turn finishes\"]'),codecCalls:window.__queueCodecCalls,queueRows:document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length})");
+          console.log("Restored queue before Send now",restoredState);
+          assert.equal(restoredState.running,true);
+          assert.equal(restoredState.stopVisible,false);
+          assert.equal(restoredState.queueVisible,true);
+        }
+        await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=\"Send now\"]').click();void 0");
+        const reference=queuedDraft.occurrences[0];
+        const expected=(queuedDraft.draft.slice(0,reference.offset)+'<queue:id>'+queuedDraft.draft.slice(reference.offset+reference.length)+' edited').trim();
+        await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(expected))));
+        if (stashedExpected) {
+          await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(stashedExpected))));
+          console.log("An unsent draft stashed by queue Edit was resolved on automatic drain; the real model received its reference codec output and literal token unchanged");
+        }
+        assert.equal(await evaluate("window.__queueCodecCalls"),(process.argv.includes("--queue-reload") ? 1 : 2)+(stashedExpected ? 1 : 0));
+        await wait(() => evaluate("!document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]') && !document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+        await evaluate("window.__queueRefOff();void 0");
+        console.log("Native queued mixed draft restored its real reference and literal token; edited Send now re-ran the codec and delivered the exact new model payload");
+        if (process.argv.includes("--queue-files")) {
+          const bytes=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jJ1sAAAAASUVORK5CYII=","base64");
+          const imagePath=path.join(profile,"queue-owned.png");
+          await writeFile(imagePath,bytes);
+          await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','COMPAT_WAIT_FOR_STOP');window.__probeCtx.composerInputs.submitInput('compat-continuable-child');void 0");
+          await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+          await evaluate("Array.from(document.querySelectorAll('[data-composer-card]')).find(n=>n.getClientRects().length>0).parentElement.querySelector('input[type=file]').id='queue-file-input';void 0");
+          const doc=await call("DOM.getDocument");
+          const node=await call("DOM.querySelector",{nodeId:doc.root.nodeId,selector:'#queue-file-input'});
+          await call("DOM.setFileInputFiles",{nodeId:node.nodeId,files:[imagePath]});
+          await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','Queued file ownership check');void 0");
+          await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Queue: send after the current turn finishes\"]:not(:disabled)')"));
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-continuable-child')"),true);
+          await wait(()=>evaluate("(async()=>{const x=await window.amiba.storage.get('pendingQueue:compat-continuable-child');return !!x['pendingQueue:compat-continuable-child']?.[0]?.attachments?.[0]?.attachmentId})()"));
+          const attachmentId=await evaluate("(async()=>{const x=await window.amiba.storage.get('pendingQueue:compat-continuable-child');return x['pendingQueue:compat-continuable-child'][0].attachments[0].attachmentId})()");
+          const stored=(await readdir(profile,{recursive:true})).filter(file=>file.endsWith('/'+attachmentId+'.bin'));
+          assert.equal(stored.length,1);
+          const storedPath=path.join(profile,stored[0]);
+          await evaluate("new Promise(resolve=>setTimeout(resolve,250))");
+          assert.deepEqual(await readFile(storedPath),bytes);
+          await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]').click();void 0");
+          await wait(()=>evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+          const edit="document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]').click();void 0";
+          const cancel="document.querySelector('[data-composer-card] button[aria-label=\"Cancel edit\"]').click();void 0";
+          const checkRestoredImage=async()=>{
+            await wait(()=>evaluate("window.__probeCtx.composerInputs.inputImagesFor('compat-continuable-child').length===1"));
+            const value=await evaluate("(async()=>{const image=window.__probeCtx.composerInputs.inputImagesFor('compat-continuable-child')[0];return {id:image.id,name:image.file.name,mime:image.file.type,bytes:btoa(String.fromCharCode(...new Uint8Array(await image.file.arrayBuffer()))),registered:window.__probeCtx.get('composerImages').draftImages([image.id]).length}})()");
+            assert.equal(value.name,'queue-owned.png');
+            assert.equal(value.mime,'image/png');
+            assert.equal(value.bytes,bytes.toString('base64'));
+            assert.equal(value.registered,1);
+            assert.notEqual(value.id,attachmentId);
+            return value.id;
+          };
+          await evaluate(edit);
+          await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Cancel edit\"]')"));
+          const restoredImageId=await checkRestoredImage();
+          await evaluate(cancel);
+          await wait(()=>evaluate(`window.__probeCtx.get('composerImages').draftImages([${JSON.stringify(restoredImageId)}]).length===0`));
+          await evaluate("new Promise(resolve=>setTimeout(resolve,250))");
+          assert.deepEqual(await readFile(storedPath),bytes);
+          await evaluate(edit);
+          await wait(()=>evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Remove queue-owned.png\"]')"));
+          await checkRestoredImage();
+          await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Remove queue-owned.png\"]').click();void 0");
+          await evaluate("new Promise(resolve=>setTimeout(resolve,250))");
+          assert.deepEqual(await readFile(storedPath),bytes);
+          await evaluate(cancel);
+          await evaluate(edit);
+          await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+          await wait(()=>evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)"));
+          assert.equal(await evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Cancel edit\"]')"),false);
+          await evaluate("new Promise(resolve=>setTimeout(resolve,250))");
+          assert.deepEqual(await readFile(storedPath),bytes);
+          await evaluate("window.__probeCtx.sessions.open('compat-continuable-child');void 0");
+          await wait(()=>evaluate("!!document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]')"));
+          if(process.argv.includes("--queue-image-reload")) {
+            const rootSessionId=await evaluate("window.__compatSessionId");
+            await evaluate("window.__queueImageReloadBefore=true;void 0");
+            await call("Page.reload",{});
+            await wait(async()=>{try{return await evaluate("!window.__queueImageReloadBefore && !!window.__probeCtx?.sessions");}catch{return false;}});
+            await evaluate(`window.__compatSessionId=${JSON.stringify(rootSessionId)};window.__probeCtx.layout.openChat();void 0`);
+            await wait(()=>evaluate("(async()=>{await window.__probeCtx.sessions.refreshSubagents('compat-continuable-parent');return window.__probeCtx.sessions.list.getSnapshot().subagentsByParent['compat-continuable-parent']?.entries.some(e=>e.kind==='child'&&e.id==='compat-continuable-child')})()"));
+            await evaluate("window.__probeCtx.sessions.open('compat-continuable-child');void 0");
+            await wait(()=>evaluate("!!document.querySelector('[data-composer-context-rail] ul button[aria-label=Edit]')"));
+          }
+          await wait(()=>evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')"));
+          await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-continuable-child','');void 0");
+          await evaluate(edit);
+          const finalImageId=await checkRestoredImage();
+          await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=Delete]').click();void 0");
+          await wait(async()=>{try{await readFile(storedPath);return false;}catch(error){if(error.code==='ENOENT')return true;throw error;}});
+          await wait(()=>evaluate(`window.__probeCtx.get('composerImages').draftImages([${JSON.stringify(finalImageId)}]).length===0`));
+          console.log("Restored queued image registered a real browser File with exact original bytes and a distinct draft ID; renderer reload and final registry release passed");
+          console.log("Actual queued image bytes survived cancel edit, chip removal and session switching; deleting the last queue owner removed its stored file");
+          if(process.argv.includes("--host-file-refs")) {
+            const result=await evaluate("(async()=>{const call=async(method,args)=>{const rpcId=crypto.randomUUID();const response=await window.amiba.dshClient.fetch({url:'/api/amibaAttachments/'+method,method:'POST',headers:{'content-type':'application/json'},body:new TextEncoder().encode(JSON.stringify({type:'client-request',rpcId,method:'amibaAttachments/'+method,payload:{args}}))});const envelope=JSON.parse(new TextDecoder().decode(response.body));if(envelope.rpcId!==rpcId)throw new Error('Invalid attachment RPC envelope');return envelope.result;};const created=await call('put',{name:'retained.txt',mime:'text/plain',kind:'text',dataBase64:btoa('retained bytes')});if(!created.ok)throw new Error(JSON.stringify(created));const id=created.value.attachmentId;const retained=await call('retainForSession',{attachmentId:id,sessionId:window.__compatSessionId});const removed=await call('removeAttachment',{attachmentId:id});const read=await call('readForPrompt',{attachmentId:id});return {retained,removed,read};})()");
+            assert.equal(result.retained.ok,true);
+            assert.equal(result.retained.value.retained,true);
+            assert.equal(result.removed.ok,true);
+            assert.equal(result.removed.value.deleted,false);
+            assert.equal(result.read.ok,true);
+            assert.equal(result.read.value.dataBase64,Buffer.from('retained bytes').toString('base64'));
+            console.log("Real Host attachment remote retained session-referenced bytes against a later draft deletion request");
+            if(process.argv.includes("--legacy-file-refs")) {
+              const attachmentRpc=async(method,args)=>evaluate(`(async()=>{const method=${JSON.stringify(method)};const rpcId=crypto.randomUUID();const response=await window.amiba.dshClient.fetch({url:'/api/amibaAttachments/'+method,method:'POST',headers:{'content-type':'application/json'},body:new TextEncoder().encode(JSON.stringify({type:'client-request',rpcId,method:'amibaAttachments/'+method,payload:{args:${JSON.stringify(args)}}}))});const envelope=JSON.parse(new TextDecoder().decode(response.body));if(!envelope.result.ok)throw new Error(JSON.stringify(envelope.result));return envelope.result.value;})()`);
+              const old=await attachmentRpc('put',{name:'legacy.txt',mime:'text/plain',kind:'text',dataBase64:Buffer.from('legacy bytes').toString('base64')});
+              const metadataFiles=(await readdir(profile,{recursive:true})).filter(file=>file.endsWith('/'+old.attachmentId+'.json'));
+              assert.equal(metadataFiles.length,1);
+              const metadataFile=path.join(profile,metadataFiles[0]);
+              assert.equal(JSON.parse(await readFile(metadataFile,'utf8')).retainedBy,undefined);
+              const rootSessionId=await evaluate("window.__compatSessionId");
+              const text=['<file-attachment>','Name: "legacy.txt"','Kind: "text"','Mime: "text/plain"','Size: 12 bytes','Attachment-ID: '+JSON.stringify(old.attachmentId),'</file-attachment>','','COMPAT_LEGACY_ATTACHMENT'].join('\n');
+              await writeFile(path.join(profile,'legacy-attachment.json'),JSON.stringify({sessionId:rootSessionId,text}));
+              await wait(async()=> (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LEGACY_ATTACHMENT'})")).entries.length>0);
+              await evaluate("window.__legacyReloadBefore=true;void 0");
+              await call('Page.reload',{});
+              await wait(async()=>{try{return await evaluate("!window.__legacyReloadBefore && !!window.__probeCtx?.sessions");}catch{return false;}});
+              await evaluate(`window.__compatSessionId=${JSON.stringify(rootSessionId)};window.__probeCtx.layout.openChat();window.__probeCtx.sessions.open(window.__compatSessionId);void 0`);
+              await wait(()=>evaluate("document.body.textContent.includes('COMPAT_LEGACY_ATTACHMENT')"));
+              await wait(async()=>JSON.parse(await readFile(metadataFile,'utf8')).retainedBy?.includes(rootSessionId));
+              assert.equal((await attachmentRpc('removeAttachment',{attachmentId:old.attachmentId})).deleted,false);
+              assert.equal((await attachmentRpc('readForPrompt',{attachmentId:old.attachmentId})).dataBase64,Buffer.from('legacy bytes').toString('base64'));
+              console.log('Opening real legacy history after renderer reload migrated its original attachment reference and preserved the exact stored bytes');
+            }
+
+          }
+
+        }
+
+      }
+
+      await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY')"));
+    }
+    if (process.argv.includes("--child-navigation")) {
+      await writeFile(path.join(profile, "child-create"), "create");
+      await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_CHILD'})")).entries.length > 0);
+      await evaluate("window.__probeCtx.sessions.refreshSubagents(window.__compatSessionId)");
+      console.log("child catalog after creation", await evaluate("window.__probeCtx.sessions.list.getSnapshot().subagentsByParent[window.__compatSessionId]"));
+      await wait(() => evaluate("(async()=>{await window.__probeCtx.sessions.refreshSubagents(window.__compatSessionId);return window.__probeCtx.sessions.list.getSnapshot().subagentsByParent[window.__compatSessionId]?.entries.some(e=>e.kind==='child'&&e.id==='compat-child')})()"));
+      await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:window.__compatSessionId,childSessionId:'compat-child',mode:'one-shot'});void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_CHILD_REPLY') && !document.body.textContent.includes('COMPAT_TURN_REPLY')"));
+      assert.equal(await evaluate("window.__probeCtx.sessions.subagentAddress('compat-child').parentSessionId"), await evaluate("window.__compatSessionId"));
+      assert.ok(await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).some(n=>n.getClientRects().length>0&&n.getAttribute('contenteditable')==='false')"), "one-shot child composer must be read-only");
+      await writeFile(path.join(tmpdir(), "amiba-child-readonly.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+      await evaluate("window.__readonlyInputActions=window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions;void 0");
+      assert.equal(await evaluate("typeof window.__readonlyInputActions?.setDraft"),"function");
+      await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY') && !document.body.textContent.includes('COMPAT_CHILD_REPLY')"));
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-child')===undefined"),true);
+      assert.equal(await evaluate("(()=>{try{window.__readonlyInputActions.setDraft('COMPAT_READONLY_OFFSCREEN');return false;}catch{return true;}})()"),true);
+      console.log("Standard offscreen draft action preserved the one-shot child's read-only boundary");
+      await evaluate("window.__probeCtx.sessions.open('compat-child');void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_CHILD_REPLY')"));
+      await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY')"));
+      await evaluate("window.__probeCtx.sessions.clear();void 0");
+      await wait(() => evaluate("window.__probeCtx.sessions.list.getSnapshot().current===undefined && !document.body.textContent.includes('COMPAT_TURN_REPLY')"));
+      await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:window.__compatSessionId,childSessionId:'compat-child',mode:'one-shot'});void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_CHILD_REPLY') && window.__probeCtx.sessions.list.getSnapshot().current==='compat-child'"));
+      await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY')"));
+      assert.ok(await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).some(n=>n.getClientRects().length>0&&n.getAttribute('contenteditable')==='true')"), "ordinary parent composer must become editable again");
+      console.log("Real catalog child navigation, Home-origin open, read-only composer, transcript and parent return verified");
+      if (process.argv.includes("--child-reload")) {
+        const parentId = await evaluate("window.__compatSessionId");
+        await evaluate("window.__probeCtx.sessions.open('compat-child');void 0");
+        await wait(() => evaluate("document.body.textContent.includes('COMPAT_CHILD_REPLY')"));
+        await evaluate("window.__beforeChildReload=true;void 0");
+        await call("Page.reload", {});
+        await wait(async () => { try { return await evaluate("Boolean(!window.__beforeChildReload && window.__probeCtx?.sessions && document.querySelector('[data-amiba-product-shell]'))"); } catch { return false; } });
+        await evaluate(`window.__compatSessionId=${JSON.stringify(parentId)};window.__probeCtx.layout.openChat();window.__probeCtx.sessions.open('compat-child');void 0`);
+        await wait(() => evaluate("document.body.textContent.includes('COMPAT_CHILD_REPLY')"));
+        assert.equal(await evaluate("window.__probeCtx.sessions.subagentAddress('compat-child')?.parentSessionId"), parentId);
+        assert.ok(await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).some(n=>n.getClientRects().length>0&&n.getAttribute('contenteditable')==='false')"));
+        await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+        await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY')"));
+        console.log("Child transcript, direct-parent address and read-only state survived full renderer reload");
+      }
+    }
+
+    const beforeClearIds = await evaluate("window.__probeCtx.sessions.list.getSnapshot().ids");
+    await evaluate("window.__probeCtx.sessions.clear();void 0");
+    await wait(() => evaluate("window.__probeCtx.sessions.list.getSnapshot().current===undefined && !document.body.textContent.includes('COMPAT_TURN_REPLY')"));
+    assert.deepEqual(await evaluate("window.__probeCtx.sessions.list.getSnapshot().ids"), beforeClearIds, "clear must retain every session");
+    await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY') && window.__probeCtx.sessions.list.getSnapshot().current===window.__compatSessionId"));
+    console.log("Official sessions.clear passed native deselection, retained session inventory and reopening the same transcript.");
+
+    await evaluate(`window.__turnTailOff=window.__probeCtx.slots.register({name:'conversation.chat.turnTail',select:owner=>[7,8].includes(owner.turn.turn)?true:null},(owner)=>{window.__turnTailOwners??={};window.__turnTailOwners[owner.turn.turn]=owner;window.__turnTailOwner=owner;return 'COMPAT_TURN_TAIL:'+owner.turn.turn+':'+owner.seq;});void 0`);
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY') && document.body.textContent.includes('COMPAT_TURN_TAIL:7:')"));
+    assert.ok(await evaluate("window.__turnTailOwner.turn===window.__probeCtx.sessions.binding(window.__compatSessionId).session.getSnapshot().chat.timeline.turns.get(7)"), "turn-tail receives the exact engine timeline object");
+    assert.ok(await evaluate("window.__turnTailOwner.seq===window.__turnTailOwner.turn.data.get('turn-tail').closing.finalNode.seq && typeof window.__turnTailOwner.openFile==='function'"), "tail uses the closing assistant sequence and a file opener");
+    // The raw official create API does not establish Amiba's file-workspace binding.
+    await evaluate(`window.amiba.workspaces.bind(window.__compatSessionId, ${JSON.stringify(profile)})`);
+    const fileWorkspace = await evaluate("window.amiba.workspaces.getCurrent(window.__compatSessionId)");
+    assert.ok(fileWorkspace && (await realpath(fileWorkspace)).startsWith(await realpath(profile)), "file fixture must stay inside the temporary workspace");
+    const openedFile = path.join(fileWorkspace, "compat-open.txt");
+    await writeFile(openedFile, "COMPAT_FILE_OPENED");
+    await smokeFileStat({ evaluate, fileWorkspace, openedFile });
+    await smokeDocumentRead({ evaluate, fileWorkspace });
+    await smokeFileProvider({ evaluate, wait, fileWorkspace });
+    if (process.argv.includes("--sidebar-right")) await smokeSidebarRight({ evaluate, wait, fileWorkspace, activateFocused: async () => { for (const type of ["keyDown","keyUp"]) await call("Input.dispatchKeyEvent", {type, key:"Enter", code:"Enter", windowsVirtualKeyCode:13, ...(type==="keyDown" ? {text:"\r",unmodifiedText:"\r"} : {})}); }, setViewport: width => width === undefined ? call("Emulation.clearDeviceMetricsOverride") : call("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: false }), screenshot: async variant => writeFile(path.join(tmpdir(), variant ? `amiba-native-sidebar-${variant}.png` : "amiba-native-sidebar.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64")) });
+    if (process.argv.includes("--sidebar-right")) await smokeDocumentPreview({ evaluate, wait, fileWorkspace, captureImage: async clip => (await call("Page.captureScreenshot", {format:"png", clip})).data, screenshot: async () => writeFile(path.join(tmpdir(), "amiba-native-document.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64")) });
+    await evaluate(`window.__turnTailOwners[7].openFile(${JSON.stringify(openedFile)});void 0`);
+    await wait(() => evaluate("document.querySelector('[data-workspace-file-preview]')?.textContent.includes('COMPAT_FILE_OPENED')"));
+    await writeFile(path.join(profile, "turn-tail-open"), "open");
+    await wait(() => evaluate("window.__probeCtx.sessions.binding(window.__compatSessionId).session.getSnapshot().chat.timeline.turns.get(8)?.status==='open'"));
+    assert.ok(await evaluate("!document.body.textContent.includes('COMPAT_TURN_TAIL:8:')"), "open empty turns must not render a completed tail");
+    await writeFile(path.join(profile, "turn-tail-close"), "close");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_TAIL:8:')"));
+    assert.ok(await evaluate("window.__turnTailOwners[8].seq===window.__turnTailOwners[8].turn.end.seq && window.__turnTailOwners[8].turn.data.get('turn-tail').closing===null"), "empty live turn uses the exact end sequence with no invented assistant");
+    await evaluate("window.__turnTailOff();void 0");
+    await wait(() => evaluate("!document.body.textContent.includes('COMPAT_TURN_TAIL:') && document.body.textContent.includes('COMPAT_TURN_REPLY')"));
+    console.log("Turn-tail passed actual Host history and live empty completion, exact engine turn/sequence, real file opening, and dynamic mount/unmount.");
+    for (let i=0;i<7;i++) await writeFile(path.join(profile, `compat-produced${i===0?"":i+1}.txt`), "COMPAT_PRODUCED_FILE_CONTENT");
+    await writeFile(path.join(profile, "turn-tail-deliverables"), "produce");
+    await wait(() => evaluate("Array.from(document.querySelectorAll('[data-produced-files-row] button')).some(n=>n.textContent==='compat-produced.txt')"));
+    assert.ok(await evaluate("window.__probeCtx.sessions.binding(window.__compatSessionId).session.getSnapshot().chat.timeline.turns.get(9).data.get('deliverables').produced.some(p=>p.path.endsWith('/compat-produced.txt'))"), "official deliverables must derive paths from the real Host-projected tool view");
+    await wait(() => evaluate("Array.from(document.querySelectorAll('.chat-md-file-link')).some(n=>n.textContent==='compat-produced.txt')"));
+    await evaluate("Array.from(document.querySelectorAll('.chat-md-file-link')).find(n=>n.textContent==='compat-produced.txt').click()");
+    await wait(() => evaluate("document.querySelector('[data-workspace-file-preview]')?.textContent.includes('COMPAT_PRODUCED_FILE_CONTENT')"));
+    await evaluate("window.__proseBubble=Array.from(document.querySelectorAll('.chat-md-file-link')).find(n=>n.textContent==='compat-produced.txt').closest('[data-selection=text]');window.__proseBubble.querySelector('button[aria-expanded=false]').click();void 0");
+    await wait(() => evaluate("Array.from(window.__proseBubble.querySelectorAll('.chat-md-file-link')).filter(n=>n.textContent==='compat-produced.txt').length===2"));
+    assert.ok(await evaluate("!Array.from(window.__proseBubble.querySelectorAll('.chat-md-file-link')).some(n=>n.textContent.includes('COMPAT_PRIVATE_THOUGHT'))"), "thinking text must not acquire prose attribution");
+    if (process.argv.includes("--interrupted-prose")) {
+      assert.ok(await evaluate("(()=>{const turn=window.__probeCtx.sessions.binding(window.__compatSessionId).session.getSnapshot().chat.timeline.turns.get(9);const final=turn.data.get('turn-tail').closing.finalNode;return final.interrupted===true && final.messageId===undefined && !Number.isInteger(final.seq);})()"), "interrupted prose must use the actual synthetic final without a message ID");
+      console.log("Interrupted prose passed actual synthetic final, folded narration and real file opening without an assistant/message event.");
+    }
+    console.log("Official prose links passed live source mapping, folded final-message narration, thinking cleanup and file opening.");
+    await evaluate(`window.__markdownRegister = label => window.__probeCtx.slots.register({name:'amiba.markdown.extension',id:'compat-markdown',inject:()=>({extension:{id:'compat-markdown',version:'1',remarkPlugins:[function compatTransform(){return tree=>{tree.children.unshift({type:'paragraph',children:[{type:'text',value:label}]});};}]}})},()=>null);window.__markdownOff=window.__markdownRegister('COMPAT_MARKDOWN_FIRST');void 0`);
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_MARKDOWN_FIRST')"));
+    await evaluate("window.__markdownOff();window.__markdownOff=window.__markdownRegister('COMPAT_MARKDOWN_SECOND');void 0");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_MARKDOWN_SECOND') && !document.body.textContent.includes('COMPAT_MARKDOWN_FIRST')"));
+    assert.ok(await evaluate("Array.from(document.querySelectorAll('.chat-md-file-link')).some(n=>n.textContent==='compat-produced.txt')"), "surrounding Markdown transforms retain existing prose file ownership");
+    await evaluate("window.__markdownOff();void 0");
+    await wait(() => evaluate("!document.body.textContent.includes('COMPAT_MARKDOWN_SECOND')"));
+    console.log("Markdown extension replacement passed same-name/same-version transforms, preserved file links and unload cleanup.");
+
+    await evaluate("Array.from(document.querySelectorAll('[data-produced-files-row] button')).find(n=>n.textContent==='compat-produced.txt').click()");
+    await wait(() => evaluate("document.querySelector('[data-workspace-file-preview]')?.textContent.includes('COMPAT_PRODUCED_FILE_CONTENT')"));
+    await writeFile(path.join(tmpdir(), "amiba-official-deliverables.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data,"base64"));
+    await wait(() => evaluate("Boolean(document.querySelector('.P4kPIW_showFolder'))"));
+    await evaluate("document.querySelector('.P4kPIW_showFolder').click()");
+    await wait(async () => (await readFile(nativeEvents, "utf8")).includes("turn-open-directory "));
+    const openedDirectory = (await readFile(nativeEvents,"utf8")).split("\n").find(line=>line.startsWith("turn-open-directory ")).slice("turn-open-directory ".length);
+    assert.equal(await realpath(openedDirectory), await realpath(profile), "folder action must use the existing validated session-workspace opener");
+    console.log("Official produced-files row passed actual tool-view derivation, file contents and validated directory IPC (OS folder opener stubbed).");
+    if (process.argv.includes("--legacy-tool-details")) await smokeLegacyToolDetails({ evaluate, wait, call, profile, live: process.argv.includes("--legacy-tool-live") });
+    if (process.argv.includes("--reopen-prose")) {
+      const reopenedId = await evaluate("window.__compatSessionId");
+      await evaluate("window.__beforeProseReload=true;void 0");
+      await call("Page.reload", {});
+      await wait(async () => { try { return await evaluate("Boolean(!window.__beforeProseReload && window.__probeCtx?.sessions && document.querySelector('[data-amiba-product-shell]'))"); } catch { return false; } });
+      await evaluate(`window.__compatSessionId=${JSON.stringify(reopenedId)};window.__probeCtx.layout.openChat();window.__probeCtx.sessions.open(window.__compatSessionId);void 0`);
+      await wait(() => evaluate("Array.from(document.querySelectorAll('.chat-md-file-link')).some(n=>n.textContent==='compat-produced.txt')"));
+      await evaluate("Array.from(document.querySelectorAll('.chat-md-file-link')).find(n=>n.textContent==='compat-produced.txt').click()");
+      await wait(() => evaluate("document.querySelector('[data-workspace-file-preview]')?.textContent.includes('COMPAT_PRODUCED_FILE_CONTENT')"));
+      await writeFile(path.join(tmpdir(), "amiba-history-prose.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data,"base64"));
+      console.log("Prose file links passed a full renderer reload and durable history reopen with actual file contents.");
+    }
+    let projectFolder = path.join(profile, "directory-project");
+    let extraFolder = path.join(profile, "directory-extra");
+    await mkdir(projectFolder, { recursive: true });
+    await mkdir(extraFolder, { recursive: true });
+    projectFolder = await realpath(projectFolder);
+    extraFolder = await realpath(extraFolder);
+    await evaluate(`(() => {
+      window.__projectDirectoryOff = window.__probeCtx.slots.register({
+        name:'sidebar.workspaces.directoryFlow', id:'compat-project-directory', priority:-100,
+      }, owner => { window.__projectDirectoryOwner=owner; return owner.open ? 'COMPAT_PROJECT_DIRECTORY_OPEN' : null; });
+      const toggle=document.querySelector('button[aria-label="Open workbench"],button[aria-label="打开工作台"]');
+      if(toggle) toggle.click();
+    })()`);
+    await wait(() => evaluate("Boolean(document.querySelector('button[aria-label=\"Show file tree\"],button[aria-label=\"显示文件目录\"]'))"));
+    await evaluate("document.querySelector('button[aria-label=\"Show file tree\"],button[aria-label=\"显示文件目录\"]').click()");
+    await wait(() => evaluate("Boolean(document.querySelector('[data-workspace-project-strip] button[aria-haspopup=menu]'))"));
+    await evaluate("document.querySelector('[data-workspace-project-strip] button[aria-haspopup=menu]').click()");
+    await wait(() => evaluate("Array.from(document.querySelectorAll('[role=menuitem]')).some(n=>n.textContent==='New project from folder'||n.textContent==='从文件夹新建项目')"));
+    await evaluate("Array.from(document.querySelectorAll('[role=menuitem]')).find(n=>n.textContent==='New project from folder'||n.textContent==='从文件夹新建项目').click()");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_PROJECT_DIRECTORY_OPEN')"));
+    await evaluate(`window.__projectDirectoryOwner.onPicked(${JSON.stringify(projectFolder)})`);
+    await wait(() => evaluate(`(async()=>!document.body.textContent.includes('COMPAT_PROJECT_DIRECTORY_OPEN') && await window.amiba.workspaces.getCurrent(window.__compatSessionId)===${JSON.stringify(projectFolder)})()`));
+    const createdProject = await evaluate("window.amiba.workspaceDevelopment.ensureProject(window.__compatSessionId)");
+    assert.deepEqual(createdProject.folders, [projectFolder], "new project must keep the actual selected folder");
+    await wait(() => evaluate("Boolean(document.querySelector('[data-workspace-project-add]:not(:disabled)'))"));
+    await evaluate("document.querySelector('[data-workspace-project-add]').click()");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_PROJECT_DIRECTORY_OPEN')"));
+    await evaluate("window.__projectDirectoryOwner.onCancel()");
+    await wait(() => evaluate("!document.body.textContent.includes('COMPAT_PROJECT_DIRECTORY_OPEN')"));
+    assert.deepEqual((await evaluate("window.amiba.workspaceDevelopment.ensureProject(window.__compatSessionId)")).folders, [projectFolder], "cancel must not add a project folder");
+    await evaluate("document.querySelector('[data-workspace-project-add]').click()");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_PROJECT_DIRECTORY_OPEN')"));
+    await evaluate(`window.__projectDirectoryOwner.onPicked(${JSON.stringify(extraFolder)})`);
+    await wait(() => evaluate(`(async()=>!document.body.textContent.includes('COMPAT_PROJECT_DIRECTORY_OPEN') && await window.amiba.workspaces.getCurrent(window.__compatSessionId)===${JSON.stringify(extraFolder)})()`));
+    const extendedProject = await evaluate("window.amiba.workspaceDevelopment.ensureProject(window.__compatSessionId)");
+    assert.equal(extendedProject.id, createdProject.id, "add-folder must retain project identity");
+    assert.deepEqual(extendedProject.folders, [projectFolder, extraFolder]);
+    await writeFile(path.join(tmpdir(), "amiba-directory-project.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+    await evaluate("window.__projectDirectoryOff();void 0");
+    console.log("Project directory slot passed real project creation, cancellation, add-folder and session location binding.");
     console.log("Compatibility slots passed: real plugin tab selection, Host-keyed config card, removal and inventory fallback.");
+  }
+  if (process.argv.includes("--child-cold-restart")) {
+    const parentId = await evaluate("window.__compatSessionId");
+    const beforeRestart = await evaluate("window.amiba.agentDiagnostics.status()");
+    assert.ok(beforeRestart.healthy && Number.isInteger(beforeRestart.pid));
+    // Re-register the model adapter after restart, but never recreate fixture sessions.
+    await writeFile(path.join(profile, "cold-restart"), "restore-existing-only");
+    const restarted = await evaluate("window.amiba.agentDiagnostics.restart()");
+    assert.ok(restarted.healthy && Number.isInteger(restarted.pid), JSON.stringify(restarted));
+    assert.notEqual(restarted.pid, beforeRestart.pid, "must replace the actual Host process");
+    assert.throws(() => process.kill(beforeRestart.pid, 0), error => error.code === "ESRCH");
+    await evaluate("window.__beforeColdRestartReload=true;void 0");
+    await call("Page.reload", {});
+    await wait(async () => { try { return await evaluate("!window.__beforeColdRestartReload && !!window.__probeCtx?.sessions && !!document.querySelector('[data-amiba-product-shell]')"); } catch { return false; } });
+    await evaluate(`window.__compatSessionId=${JSON.stringify(parentId)};window.__probeCtx.layout.openChat();window.__probeCtx.sessions.open('compat-child');void 0`);
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_CHILD_REPLY')"));
+    assert.equal(await evaluate("window.__probeCtx.sessions.subagentAddress('compat-child')?.parentSessionId"), parentId);
+    assert.ok(await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable]')).some(n=>n.getClientRects().length>0&&n.getAttribute('contenteditable')==='false')"));
+    await wait(() => evaluate(`(async()=>{await window.__probeCtx.sessions.refreshSubagents(${JSON.stringify(parentId)});return window.__probeCtx.sessions.list.getSnapshot().subagentsByParent[${JSON.stringify(parentId)}]?.entries.some(e=>e.kind==='child'&&e.id==='compat-child')})()`));
+    await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_TURN_REPLY')"));
+    console.log("Cold Host process replacement restored one-shot child history, parent address, catalog and read-only composer without recreating fixtures");
+    await wait(() => evaluate("(async()=>{await window.__probeCtx.sessions.refreshSubagents('compat-continuable-parent');return window.__probeCtx.sessions.list.getSnapshot().subagentsByParent['compat-continuable-parent']?.entries.some(e=>e.kind==='child'&&e.id==='compat-continuable-child')})()"));
+    await evaluate("window.__probeCtx.sessions.open('compat-continuable-child');void 0");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_NATIVE_FOLLOWUP')"));
+    assert.equal(await evaluate("window.__probeCtx.sessions.subagentAddress('compat-continuable-child')?.parentSessionId"), "compat-continuable-parent");
+    await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0).focus();void 0");
+    await call("Input.insertText", { text: "COMPAT_COLD_FOLLOWUP" });
+    await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_COLD_FOLLOWUP')"));
+    await wait(() => evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+    console.log("Cold Host process replacement restored continuable child history and native submit automatically recovered its persisted parent through the configured official resolver");
+  }
+  if (process.argv.includes("--child-nested-restart")) {
+    await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0).focus();void 0");
+    await call("Input.insertText", { text: "COMPAT_NESTED_CREATE" });
+    await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_NESTED_CREATED'})")).entries.length > 0);
+    const openNested = async () => {
+      await wait(() => evaluate("(async()=>{await window.__probeCtx.sessions.refreshSubagents('compat-continuable-child');return window.__probeCtx.sessions.list.getSnapshot().subagentsByParent['compat-continuable-child']?.entries.some(e=>e.kind==='child'&&e.id==='compat-nested-child')})()"));
+      await evaluate("window.__probeCtx.sessions.openSubagent({parentSessionId:'compat-continuable-child',childSessionId:'compat-nested-child',mode:'continuable'});void 0");
+      await wait(() => evaluate("document.body.textContent.includes('COMPAT_NESTED_REPLY COMPAT_NESTED_INITIAL') && !!window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child')"));
+    };
+    const sendText = async text => {
+      await evaluate("Array.from(document.querySelectorAll('[data-composer-card] [contenteditable=true]')).find(n=>n.getClientRects().length>0).focus();void 0");
+      if (text) await call("Input.insertText", { text });
+      await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+      await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    };
+    await openNested();
+    const before = await evaluate("window.amiba.agentDiagnostics.status()");
+    const restarted = await evaluate("window.amiba.agentDiagnostics.restart()");
+    assert.ok(restarted.healthy && restarted.pid !== before.pid);
+    assert.throws(() => process.kill(before.pid, 0), error => error.code === "ESRCH");
+    await evaluate("window.__beforeNestedRestart=true;void 0");
+    await call("Page.reload", {});
+    await wait(async () => { try { return await evaluate("!window.__beforeNestedRestart && !!window.__probeCtx?.sessions"); } catch { return false; } });
+    await evaluate("window.__probeCtx.layout.openChat();void 0");
+    await openNested();
+    let nestedDraft = 'COMPAT_NESTED_FOLLOWUP';
+    let nestedResolved = nestedDraft;
+    if (process.argv.includes("--queue-draft")) {
+      await evaluate("window.__recoverCalls=0;window.__recoverRefOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-recover-ref',trigger:'@',candidates:async()=>[],onPick:()=>({}),matchSpace:(_s,token)=>token==='@recover'?{insert:{source:'compat-recover-ref',ref:'id',label:'恢复引用😀',clipboardText:'recover clip'}}:undefined,codec:{serialize:async ref=>{window.__recoverCalls++;return '<recover:'+ref+'>'}}});window.__probeCtx.composerInputs.editInputDraft('compat-nested-child','@recover');void 0");
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.controllerFor('compat-nested-child').onSpace()"),true);
+      await wait(() => evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child')?.occurrences.length===1"));
+      await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-nested-child',window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child').draft+' literal @[dsh.reference:missing|id|literal|clip]');void 0");
+      await evaluate("window.__probeCtx.composerInputs.editInputDraft('compat-nested-child','COMPAT_NESTED_FOLLOWUP '+window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child').draft);void 0");
+      const recoveryDraft=await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child')");
+      nestedDraft=recoveryDraft.draft;
+      const reference=recoveryDraft.occurrences[0];
+      nestedResolved=(nestedDraft.slice(0,reference.offset)+'<recover:id>'+nestedDraft.slice(reference.offset+reference.length)).trim();
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-nested-child')"),true);
+    } else await sendText(nestedDraft);
+    await wait(() => evaluate(`document.body.textContent.includes("Couldn't open the conversation") && window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child')?.draft===${JSON.stringify(nestedDraft)}`));
+    if (process.argv.includes("--queue-draft")) {
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child').occurrences.length"),1);
+      assert.equal(await evaluate("window.__recoverCalls"),1);
+    }
+    assert.ok(!await evaluate("document.body.textContent.includes('COMPAT_NESTED_REPLY COMPAT_NESTED_FOLLOWUP')"));
+    console.log("Cold nested parent ownership refusal preserved the original grandchild draft without sending a synthetic wake-up message");
+    await wait(() => evaluate("(async()=>{await window.__probeCtx.sessions.refreshSubagents('compat-continuable-parent');return window.__probeCtx.sessions.list.getSnapshot().subagentsByParent['compat-continuable-parent']?.entries.some(e=>e.kind==='child'&&e.id==='compat-continuable-child')})()"));
+    await evaluate("window.__probeCtx.sessions.open('compat-continuable-child');void 0");
+    await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child')"));
+    await sendText("COMPAT_NESTED_PARENT_WAKE");
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_CONTINUABLE_REPLY COMPAT_NESTED_PARENT_WAKE')"));
+    await openNested();
+    assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-nested-child').draft"), nestedDraft);
+    assert.equal(await evaluate("window.__probeCtx.composerInputs.submitInput('compat-nested-child')"),true);
+    await wait(() => evaluate("document.body.textContent.includes('COMPAT_NESTED_REPLY COMPAT_NESTED_FOLLOWUP')"));
+    if (process.argv.includes("--queue-draft")) {
+      await wait(async () => (await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_MODEL'})")).entries.some(entry => entry.message==='AMIBA_PROBE_MODEL compat-nested-child '+nestedResolved));
+      assert.equal(await evaluate("window.__recoverCalls"),2);
+      await evaluate("window.__recoverRefOff();void 0");
+      console.log("Failed native preparation restored real reference nodes and literal text; retry resolved the restored reference through its codec again");
+    }
+    console.log("An actually running parent continuation enabled the persisted nested child to submit its retained draft through the original composer");
+    await evaluate("window.__probeCtx.sessions.open('compat-continuable-child');void 0");
+    await wait(() => evaluate("!!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+    await evaluate("document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]').click();void 0");
+    await wait(() => evaluate("!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+  }
+  if (process.argv.includes('--native-model-file')) {
+    // Earlier directory-slot checks deliberately rebind this fixture session.
+    await evaluate(`window.amiba.workspaces.bind(window.__compatSessionId, ${JSON.stringify(profile)})`);
+    await evaluate("window.__probeCtx.sessions.open(window.__compatSessionId);void 0");
+    await wait(()=>evaluate("!!window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)"));
+    const selected=await evaluate(`(async()=>{const response=await window.amiba.dshClient.fetch({url:'/api/session.selectModel',method:'POST',headers:{'content-type':'application/json'},body:new TextEncoder().encode(JSON.stringify({type:'client-request',rpcId:'native-file-select',method:'session.selectModel',payload:{sessionId:window.__compatSessionId,provider:'compat-native-file',model:'fixture'}}))});return JSON.parse(new TextDecoder().decode(response.body)).result;})()`);
+    assert.equal(selected.ok,true);
+    const filePath=path.join(profile,'native-model.txt');await writeFile(filePath,'COMPAT_MODEL_BYTES');
+    await evaluate("Array.from(document.querySelectorAll('[data-composer-card]')).find(n=>n.getClientRects().length>0).parentElement.querySelector('input[type=file]').id='compat-model-file-input';void 0");
+    const doc=await call('DOM.getDocument',{});const node=await call('DOM.querySelector',{nodeId:doc.root.nodeId,selector:'#compat-model-file-input'});
+    await call('DOM.setFileInputFiles',{nodeId:node.nodeId,files:[filePath]});
+    await wait(()=>evaluate("document.body.textContent.includes('native-model.txt')"));
+    await evaluate("window.__probeCtx.composerInputs.setInputDraft(window.__compatSessionId,'COMPAT_NATIVE_MODEL_FILE');void 0");
+    const send=()=>evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).find(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')&&!n.disabled)?.click();void 0");
+    await wait(()=>evaluate("Array.from(document.querySelectorAll('[data-composer-card] button')).some(n=>n.getClientRects().length>0&&n.getAttribute('aria-label')?.startsWith('Send')&&!n.disabled)"));
+    await send();
+    await wait(()=>evaluate("document.body.textContent.includes('prompt rejected')"));
+    const rejectedLogs=await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_NATIVE_MODEL '})");
+    assert.ok(rejectedLogs.entries.some(e=>e.message.includes('AMIBA_PROBE_NATIVE_MODEL ')), 'failure must come from the actual file receiver');
+    const readFailedQueue=()=>evaluate("(async()=>{const key='pendingQueue:'+window.__compatSessionId;return (await window.amiba.storage.get(key))[key]??[];})()");
+    await wait(async()=>(await readFailedQueue()).some(row=>row.text==='COMPAT_NATIVE_MODEL_FILE'));
+    const retained=(await readFailedQueue()).find(row=>row.text==='COMPAT_NATIVE_MODEL_FILE');
+    assert.equal(retained.attachments[0].name,'native-model.txt');
+    assert.equal(retained.attachments[0].size,18);
+    assert.ok(retained.attachments[0].attachmentId);
+    await evaluate("document.querySelector('[data-composer-context-rail] ul button[aria-label=\"Send now\"]').click();void 0");
+    await wait(()=>evaluate("document.body.textContent.includes('COMPAT_NATIVE_MODEL_REPLY')&&!document.querySelector('[data-composer-card] button[aria-label=\"Stop generation\"]')"));
+    assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft"),'');
+    const logs=await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_NATIVE_MODEL '})");
+    const attempts=logs.entries.filter(e=>e.message.includes('AMIBA_PROBE_NATIVE_MODEL ')).map(e=>JSON.parse(e.message.split('AMIBA_PROBE_NATIVE_MODEL ')[1]));
+    assert.deepEqual(attempts.map(e=>e.attempt),[1,2]);
+    assert.deepEqual(attempts[1].content.map(part=>part.type),['text','text','file']);
+    const modelSessionId=await evaluate("window.__compatSessionId");
+    await call('Page.reload',{});
+    await wait(()=>evaluate("!!window.__probeCtx?.sessions"));
+    await evaluate(`window.__compatSessionId=${JSON.stringify(modelSessionId)};window.__probeCtx.sessions.open(window.__compatSessionId);void 0`);
+    await wait(()=>evaluate("document.body.textContent.includes('COMPAT_NATIVE_MODEL_REPLY')&&document.body.textContent.includes('native-model.txt')"));
+    console.log('Native model file: real picker, rejection retention, successful retry, local model adapter round-trip and reloaded file badge passed.');
   }
   await evaluate("window.__probePoll=setInterval(()=>window.amiba.agentDiagnostics.status().catch(()=>{}),50)");
   cli.kill("SIGINT");

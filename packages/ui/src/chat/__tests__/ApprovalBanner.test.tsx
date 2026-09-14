@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("@amiba/i18n", () => ({
@@ -80,5 +80,45 @@ describe("ApprovalBanner", () => {
       "z-0",
       "pb-5"
     )
+  })
+})
+
+describe("approval detail extensions", () => {
+  const request = { approvalId: "a", requestId: "rpc", sessionId: "s", toolCallId: "call-real", command: "pwd" }
+  const props = { approvals: [request], inFlight: {}, error: null, onRespond: vi.fn(), onDismissError: vi.fn() }
+
+  it("uses the correlated call while retaining the original decision request", () => {
+    const renderDetail = vi.fn((callId: string) => <div>Detail {callId}</div>)
+    const view = render(<ApprovalBanner {...props} renderDetail={renderDetail} />)
+    expect(screen.getByText("Detail call-real")).toBeInTheDocument()
+    expect(view.container.querySelector("[data-approval-code]")).toHaveTextContent("pwd")
+    expect(view.container.querySelectorAll("[data-approval-actions] button")).toHaveLength(4)
+    fireEvent.click(screen.getByRole("button", { name: "sidepanel.permission.allowOnce" }))
+    expect(props.onRespond).toHaveBeenLastCalledWith(request, "once")
+    view.rerender(<ApprovalBanner {...props} approvals={[{ ...request, toolCallId: "next-call" }]} renderDetail={renderDetail} />)
+    expect(screen.queryByText("Detail call-real")).not.toBeInTheDocument()
+    expect(screen.getByText("Detail next-call")).toBeInTheDocument()
+  })
+
+  it("does not invent a call identity or leave an empty detail container", () => {
+    const renderDetail = vi.fn(() => <div>Uncorrelated detail</div>)
+    const view = render(<ApprovalBanner {...props} approvals={[{ ...request, toolCallId: undefined }]} renderDetail={renderDetail} />)
+    expect(renderDetail).not.toHaveBeenCalled()
+    expect(view.container.querySelector(".approval-code")?.nextElementSibling).toHaveAttribute("data-approval-actions")
+  })
+
+  it("isolates failed plugin details and recovers for the next approval", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {})
+    try {
+      const renderDetail = (callId: string) => {
+        if (callId === "call-real") throw new Error("plugin failed")
+        return <div>Recovered detail</div>
+      }
+      const view = render(<ApprovalBanner {...props} renderDetail={renderDetail} />)
+      fireEvent.click(screen.getByRole("button", { name: "sidepanel.permission.deny" }))
+      expect(props.onRespond).toHaveBeenLastCalledWith(request, "deny")
+      view.rerender(<ApprovalBanner {...props} approvals={[{ ...request, approvalId: "b", toolCallId: "next" }]} renderDetail={renderDetail} />)
+      expect(screen.getByText("Recovered detail")).toBeInTheDocument()
+    } finally { errors.mockRestore() }
   })
 })

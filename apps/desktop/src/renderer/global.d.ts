@@ -9,6 +9,8 @@ import type {
   WorkspaceFileChange,
   WorkspaceFileDocument,
   WorkspaceFileBytes,
+  WorkspaceFileStat,
+  WorkspaceFileObservation,
   WorkspaceDevelopmentAdapter,
   WorkspaceTreeEntry,
 } from "@amiba/app-runtime/platform";
@@ -35,6 +37,11 @@ interface AmibaBridgeApi {
     standaloneTitleBar?: boolean;
   };
   dshClient: {
+    uploadOpen(url: string): Promise<string>;
+    uploadWrite(id: string, bytes: Uint8Array): Promise<void>;
+    uploadFinish(id: string): Promise<{status:number;body:string}>;
+    uploadCancel(id: string): Promise<void>;
+    download(url: string): Promise<void>;
     boot(): Promise<{
       baseUrl: string;
       graph: {
@@ -85,6 +92,8 @@ interface AmibaBridgeApi {
     chooseDirectory(defaultPath?: string): Promise<string | null>;
     getDefaultRoot(): Promise<string>;
     bind(sessionId: string, path: string): Promise<void>;
+    bindIfUnbound(sessionId: string, path: string): Promise<string | null>;
+    resolveRuntimeCwd(sessionId: string, cwd: string): Promise<string>;
     unbind(sessionId: string): Promise<void>;
     getCurrent(sessionId: string): Promise<string | null>;
     listBindings(): Promise<Record<string, string>>;
@@ -99,7 +108,10 @@ interface AmibaBridgeApi {
     tree(sessionId: string, path?: string): Promise<WorkspaceTreeEntry[]>;
     search(sessionId: string, query: string): Promise<WorkspaceTreeEntry[]>;
     read(sessionId: string, path: string): Promise<WorkspaceFileDocument>;
+    stat(sessionId: string, path: string): Promise<WorkspaceFileStat>;
+    observe(sessionId: string, path: string, changed: () => void): WorkspaceFileObservation;
     readBytes(sessionId: string, path: string): Promise<WorkspaceFileBytes>;
+    readDocument(sessionId: string, path: string, request: import("@amiba/app-runtime/platform").WorkspaceDocumentReadRequest): import("@amiba/app-runtime/platform").WorkspaceDocumentRead;
     reveal(sessionId: string, path: string): Promise<void>;
     openExternal(sessionId: string, path: string): Promise<void>;
     watch(

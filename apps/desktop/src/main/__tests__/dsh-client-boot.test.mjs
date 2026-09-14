@@ -5,6 +5,7 @@ import {
   extractDshClientBootGraph,
   extractDshShellAssets,
   proxyDshClientFetch,
+  resolveDshSessionDownloadUrl,
 } from "../dsh-client-boot.ts";
 
 test("extracts and absolutizes the host-composed DSH client graph", () => {
@@ -163,4 +164,13 @@ test("refuses to proxy non-API targets", async () => {
     ),
     /refused a non-runtime API URL/u,
   );
+});
+
+
+test("native download handoff preserves query and rejects other authorities or endpoints", () => {
+  const base = "http://127.0.0.1:8080";
+  assert.equal(resolveDshSessionDownloadUrl("/api/session.export?sessionId=s&includeDescendants=true",base).href, base+"/api/session.export?sessionId=s&includeDescendants=true");
+  for (const url of ["http://127.0.0.1:9090/api/session.export", "https://remote.example/api/session.export", "/api/settings.describe", "/api/session.export/extra", "file:///api/session.export", "http://user:password@127.0.0.1:8080/api/session.export"]) {
+    assert.throws(() => resolveDshSessionDownloadUrl(url,base));
+  }
 });

@@ -1,10 +1,13 @@
+import type { ComposerDraftSource } from "../composer-draft-store"
 import { LexicalComposer } from "@lexical/react/LexicalComposer"
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
 import { ContentEditable } from "@lexical/react/LexicalContentEditable"
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary"
-import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin"
+import { ComposerHistoryPlugin } from "./plugins/ComposerHistoryPlugin"
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin"
 import {
   forwardRef,
+  useEffect,
   type ClipboardEventHandler,
   type CSSProperties,
   type ReactNode,
@@ -14,6 +17,7 @@ import { baseEditorConfig } from "./lexical-config"
 import { AutoGrowPlugin } from "./plugins/AutoGrowPlugin"
 import { ImeEnterPlugin } from "./plugins/ImeEnterPlugin"
 import { ImperativeHandlePlugin, type RichComposerHandle } from "./plugins/ImperativeHandlePlugin"
+import { ReferenceClipboardPlugin } from "./plugins/ReferenceClipboardPlugin"
 import { MentionSerializePlugin } from "./plugins/MentionSerializePlugin"
 import { OfficialTriggerPlugin } from "./plugins/OfficialTriggerPlugin"
 import { TriggerMenuPlugin } from "./plugins/TriggerMenuPlugin"
@@ -22,8 +26,15 @@ import type { TriggerProvider } from "./providers/types"
 
 export type { RichComposerHandle } from "./plugins/ImperativeHandlePlugin"
 
+function EditableStatePlugin({ disabled }: { disabled?: boolean }) {
+  const [editor] = useLexicalComposerContext()
+  useEffect(() => { editor.setEditable(!disabled) }, [editor, disabled])
+  return null
+}
+
 export interface RichComposerEditorProps {
   value: string
+  draftSource?: ComposerDraftSource
   onChange: (next: string) => void
   placeholder?: string
   disabled?: boolean
@@ -69,6 +80,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
   function RichComposerEditor(props, ref) {
     const {
       value,
+      draftSource,
       onChange,
       placeholder,
       disabled,
@@ -93,7 +105,13 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
                 role="textbox"
                 aria-multiline="true"
                 spellCheck
-                onPaste={onPaste}
+                onPaste={disabled || trigger?.official ? undefined : onPaste}
+                onPasteCapture={disabled || !trigger?.official ? undefined : event => {
+                  onPaste?.(event)
+                  // File intake has consumed this event. Prevent Lexical's
+                  // native listener from processing the same payload again.
+                  if (event.defaultPrevented) event.stopPropagation()
+                }}
                 style={style}
                 className={cn(
                   "resize-none overflow-hidden border-0 bg-transparent text-sm outline-none",
@@ -120,13 +138,15 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
             }
             ErrorBoundary={LexicalErrorBoundary}
           />
-          <HistoryPlugin />
+          <ComposerHistoryPlugin source={draftSource} />
+          <ReferenceClipboardPlugin />
+          <EditableStatePlugin disabled={disabled} />
           <AutoGrowPlugin
             maxHeightPx={maxHeightPx ?? 200}
             layoutKey={className}
           />
-          <MentionSerializePlugin value={value} onChange={onChange} />
-          {onSubmitChord && (
+          <MentionSerializePlugin value={value} onChange={onChange} draftSource={draftSource} />
+          {onSubmitChord && !disabled && (
             <ImeEnterPlugin onSubmitChord={onSubmitChord} onKeyDownExtra={onKeyDownExtra} />
           )}
           <ImperativeHandlePlugin handleRef={ref} />

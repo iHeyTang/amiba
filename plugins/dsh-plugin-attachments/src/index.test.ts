@@ -109,3 +109,26 @@ describe("Amiba DSH attachment store", () => {
     expect(result.truncated).toBe(false);
   });
 });
+
+it("persists session references across store recreation and rejects ordinary draft deletion", async()=>{
+  const root=await mkdtemp(join(tmpdir(),"amiba-attachment-retention-"));
+  const store=new AmibaAttachmentStore(root);
+  const item=await store.put({name:"saved.txt",mime:"text/plain",kind:"text",dataBase64:base64("retained bytes")});
+  await Promise.all([store.retainForSession(item.attachmentId,"session-a"),store.retainForSession(item.attachmentId,"session-b"),store.retainForSession(item.attachmentId,"session-a")]);
+  const restored=new AmibaAttachmentStore(root);
+  expect((await restored.read(item.attachmentId)).retainedBy).toEqual(["session-a","session-b"]);
+  expect(await restored.remove(item.attachmentId)).toEqual({attachmentId:item.attachmentId,deleted:false});
+  expect(Buffer.from((await restored.read(item.attachmentId)).data).toString()).toBe("retained bytes");
+});
+it("serializes retain-before-remove while leaving unreferenced drafts removable",async()=>{
+  const root=await mkdtemp(join(tmpdir(),"amiba-attachment-race-"));
+  const store=new AmibaAttachmentStore(root);
+  const item=await store.put({name:"a.txt",mime:"text/plain",kind:"text",dataBase64:base64("bytes")});
+  const retaining=store.retainForSession(item.attachmentId,"session");
+  const removing=store.remove(item.attachmentId);
+  await retaining;
+  expect((await removing).deleted).toBe(false);
+  const draft=await store.put({name:"draft.txt",mime:"text/plain",kind:"text",dataBase64:base64("draft")});
+  expect((await store.remove(draft.attachmentId)).deleted).toBe(true);
+  await expect(store.retainForSession(draft.attachmentId,"session")).rejects.toThrow();
+});

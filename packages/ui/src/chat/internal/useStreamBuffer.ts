@@ -1,3 +1,5 @@
+import { appendAssistantText, applyAssistantTextSource } from "@amiba/app-runtime/dsh-client";
+import type { StreamEvent } from "@amiba/app-runtime/protocol";
 import { upsertCompactionTimeline, interruptOpenCompactions } from "@amiba/app-runtime/dsh-client";
 import type { CompactionUpdate } from "@amiba/app-runtime/protocol";
 import { useCallback, useEffect, useRef } from "react";
@@ -80,7 +82,8 @@ export interface UseStreamBufferResult {
 
   // --- Stream-event handlers -----------------------------------------
   /** Append a `delta.content` chunk. Schedules a flush. */
-  onChunk: (text: string) => void;
+  onChunk: (text: string, runtimeStep?: number) => void;
+  onAssistantTextSource: (event: Extract<StreamEvent,{kind:"assistantTextSource"}>) => void;
   /** Append a reasoning delta chunk. Schedules a verbose flush. */
   onReasoning: (text: string) => void;
   /** Overwrite the running tool-call list. Schedules a verbose flush. */
@@ -155,15 +158,9 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     };
   }, [cancelStreamChunkFlush]);
 
-  const appendTextToVerboseTimeline = useCallback((delta: string): void => {
+  const appendTextToVerboseTimeline = useCallback((delta: string, runtimeStep?: number): void => {
     const v = verboseStateRef.current;
-    if (!v) return;
-    const last = v.timeline[v.timeline.length - 1];
-    if (last && last.kind === "text") {
-      last.text += delta;
-    } else {
-      v.timeline.push({ kind: "text", id: shortId("tl"), text: delta });
-    }
+    if (v) appendAssistantText(v.timeline, delta, () => shortId("tl"), runtimeStep);
   }, []);
 
   const appendToolToVerboseTimeline = useCallback((toolCallId: string): void => {
@@ -355,15 +352,21 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
   }, []);
 
   const onChunk = useCallback(
-    (text: string): void => {
+    (text: string, runtimeStep?: number): void => {
       const slot = streamChunkBufRef.current;
       if (slot) slot.pending += text;
-      appendTextToVerboseTimeline(text);
+      appendTextToVerboseTimeline(text, runtimeStep);
       scheduleStreamChunkFlush();
       scheduleVerboseFlush();
     },
     [appendTextToVerboseTimeline, scheduleStreamChunkFlush, scheduleVerboseFlush],
   );
+
+  const onAssistantTextSource = useCallback((event: Extract<StreamEvent,{kind:"assistantTextSource"}>) => {
+    const v = verboseStateRef.current;
+    if (v) applyAssistantTextSource(v.timeline, event);
+    scheduleVerboseFlush();
+  }, [scheduleVerboseFlush]);
 
   const onReasoning = useCallback(
     (text: string): void => {
@@ -440,6 +443,7 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     reset,
     hydrateFromSnapshot,
     onChunk,
+    onAssistantTextSource,
     onReasoning,
     onToolCalls,
     onToolProgress,

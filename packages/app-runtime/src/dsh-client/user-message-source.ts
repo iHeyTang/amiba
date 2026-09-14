@@ -1,7 +1,10 @@
 import type {
+  MessageImage,
   MessageNotice,
   PluginMessageOrigin,
 } from "@amiba/app-runtime/protocol"
+
+import { durableContentImages } from "./content-images"
 
 import { splitFileAttachmentsFromPrompt } from "../core/attachments/format"
 import type { AttachmentBadge } from "../core/attachments/types"
@@ -127,8 +130,10 @@ export function visibleUserMessage(value: unknown): VisibleUserMessage | null {
 export interface UserMessageText {
   /** The text a person reads: every envelope removed, parts joined by `\n`. */
   text: string
-  /** One badge per attachment the envelopes described, in wire order. */
+  /** Native envelope badges plus otherwise unrepresented durable files. */
   badges: AttachmentBadge[]
+  /** Valid durable image blocks in their original content order. */
+  images: MessageImage[]
 }
 
 /**
@@ -142,11 +147,9 @@ export interface UserMessageText {
  * splitter divides in place. A plain-string `content` (older logs) counts as
  * a single part.
  *
- * Both consumers call this, so a relayed message carrying an envelope reads
- * the same live as it does after a reload — the bridge simply has nowhere to
- * put `badges` yet (`StreamEvent.userMessage` carries text only, and
- * attachments are a composer feature no plugin relay uses today), while the
- * durable projection renders them as chips.
+ * Both consumers carry the same badges, so a relayed file message reads the
+ * same live as after reload. Durable image references remain separate from
+ * file badges, without turning staging IDs into durable references.
  */
 export function userMessageText(content: unknown): UserMessageText {
   const parts =
@@ -167,7 +170,25 @@ export function userMessageText(content: unknown): UserMessageText {
     badges.push(...split.badges)
     if (split.text) texts.push(split.text)
   }
-  return { text: texts.join("\n"), badges }
+  // Native messages also carry legacy metadata for Amiba's ID-based tools.
+  // Match occurrences one-to-one so a dual representation gets one badge,
+  // while repeated standalone official file blocks remain distinct.
+  const unmatched = badges.filter(badge => badge.kind !== "image").slice()
+  if (Array.isArray(content)) content.forEach((part, index) => {
+    const item = record(part)
+    const file = record(item?.attachment)
+    if (item?.type !== "file" || !file || typeof file.attachmentId !== "string" || !file.attachmentId
+      || typeof file.name !== "string" || !file.name || typeof file.bytes !== "number"
+      || !Number.isSafeInteger(file.bytes) || file.bytes < 0) return
+    const existing = unmatched.findIndex(badge => badge.name === file.name && badge.size === file.bytes)
+    if (existing >= 0) { unmatched.splice(existing, 1); return }
+    // A durable DSH hash is not an Amiba staging ID: display it without routing
+    // clicks to the native attachment reader under a fabricated identity.
+    badges.push({ uiId: `dsh-file:${file.attachmentId}:${index}`, name: file.name,
+      size: file.bytes, mime: "application/octet-stream", kind: "binary" })
+  })
+  const images = durableContentImages(content)
+  return { text: texts.join("\n"), badges, images }
 }
 
 /**

@@ -1,29 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { sessionPendingQueue, type PendingChatTurn } from "./pending-queue-store";
+export { pendingQueueStorageKey, type PendingChatTurn } from "./pending-queue-store";
 import { getPlatform } from "@amiba/app-runtime/platform";
 import { useT } from "@amiba/i18n";
 import { shortId } from "@amiba/app-runtime/utils";
 import {
-  deleteAttachmentFile,
   useSessions,
   type Attachment,
   type ChatEngineClient,
 } from "@amiba/app-runtime/core";
 
+import type { ComposerDraftDocument } from "../composer-draft-document";
+import type { ComposerDraftSource } from "../composer-draft-store";
+import { captureComposerHistory } from "../composer/composer-history-state";
+
 import { pickSendText } from "./pickSendText";
-
-/** One user turn waiting while the model is still streaming the previous reply. */
-export interface PendingChatTurn {
-  queueId: string;
-  text: string;
-  attachments: Attachment[];
-}
-
-/** Per-session storage key for the pending-turn queue — survives reloads
- * so a fast refresh while items are queued doesn't lose them. Exported
- * so the surface can clean up its own keys when sessions are deleted. */
-export function pendingQueueStorageKey(sessionId: string): string {
-  return `pendingQueue:${sessionId}`;
-}
+import { deleteUnretainedAttachments } from "./attachment-ownership";
 
 /** Compact preview line for the chip row. Body trim + attachment count. */
 export function previewPendingTurn(t: PendingChatTurn): string {
@@ -39,8 +31,12 @@ export function previewPendingTurn(t: PendingChatTurn): string {
  * the surface's runChatTurn without leaking the runner's many internal
  * dependencies into this file. */
 export interface RunChatTurnArgs {
+  /** Called only after an authoritative admission receipt, never on legacy dispatch. */
+  onAccepted?: () => void;
   text: string;
   attachments: Attachment[];
+  /** Original editor nodes, separate from the resolved model payload. */
+  draft?: ComposerDraftDocument;
 }
 
 /**
@@ -63,6 +59,8 @@ export interface RunChatTurnArgs {
  * function for the order-of-operations cascade.
  */
 export interface UsePendingQueueArgs {
+  /** Existing transcript can be viewed but cannot receive sends or stop actions. */
+  readOnly?: boolean;
   sessions: ReturnType<typeof useSessions>;
   client: ChatEngineClient;
 
@@ -71,6 +69,10 @@ export interface UsePendingQueueArgs {
   // composer drafts into queue items, commit edits, and clear the
   // composer after a fire.
   input: string;
+  draftSource?: ComposerDraftSource;
+  /** Route an edited queue row through the same codec/command pipeline as Send. */
+  submitComposer?: () => boolean;
+  resolveQueuedDraft?: (draft: ComposerDraftDocument, signal: AbortSignal) => Promise<string>;
   setInput: (v: string) => void;
   attachments: Attachment[];
   setAttachments: React.Dispatch<React.SetStateAction<Attachment[]>>;
@@ -83,6 +85,8 @@ export interface UsePendingQueueArgs {
 
   // Stream-side dependencies (from useStreamBuffer + local state).
   busy: boolean;
+  /** Whether the displaced turn has a local runChatTurn finally to suppress. */
+  hasNativeTurn?: (sessionId: string) => boolean;
   markCurrentAssistantStopped: () => void;
   rejectPendingTurn: (sessionId: string, err: Error) => void;
 
@@ -108,6 +112,8 @@ export interface UsePendingQueueResult {
   // Cross-domain setters. `handleStreamError` clears the queue on
   // fatal engine error; the snapshot path may also need to wipe.
   setQueue: React.Dispatch<React.SetStateAction<PendingChatTurn[]>>;
+  /** Clear the outgoing panel projection without deleting its session queue. */
+  resetView(): void;
   setPaused: (v: boolean) => void;
   setEditingQueueId: (v: string | null) => void;
 
@@ -131,6 +137,9 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     sessions,
     client,
     input,
+    draftSource,
+    submitComposer,
+    resolveQueuedDraft,
     setInput,
     attachments,
     setAttachments,
@@ -138,20 +147,30 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     attachmentUploading,
     setPendingSourceApp,
     busy,
+    hasNativeTurn,
     markCurrentAssistantStopped,
     rejectPendingTurn,
     runChatTurn,
   } = args;
+  const readOnlyRef = useRef(args.readOnly ?? false);
+  readOnlyRef.current = args.readOnly ?? false;
   const { t: _t } = useT();
   void _t; // i18n hook kept stable for future copy needs
 
-  const [queue, setQueue] = useState<PendingChatTurn[]>([]);
+  const [queue, setViewQueue] = useState<PendingChatTurn[]>([]);
+  const queueSource = useMemo(() => sessions.activeId ? sessionPendingQueue(getPlatform().storage, sessions.activeId) : undefined, [sessions.activeId]);
+  const setQueue = useCallback<React.Dispatch<React.SetStateAction<PendingChatTurn[]>>>(action => {
+    if (queueSource) queueSource.update(action);
+    else setViewQueue(action);
+  }, [queueSource]);
+  const resetView = useCallback(() => setViewQueue([]), []);
   const [paused, setPausedState] = useState(false);
   const queuePausedRef = useRef(false);
-  useEffect(() => {
-    queuePausedRef.current = paused;
-  }, [paused]);
-  const setPaused = useCallback((v: boolean): void => setPausedState(v), []);
+  queuePausedRef.current = queueSource?.isPaused() ?? paused;
+  const setPaused = useCallback((value: boolean): void => {
+    if (queueSource) queueSource.setPaused(value);
+    else { queuePausedRef.current = value; setPausedState(value); }
+  }, [queueSource]);
 
   /**
    * Send-now preemption flags. When `sendNow` decides to seal the
@@ -177,79 +196,101 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   // switching tabs should bring the prior session's queue back the next
   // time it's activated.
   // ---------------------------------------------------------------------
-  const queueHydratedForSessionRef = useRef<string>("");
-
   useEffect(() => {
-    const id = sessions.activeId;
-    if (!id || !sessions.ready) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await getPlatform().storage.get(pendingQueueStorageKey(id));
-        if (cancelled) return;
-        const raw = res[pendingQueueStorageKey(id)];
-        const restored: PendingChatTurn[] = Array.isArray(raw)
-          ? (raw as PendingChatTurn[])
-          : [];
-        // Only adopt if the user hasn't switched again during the read.
-        if (sessions.activeId !== id) return;
-        // If the user already queued items during the load window
-        // (clicked send while busy before storage.get resolved), keep
-        // those — overwriting with the persisted snapshot would lose
-        // their just-typed turn.
-        setQueue((prev) => (prev.length > 0 ? prev : restored));
-        queueHydratedForSessionRef.current = id;
-      } catch (e) {
-        console.warn("[sidepanel] load pendingQueue failed:", e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [sessions.activeId, sessions.ready]);
-
-  useEffect(() => {
-    const id = sessions.activeId;
-    if (!id) return;
-    // Skip writes for sessions we haven't hydrated yet — that initial
-    // [] state isn't an authoritative "queue is empty", it's just the
-    // pre-load placeholder.
-    if (queueHydratedForSessionRef.current !== id) return;
-    if (queue.length === 0) {
-      void getPlatform().storage.remove(pendingQueueStorageKey(id));
-    } else {
-      void getPlatform().storage.set({
-        [pendingQueueStorageKey(id)]: queue,
-      });
+    setViewQueue([]);
+    if (!queueSource || !sessions.ready) {
+      queuePausedRef.current = false;
+      setPausedState(false);
+      return;
     }
-  }, [queue, sessions.activeId]);
+    let active = true;
+    const update = () => {
+      if (!active) return;
+      queuePausedRef.current = queueSource.isPaused();
+      setPausedState(queuePausedRef.current);
+      setViewQueue(queueSource.getSnapshot());
+    };
+    const off = queueSource.subscribe(update);
+    update();
+    return () => { active = false; off(); };
+  }, [queueSource, sessions.ready]);
 
   // ---------------------------------------------------------------------
   // Actions.
   // ---------------------------------------------------------------------
 
+  const queueRef = useRef(queue);
+  queueRef.current = queue;
+  const activeSessionRef = useRef(sessions.activeId);
+  activeSessionRef.current = sessions.activeId;
+  const resolutionRef = useRef<AbortController | null>(null);
+  const cancelResolution = useCallback(() => {
+    resolutionRef.current?.abort();
+    resolutionRef.current = null;
+  }, []);
+  useEffect(() => cancelResolution, [sessions.activeId, args.readOnly, cancelResolution]);
+
+  // Resolve only unsent drafts stashed by Edit. Already-submitted queue items
+  // retain their original resolved model payload, including across reloads.
+  const prepareItem = useCallback((item: PendingChatTurn, ready: (item: PendingChatTurn) => void) => {
+    if (resolutionRef.current) return;
+    if (!item.needsResolution) { ready(item); return; }
+    const attempt = new AbortController();
+    const sessionId = sessions.activeId;
+    resolutionRef.current = attempt;
+    const current = () => resolutionRef.current === attempt && !attempt.signal.aborted &&
+      !readOnlyRef.current && activeSessionRef.current === sessionId &&
+      queueRef.current.includes(item);
+    void (async () => {
+      try {
+        if (!item.draft || !resolveQueuedDraft) throw new Error("Queued draft resolver is unavailable");
+        const text = await resolveQueuedDraft(item.draft, attempt.signal);
+        if (!current()) return;
+        if (!text.trim() && item.attachments.every(a => !a.attachmentId || a.uploading)) {
+          throw new Error("Queued draft resolved to empty content");
+        }
+        setAttachmentError(null);
+        ready({ ...item, text: text.trim(), needsResolution: false });
+      } catch (error) {
+        if (!current()) return;
+        setPaused(true);
+        setAttachmentError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (resolutionRef.current === attempt) resolutionRef.current = null;
+      }
+    })();
+  }, [sessions.activeId, resolveQueuedDraft, setAttachmentError, setPaused]);
+
   const drainHead = useCallback((): void => {
-    setQueue((prev) => {
-      if (prev.length === 0) return prev;
-      const [head, ...tail] = prev;
-      queueMicrotask(() =>
-        void runChatTurn({
-          text: head.text,
-          attachments: head.attachments,
-        }),
-      );
-      return tail;
+    if (readOnlyRef.current) return;
+    const head = queueRef.current[0];
+    if (!head) return;
+    prepareItem(head, (item) => {
+      queueRef.current = queueRef.current.filter(row => row.queueId !== item.queueId);
+      setQueue((prev) => prev.filter(row => row.queueId !== item.queueId));
+      queueMicrotask(() => void runChatTurn({
+        text: item.text, attachments: item.attachments,
+        ...(item.draft ? { draft: item.draft } : {}),
+      }));
     });
-  }, [runChatTurn]);
+  }, [prepareItem, runChatTurn, setQueue]);
 
   const sendNow = useCallback(
-    (queueId: string): void => {
+    (queueId: string, textArg?: string): void => {
+      if (readOnlyRef.current || resolutionRef.current) return;
       const editingThisOne = editingQueueId === queueId;
+      if (editingThisOne && textArg === undefined && submitComposer) {
+        submitComposer();
+        return;
+      }
       let item: PendingChatTurn | undefined;
+      let onAccepted: (() => void) | undefined;
       if (editingThisOne) {
+        onAccepted = draftSource && captureComposerHistory(draftSource);
         item = {
           queueId,
-          text: input,
+          text: pickSendText(textArg, input),
+          ...(draftSource ? { draft: draftSource.getDocument() } : {}),
           attachments: attachments
             .filter((a) => a.attachmentId && !a.uploading)
             .map((a) => ({ ...a })),
@@ -262,48 +303,69 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       }
       if (!item) return;
 
-      // The item is about to fire — remove it from the visible queue
-      // now so the chip doesn't linger during the handoff.
-      setQueue((prev) => prev.filter((q) => q.queueId !== queueId));
-      setPausedState(false);
+      prepareItem(item, (item) => {
+        const original = queueRef.current.find(q => q.queueId === queueId);
+        deleteUnretainedAttachments(original?.attachments ?? [], [
+          ...queueRef.current.filter(q => q.queueId !== queueId).flatMap(q => q.attachments),
+          ...item.attachments,
+          ...(editingThisOne ? [] : attachments),
+        ]);
+        // The item is about to fire — remove it from the visible queue
+        // now so the chip doesn't linger during the handoff.
+        setQueue((prev) => prev.filter((q) => q.queueId !== queueId));
+        setPaused(false);
 
-      const sid = sessions.activeId;
-      if (busy && sid) {
-        // Drive the preemption locally. Order matters:
-        //   1. Set the gates BEFORE rejecting / aborting so neither the
-        //      finally that fires next microtask nor the engine's echo
-        //      double-handles us.
-        //   2. Seal the bubble locally so the user sees `[stopped]`
-        //      immediately, not after an engine round-trip.
-        //   3. Reject the old pendingTurn so the old runChatTurn unwinds
-        //      promptly into its finally (which we just gated).
-        //   4. Fire abort to DSH — best-effort cleanup; the echoed
-        //      `aborted` event hits `ignoreAbortForSessionRef` and
-        //      no-ops.
-        suppressFinallyDrainRef.current = true;
-        ignoreAbortForSessionRef.current = sid;
-        markCurrentAssistantStopped();
-        rejectPendingTurn(sid, new DOMException("aborted", "AbortError"));
-        try {
-          client.abort(sid);
-        } catch (e) {
-          console.warn("[sidepanel] abort-for-send-now failed:", e);
+        const sid = sessions.activeId;
+        if (busy && sid) {
+          // Drive the preemption locally. Order matters:
+          //   1. Set the gates BEFORE rejecting / aborting so neither the
+          //      finally that fires next microtask nor the engine's echo
+          //      double-handles us.
+          //   2. Seal the bubble locally so the user sees `[stopped]`
+          //      immediately, not after an engine round-trip.
+          //   3. Reject the old pendingTurn so the old runChatTurn unwinds
+          //      promptly into its finally (which we just gated).
+          //   4. Fire abort to DSH — best-effort cleanup; the echoed
+          //      `aborted` event hits `ignoreAbortForSessionRef` and
+          //      no-ops.
+          suppressFinallyDrainRef.current = hasNativeTurn?.(sid) ?? true;
+          ignoreAbortForSessionRef.current = sid;
+          markCurrentAssistantStopped();
+          rejectPendingTurn(sid, new DOMException("aborted", "AbortError"));
         }
-      }
+        // After renderer reload the Host may still be running a turn for which
+        // this window has no local busy state. Send now explicitly preempts it;
+        // let the authoritative session treat an already-idle interrupt as a no-op.
+        if (sid) {
+          try {
+            client.abort(sid);
+          } catch (e) {
+            console.warn("[sidepanel] abort-for-send-now failed:", e);
+          }
+        }
 
-      void runChatTurn({
-        text: item.text,
-        attachments: item.attachments,
+        void runChatTurn({
+          text: item.text,
+          attachments: item.attachments,
+          ...(item.draft ? { draft: item.draft } : {}),
+          ...(onAccepted ? { onAccepted } : {}),
+        });
       });
     },
     [
       editingQueueId,
+      prepareItem,
+      setQueue,
+      setPaused,
       queue,
       input,
+      draftSource,
+      submitComposer,
       attachments,
       sessions,
       client,
       busy,
+      hasNativeTurn,
       markCurrentAssistantStopped,
       rejectPendingTurn,
       runChatTurn,
@@ -313,6 +375,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   );
 
   const send = useCallback(async (textArg?: string): Promise<void> => {
+    if (readOnlyRef.current || resolutionRef.current) return;
     // `textArg` carries the Composer's mention-expanded text (`@[...]`
     // tokens turned into agent-facing text). Prefer it for the payload
     // that's DISPATCHED to the engine / QUEUED so the backend never sees
@@ -333,10 +396,11 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     // "save my changes and fire this one now" — equivalent to the per-row
     // send-now button on the same item.
     if (editingQueueId != null) {
-      sendNow(editingQueueId);
+      sendNow(editingQueueId, textArg);
       return;
     }
 
+    const draft = draftSource?.getDocument();
     const attachmentsForSend = attachments.filter(
       (a) => a.attachmentId && !a.uploading,
     );
@@ -347,6 +411,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
         {
           queueId: shortId("q"),
           text,
+          ...(draft ? { draft } : {}),
           attachments: attachmentsForSend.map((a) => ({ ...a })),
         },
       ]);
@@ -359,10 +424,11 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       // Sending a new message implicitly un-pauses: the user is
       // clearly ready for the queue to move again. The current stream
       // will finish and the finally-drain will kick in normally.
-      if (queuePausedRef.current) setPausedState(false);
+      if (queuePausedRef.current) setPaused(false);
       return;
     }
 
+    const onAccepted = draftSource && captureComposerHistory(draftSource);
     setInput("");
     setAttachments([]);
     setAttachmentError(null);
@@ -373,14 +439,17 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     // Not busy. If the queue was paused (i.e., user hit Stop and left
     // items queued), unpause first so the runChatTurn's finally-drain
     // fires the remaining items after this fresh turn completes.
-    if (queuePausedRef.current) setPausedState(false);
+    if (queuePausedRef.current) setPaused(false);
 
     await runChatTurn({
       text,
+      ...(draft ? { draft } : {}),
       attachments: attachmentsForSend,
+      ...(onAccepted ? { onAccepted } : {}),
     });
   }, [
     input,
+    draftSource,
     attachments,
     attachmentUploading,
     sessions.ready,
@@ -392,16 +461,20 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     setAttachmentError,
     setPendingSourceApp,
     sendNow,
+    setQueue,
+    setPaused,
   ]);
 
   const stop = useCallback((): void => {
+    if (readOnlyRef.current) return;
+    cancelResolution();
     // Preserve the pending queue. Hitting Stop while items are queued
     // is a "halt and let me think" gesture — wiping the queue forces
     // the user to retype everything they had lined up. We freeze
     // auto-drain with `queuePaused` so the next finished stream
     // doesn't immediately fire the next queued item behind the user's
     // back.
-    setPausedState(true);
+    setPaused(true);
     const sid = sessions.activeId;
     if (sid) {
       try {
@@ -410,28 +483,30 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
         console.warn("[sidepanel] abort failed:", e);
       }
     }
-  }, [sessions.activeId, client]);
+  }, [sessions.activeId, client, cancelResolution, setPaused]);
 
   const remove = useCallback(
     (queueId: string): void => {
-      setQueue((prev) => {
-        const hit = prev.find((q) => q.queueId === queueId);
-        if (hit) {
-          for (const a of hit.attachments) void deleteAttachmentFile(a);
-        }
-        return prev.filter((q) => q.queueId !== queueId);
-      });
+      cancelResolution();
+      const hit = queueRef.current.find(q => q.queueId === queueId);
+      const remaining = queueRef.current.filter(q => q.queueId !== queueId);
+      const clearsComposer = editingQueueId === queueId;
+      deleteUnretainedAttachments(
+        [...(hit?.attachments ?? []), ...(clearsComposer ? attachments : [])],
+        [...remaining.flatMap(q => q.attachments), ...(clearsComposer ? [] : attachments)],
+      );
+      queueRef.current = remaining;
+      setQueue(prev => prev.filter(q => q.queueId !== queueId));
       // If we just deleted the row that was being edited, drop edit
       // mode so the composer doesn't keep a ghost reference to a
       // vanished item.
       if (editingQueueId === queueId) {
         setEditingQueueId(null);
         setInput("");
-        for (const a of attachments) void deleteAttachmentFile(a);
         setAttachments([]);
       }
     },
-    [editingQueueId, attachments, setInput, setAttachments],
+    [editingQueueId, attachments, setInput, setAttachments, cancelResolution, setQueue],
   );
 
   /**
@@ -446,7 +521,9 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     (queueId: string): void => {
       const item = queue.find((q) => q.queueId === queueId);
       if (!item) return;
+      cancelResolution();
       const draftText = input;
+      const draft = draftSource?.getDocument();
       const draftAttachments = attachments.filter(
         (a) => a.attachmentId && !a.uploading,
       );
@@ -460,18 +537,24 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
           {
             queueId: shortId("q"),
             text: draftText,
+            ...(draft ? { draft, needsResolution: true } : {}),
             attachments: draftAttachments.map((a) => ({ ...a })),
           },
         ];
       });
       setEditingQueueId(queueId);
-      setInput(item.text);
+      if (item.draft && draftSource) draftSource.setParts(item.draft.parts);
+      else setInput(item.text);
       setAttachments(item.attachments.map((a) => ({ ...a })));
-      setPausedState(true);
+      setPaused(true);
     },
     [
       queue,
+      setQueue,
+      setPaused,
       input,
+      draftSource,
+      cancelResolution,
       attachments,
       setInput,
       setAttachments,
@@ -483,7 +566,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     if (editingQueueId == null) return;
     setEditingQueueId(null);
     setInput("");
-    for (const a of attachments) void deleteAttachmentFile(a);
+    deleteUnretainedAttachments(attachments, queueRef.current.flatMap(q => q.attachments));
     setAttachments([]);
   }, [editingQueueId, attachments, setInput, setAttachments]);
 
@@ -495,6 +578,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     suppressFinallyDrainRef,
     ignoreAbortForSessionRef,
     setQueue,
+    resetView,
     setPaused,
     setEditingQueueId,
     send,

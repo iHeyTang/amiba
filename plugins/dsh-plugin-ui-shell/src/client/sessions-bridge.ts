@@ -14,36 +14,41 @@
  * of its own at boot (a persisted ``dsh.sessions.current`` restore, and
  * ``workspaces.startInitialSelection`` opening the recent workspace's
  * session), and Amiba windows deliberately start empty — so a non-empty
- * official current while Amiba holds NO selection is runtime policy, not a
- * user action, and is cleared rather than followed. Following it made cold
+ * official current without an explicit open request is runtime policy and
+ * is cleared rather than followed. Following it made cold
  * windows jump into a session instead of landing on the home view.
  *
  * amiba → official (``setActive``): the official ``open(id)`` FAILS LOUD on
- * ids not yet in its list (``sessions.select: unknown session`` — the
- * manager checks its summaries before selecting), and a freshly minted
+ * ids neither listed nor retained as catalog children
+ * (``sessions.select: unknown session``), and a freshly minted
  * Amiba session races that list: Amiba creates blank sessions locally and
  * the real DSH session only materializes on first submit. So an unlisted id
  * is DEFERRED: the bridge clears the official selection (so official
  * session-scoped slots do not keep rendering the previous session under the
- * new draft surface) and opens the id once the official list gains it. A
+ * new draft surface) and opens the id once it is listed or addressed. A
  * newer ``setActive`` supersedes the pending target; a target that vanishes
- * from the list again, or whose open throws, returns to deferral instead of
+ * from the available targets again, or whose open throws, returns to deferral instead of
  * being dropped silently.
  *
- * official → amiba (``onExternalOpen``): forwarded ONLY when Amiba already
+ * official → amiba (``onExternalOpen``): the pinned runtime marks public
+ * open requests separately from initial workspace selection. Explicit opens
+ * are forwarded even from Home; restored/startup selection is not. On older
+ * runtimes without intent metadata, forwarding happens only when Amiba already
  * holds a session and the official side moved to a DIFFERENT one — the one
  * shape the runtime's own boot policies cannot produce (they select into an
  * empty window). That is the deliberate ecosystem open (a plugin calling
  * ``ctx.sessions.open``); it routes through the existing Amiba open-session
  * path (the ``amiba:open-session`` event → product-shell ``openSession``).
- * An official ``clear()`` is NOT forwarded (Amiba has no external deselect
- * path today) — recorded asymmetry, benign: official seats simply render
- * nothing until the next projection.
+ * Public clear requests carrying pinned runtime intent metadata forward to
+ * Amiba deselect. The bridge suppresses its own clear projection; unmarked
+ * internal selection loss retains the existing Amiba-authoritative behavior.
  */
+
+import type { AgentSubagentAddress } from "@amiba/app-runtime/platform";
 
 /** Minimal observable snapshot of the official session list this bridge reads. */
 export interface OfficialSessionListSnapshot {
-  /** Host-list order (ids the official `open()` accepts without an address). */
+  /** Host-list order (catalog children can be openable without appearing here). */
   readonly ids: readonly string[];
   /** The official current selection. */
   readonly current: string | undefined;
@@ -54,11 +59,20 @@ export interface OfficialSessionListSnapshot {
  * subset of dsh-client-runtime's `ctx.sessions` (`ISessions`).
  */
 export interface OfficialSessionsFace {
+  /** Pinned runtime metadata; identity changes for each public open request. */
+  readonly lastOpenRequest?: {
+    readonly sessionId: string;
+    readonly source: string;
+  };
+  /** Identity changes only for public clear requests in the pinned runtime. */
+  readonly lastClearRequest?: object;
   list: {
     getSnapshot(): OfficialSessionListSnapshot;
     subscribe(listener: () => void): () => void;
   };
-  /** Select a listed session as current; throws on ids not in the list. */
+  /** Retained direct-parent addresses also make a catalog child openable. */
+  subagentAddress?(id: string): AgentSubagentAddress | undefined;
+  /** Select a listed or retained catalog-addressed session as current. */
   open(id: string): void;
   /** Clear the current selection into the no-session view state. */
   clear(): void;
@@ -76,11 +90,12 @@ export interface AmibaSessionsBridge {
 /**
  * @param sessions - the official sessions face (`ctx.sessions`).
  * @param onExternalOpen - called with a session id when the OFFICIAL side
- *   switched to a different session while Amiba already held one.
+ *   explicitly opens a session, including from the empty home screen.
  */
 export function createSessionsBridge(
   sessions: OfficialSessionsFace,
-  onExternalOpen: (sessionId: string) => void,
+  onExternalOpen: (sessionId: string, subagent?: AgentSubagentAddress) => void,
+  onExternalClear?: () => void,
 ): AmibaSessionsBridge {
   /** Amiba's latest projected selection ("" = none) — the authority. */
   let lastPushed = "";
@@ -89,6 +104,17 @@ export function createSessionsBridge(
   /** The official current as this bridge last observed it ("" = none). */
   let lastSeenCurrent = sessions.list.getSnapshot().current ?? "";
   let disposed = false;
+  let lastSeenOpenRequest = sessions.lastOpenRequest;
+  let selectionRevision = 0;
+  let lastSeenClearRequest = sessions.lastClearRequest;
+  let projectingClear = false;
+  const clearProjection = () => {
+    projectingClear = true;
+    try { sessions.clear(); } finally { projectingClear = false; }
+  };
+
+  const canOpen = (id: string, snapshot: OfficialSessionListSnapshot): boolean =>
+    snapshot.ids.includes(id) || sessions.subagentAddress?.(id)?.childSessionId === id;
 
   const tryOpen = (id: string): boolean => {
     try {
@@ -110,43 +136,81 @@ export function createSessionsBridge(
   const project = (id: string, snapshot: OfficialSessionListSnapshot): void => {
     const current = snapshot.current ?? "";
     if (id === "") {
-      if (current !== "") sessions.clear();
+      if (current !== "") clearProjection();
       return;
     }
     if (current === id) return;
-    if (snapshot.ids.includes(id)) {
-      tryOpen(id);
-      return;
+    if (canOpen(id, snapshot)) {
+      if (tryOpen(id)) return;
     }
-    if (current !== "") sessions.clear();
+    if (current !== "") clearProjection();
     pending = id;
   };
 
   const handleListChange = (): void => {
     if (disposed) return;
     const snapshot = sessions.list.getSnapshot();
-    if (pending !== null && snapshot.ids.includes(pending)) {
+    const clearRequest = sessions.lastClearRequest;
+    const explicitClear = clearRequest !== undefined && clearRequest !== lastSeenClearRequest && !projectingClear;
+    lastSeenClearRequest = clearRequest;
+    const request = sessions.lastOpenRequest;
+    const newRequest = request !== lastSeenOpenRequest;
+    const explicitOpen =
+      newRequest &&
+      request?.source === "explicit" &&
+      request.sessionId === snapshot.current;
+    const initialOpen =
+      newRequest &&
+      request?.source === "initial" &&
+      request.sessionId === snapshot.current;
+    lastSeenOpenRequest = request;
+    if (explicitClear && onExternalClear) {
+      selectionRevision++;
+      pending = null;
+      lastSeenCurrent = "";
+      lastPushed = "";
+      onExternalClear();
+      return;
+    }
+    if (projectingClear) {
+      // Clearing a stale selection is our own projection, not a new catalog
+      // update. In particular, do not recursively retry a just-failed open.
+      lastSeenCurrent = snapshot.current ?? "";
+      return;
+    }
+    if (pending !== null && canOpen(pending, snapshot)) {
       const target = pending;
+      const revision = selectionRevision;
       pending = null;
       // Escape the store-notification stack before mutating the selection.
       queueMicrotask(() => {
         // Superseded while queued (a newer setActive moved on) — drop it.
-        if (disposed || lastPushed !== target) return;
-        const listed = sessions.list.getSnapshot().ids.includes(target);
+        if (disposed || lastPushed !== target || revision !== selectionRevision)
+          return;
+        const available = canOpen(target, sessions.list.getSnapshot());
         // The row can leave the list again inside the microtask; keep the
         // target deferred rather than dropping it into a silent desync.
-        if (!listed || !tryOpen(target)) pending = target;
+        if (!available || !tryOpen(target)) pending = target;
       });
     }
     const current = snapshot.current ?? "";
     if (current === lastSeenCurrent) return;
     lastSeenCurrent = current;
     if (current === lastPushed) return; // echo of our own projection
-    if (lastPushed !== "" && current !== "") {
-      // Amiba holds a session and the official side moved to another one:
-      // a deliberate ecosystem open. Follow it (the forward comes back
+    if (
+      current !== "" &&
+      (explicitOpen || (lastPushed !== "" && !initialOpen))
+    ) {
+      // A public open request is distinct from restored/startup selection.
+      // Existing active-session navigation (including catalog children)
+      // retains the fallback for paths without a public-open marker.
+      // Follow the explicit request (the forward comes back
       // through setActive, which no-ops against the already-current id).
-      onExternalOpen(current);
+      selectionRevision++;
+      pending = null;
+      const address = sessions.subagentAddress?.(current);
+      if (address?.childSessionId === current) onExternalOpen(current, { ...address });
+      else onExternalOpen(current);
       return;
     }
     // Amiba holds no selection (or the official side cleared): runtime
@@ -159,6 +223,7 @@ export function createSessionsBridge(
   return {
     setActive(id: string): void {
       if (disposed) return;
+      selectionRevision++;
       lastPushed = id;
       pending = null;
       project(id, sessions.list.getSnapshot());

@@ -30,6 +30,12 @@ class AmibaAttachmentsRemoteService extends TypertRemoteService {
   }
 
   @Remote
+  async retainForSession(attachmentId: string, sessionId: string) {
+    await this.store.retainForSession(attachmentId, sessionId);
+    return { attachmentId, retained: true };
+  }
+
+  @Remote
   removeAttachment(attachmentId: string) {
     return this.store.remove(attachmentId);
   }

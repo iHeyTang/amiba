@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import { expandMentionsAsync } from "../expandMentions"
 import { registerMentionType } from "../serialize"
@@ -37,3 +37,24 @@ describe("expandMentionsAsync", () => {
     )
   })
 })
+
+
+it("forwards submission cancellation to official reference codecs", async () => {
+  const attempt=new AbortController();
+  let resolve!:(text:string)=>void;
+  const serializeReference=vi.fn(()=>new Promise<string>(done=>{resolve=done;}));
+  const result=expandMentionsAsync("@[dsh.reference:fixture|id|Label|clipboard]",[],{serializeReference},attempt.signal);
+  expect(serializeReference).toHaveBeenCalledWith("fixture","id",attempt.signal);
+  attempt.abort(new Error("draft changed"));
+  // Even an owner ignoring cancellation cannot return an accepted old payload.
+  resolve("old resource");
+  await expect(result).rejects.toThrow("draft changed");
+});
+
+it("does not invoke codecs for an already canceled submission", async () => {
+  const attempt=new AbortController();
+  attempt.abort(new Error("session changed"));
+  const serializeReference=vi.fn();
+  await expect(expandMentionsAsync("@[dsh.reference:fixture|id|Label|clipboard]",[],{serializeReference},attempt.signal)).rejects.toThrow("session changed");
+  expect(serializeReference).not.toHaveBeenCalled();
+});

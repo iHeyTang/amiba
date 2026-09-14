@@ -9,6 +9,88 @@ function jsonResponse(value: unknown): Response {
 }
 
 describe("DshApiClient", () => {
+  it("establishes an empty mux on socket open and closes an unread stream", async () => {
+    const socket = new FakeWebSocket();
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", createWebSocket: () => socket });
+    const opening = client.openEvents();
+    socket.emit("open");
+    const stream = await opening;
+    await stream.return!();
+    expect(socket.closes).toHaveLength(1);
+  });
+
+  it("retains the first frame received alongside socket readiness", async () => {
+    const socket = new FakeWebSocket();
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", createWebSocket: () => socket });
+    const opening = client.openEvents();
+    socket.emit("open");
+    const frame = { type: "server-request", method: "session/subscribed", rpcId: "child-frame", payload: { type: "session/subscribed", sessionId: "child", lastSeq: 0 } };
+    socket.message(frame);
+    const stream = await opening;
+    expect(await stream.next()).toEqual({ done: false, value: { rpcId: frame.rpcId, payload: frame.payload } });
+    await stream.return!();
+    expect(socket.closes).toHaveLength(1);
+  });
+
+  it("rejects socket failure before readiness and releases the connection", async () => {
+    const socket = new FakeWebSocket();
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", createWebSocket: () => socket });
+    const opening = client.openEvents();
+    socket.emit("error");
+    await expect(opening).rejects.toThrow("WebSocket failed");
+    expect(socket.closes).toHaveLength(1);
+  });
+
+  it("cancels while waiting for socket readiness", async () => {
+    const socket = new FakeWebSocket();
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", createWebSocket: () => socket });
+    const controller = new AbortController();
+    const opening = client.openEvents(controller.signal);
+    controller.abort();
+    await expect(opening).rejects.toThrow("closed before opening");
+    expect(socket.closes).toHaveLength(1);
+  });
+
+  it("routes child continuation and interruption through the exact direct-parent address", async () => {
+    const calls: Array<{ method: string; payload: unknown }> = [];
+    const client = new DshApiClient({
+      baseUrl: "http://dsh.test",
+      fetch: (async (_url, init) => {
+        const body = JSON.parse(String(init?.body));
+        calls.push({ method: body.method, payload: body.payload });
+        return jsonResponse({ type: "server-response", rpcId: body.rpcId, result: {
+          ok: true, value: body.method === "subagent.prompt" ? { messageId: "message-child" } : { accepted: true },
+        } });
+      }) as typeof fetch,
+    });
+    const address = { parentSessionId: "parent", childSessionId: "child", mode: "continuable" as const };
+    const content = [{ type: "text" as const, text: "Continue" }];
+    await expect(client.subagentPrompt(address, content, { clientTimeZone: "Asia/Shanghai" })).resolves.toEqual({ messageId: "message-child" });
+    await expect(client.subagentInterrupt(address)).resolves.toEqual({ accepted: true });
+    expect(calls).toEqual([
+      { method: "subagent.prompt", payload: { ...address, content, clientTimeZone: "Asia/Shanghai" } },
+      { method: "subagent.interrupt", payload: address },
+    ]);
+  });
+
+  it("does not send continuation RPCs for one-shot children even from untyped callers", async () => {
+    const fetch = vi.fn();
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", fetch });
+    const address = { parentSessionId: "parent", childSessionId: "child", mode: "one-shot" };
+    await expect(client.subagentPrompt(address as never, [])).rejects.toThrow("One-shot");
+    await expect(client.subagentInterrupt(address as never)).rejects.toThrow("One-shot");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("matches the pinned official client's rejection of child image prompts", async () => {
+    const fetch = vi.fn();
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", fetch });
+    await expect(client.subagentPrompt({ parentSessionId: "parent", childSessionId: "child", mode: "continuable" }, [
+      { type: "image", mediaType: "image/png", data: "aW1hZ2U=", name: "image.png" },
+    ])).rejects.toThrow("Image input is unavailable");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("uses native DSH RPC envelopes", async () => {
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as { rpcId: string; method: string; payload: unknown }
@@ -358,6 +440,10 @@ class FakeWebSocket implements DshWebSocketLike {
   close(code?: number, reason?: string): void {
     this.readyState = 2
     this.closes.push({ code, reason })
+  }
+
+  emit(type: string): void {
+    for (const listener of this.listeners.get(type) ?? []) listener(new Event(type))
   }
 
   message(value: unknown): void {

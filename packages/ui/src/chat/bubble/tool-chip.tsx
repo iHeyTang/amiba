@@ -1,3 +1,6 @@
+import { useNestedToolCalls, useNestedToolExpansion } from "./nested-tool-calls";
+import type { ToolCallOwnerProps } from "@amiba/extension-sdk";
+import { useToolImageEvidence } from "./tool-image-evidence";
 import type { ToolProgress } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
 import { cn } from "../../primitives";
@@ -45,7 +48,7 @@ function ToolTarget({
  * {@link ToolChip}, so an unclaimed tool name renders exactly this and
  * nothing else.
  */
-function ToolChipRow({ event, mode }: { event: ToolProgress; mode?: "row" | "summary" }) {
+function ToolChipRow({ event, mode, owner }: { event: ToolProgress; mode?: "row" | "summary"; owner?: ToolCallOwnerProps }) {
   const { t } = useT();
   const workspacePane = useWorkspacePane();
   // Force a re-render every second while running so the duration ticks
@@ -62,6 +65,10 @@ function ToolChipRow({ event, mode }: { event: ToolProgress; mode?: "row" | "sum
 
   const presentation = describeToolCall(event, t);
   const hasDetail = hasToolDetail(event);
+  const imageBlock = useMemo(() => toolCallBlockFromProgress(event), [event]);
+  const images = useToolImageEvidence(event.toolCallId, imageBlock);
+  const nested = useNestedToolCalls(owner);
+  const expansion = useNestedToolExpansion(imageBlock);
   const opensInWorkspace = workspacePane.canOpenToolEvent(event);
 
   let durationMs: number | undefined;
@@ -73,6 +80,7 @@ function ToolChipRow({ event, mode }: { event: ToolProgress; mode?: "row" | "sum
 
   return (
     <ToolRowFrame
+      {...expansion}
       presentation={mode}
       icon={presentation.icon}
       action={presentation.action}
@@ -87,7 +95,7 @@ function ToolChipRow({ event, mode }: { event: ToolProgress; mode?: "row" | "sum
       ariaLabel={[presentation.action, presentation.target]
         .filter(Boolean)
         .join(" ")}
-      detail={hasDetail ? <ToolDetail event={event} t={t} /> : undefined}
+      detail={hasDetail || images || nested ? <>{hasDetail ? <ToolDetail event={event} t={t} /> : null}{images}{nested}</> : undefined}
       onOpen={
         opensInWorkspace ? () => workspacePane.openToolEvent(event) : undefined
       }
@@ -127,9 +135,8 @@ export function ToolChip({ event, mode = "row" }: { event: ToolProgress; mode?: 
     [workspacePane],
   );
   const block = useMemo(() => toolCallBlockFromProgress(event), [event]);
-  // `inspect` is deliberately absent from the owner share: it means "inspect
-  // this call in the trajectory view", and Amiba runs no trajectory surface.
-  // The member is optional, so omitting it is the honest supply.
+  // The shell adds `inspect` only when a contributed trajectory view can
+  // receive the call. This runtime-neutral row cannot promise that surface.
   const owner = useMemo(
     () =>
       block
@@ -147,7 +154,7 @@ export function ToolChip({ event, mode = "row" }: { event: ToolProgress; mode?: 
     [block, event.toolCallId, openFile, seat?.cwd, mode, navigation, revealVersion],
   );
 
-  const fallback = <ToolChipRow event={event} mode={mode} />;
+  const fallback = <ToolChipRow event={event} mode={mode} owner={owner ?? undefined} />;
   const row = seat?.render && owner ? seat.render({ owner, fallback }) : fallback;
   if (mode === "summary") return <>{row}</>;
   return <div ref={ref}>{row}{seat?.activity?.({ callId: event.toolCallId })}</div>;

@@ -58,3 +58,26 @@ test('managed installs apply workspace and host-only patches and reject version 
     assert.throws(() => applyManagedRuntimePatches(app, root), /Patch version mismatch/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test('embedded primitives are patched through the shipped frontend while other missing targets fail', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'amiba-embedded-patch-'));
+  try {
+    const app = path.join(root, 'app');
+    const directory = path.join(app, 'node_modules/@deepseek-ai/dsh-web-frontend');
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify({ version: '0.1.1-rc.2' }));
+    fs.writeFileSync(path.join(directory, 'value.txt'), 'before\n');
+    fs.writeFileSync(path.join(root, 'frontend.patch'), '--- a/value.txt\n+++ b/value.txt\n@@ -1 +1 @@\n-before\n+after\n');
+    const manifest = {
+      pnpm: { patchedDependencies: { '@deepseek-ai/dsh-client-ui-primitives@0.1.1-rc.2': 'development.patch' } },
+      amiba: { runtimePatches: { '@deepseek-ai/dsh-web-frontend@0.1.1-rc.2': 'frontend.patch' } },
+    };
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify(manifest));
+    applyManagedRuntimePatches(app, root);
+    applyManagedRuntimePatches(app, root);
+    assert.equal(fs.readFileSync(path.join(directory, 'value.txt'), 'utf8'), 'after\n');
+    manifest.amiba.runtimePatches = {};
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify(manifest));
+    assert.throws(() => applyManagedRuntimePatches(app, root), /ENOENT/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

@@ -14,6 +14,13 @@ import type { PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import { apply } from "../../../dsh-plugin-runtime-inventory/src/client/index.js";
 
+// This test owns generic slot registration, not the built-in browser cards.
+// Those controllers require the real ModuleLoader/connection and are exercised
+// by the installed desktop compatibility smoke.
+vi.mock("../../../dsh-plugin-runtime-inventory/src/client/builtin-config-cards.js", () => ({
+  registerBuiltinConfigCards: () => {},
+}));
+
 afterEach(cleanup);
 
 it("joins real slot registrations to served Host namespaces and releases the contribution tree", async () => {

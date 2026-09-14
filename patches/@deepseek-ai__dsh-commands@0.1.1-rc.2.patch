@@ -1,0 +1,270 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -148,8 +148,10 @@
+ 		if (typeof rawInput !== "object" || rawInput === null || !("hint" in rawInput) || typeof rawInput.hint !== "string") throw new TypeError(`command "${definition.name}" input hint must be a string`);
+ 		if (rawInput.hint.trim().length === 0) throw new TypeError(`command "${definition.name}" input hint must not be empty`);
+ 		if ("images" in rawInput && rawInput.images !== void 0 && typeof rawInput.images !== "boolean") throw new TypeError(`command "${definition.name}" input images flag must be a boolean`);
++		if ("attachments" in rawInput && typeof rawInput.attachments !== "boolean") throw new TypeError("command input attachments flag must be a boolean");
+ 		input = Object.freeze({
+ 			hint: rawInput.hint,
++			..."attachments" in rawInput ? { attachments: rawInput.attachments } : {},
+ 			..."images" in rawInput && rawInput.images === true ? { images: true } : {}
+ 		});
+ 	}
+@@ -239,6 +241,7 @@
+ 			this.notifyChange();
+ 		}));
+ 		/** Monotonic per-instance counter behind {@link mintCommandId}. */
++		fileReceipts = { resolver: undefined };
+ 		commandSeq = 0;
+ 		/** Instance token keeping minted ids unique across process restarts over one resumed log. */
+ 		instanceToken = crypto.randomUUID().slice(0, 8);
+@@ -268,6 +271,11 @@
+ 		* @param name - command name without a slash.
+ 		* @returns the scoped shadow or global definition.
+ 		*/
++		registerFileReceiptResolver(resolver) {
++            if (this.fileReceipts.resolver !== undefined) throw new Error("commands: a file receipt resolver is already registered");
++            this.fileReceipts.resolver = resolver;
++            return () => { if (this.fileReceipts.resolver === resolver) this.fileReceipts.resolver = undefined; };
++        }
+ 		find(agent, name) {
+ 			return this.view(agent).get(name)?.definition;
+ 		}
+@@ -297,7 +305,12 @@
+ 		* @returns the settled execution (result + lifecycle pairing id), or
+ 		*   `undefined` when syntax or name does not resolve.
+ 		*/
+-		async execute(agent, line, images, signal) {
++		executeWire(agent, line, images, submittedAttachments, signal) {
++            if (images !== undefined && submittedAttachments !== undefined) throw new TypeError("Provide only one command attachment payload");
++            return this.execute(agent, line, submittedAttachments ?? images ?? [], signal);
++        }
++        async execute(agent, line, images, signal) {
++            if (!Array.isArray(images)) throw new TypeError("Command attachments must be an array");
+ 			const parsed = parseCommand(line);
+ 			if (parsed === void 0) return void 0;
+ 			const command = this.view(agent).get(parsed.name);
+@@ -324,9 +337,9 @@
+ 			};
+ 			let attachments = NO_ATTACHMENTS;
+ 			if (images.length > 0) {
+-				if (command.definition.input?.images !== true) return settle({
++				if ((command.definition.input && "attachments" in command.definition.input ? command.definition.input.attachments !== true : command.definition.input?.images !== true) || (command.definition.input?.attachments !== true && images.some(item => item.type === "file"))) return settle({
+ 					kind: "error",
+-					text: `/${parsed.name} does not accept image attachments`
++					text: command.definition.input && "attachments" in command.definition.input ? `/${parsed.name} does not accept attachments` : `/${parsed.name} does not accept image attachments`
+ 				});
+ 				const store = this.ctx.get("attachments");
+ 				if (store === void 0) return settle({
+@@ -334,11 +347,21 @@
+ 					text: `/${parsed.name}: image attachments are unavailable because no attachment store is composed`
+ 				});
+ 				try {
+-					const refs = await admitEncodedImages(store, images);
+-					attachments = Object.freeze(refs.map((ref) => Object.freeze({
+-						type: "image",
+-						attachment: ref
+-					})));
++                    // Resolve every file before admitting images, so a foreign receipt writes nothing.
++                    const files = new Map();
++                    for (const item of images) {
++                        if (!item || (item.type !== undefined && item.type !== "image" && item.type !== "file")) throw new AttachmentError("Invalid command attachment type", "ATTACHMENT_NOT_FOUND");
++                        if (item.type !== "file" || files.has(item.receiptId)) continue;
++                        const file = this.fileReceipts.resolver?.(agent, item.receiptId);
++                        if (!file) throw new AttachmentError("File upload receipt is unknown for this session.", "ATTACHMENT_NOT_FOUND");
++                        files.set(item.receiptId, file);
++                    }
++                    const encoded = images.filter(item => item.type !== "file").map(({type, ...image}) => image);
++                    const refs = encoded.length ? await admitEncodedImages(store, encoded) : [];
++                    let index = 0;
++                    attachments = Object.freeze(images.map(item => Object.freeze(item.type === "file"
++                        ? {type:"file", attachment:files.get(item.receiptId)}
++                        : {type:"image", attachment:refs[index++]})));
+ 				} catch (error) {
+ 					if (error instanceof AttachmentError) return settle({
+ 						kind: "error",
+diff --git a/lib/types/types.d.ts b/lib/types/types.d.ts
+--- a/lib/types/types.d.ts
++++ b/lib/types/types.d.ts
+@@ -19,6 +19,8 @@
+      * grammar decision, including rejecting sub-commands that cannot use them.
+      */
+     readonly images?: boolean;
++    /** Newer attachment declaration; when present it takes precedence over images. */
++    readonly attachments?: boolean;
+ }
+ /** Expected command outcome rendered directly by the dispatching UI. */
+ export type CommandResult = {
+@@ -107,4 +109,8 @@
+         };
+     }
+ }
+-//# sourceMappingURL=types.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=types.d.ts.map
++/** File references returned by the receiving Session's upload authority. */
++export interface CommandFileAttachmentRef { readonly attachmentId: string; readonly name: string; readonly bytes: number; }
++export interface CommandFileBlock { readonly type: 'file'; readonly attachment: CommandFileAttachmentRef; }
++export type CommandSubmitAttachment = (import('@deepseek-ai/dsh-attachment/types').EncodedImageAttachment & { readonly type?: 'image' }) | { readonly type: 'file'; readonly receiptId: string };
+diff --git a/lib/types/index.d.ts b/lib/types/index.d.ts
+--- a/lib/types/index.d.ts
++++ b/lib/types/index.d.ts
+@@ -4,13 +4,14 @@
+  */
+ import { Context } from '@deepseek-ai/cordis';
+ import type { Agent } from '@deepseek-ai/dsh-agent';
+-import type { EncodedImageAttachment } from '@deepseek-ai/dsh-attachment/types';
++import type { CommandFileAttachmentRef, CommandFileBlock, CommandSubmitAttachment } from './types.ts';
+ import type { ImageBlock } from '@deepseek-ai/dsh-llm';
+ import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
+ import { CommandId } from './brand.ts';
+ import type { CommandDescriptor, CommandExecution, CommandInputDescriptor, CommandResult } from './types.ts';
+ export { CommandId } from './brand.ts';
+ export type * from './types.ts';
++export type CommandFileReceiptResolver = (agent: Agent, receiptId: string) => CommandFileAttachmentRef | undefined;
+ export declare const name = "commands";
+ /** Invocation passed to one registered command handler. */
+ export interface CommandInvocation {
+@@ -27,7 +28,7 @@
+      * and a handler whose grammar cannot use them in this invocation returns an
+      * error so the dispatching composer retains the originals.
+      */
+-    readonly attachments: readonly ImageBlock[];
++    readonly attachments: readonly (ImageBlock | CommandFileBlock)[];
+     /** Cancellation signal owned by the dispatching UI request. */
+     readonly signal: AbortSignal;
+ }
+@@ -79,6 +80,7 @@
+     /** Instance token keeping minted ids unique across process restarts over one resumed log. */
+     private readonly instanceToken;
+     constructor(ctx: Context);
++    registerFileReceiptResolver(resolver: CommandFileReceiptResolver): () => void;
+     /**
+      * Register a global or calling-agent-scoped command.
+      * @param definition - discovery metadata and direct UI handler.
+@@ -124,7 +126,7 @@
+      * @returns the settled execution (result + lifecycle pairing id), or
+      *   `undefined` when syntax or name does not resolve.
+      */
+-    execute(agent: Agent, line: string, images: readonly EncodedImageAttachment[], signal: AbortSignal): Promise<CommandExecution | undefined>;
++    execute(agent: Agent, line: string, images: readonly CommandSubmitAttachment[], signal: AbortSignal): Promise<CommandExecution | undefined>;
+     /** Contained `command/done` error append for a thrown handler or admission failure. */
+     private settleThrown;
+     /** Mint the next pairing id (monotonic; instance-token-prefixed so a resumed log never repeats one). */
+diff --git a/lib/typert.remote-client.d.ts b/lib/typert.remote-client.d.ts
+--- a/lib/typert.remote-client.d.ts
++++ b/lib/typert.remote-client.d.ts
+@@ -3,24 +3,24 @@
+   RemoteResult,
+   TypertRemoteContribution,
+ } from '@deepseek-ai/dsh-typert-protocol'
+-import type { EncodedImageAttachment } from '@deepseek-ai/dsh-attachment/types'
++import type { CommandSubmitAttachment } from '@deepseek-ai/dsh-commands/types'
+ import type { CommandDescriptor, CommandExecution } from '@deepseek-ai/dsh-commands/types'
+ import type { SessionId } from '@deepseek-ai/dsh-session/types'
+ 
+ declare module '@deepseek-ai/dsh-typert-protocol' {
+   interface TypertRemoteNamespace$636f6d6d616e6473 {
+-    execute: (agentId: SessionId, line: string, images: readonly EncodedImageAttachment[], signal?: AbortSignal) => Promise<RemoteResult<CommandExecution | undefined>>
++    execute: (agentId: SessionId, line: string, images: readonly CommandSubmitAttachment[], signal?: AbortSignal) => Promise<RemoteResult<CommandExecution | undefined>>
+     list: (agentId: SessionId) => Promise<RemoteResult<readonly CommandDescriptor[]>>
+   }
+   interface TypertRemoteMap {
+-    'commands/execute': (agentId: SessionId, line: string, images: readonly EncodedImageAttachment[], signal?: AbortSignal) => Promise<RemoteResult<CommandExecution | undefined>>
++    'commands/execute': (agentId: SessionId, line: string, images: readonly CommandSubmitAttachment[], signal?: AbortSignal) => Promise<RemoteResult<CommandExecution | undefined>>
+     'commands/list': (agentId: SessionId) => Promise<RemoteResult<readonly CommandDescriptor[]>>
+   }
+   interface TypertRemoteNamespaceMap {
+     'commands': TypertRemoteNamespace$636f6d6d616e6473
+   }
+   interface TypertRemoteScopeMap {
+-    'agent:commands/execute': (line: string, images: readonly EncodedImageAttachment[], signal?: AbortSignal) => Promise<RemoteResult<CommandExecution | undefined>>
++    'agent:commands/execute': (line: string, images: readonly CommandSubmitAttachment[], signal?: AbortSignal) => Promise<RemoteResult<CommandExecution | undefined>>
+     'agent:commands/list': () => Promise<RemoteResult<readonly CommandDescriptor[]>>
+   }
+ }
+diff --git a/lib/typert.host.js b/lib/typert.host.js
+--- a/lib/typert.host.js
++++ b/lib/typert.host.js
+@@ -3,11 +3,10 @@
+ 
+ const _deepseek_ai_dsh_commands_commands_execute_parameter_0$schema = z.intersection(z.string(), z.unknown())
+ const _deepseek_ai_dsh_commands_commands_execute_parameter_1$schema = z.string()
+-const _deepseek_ai_dsh_commands_commands_execute_parameter_2$schema = z.array(z.object({
+-  'mediaType': z.union([z.literal("image/png"), z.literal("image/jpeg"), z.literal("image/webp"), z.literal("image/gif")]),
+-  'data': z.string(),
+-  'name': z.string().optional(),
+-}))
++const _deepseek_ai_dsh_commands_commands_execute_parameter_2$schema = z.array(z.union([
++ z.object({ type: z.literal('file'), receiptId: z.string() }),
++ z.object({ type: z.literal('image').optional(), mediaType: z.union([z.literal('image/png'),z.literal('image/jpeg'),z.literal('image/webp'),z.literal('image/gif')]), data:z.string(), name:z.string().optional() }),
++])).optional()
+ const _deepseek_ai_dsh_commands_commands_execute_result$schema = z.union([z.undefined(), z.object({
+   'commandId': z.intersection(z.string(), z.unknown()).readonly(),
+   'result': z.union([z.object({
+@@ -26,6 +25,7 @@
+   'input': z.object({
+   'hint': z.string().readonly(),
+   'images': z.boolean().readonly().optional(),
++  'attachments': z.boolean().readonly().optional(),
+ }).readonly().optional(),
+ }))
+ 
+@@ -39,7 +39,7 @@
+       id: '@deepseek-ai/dsh-commands#commands/execute',
+       service: 'commands',
+       namespace: 'commands',
+-      method: 'execute',
++      method: 'execute', implementation: 'executeWire',
+       invocation: { kind: 'direct' },
+       scope: {
+         context: 'agent',
+@@ -68,7 +68,7 @@
+           },
+         },
+         {
+-          name: 'images',
++          name: 'images', acceptsUndefined: true,
+           wire: 'images',
+           source: 'json',
+           codec: {
+@@ -76,6 +76,10 @@
+             typeSymbol: '@deepseek-ai/dsh-commands#commands/execute:images',
+             schema: _deepseek_ai_dsh_commands_commands_execute_parameter_2$schema,
+           },
++        },
++        {
++          name: 'submittedAttachments', wire: 'submittedAttachments', source: 'json', acceptsUndefined: true,
++          codec: { mode: 'strict', typeSymbol: '@deepseek-ai/dsh-commands#commands/execute:submittedAttachments', schema: _deepseek_ai_dsh_commands_commands_execute_parameter_2$schema },
+         },
+       ],
+       cancellation: { parameter: 'signal' },
+diff --git a/lib/typert.remote-client.js b/lib/typert.remote-client.js
+--- a/lib/typert.remote-client.js
++++ b/lib/typert.remote-client.js
+@@ -3,11 +3,10 @@
+ 
+ const _deepseek_ai_dsh_commands_commands_execute_parameter_0$schema = z.intersection(z.string(), z.unknown())
+ const _deepseek_ai_dsh_commands_commands_execute_parameter_1$schema = z.string()
+-const _deepseek_ai_dsh_commands_commands_execute_parameter_2$schema = z.array(z.object({
+-  'mediaType': z.union([z.literal("image/png"), z.literal("image/jpeg"), z.literal("image/webp"), z.literal("image/gif")]),
+-  'data': z.string(),
+-  'name': z.string().optional(),
+-}))
++const _deepseek_ai_dsh_commands_commands_execute_parameter_2$schema = z.array(z.union([
++ z.object({ type: z.literal('file'), receiptId: z.string() }),
++ z.object({ type: z.literal('image').optional(), mediaType: z.union([z.literal('image/png'),z.literal('image/jpeg'),z.literal('image/webp'),z.literal('image/gif')]), data:z.string(), name:z.string().optional() }),
++]))
+ const _deepseek_ai_dsh_commands_commands_execute_result$schema = z.union([z.undefined(), z.object({
+   'commandId': z.intersection(z.string(), z.unknown()).readonly(),
+   'result': z.union([z.object({
+@@ -26,6 +25,7 @@
+   'input': z.object({
+   'hint': z.string().readonly(),
+   'images': z.boolean().readonly().optional(),
++  'attachments': z.boolean().readonly().optional(),
+ }).readonly().optional(),
+ }))
+ 

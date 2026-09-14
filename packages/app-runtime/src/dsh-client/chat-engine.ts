@@ -1,3 +1,4 @@
+import { appendAssistantText, applyAssistantTextSource } from "./assistant-text-source";
 import { upsertCompactionTimeline, interruptOpenCompactions } from "./compaction.js";
 import type {
   ApprovalDecision,
@@ -10,13 +11,15 @@ import type {
   SnapshotFrame,
   StreamEvent,
   SubmitPayload,
+  SubmitReceipt,
   UserQuestionAnswerItem,
   UserQuestionRequest,
 } from "../protocol/index.js";
-import type { AgentAttachmentsAdapter } from "../platform/index.js";
+import type { AgentAttachmentsAdapter, AgentSubagentAddress } from "../platform/index.js";
 import { shortId } from "../utils/index.js";
 
 import { DshAmibaEventBridge } from "./amiba-event-bridge.js";
+import { DshRpcError } from "./index.js";
 import type {
   DshApiClient,
   DshImageMediaType,
@@ -36,9 +39,26 @@ interface SessionState extends ChatRuntimeState {
   passive?: boolean;
 }
 
+interface SubmissionObserver {
+  dispatch(): void;
+  accept(receipt: SubmitReceipt): void;
+  fail(error: unknown): void;
+}
+
+export interface DshSessionActivitySource {
+  getSnapshot(): { running: boolean };
+  subscribe(listener: () => void): () => void;
+}
+
 export interface DshChatEngineOptions {
   client: DshApiClient;
+  /** Existing official session face; no second conversation controller. */
+  sessionActivity?: (sessionId: string) => DshSessionActivitySource | undefined;
+  /** Current durable navigation address, including children whose parent is cold. */
+  resolveSubagent?: (sessionId: string) => AgentSubagentAddress | undefined;
   attachments?: AgentAttachmentsAdapter;
+  /** Stage ordinary files in the receiving session; native child attachments keep their existing path. */
+  uploadFile?: (sessionId: string, dataBase64: string, name: string, signal: AbortSignal) => Promise<string>;
   resolveSession?: (
     payload: SubmitPayload,
     signal: AbortSignal,
@@ -93,7 +113,7 @@ function snapshotOf(
       ...(pendingApprovals.length ? { pendingApprovals } : {}),
     };
   }
-  const visible: ChatRuntimeState = { ...state };
+  const visible: ChatRuntimeState = { ...state, timeline: state.timeline.map(item => ({ ...item })) };
   delete (visible as Partial<SessionState>).controller;
   if (state.streaming) return { type: "snapshot", sessionId, kind: "live", state: visible };
   if (state.error) return { type: "snapshot", sessionId, kind: "interrupted", state: visible };
@@ -120,23 +140,35 @@ function imageMediaType(attachment: RuntimeAttachment): DshImageMediaType | null
 async function promptAttachments(
   adapter: AgentAttachmentsAdapter | undefined,
   attachments: RuntimeAttachment[] | undefined,
+  uploadFile?: (dataBase64: string, name: string) => Promise<string>,
+  signal?: AbortSignal,
 ): Promise<DshPromptContentPart[]> {
   if (!attachments?.length) return [];
   if (!adapter) throw new Error("DSH attachment plugin is unavailable.");
   const parts: DshPromptContentPart[] = [];
+  // Validate the complete batch before creating any official file receipts.
+  const prepared = [];
   for (const attachment of attachments) {
-    if (attachment.kind !== "image") continue;
+    if (attachment.kind !== "image" && !uploadFile) continue;
+    signal?.throwIfAborted();
     const stored = await adapter.readForPrompt(attachment.attachmentId);
-    const mediaType = imageMediaType(attachment);
-    if (!mediaType || stored.kind !== "image" || stored.size !== attachment.size) {
-      throw new Error(`Attachment ${attachment.name} failed image validation.`);
+    signal?.throwIfAborted();
+    if (stored.attachmentId !== attachment.attachmentId || stored.kind !== attachment.kind || stored.size !== attachment.size
+      || (attachment.kind === "image" && !imageMediaType(attachment))) {
+      throw new Error(`Attachment ${attachment.name} failed validation.`);
     }
-    parts.push({
-      type: "image",
-      mediaType,
-      data: stored.dataBase64,
-      name: stored.name,
-    });
+    prepared.push({ attachment, stored });
+  }
+  for (const { attachment, stored } of prepared) {
+    signal?.throwIfAborted();
+    if (attachment.kind !== "image") {
+      const receiptId = await uploadFile!(stored.dataBase64, stored.name);
+      signal?.throwIfAborted();
+      if (!receiptId) throw new Error("File upload returned no receipt.");
+      parts.push({ type: "file", receiptId });
+    } else {
+      parts.push({ type: "image", mediaType: imageMediaType(attachment)!, data: stored.dataBase64, name: stored.name });
+    }
   }
   return parts;
 }
@@ -168,6 +200,7 @@ async function waitUntilSubscribed(
  */
 export class DshChatEngineClient implements ChatEngineClient {
   private readonly states = new Map<string, SessionState>();
+  private readonly activities = new Map<string, { source: DshSessionActivitySource; running: boolean; off(): void }>();
   private readonly snapshotListeners = new Set<SnapshotListener>();
   private readonly streamListeners = new Set<StreamListener>();
   // Host-owned interaction waits, keyed session → requestId/approvalId.
@@ -190,7 +223,29 @@ export class DshChatEngineClient implements ChatEngineClient {
       [...(this.questionLedger.get(sessionId)?.values() ?? [])],
       [...(this.approvalLedger.get(sessionId)?.values() ?? [])],
     );
+    // A locally submitted turn remains authoritative until its own terminal
+    // event. A delayed Host baseline must not clear that pending submission.
+    const activity = this.activities.get(sessionId);
+    if (activity && !this.states.get(sessionId)?.controller) frame.hostRunning = activity.running;
     for (const listener of this.snapshotListeners) listener(frame);
+  }
+
+  private bindActivity(sessionId: string): void {
+    const source = this.options.sessionActivity?.(sessionId);
+    const previous = this.activities.get(sessionId);
+    if (source === previous?.source) return;
+    previous?.off();
+    this.activities.delete(sessionId);
+    if (!source) return;
+    const binding = { source, running: source.getSnapshot().running, off: () => {} };
+    this.activities.set(sessionId, binding);
+    binding.off = source.subscribe(() => {
+      if (this.disposed || this.activities.get(sessionId) !== binding) return;
+      const running = source.getSnapshot().running;
+      if (running === binding.running) return;
+      binding.running = running;
+      this.emitSnapshot(sessionId);
+    });
   }
 
   private emit(sessionId: string, event: StreamEvent): void {
@@ -321,6 +376,7 @@ export class DshChatEngineClient implements ChatEngineClient {
         return;
       }
       case "assistantMessage":
+      case "assistantTextSource":
       case "chunk":
       case "reasoning":
       case "toolCalls":
@@ -351,11 +407,12 @@ export class DshChatEngineClient implements ChatEngineClient {
       case "assistantMessage":
         state.assistantMessageId = event.messageId;
         break;
+      case "assistantTextSource":
+        applyAssistantTextSource(state.timeline, event);
+        break;
       case "chunk": {
         state.assistantText += event.text;
-        const last = state.timeline.at(-1);
-        if (last?.kind === "text") last.text += event.text;
-        else state.timeline.push({ kind: "text", id: `t_${Date.now()}_${state.timeline.length}`, text: event.text });
+        appendAssistantText(state.timeline, event.text, () => `t_${Date.now()}_${state.timeline.length}`, event.runtimeStep);
         break;
       }
       case "reasoning": {
@@ -397,6 +454,7 @@ export class DshChatEngineClient implements ChatEngineClient {
       }
       case "turn":
         state.turnId = event.turnId;
+        state.runtimeTurn = event.runtimeTurn;
         delete state.assistantMessageId;
         break;
       case "approvalRequest":
@@ -458,60 +516,74 @@ export class DshChatEngineClient implements ChatEngineClient {
     state.updatedAt = Date.now();
   }
 
-  private async run(payload: SubmitPayload, controller: AbortController): Promise<void> {
+  private async run(payload: SubmitPayload, controller: AbortController, admission?: SubmissionObserver): Promise<void> {
     const { client } = this.options;
     const sessionId = payload.sessionId;
     try {
-      // IM/plugin-created and cold sessions already own their cwd and preset.
-      // Desktop workspace defaults are creation hints, never resume overrides.
-      const existing = (
-        await client.listSessions(controller.signal)
-      ).items.find((session) => session.sessionId === sessionId);
-      const resolved = existing
-        ? {
-            ...(existing.cwd ? { cwd: existing.cwd } : {}),
-            ...(existing.agentPreset
-              ? { agentPreset: existing.agentPreset }
-              : {}),
-          }
-        : ((await this.options.resolveSession?.(payload, controller.signal)) ??
-          {});
-      await client.createSession(
-        {
-          sessionId,
-          ...resolved,
-          ...(existing || resolved.agentPreset
-            ? {}
-            : payload.agent?.profileId && payload.agent.profileId !== "default"
-              ? { agentPreset: payload.agent.profileId }
-              : {}),
-        },
-        controller.signal,
-      );
-      if (payload.modelSelection) {
-        if (this.options.selectModel) {
-          await this.options.selectModel(
+      const suppliedAddress = this.options.resolveSubagent?.(sessionId);
+      const address = suppliedAddress ? { ...suppliedAddress } : undefined;
+      controller.signal.throwIfAborted();
+      if (address && address.childSessionId !== sessionId) throw new Error("Subagent address does not match the requested session");
+      if (address?.mode === "one-shot") throw new Error("One-shot subagent conversations are read-only");
+      for (const attachmentId of new Set(payload.attachments?.map(item => item.attachmentId) ?? [])) {
+        await this.options.attachments?.retainForSession?.(attachmentId, sessionId);
+        controller.signal.throwIfAborted();
+      }
+
+      if (!address) {
+        // Existing IM/plugin sessions own their cwd and preset; desktop defaults
+        // are creation hints only. Children keep their separate continuation path.
+        const existing = (await client.listSessions(controller.signal)).items.find(session => session.sessionId === sessionId);
+        controller.signal.throwIfAborted();
+        const resolved = existing
+          ? { ...(existing.cwd ? { cwd: existing.cwd } : {}), ...(existing.agentPreset ? { agentPreset: existing.agentPreset } : {}) }
+          : (await this.options.resolveSession?.(payload, controller.signal)) ?? {};
+        controller.signal.throwIfAborted();
+        await client.createSession(
+          {
             sessionId,
-            payload.modelSelection,
-            controller.signal,
-          );
-        } else {
-          await client.selectModel(
-            { sessionId, ...payload.modelSelection },
-            controller.signal,
-          );
+            ...resolved,
+            ...(resolved.agentPreset
+              ? {}
+              : payload.agent?.profileId && payload.agent.profileId !== "default"
+                ? { agentPreset: payload.agent.profileId }
+                : {}),
+          },
+          controller.signal,
+        );
+        if (payload.modelSelection) {
+          if (this.options.selectModel) {
+            await this.options.selectModel(
+              sessionId,
+              payload.modelSelection,
+              controller.signal,
+            );
+          } else {
+            await client.selectModel(
+              { sessionId, ...payload.modelSelection },
+              controller.signal,
+            );
+          }
         }
       }
 
       const bridge = new DshAmibaEventBridge();
-      const iterator = client.events(controller.signal)[Symbol.asyncIterator]();
+      // Socket readiness establishes the mux before a cold child is attached by
+      // its continuation. Waiting for that child's frame first would deadlock.
+      const iterator = address
+        ? await client.openEvents(controller.signal)
+        : client.events(controller.signal)[Symbol.asyncIterator]();
       try {
-        await waitUntilSubscribed(iterator, sessionId, bridge, (event) =>
+        if (!address) await waitUntilSubscribed(iterator, sessionId, bridge, (event) =>
           this.emit(sessionId, event),
         );
-        const imageParts = await promptAttachments(
+        const attachmentParts = await promptAttachments(
           this.options.attachments,
           payload.attachments,
+          !address && this.options.uploadFile
+            ? (data, name) => this.options.uploadFile!(sessionId, data, name, controller.signal)
+            : undefined,
+          controller.signal,
         );
         const textParts: DshPromptContentPart[] = [
           // Attachment metadata rides its own part; the user's words ride
@@ -522,15 +594,29 @@ export class DshChatEngineClient implements ChatEngineClient {
             : []),
           { type: "text" as const, text: lastUserText(payload) },
         ];
-        const response = await client.prompt(
+        if (address && attachmentParts.length) throw new Error("Image input is unavailable for subagent continuations");
+        // Cancellation during preparation must not dispatch a later prompt,
+        // even when an attachment/storage adapter did not observe the signal.
+        controller.signal.throwIfAborted();
+        admission?.dispatch();
+        let childMessageId: string | undefined;
+        const response = address
+          ? (childMessageId = (await client.subagentPrompt({ ...address, mode: "continuable" }, [...textParts, ...attachmentParts], {
+              clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              signal: controller.signal,
+            })).messageId, { accepted: true as const, command: undefined })
+          : await client.prompt(
           sessionId,
-          [...textParts, ...imageParts],
+          [...textParts, ...attachmentParts],
           {
             mode: "queue",
             clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             signal: controller.signal,
           },
         );
+        admission?.accept((address ? typeof childMessageId === "string" && childMessageId.length > 0 : response.accepted === true)
+          ? { kind: "accepted", ...(response.command ? { command: response.command } : {}) }
+          : { kind: "unconfirmed", error: "DSH returned no valid prompt acceptance receipt." });
         if (response.command) {
           if (response.command.text) {
             this.emit(sessionId, { kind: "chunk", text: response.command.text });
@@ -553,10 +639,15 @@ export class DshChatEngineClient implements ChatEngineClient {
           }
           if (terminal) return;
         }
+      } catch (error) {
+        // Report admission before socket cleanup, which may itself be delayed.
+        admission?.fail(error);
+        throw error;
       } finally {
         await iterator.return?.(undefined);
       }
     } catch (error) {
+      admission?.fail(error);
       if (controller.signal.aborted) {
         this.emit(sessionId, { kind: "aborted" });
       } else {
@@ -572,20 +663,40 @@ export class DshChatEngineClient implements ChatEngineClient {
   }
 
   subscribe(sessionId: string): void {
+    if (this.disposed) return;
+    this.bindActivity(sessionId);
     this.ensureInteractionWatcher();
     this.emitSnapshot(sessionId);
   }
 
   requestSnapshot(sessionId: string): void {
+    if (this.disposed) return;
+    this.bindActivity(sessionId);
     this.emitSnapshot(sessionId);
   }
 
   submit(payload: SubmitPayload): void {
+    this.startSubmission(payload);
+  }
+
+  submitWithReceipt(payload: SubmitPayload): Promise<SubmitReceipt> {
+    return new Promise(resolve => this.startSubmission(payload, resolve));
+  }
+
+  private startSubmission(payload: SubmitPayload, receipt?: (value: SubmitReceipt) => void): void {
+    if (this.disposed) {
+      receipt?.({ kind: "rejected", error: "The chat engine has been disposed." });
+      return;
+    }
     const current = this.states.get(payload.sessionId);
     // A PASSIVE run is not this window's to guard: the person typing has
     // taken the session back, and DSH queues the prompt behind whatever the
     // host is running. Only a local run in flight refuses a second submit.
     if (current?.streaming && !current.passive) {
+      if (receipt) {
+        receipt({ kind: "rejected", error: "A stream is already in progress for this session." });
+        return;
+      }
       this.emit(payload.sessionId, {
         kind: "error",
         message: "A stream is already in progress for this session.",
@@ -615,6 +726,19 @@ export class DshChatEngineClient implements ChatEngineClient {
       this.states.delete(payload.sessionId);
     }
     const controller = new AbortController();
+    let dispatched = false, settled = false;
+    const settle = (value: SubmitReceipt) => {
+      if (settled) return;
+      settled = true;
+      controller.signal.removeEventListener("abort", onAbort);
+      receipt?.(value);
+    };
+    const fail = (error: unknown) => settle({
+      kind: !dispatched || error instanceof DshRpcError ? "rejected" : "unconfirmed",
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const onAbort = () => fail(new Error("Submission interrupted before acceptance confirmation."));
+    if (receipt) controller.signal.addEventListener("abort", onAbort, { once: true });
     const state = initialState(payload.sessionId, payload.assistantUiId);
     state.controller = controller;
     this.states.set(payload.sessionId, state);
@@ -622,15 +746,25 @@ export class DshChatEngineClient implements ChatEngineClient {
       kind: "begin",
       assistantUiId: payload.assistantUiId,
     });
-    void this.run(payload, controller);
+    void this.run(payload, controller, receipt ? {
+      dispatch: () => { dispatched = true; }, accept: settle, fail,
+    } : undefined);
   }
 
   abort(sessionId: string): void {
-    void this.options.client.cancel(sessionId).catch(() => {});
+    const address = this.options.resolveSubagent?.(sessionId);
+    if (address) {
+      if (address.childSessionId !== sessionId || address.mode === "one-shot") return;
+      void this.options.client.subagentInterrupt({ ...address, mode: "continuable" }).catch(() => {});
+    } else {
+      void this.options.client.cancel(sessionId).catch(() => {});
+    }
     this.states.get(sessionId)?.controller?.abort();
   }
 
   clear(sessionId: string): void {
+    this.activities.get(sessionId)?.off();
+    this.activities.delete(sessionId);
     this.abort(sessionId);
     this.states.delete(sessionId);
   }
@@ -725,6 +859,8 @@ export class DshChatEngineClient implements ChatEngineClient {
     this.watchController.abort();
     for (const state of this.states.values()) state.controller?.abort();
     this.states.clear();
+    for (const activity of this.activities.values()) activity.off();
+    this.activities.clear();
     this.questionLedger.clear();
     this.approvalLedger.clear();
     this.snapshotListeners.clear();

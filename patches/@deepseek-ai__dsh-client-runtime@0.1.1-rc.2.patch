@@ -1,0 +1,124 @@
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -28,6 +28,50 @@
+ 			_renderer;
+ 			_locale;
+ 			_host;
++            _rootContributions = [];
++            _rootListeners = new Set();
++            _rootBinding = { key: void 0, hooks: {}, keyedHooks: {}, props: {} };
++            _rootSource = {
++                getSnapshot: () => this._rootBinding,
++                subscribe: listener => { this._rootListeners.add(listener); return () => this._rootListeners.delete(listener); }
++            };
++            provideRoot(contribution) {
++                const dispose = this.ctx.effect(() => {
++                    this._rootContributions.push(contribution);
++                    try { this.rebuildRootBinding(); }
++                    catch (error) { this._rootContributions.pop(); throw error; }
++                    return () => {
++                        const index = this._rootContributions.indexOf(contribution);
++                        if (index < 0) return;
++                        this._rootContributions.splice(index, 1);
++                        this.rebuildRootBinding();
++                    };
++                }, "slots.provideRoot()");
++                return () => { void dispose(); };
++            }
++            rebuildRootBinding() {
++                const hooks = Object.create(null), keyedHooks = Object.create(null), props = Object.create(null);
++                // rc.2 already owns these two root sources; contributions cannot replace them.
++                const names = new Set(["useSessions", "useWorkspaces"]);
++                const copy = (target, source, hook) => {
++                    for (const [name, value] of Object.entries(source ?? {})) {
++                        const output = hook ? `use${name[0]?.toUpperCase() ?? ""}${name.slice(1)}` : name;
++                        if (names.has(output)) throw new Error(`duplicate root standard prop: ${output}`);
++                        names.add(output);
++                        target[name] = value;
++                    }
++                };
++                for (const contribution of this._rootContributions) {
++                    copy(hooks, contribution.hooks, true);
++                    copy(keyedHooks, contribution.keyedHooks, true);
++                    copy(props, contribution.props, false);
++                }
++                this._rootBinding = { key: void 0, hooks, keyedHooks, props };
++                for (const listener of [...this._rootListeners]) {
++                    try { listener(); } catch (error) { console.error("root standard-source subscriber failed:", error); }
++                }
++            }
++
+ 			/**
+ 			* @param ctx - owning root context.
+ 			*/
+@@ -285,6 +329,7 @@
+ 						provideInfo: sessions.currentProvideInfo
+ 					},
+ 					workspaces: { list: workspaces.list },
++                    root: this._rootSource,
+ 					get locale() {
+ 						return service._locale;
+ 					}
+@@ -8964,15 +9009,31 @@
+ 			* Select a listed or retained catalog-addressed session as current.
+ 			* @param id - listed or addressed session id.
+ 			*/
+-			open(id) {
+-				this.manager.select(id);
++			open(id, source = "explicit") {
++				// Preserve navigation intent for hosts with their own selection store.
++				// Set before select: its list notification is synchronous.
++				const previous = this.lastOpenRequest;
++				this.lastOpenRequest = { sessionId: id, source };
++				try {
++					this.manager.select(id);
++				} catch (error) {
++					this.lastOpenRequest = previous;
++					throw error;
++				}
+ 			}
+ 			/**
+ 			* Open a healthy catalog child through its direct-parent address.
+ 			* @param address - catalog-derived parent and child ids.
+ 			*/
+ 			openSubagent(address) {
+-				this.manager.selectSubagent(address);
++				const previous = this.lastOpenRequest;
++				this.lastOpenRequest = { sessionId: address.childSessionId, source: "explicit" };
++				try {
++					this.manager.selectSubagent(address);
++				} catch (error) {
++					this.lastOpenRequest = previous;
++					throw error;
++				}
+ 			}
+ 			/**
+ 			* Resolve an already discovered direct-parent address without opening it.
+@@ -9009,6 +9070,7 @@
+ 			* per the masked-gap contract until the next open() moves the stage.
+ 			*/
+ 			clear() {
++				this.lastClearRequest = {};
+ 				this.manager.clearSelection();
+ 			}
+ 			/**
+@@ -9897,7 +9959,7 @@
+ 					state = "connecting";
+ 					this.connectWorkspace(target).then((sessionId) => {
+ 						if (disposed) return;
+-						if (this.sessions.list.getSnapshot().current === void 0) this.sessions.open(sessionId);
++						if (this.sessions.list.getSnapshot().current === void 0) this.sessions.open(sessionId, "initial");
+ 						state = "done";
+ 					}, (reason) => {
+ 						if (disposed) return;
+--- a/lib/types/client/slots.d.ts
++++ b/lib/types/client/slots.d.ts
+@@ -44,6 +44,8 @@
+ type SlotInjectionEffect = (() => void) | Iterable<() => void, void, void>;
+ /** cordis Service layer of the slot system; see the module doc for the split with SlotCore. */
+ export declare class SlotRegistry extends Service {
++    /** Publish domain-owned root props and hooks, scoped to the caller fiber. */
++    provideRoot(contribution: import('@deepseek-ai/dsh-client-ui-slots').RootStandardSourceContribution): () => void;
+     private readonly _core;
+     /** Store-instance axis: handle -> mounted scope, refcount, resolved instances. */
+     private readonly _stores;

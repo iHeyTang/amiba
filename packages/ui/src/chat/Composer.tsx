@@ -1,3 +1,12 @@
+import { commandEnvelope } from "./composer/command-contract";
+import type { ComposerDraftDocument } from "./composer-draft-document";
+import { captureComposerHistory } from "./composer/composer-history-state";
+const EMPTY_RESIDENT_SUBMISSION = Object.freeze({ pending: false, notice: null });
+const emptySubmissionSnapshot = () => EMPTY_RESIDENT_SUBMISSION;
+const noSubmissionSubscription = () => () => {};
+import type { ComposerDraftSource } from "./composer-draft-store";
+import { parseTokens } from "./composer/serialize";
+import { commandImages } from "./composer/command-attachments";
 import { ComposerAccessory } from "../primitives/empty-state-visual";
 import { useT } from "@amiba/i18n";
 import { Paperclip } from "lucide-react";
@@ -34,6 +43,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ClipboardEventHandler,
   type CSSProperties,
   type ReactNode,
@@ -41,7 +51,7 @@ import {
 
 import { COMPOSER_TEXTAREA_MAX_PX } from "./internal/types";
 import { buildProviderRegistry } from "./composer/providers/registry";
-import { expandMentionsAsync } from "./composer/expandMentions";
+import { expandMentionPartsAsync } from "./composer/expandMentions";
 import { routeSubmit } from "./composer/command-routing";
 import { useComposerTriggers } from "./composer/triggers/session";
 import type { ComposerTriggerRuntime } from "./composer/triggers/contracts";
@@ -53,6 +63,7 @@ import type {
   AmibaComposerModelPickerOwner,
   ConversationInputModelOwnerProps,
   ConversationInputPlanOwnerProps,
+  ComposerAttachmentsOwner,
 } from "@amiba/extension-sdk";
 
 /**
@@ -98,6 +109,8 @@ export type ComposerModelPickerRenderer = (
  * no reserved space. Surfaces without a DSH plugin runtime (Quick-Ask) pass
  * no renderer and the same nothing renders.
  */
+export type ComposerAttachmentsRenderer = (owner: ComposerAttachmentsOwner) => ReactNode;
+
 export type ComposerPlanSeatRenderer = (
   owner: ConversationInputPlanOwnerProps,
 ) => ReactNode;
@@ -142,6 +155,9 @@ export type ComposerPlanSeatRenderer = (
  * surfaces with a queue (ChatSurface) push to their FIFO.
  */
 export interface ComposerHandle {
+  /** Submit through the existing guards, command routing and reference codecs. */
+  submit?(): boolean;
+  resolveQueuedDraft?(draft: ComposerDraftDocument, signal: AbortSignal): Promise<string>;
   focus(): void;
   select(): void;
   /** Imperative access to the underlying textarea, for callers that need
@@ -164,6 +180,8 @@ interface SendButtonRenderCtx {
 
 export interface ComposerProps {
   value: string;
+  /** Native session document, when this surface owns a resident draft. */
+  draftSource?: ComposerDraftSource;
   onChange: (next: string) => void;
   /**
    * Called when the user submits a turn. Composer expands mentions and
@@ -181,6 +199,8 @@ export interface ComposerProps {
    * override (e.g. `value.trim() || hasReadyAttachments`).
    */
   canSubmit?: boolean;
+  /** Re-evaluate admission for an imperative draft write before React commits. */
+  canSubmitDraft?: (draft: string) => boolean;
 
   /** Disable the whole composer (textarea + buttons). */
   disabled?: boolean;
@@ -271,6 +291,11 @@ export interface ComposerProps {
    * (Quick-Ask) pass nothing and behave exactly as before.
    */
   inputOverlay?: ReactNode;
+  inputAttachments?: ComposerAttachmentsRenderer;
+  inputDock?: ReactNode;
+  composerDock?: ReactNode;
+  inputLeft?: ReactNode;
+  inputRight?: ReactNode;
   /** Runtime session used to distinguish pinned permissions from new-task defaults. */
   permissionSessionId?: string;
   /** Visual treatment for the modal overlay behind model and Profile dialogs. */
@@ -418,11 +443,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
   function Composer(
     {
       value,
+      draftSource,
       onChange,
       onSubmit,
       busy = false,
       onAbort,
       canSubmit,
+      canSubmitDraft,
       disabled = false,
       placeholder = "Send a message…",
       // `rows` stays in the public ComposerProps for the 5 consumers, but
@@ -438,6 +465,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       approvalModePicker,
       planSeat,
       inputOverlay,
+      inputAttachments,
+      inputDock,
+      composerDock,
+      inputLeft,
+      inputRight,
       permissionSessionId,
       pickerDialogSize = "default",
       pickerOverlayVariant = "dimmed",
@@ -500,7 +532,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
 
     // A command-mode submit failure, or a reference serialization failure.
     // Never a silent downgrade: the draft is kept and the reason is shown.
-    const [commandNotice, setCommandNotice] = useState<string | null>(null);
+    const submissionSource = useMemo(() => permissionSessionId ? triggerRuntime?.inputSubmissionSource?.(permissionSessionId) : undefined, [permissionSessionId, triggerRuntime]);
+    const residentSubmission = useSyncExternalStore(submissionSource?.subscribe ?? noSubmissionSubscription, submissionSource?.getSnapshot ?? emptySubmissionSnapshot, emptySubmissionSnapshot);
+    const [nativeCommandNotice, setCommandNotice] = useState<string | null>(null);
+    const commandNotice = nativeCommandNotice ?? residentSubmission.notice;
 
     // Single normal-send path. Order mirrors upstream's `onEnter`:
     //   1. command mode (a claim owns Enter),
@@ -508,9 +543,38 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     //   3. official Enter adjudication for a `/`-leading draft,
     //   4. ordinary send with `@[...]` expansion.
     // Abort / stop / queue branches do NOT route through here.
-    const resolvingMentionRef = useRef(false);
-    const handleSend = useCallback(async () => {
-      const handled = routeSubmit(value, {
+    const resolvingMentionRef = useRef<(AbortController & { draft: string; document?: ComposerDraftDocument; sessionId?: string; attachments: UseComposerAttachmentsResult["attachments"] | undefined }) | null>(null);
+    const commandAttemptRef = useRef<object | null>(null);
+    const currentDraftRef = useRef({ value, sessionId: permissionSessionId });
+    currentDraftRef.current = { value, sessionId: permissionSessionId };
+    useEffect(() => {
+      const cancelStaleAttempt = () => {
+        const attempt = resolvingMentionRef.current;
+        if (!attempt || (attempt.draft === value && attempt.sessionId === permissionSessionId &&
+          attempt.document === draftSource?.getDocument() &&
+          attempt.attachments === attachments?.attachments && !disabled)) return;
+        attempt.abort();
+        resolvingMentionRef.current = null;
+        trigger.setAttemptInFlight(false);
+      };
+      cancelStaleAttempt();
+      // Reference -> literal edits may keep the canonical string unchanged.
+      // Observe the document directly, before a delayed codec can complete.
+      return draftSource?.subscribe(cancelStaleAttempt);
+    }, [value, draftSource, permissionSessionId, disabled, attachments?.attachments]);
+    useEffect(() => () => {
+      resolvingMentionRef.current?.abort();
+      resolvingMentionRef.current = null;
+    }, []);
+    useEffect(() => {
+      commandAttemptRef.current = null;
+      if (!submissionSource?.getSnapshot().pending) trigger.setAttemptInFlight(false);
+      return () => { commandAttemptRef.current = null; };
+    }, [permissionSessionId]);
+    const handleSend = useCallback(async (draft = value) => {
+      if (disabled || commandAttemptRef.current || resolvingMentionRef.current || submissionSource?.getSnapshot().pending) return;
+      if (permissionSessionId) triggerRuntime?.clearInputSubmissionNotice?.(permissionSessionId);
+      const handled = routeSubmit(draft, {
         send: () => {},
         ctx: slashUiActions ?? {},
         claim: {
@@ -524,21 +588,46 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               );
               return;
             }
-            trigger.setAttemptInFlight(true);
-            void submit(claim, args)
+            const captured = (attachments?.attachments ?? []).map((item) => ({ ...item }));
+            const sessionId = permissionSessionId;
+            const commandDocument = draftSource?.getDocument();
+            const confirmHistory = draftSource && captureComposerHistory(draftSource);
+            const commandAttempt = {};
+            commandAttemptRef.current = commandAttempt;
+            trigger.setAttemptInFlight(true, "submitting");
+            void commandImages(claim, captured, sessionId && triggerRuntime?.uploadCommandFile
+              ? (data, name) => triggerRuntime.uploadCommandFile!(sessionId, data, name)
+              : undefined).then((images) => {
+                if (commandAttemptRef.current !== commandAttempt) throw new Error("Command preparation was cancelled.");
+                return submit(claim, args, images);
+              })
               .then(
                 (outcome) => {
+                  if (commandAttemptRef.current !== commandAttempt) return;
+                  commandAttemptRef.current = null;
                   trigger.setAttemptInFlight(false);
+                  if (currentDraftRef.current.sessionId !== sessionId) return;
                   if (outcome.kind === "success") {
-                    trigger.claims.release();
-                    onChange("");
+                    if (innerRef.current?.getValue() === draft &&
+                      (!draftSource || (commandDocument && (draftSource.commitSend
+                        ? draftSource.commitSend(commandDocument)
+                        : commandDocument === draftSource.getDocument())))) {
+                      trigger.claims.release();
+                      innerRef.current?.clearHistory?.();
+                      onChange("");
+                    }
+                    confirmHistory?.();
+                    for (const item of captured) attachments?.removeAttachment(item.uiId);
                     if (outcome.text) setCommandNotice(outcome.text);
                     return;
                   }
                   setCommandNotice(outcome.text ?? "command failed");
                 },
                 (error: unknown) => {
+                  if (commandAttemptRef.current !== commandAttempt) return;
+                  commandAttemptRef.current = null;
                   trigger.setAttemptInFlight(false);
+                  if (currentDraftRef.current.sessionId !== sessionId) return;
                   setCommandNotice(
                     error instanceof Error ? error.message : String(error),
                   );
@@ -548,29 +637,38 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         },
       });
       if (handled) return; // command claim or UI action took it, don't send
-      if (resolvingMentionRef.current) return;
-      resolvingMentionRef.current = true;
+      const editorParts = innerRef.current?.getParts?.();
+      const usesEditorParts = editorParts !== undefined && editorParts.map(part => part.kind === "text" ? part.text : part.raw).join("") === draft;
+      const parts = usesEditorParts ? editorParts : parseTokens(draft);
+      const editorIdentity = usesEditorParts ? JSON.stringify(parts) : undefined;
+      const attempt = Object.assign(new AbortController(), { draft, document: draftSource?.getDocument(), sessionId: permissionSessionId, attachments: attachments?.attachments });
+      const isCurrentAttempt = () => !attempt.signal.aborted &&
+        attempt.document === draftSource?.getDocument() &&
+        (editorIdentity === undefined || editorIdentity === JSON.stringify(innerRef.current?.getParts?.()));
+      resolvingMentionRef.current = attempt;
+      trigger.setAttemptInFlight(true);
       try {
         // Enter adjudication: give every registered source its `matchEnter`
         // turn before the draft becomes an ordinary message. Only the
         // `{ claim }` arm and `undefined` act, exactly as upstream's
         // `onAdjudicated` does — `'handled'` means the source dealt with it.
         const controller = trigger.controller;
-        const trimmed = value.trim();
+        const trimmed = draft.trim();
         if (controller !== undefined && trimmed.startsWith("/")) {
-          const attempt = new AbortController();
-          trigger.setAttemptInFlight(true);
           let outcome;
           try {
-            outcome = await controller.adjudicate(trimmed, attempt.signal);
+            outcome = await controller.adjudicate(trimmed, attempt.signal, commandEnvelope(
+              attachments?.attachments.filter((item) => item.kind === "image").length ?? 0,
+              attachments?.attachments.length ?? 0,
+            ));
           } catch (error) {
+            if (attempt.signal.aborted) return;
             setCommandNotice(
               error instanceof Error ? error.message : String(error),
             );
             return;
-          } finally {
-            trigger.setAttemptInFlight(false);
           }
+          if (!isCurrentAttempt()) return;
           if (outcome !== undefined) {
             if (outcome !== "handled" && "claim" in outcome) {
               trigger.claims.begin(outcome.claim);
@@ -580,27 +678,42 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         }
         let finalText: string;
         try {
-          finalText = await expandMentionsAsync(
-            value,
+          finalText = await expandMentionPartsAsync(
+            parts,
             providerRegistry.all,
             trigger.resolver,
+            attempt.signal,
           );
         } catch (error) {
+          if (attempt.signal.aborted) return;
           setCommandNotice(
             error instanceof Error ? error.message : String(error),
           );
           return;
         }
+        if (!isCurrentAttempt()) return;
         setCommandNotice(null);
         onSubmit(finalText);
       } finally {
-        resolvingMentionRef.current = false;
+        // A canceled provider may settle after a new submission has begun.
+        if (resolvingMentionRef.current === attempt) {
+          resolvingMentionRef.current = null;
+          trigger.setAttemptInFlight(false);
+        }
       }
-    }, [value, slashUiActions, providerRegistry, onSubmit, onChange, trigger]);
+    }, [value, draftSource, slashUiActions, providerRegistry, onSubmit, onChange, trigger, attachments, permissionSessionId, disabled, submissionSource, triggerRuntime]);
 
+    const queuedResolverRef = useRef({ disabled, providerRegistry, trigger });
+    queuedResolverRef.current = { disabled, providerRegistry, trigger };
     useImperativeHandle(
       ref,
       (): ComposerHandle => ({
+        submit: () => submitBindingRef.current.submit(),
+        resolveQueuedDraft: (draft, signal) => {
+          const current = queuedResolverRef.current;
+          if (current.disabled) return Promise.reject(new Error("Input editor cannot send queued drafts"));
+          return expandMentionPartsAsync(draft.parts, current.providerRegistry.all, current.trigger.resolver, signal);
+        },
         focus: () => innerRef.current?.focus(),
         select: () => innerRef.current?.select(),
         getTextarea: () => innerRef.current?.getTextarea() ?? null,
@@ -608,9 +721,82 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       [],
     );
 
+    const imageBindingRef = useRef({ sessionId: permissionSessionId, attachments, disabled });
+    const imageAvailabilityListeners = useRef(new Set<() => void>());
+    imageBindingRef.current = { sessionId: permissionSessionId, attachments, disabled };
+    useEffect(() => {
+      for (const listener of imageAvailabilityListeners.current) listener();
+    });
+    useEffect(() => {
+      if (!permissionSessionId || !triggerRuntime?.bindImages || !attachments) return;
+      const current = () => imageBindingRef.current.sessionId === permissionSessionId ? imageBindingRef.current : undefined;
+      const writable = () => {
+        const binding = current();
+        return !!binding && !binding.disabled && !commandAttemptRef.current && !resolvingMentionRef.current && !triggerRuntime.inputSubmissionSource?.(permissionSessionId).getSnapshot().pending;
+      };
+      return triggerRuntime.bindImages(permissionSessionId, {
+        getImages: () => current()?.attachments?.getDraftImages?.() ?? current()?.attachments?.draftImages ?? [],
+        subscribeImages: listener => current()?.attachments?.subscribeDraftImages?.(listener) ?? (() => {}),
+        subscribeAvailability: listener => {
+          imageAvailabilityListeners.current.add(listener);
+          return () => { imageAvailabilityListeners.current.delete(listener); };
+        },
+        pruneImages: ids => current()?.attachments?.pruneDraftImages?.(ids),
+        canAdd: () => writable() && !current()?.attachments?.attachmentBusy &&
+          !current()?.attachments?.attachmentUploading && !!current()?.attachments?.canAddDraftImages?.(),
+        addImages: images => current()?.attachments?.addDraftImages?.(images),
+        removeImage: id => { if (writable()) current()?.attachments?.removeDraftImage?.(id); },
+      });
+    }, [permissionSessionId, triggerRuntime, !!attachments]);
+
+    const attachmentSeatSession = permissionSessionId;
+    const attachmentSeatWritable = () => {
+      const binding = imageBindingRef.current;
+      return binding.sessionId === attachmentSeatSession && !!binding.attachments &&
+        !binding.disabled && !commandAttemptRef.current && !resolvingMentionRef.current;
+    };
+    const attachmentSeatCanAdd = () => attachmentSeatWritable() &&
+      !imageBindingRef.current.attachments?.attachmentBusy &&
+      !imageBindingRef.current.attachments?.attachmentUploading &&
+      (imageBindingRef.current.attachments?.canAddDraftImages?.() ?? true);
+    const attachmentSeat = inputAttachments?.({
+      attachments: attachments?.getDraftImages?.() ?? attachments?.draftImages ?? [],
+      canAcceptDrop: attachmentSeatCanAdd(),
+      onAddImages: files => {
+        if (!attachmentSeatCanAdd()) return;
+        const images = files.filter(file => file.type.startsWith("image/"));
+        if (images.length) void imageBindingRef.current.attachments?.addFiles(images);
+      },
+      onRemoveImage: id => {
+        if (attachmentSeatWritable()) imageBindingRef.current.attachments?.removeDraftImage?.(id);
+      },
+    });
+
     // Default canSubmit if not provided.
     const effectiveCanSubmit =
-      canSubmit !== undefined ? canSubmit : !!value.trim();
+      !residentSubmission.pending && (canSubmit !== undefined ? canSubmit : !!value.trim());
+
+    const submitBindingRef = useRef<{ sessionId: string | undefined; submit: () => boolean }>({ sessionId: permissionSessionId, submit: () => false });
+    submitBindingRef.current = {
+      sessionId: permissionSessionId,
+      submit: () => {
+        const draft = innerRef.current?.getValue();
+        if (draft === undefined || disabled || commandAttemptRef.current || resolvingMentionRef.current || submissionSource?.getSnapshot().pending ||
+          attachments?.attachmentBusy || attachments?.attachmentUploading ||
+          (attachments?.canAddDraftImages && !attachments.canAddDraftImages())) return false;
+        const admitted = canSubmitDraft?.(draft) ?? (canSubmit === undefined ? !!draft.trim() : effectiveCanSubmit);
+        if (!admitted) return false;
+        void handleSend(draft);
+        return true;
+      },
+    };
+    useEffect(() => {
+      if (!permissionSessionId || !triggerRuntime?.bindSubmit) return;
+      return triggerRuntime.bindSubmit(permissionSessionId, () => {
+        const binding = submitBindingRef.current;
+        return binding.sessionId === permissionSessionId && binding.submit();
+      });
+    }, [permissionSessionId, triggerRuntime]);
 
     // Resolve placeholder. String form is verbatim; typewriter form runs
     // the cycling effect (pausing automatically as soon as the user types
@@ -758,7 +944,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     ) => {
       if (onPaste) onPaste(e);
       if (e.defaultPrevented) return;
+      const text = trigger.official ? e.clipboardData.getData("text/plain") : "";
       attachments?.handlePaste(e);
+      // The native attachment handler consumes file-bearing events synchronously.
+      // Official mixed paste also inserts the accompanying literal text; preserve
+      // the existing attachment-only behavior on non-runtime surfaces.
+      if (e.defaultPrevented && text) innerRef.current?.pasteText?.(text);
     };
 
     // Built-in attachment chip strip merged with the optional `chipRow`
@@ -830,6 +1021,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         )}
       >
         {extrasAbove}
+        {inputDock}
         {contextRail ? (
           <div
             data-composer-context-rail=""
@@ -885,11 +1077,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           <ComposerAccessory />
           {topAffordance}
           {renderedChipRow}
+          {attachmentSeat}
           <div className="flex items-start">
             <div className="min-w-0 flex-1">
               <RichComposerEditor
                 ref={innerRef}
                 value={value}
+                draftSource={draftSource}
                 onChange={onChange}
                 placeholder={resolvedPlaceholder}
                 disabled={disabled}
@@ -971,6 +1165,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   flex-row wrapper would spend one gap on nothing. */}
               {planSeat ? planSeat({ locked: disabled }) : null}
               {actionsLeft}
+              {inputLeft}
             </div>
             {modelPicker
               ? permissionSessionId
@@ -990,6 +1185,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                     },
                   })
               : null}
+            {inputRight}
             {sendButtonNode}
           </div>
           {/* Official conversation.input.overlay seat: a BARE dispatch, no
@@ -1000,6 +1196,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               editor and the tool row in reading order. */}
           {inputOverlay}
         </div>
+        {composerDock}
         {/* Hidden fallback file input. Renders once at the bottom of
             the wrapper so the picker click-fallback path works on
             browsers without `showOpenFilePicker`. */}

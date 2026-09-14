@@ -1,3 +1,16 @@
+import { MainPanelList, type MainPanelRow } from "./main-panel-list.js";
+import type { MainPanelNavigation } from "./main-panel-navigation.js";
+import { LegacyToolDetails } from "./legacy-tool-details.js";
+import { sessionLineage, equalSessionLineage } from "./session-lineage.js";
+import { useSessionImageLoader } from "./session-image-loader.js";
+import { useTrajectoryInspection } from "./trajectory-inspection.js";
+import { CordisBusiness, type CordisPackages } from "./cordis-business.js";
+import { useCommandRows } from "./command-rows.js";
+import { InputRegion } from "./input-region.js";
+import { TurnTail, TurnText, useTurnTailAnchors } from "./turn-tail.js";
+import { DirectoryChooserContext, type DirectoryChooser } from "@amiba/ui";
+import type { DirectoryFlow } from "./directory-flow.js";
+import type { ConversationViewEntry } from "./conversation-view-source.js";
 import { SurfaceProvider } from "./surface-provider.js";
 import type { SurfaceSelections } from "./surface-selections.js";
 import { renderOfficialToolFallback } from "./official-toolviews.js";
@@ -12,7 +25,9 @@ import {
 } from "@amiba/app-runtime/dsh-client";
 import {
   getPlatform,
+  resolveSessionCreationWorkspace,
   type AgentModelSelection,
+  type AgentSubagentAddress,
 } from "@amiba/app-runtime/platform";
 import type {
   SessionListState,
@@ -66,7 +81,7 @@ import {
   type QuestionSeatRequest,
   type ToolCallSeatRequest,
 } from "@amiba/ui";
-import { PresentationRoot, NavigationRow } from "@amiba/ui/plugin";
+import { PresentationRoot, NavigationRow, ToolImageEvidenceProvider } from "@amiba/ui/plugin";
 import { Blocks } from "lucide-react";
 import {
   useCallback,
@@ -74,6 +89,8 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
+  Fragment,
   useSyncExternalStore,
   type ReactElement,
   type ReactNode,
@@ -130,8 +147,12 @@ const EMPTY_MESSAGE_SOURCES: readonly MessageSourceRow[] = [];
  * tool name as `entryKey`.
  */
 export type AmibaShellSlot =
+  | "main"
+  | "sidebar.panellist"
   | Exclude<AmibaRootSlot, "amiba.agentPreset.section">
   | "settings.section"
+  | "conversation.hero.workspace.directoryFlow"
+  | "sidebar.workspaces.directoryFlow"
   | "sidebar.footer.action"
   | "settings.trigger"
   | "settings.header"
@@ -140,6 +161,8 @@ export type AmibaShellSlot =
   | "settings.onboarding"
   | "settings.general.item"
   | "shell.overlay"
+  | "conversation.session.header.lineage"
+  | "conversation.session.header.corner"
   | "conversation.session.header.utilities"
   | "conversation.session.header.actions"
   | "conversation.input.model"
@@ -150,8 +173,21 @@ export type AmibaShellSlot =
   | "amiba.workbench.panel"
   | "conversation.input.plan"
   | "conversation.input.overlay"
+  | "conversation.input.dock"
+  | "conversation.composer.dock"
+  | "tool.view.cordis"
+  | "conversation.chat.commandview"
+  | "conversation.input.attachments"
+  | "conversation.input.left"
+  | "conversation.input.right"
+  | "conversation.view"
+  | "conversation.chat.turnTail"
+  | "conversation.message.images"
+  | "conversation.approval.detail"
   | "conversation.chat.assistant-actions"
-  | "tool.call.toolview";
+  | "conversation.details.tool"
+  | "tool.call.toolview"
+  | "tool.call.images";
 
 /** The official DSH child-slot dispatcher, handed down from AmibaRoot. */
 export type AmibaShellRenderSlot =
@@ -308,24 +344,16 @@ function productCapabilities(): ChatSurfaceCapabilities {
   };
 }
 
-function createChatClient(dshClient: DshApiClient): DshChatEngineClient {
+function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string) => AgentSubagentAddress | undefined,
+  sessionActivity: ProductShellProps["conversationSource"],
+  uploadFile: import("@amiba/app-runtime/dsh-client").DshChatEngineOptions["uploadFile"]): DshChatEngineClient {
   return new DshChatEngineClient({
     client: dshClient,
+    resolveSubagent,
+    sessionActivity,
+    uploadFile,
     attachments: getPlatform().agentAttachments,
-    resolveSession: async (payload) => {
-      const platform = getPlatform();
-      const cwd = await platform.workspaces?.getCurrent(payload.sessionId);
-      if (!cwd) return {};
-      const explicitlyBound = Object.hasOwn(
-        (await platform.workspaces?.listBindings()) ?? {},
-        payload.sessionId,
-      );
-      if (explicitlyBound && platform.agentWorkspaces) {
-        const { workspace } = await platform.agentWorkspaces.create(cwd);
-        return { workspaceId: workspace.workspaceId };
-      }
-      return { cwd };
-    },
+    resolveSession: payload => resolveSessionCreationWorkspace(payload.sessionId),
     selectModel: async (sessionId, selection, signal) => {
       if (signal.aborted) throw signal.reason;
       const models = getPlatform().agentModels;
@@ -336,6 +364,17 @@ function createChatClient(dshClient: DshApiClient): DshChatEngineClient {
 }
 
 interface ProductShellProps {
+  mainPanels: MainPanelNavigation;
+  mainPanelList: ContributionsSource<MainPanelRow>;
+  renderSlotChain: PropsRenderSlots<AmibaShellSlot>["renderSlotChain"];
+  cordisPackages: CordisPackages;
+  legacyToolDetailsAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
+  toolImagesAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
+  commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
+  conversationSource: (sessionId: string) => import("@deepseek-ai/dsh-client-runtime/client").SessionFace | undefined;
+    fileMentions: import("@deepseek-ai/dsh-client-ui-conversation/client").ChatFileMentions["forClosing"];
+  directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
+  conversationViews: ContributionsSource<ConversationViewEntry>;
   surfaces: SurfaceSelections;
   dshClient: DshApiClient;
   openSettingsSection: (sectionId: string) => void;
@@ -365,6 +404,8 @@ interface ProductShellProps {
    * adoption forbids.
    */
   useOfficialSessions: SnapshotSelectorHook<SessionListState>;
+  lineageAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
+  openLineageSession: (sessionId: import("@deepseek-ai/dsh-client-runtime/client").SessionId) => void;
   /**
    * The framework's `useWorkspaces` standard hook, from the same
    * `GlobalStandardProps` kit. The archive set is workspace-registry state,
@@ -385,6 +426,17 @@ export function AmibaProductShell(props: ProductShellProps): ReactElement {
 }
 
 function ProductShellInner({
+  mainPanels,
+  mainPanelList,
+  renderSlotChain,
+  cordisPackages,
+  commandRowKeys,
+  legacyToolDetailsAvailable,
+  toolImagesAvailable,
+  conversationSource,
+  fileMentions,
+  directoryFlows,
+  conversationViews,
   dshClient,
   openSettingsSection,
   renderSlot,
@@ -398,9 +450,17 @@ function ProductShellInner({
   messageSources,
   surfaces,
   useOfficialSessions,
+  openLineageSession,
+  lineageAvailable,
   useOfficialWorkspaces,
 }: ProductShellProps): ReactElement {
   const { t } = useT();
+  const { activePanelId } = useSyncExternalStore(mainPanels.subscribe, mainPanels.getSnapshot, mainPanels.getSnapshot);
+  const leaveMainPanel = useCallback(() => mainPanels.leavePanel(), [mainPanels]);
+  const hasLineage = useSyncExternalStore(lineageAvailable.subscribe, lineageAvailable.getSnapshot, lineageAvailable.getSnapshot);
+  const hasLegacyDetails = useSyncExternalStore(legacyToolDetailsAvailable.subscribe, legacyToolDetailsAvailable.getSnapshot, legacyToolDetailsAvailable.getSnapshot);
+  const [legacySelections, setLegacySelections] = useState<Record<string, string>>({});
+  const hasToolImages = useSyncExternalStore(toolImagesAvailable.subscribe, toolImagesAvailable.getSnapshot, toolImagesAvailable.getSnapshot);
   const platform = getPlatform();
   const desktop = platform.kind === "desktop";
   const topBarHeightPx = platform.windowChrome?.topBarHeightPx ?? 40;
@@ -466,9 +526,31 @@ function ProductShellInner({
     useOfficialSessions,
   });
   const { open: settingsOpen, close: closeSettings } = settings;
-  const client = useMemo(() => createChatClient(dshClient), [dshClient]);
-  const capabilities = useMemo(productCapabilities, []);
   const sessions = useSessions();
+  const detailsCwd = useOfficialSessions(list => sessions.activeId ? Object.values(list.byId).find(row => row.id === sessions.activeId)?.cwd : undefined);
+  const lineage = useOfficialSessions(list => sessionLineage(list, sessions.activeId), equalSessionLineage);
+  const childAddressSource = useRef<(id: string) => AgentSubagentAddress | undefined>(() => undefined);
+  childAddressSource.current = (id) => sessions.sessions.find((session) => session.id === id)?.subagentAddress
+    ?? conversationSource(id)?.getSnapshot().subagent?.address;
+  const activitySource = useRef(conversationSource);
+  activitySource.current = conversationSource;
+  const client = useMemo(() => createChatClient(dshClient, (id) => childAddressSource.current(id),
+    (id) => activitySource.current(id), triggerRuntime?.uploadCommandFile), [dshClient, triggerRuntime]);
+  const capabilities = useMemo(productCapabilities, []);
+  const homeDirectory = useSyncExternalStore(directoryFlows.home.subscribe, directoryFlows.home.getSnapshot, directoryFlows.home.getSnapshot);
+  const workspaceDirectory = useSyncExternalStore(directoryFlows.workspace.subscribe, directoryFlows.workspace.getSnapshot, directoryFlows.workspace.getSnapshot);
+  const directoryChoosers = useMemo(() => {
+    const bind = (flow: DirectoryFlow, available: boolean): DirectoryChooser | undefined => available
+      ? (defaultPath, adopt) => flow.choose(defaultPath, platform.workspaces?.chooseDirectory, adopt)
+      : undefined;
+    return { home: bind(directoryFlows.home, homeDirectory.available), workspace: bind(directoryFlows.workspace, workspaceDirectory.available) };
+  }, [directoryFlows, homeDirectory.available, workspaceDirectory.available, platform]);
+  const viewEntries = useSyncExternalStore(conversationViews.subscribe, conversationViews.getSnapshot, conversationViews.getSnapshot);
+  const trajectory = useTrajectoryInspection(sessions.activeId, viewEntries);
+  const commandRows = useCommandRows(sessions.activeId ? conversationSource(sessions.activeId) : undefined,
+    owner => renderSlot("conversation.chat.commandview", owner, { entryKey: owner.node.name ?? "", fallback: null }), commandRowKeys);
+  const loadMessageImage = useSessionImageLoader(sessions.activeId ? conversationSource(sessions.activeId) : undefined);
+  const turnTailAnchors = useTurnTailAnchors(sessions.activeId ? conversationSource(sessions.activeId) : undefined);
   // Host-side session changes (a plugin creating a task session, a blank
   // session getting its first turn) reach the official list live; re-read
   // Amiba's own index whenever the facts it renders change, so the sidebar
@@ -493,13 +575,14 @@ function ProductShellInner({
         ? [
             makeWorkspaceFilesProvider(
               platform.workspaceFiles,
-              () => activeIdRef.current,
+              sessions.activeId,
             ),
           ]
         : [],
-    [platform.workspaceFiles],
+    [platform.workspaceFiles, sessions.activeId],
   );
-  const pendingOpenSessionRef = useRef<string | null>(null);
+  const pendingOpenSessionRef = useRef<{ sessionId: string; subagent?: AgentSubagentAddress } | null>(null);
+  const externalNavigationRevision = useRef(0);
 
   useEffect(() => () => client.dispose(), [client]);
 
@@ -583,17 +666,29 @@ function ProductShellInner({
   // Unknown tools retain the generic row; plugin registrations still win.
   const renderToolViewSeat = useCallback(
     (request: ToolCallSeatRequest) => {
-      const fallback = renderSlot("tool.call.toolview", request.owner, {
+      const owner = {
+        ...request.owner,
+        ...(loadMessageImage ? { loadImage: loadMessageImage } : {}),
+        ...(trajectory.inspectCall ? { inspect: () => trajectory.inspectCall?.(request.owner.callId) } : {}),
+      };
+      const fallback = renderSlot("tool.call.toolview", owner, {
         entryKey: request.owner.toolName,
-        fallback: renderOfficialToolFallback(request.owner, request.fallback),
+        fallback: renderOfficialToolFallback(owner, request.fallback),
       });
-      return renderSlot(
+      const row = renderSlot(
         "amiba.tool.execution",
-        { ...request.owner, fallback },
+        { ...owner, fallback },
         { fallback },
       );
+      const withImages = <ToolImageEvidenceProvider callId={owner.callId}
+        render={hasToolImages && loadMessageImage ? images => renderSlot("tool.call.images", { images, loadImage: loadMessageImage, align: "start" }) : undefined}>
+        {row}
+      </ToolImageEvidenceProvider>;
+      return request.owner.toolName === "cordis_run" ? <>{withImages}<CordisBusiness owner={request.owner}
+        source={conversationSource(sessions.activeId)} packages={cordisPackages}
+        render={owner => renderSlot("tool.view.cordis", owner, { entryKey: `${owner.pluginId}.${owner.packageId}` })} /></> : withImages;
     },
-    [renderSlot],
+    [renderSlot, conversationSource, sessions.activeId, cordisPackages, trajectory.inspectCall, hasToolImages, loadMessageImage],
   );
 
   // Amiba's KEYED per-question seat. Dispatched once per pending request with
@@ -628,15 +723,18 @@ function ProductShellInner({
   const { onboardingStepId, completeOnboardingStep } = settings;
 
   const openSession = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string, subagent?: AgentSubagentAddress) => {
       const target = sessionId.trim();
       if (!target) return;
       if (!sessions.ready) {
-        pendingOpenSessionRef.current = target;
+        pendingOpenSessionRef.current = { sessionId: target, subagent };
         return;
       }
+      const revision = ++externalNavigationRevision.current;
       await sessions.refresh();
-      await sessions.openTab(target);
+      if (revision !== externalNavigationRevision.current) return;
+      await sessions.openTab(target, subagent);
+      if (revision !== externalNavigationRevision.current) return;
       await platform.storage.set({ [SIDEBAR_VIEW_KEY]: "chats" });
       closeSettings();
     },
@@ -651,9 +749,8 @@ function ProductShellInner({
 
   useEffect(() => {
     const listener = (event: Event) => {
-      const sessionId = (event as CustomEvent<{ sessionId?: unknown }>).detail
-        ?.sessionId;
-      if (typeof sessionId === "string") void openSession(sessionId);
+      const detail = (event as CustomEvent<{ sessionId?: unknown; subagent?: AgentSubagentAddress }>).detail;
+      if (typeof detail?.sessionId === "string") void openSession(detail.sessionId, detail.subagent);
     };
     window.addEventListener("amiba:open-session", listener);
     return () => window.removeEventListener("amiba:open-session", listener);
@@ -663,8 +760,18 @@ function ProductShellInner({
     if (!sessions.ready || !pendingOpenSessionRef.current) return;
     const target = pendingOpenSessionRef.current;
     pendingOpenSessionRef.current = null;
-    void openSession(target);
+    void openSession(target.sessionId, target.subagent);
   }, [openSession, sessions.ready]);
+
+  useEffect(() => {
+    const listener = () => {
+      externalNavigationRevision.current++;
+      pendingOpenSessionRef.current = null;
+      void sessions.deselect();
+    };
+    window.addEventListener("amiba:clear-session", listener);
+    return () => window.removeEventListener("amiba:clear-session", listener);
+  }, [sessions.deselect]);
 
   // R1 amiba→official selection projection: every activeId transition
   // (including the mount-time empty selection, which converges a restored
@@ -692,12 +799,15 @@ function ProductShellInner({
 
   return (
     <PresentationRoot>
+      <DirectoryChooserContext.Provider value={directoryChoosers}>
       <div hidden aria-hidden="true">{renderSlot("amiba.session.observer", { readStates: sessions.sessions.filter(s => s.readAt !== undefined).map(s => ({sessionId: s.id, readAt: s.readAt!})) })}</div>
       <SurfaceProvider surfaces={surfaces} renderSlot={renderSlot}>
         <div
           data-amiba-product-shell
           className="relative h-screen w-full overflow-hidden bg-background text-foreground"
         >
+          {homeDirectory.owner.open && <DirectoryFlowSeat key={`home:${homeDirectory.requestId}`} content={renderSlot("conversation.hero.workspace.directoryFlow", homeDirectory.owner)} />}
+          {workspaceDirectory.owner.open && <DirectoryFlowSeat key={`workspace:${workspaceDirectory.requestId}`} content={renderSlot("sidebar.workspaces.directoryFlow", workspaceDirectory.owner)} />}
           {standaloneTitleBar && (
             <div
               data-testid="native-window-titlebar"
@@ -743,6 +853,10 @@ function ProductShellInner({
               itemMenuItems={sessionMenuItemList}
               messageSourceLabel={messageSourceLabel}
               slots={{
+                conversationViews: viewEntries,
+                conversationView: (id) => renderSlot("conversation.view", { ...trajectory.owner, ...(loadMessageImage ? { loadImage: loadMessageImage } : {}) }, { only: id }),
+                conversationViewSelection: trajectory.selection,
+                onConversationViewSelect: trajectory.select,
                 emptyState: (
                   <HomeView
                     triggerRuntime={triggerRuntime}
@@ -766,8 +880,16 @@ function ProductShellInner({
                 toolAnnotation: (owner) =>
                   renderSlot("amiba.tool.activity", owner),
                 progress: () => renderSlot("amiba.conversation.progress", {}),
-                workbenchPanel: (owner) =>
-                  renderSlot("amiba.workbench.panel", owner),
+                workbenchPanel: (owner) => <>
+                  {renderSlot("amiba.workbench.panel", owner)}
+                  {sessions.activeId ? <LegacyToolDetails enabled={hasLegacyDetails}
+                    source={conversationSource(sessions.activeId)} sessionId={sessions.activeId} cwd={detailsCwd}
+                    panel={owner} selectedCallId={legacySelections[sessions.activeId] ?? null}
+                    onSelect={callId => setLegacySelections(current => ({ ...current, [sessions.activeId!]: callId }))}
+                    render={details => renderSlot("conversation.details.tool", details)}
+                    label={t("sidepanel.trace.toolDetails")} emptyLabel={t("sidepanel.trace.selectTool")}
+                  /> : null}
+                </>,
                 // The official composer overlay anchor. The seat declares NO owner
                 // share, so `{}` is the faithful dispatch — anything else would be
                 // a fabricated owner. Session-scoped: the renderer resolves the
@@ -775,21 +897,40 @@ function ProductShellInner({
                 // bridge) and renders nothing while none is current, which is also
                 // why the home/draft composer keeps Amiba's own trigger menu.
                 inputOverlay: renderSlot("conversation.input.overlay", {}),
+                inputAttachments: owner => renderSlot("conversation.input.attachments", owner),
+                inputDock: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.input.dock", owner)} />,
+                composerDock: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.composer.dock", owner)} />,
+                inputLeft: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.input.left", owner)} />,
+                inputRight: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.input.right", owner)} />,
+                messageText: (runtimeTurn, children, openFile, timeline) => <TurnText timeline={timeline} source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} fileMentions={fileMentions}>{children}</TurnText>,
+                timelineRows: commandRows,
+                turnTailAnchors,
+                turnTail: (runtimeTurn, openFile) => <TurnTail source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} render={owner => renderSlotChain("conversation.chat.turnTail", owner)} />,
+                messageImages: images => loadMessageImage ? renderSlot("conversation.message.images", { images, loadImage: loadMessageImage, align: "end" }) : null,
+                approvalDetail: (callId) => renderSlot("conversation.approval.detail", { callId }),
                 assistantActions: (messageId) => renderSlot("conversation.chat.assistant-actions", { messageId: messageId as import("@amiba/extension-sdk").AssistantActionOwnerProps["messageId"] }),
                 toolView: renderToolViewSeat,
                 questionSeat: renderQuestionSeat,
+                mainPanel: activePanelId === null ? undefined : {
+                  id: activePanelId,
+                  content: renderSlot("main", {}, { entryKey: activePanelId }),
+                },
+                onNativeNavigation: leaveMainPanel,
                 navigationBefore: renderSlot("amiba.navigation.before", {}),
-                workspaceNavigation: (activeView) =>
-                  renderSlot("amiba.workspace.navigation", {
-                    activeView,
+                workspaceNavigation: (activeView) => <>
+                  {renderSlot("amiba.workspace.navigation", {
+                    activeView: activePanelId === null ? activeView : "",
                     sessionActivity: {
                       sessions: sessions.sessions,
                       visibleSessionId:
-                        activeView === "chats" ? sessions.activeId : "",
+                        activePanelId === null && activeView === "chats" ? sessions.activeId : "",
                       markUnread: sessions.markUnread,
                       markRead: sessions.markRead,
                     },
-                  }),
+                  })}
+                  <MainPanelList source={mainPanelList} navigation={mainPanels} conversationActive={activeView === "chats"}
+                    renderIcon={(id, owner) => renderSlot("sidebar.panellist", owner, { only: id })} />
+                </>,
                 navigationAfter: renderSlot("amiba.navigation.after", {}),
                 workspaceView: (viewId, owner) =>
                   renderSlot(
@@ -809,6 +950,16 @@ function ProductShellInner({
                 // from the official ctx.sessions current (kept in step by the R1
                 // bridge) and renders null while none is current, so the strip is
                 // empty on the home view and on a not-yet-materialized draft.
+                headerLineage: hasLineage ? lineage.map(entry => (
+                  <Fragment key={entry.id}>
+                    {renderSlot("conversation.session.header.lineage", {
+                      lineageSessionId: entry.id,
+                      displayTitle: entry.displayTitle,
+                      ...entry.current ? {} : { openTitle: () => openLineageSession(entry.id) },
+                    })}
+                  </Fragment>
+                )) : undefined,
+                headerCorner: renderSlot("conversation.session.header.corner", {}),
                 headerAfter: renderSlot(
                   "conversation.session.header.utilities",
                   {},
@@ -936,6 +1087,9 @@ function ProductShellInner({
           </span>
         </div>
       </SurfaceProvider>
+      </DirectoryChooserContext.Provider>
     </PresentationRoot>
   );
 }
+
+function DirectoryFlowSeat({ content }: { content: ReactNode }) { return <>{content}</>; }

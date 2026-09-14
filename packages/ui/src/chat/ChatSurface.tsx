@@ -1,4 +1,11 @@
+import { ensureSessionWorkspace } from "@amiba/app-runtime/platform";
+import { nativeSubmissionAdmission } from "./internal/native-submission-admission";
+import { deleteUnretainedAttachments, withSendingAttachments } from "./internal/attachment-ownership";
+import { useSessionComposerDraft } from "./use-session-composer-draft";
 import { useConversationSubmitHandoff } from "./useConversationSubmitHandoff";
+import { createResidentTurnSender, waitForResidentReady, type ResidentTurnSenderDeps } from "./internal/resident-turn-sender";
+import { createResidentQueueDrainer, type ResidentQueueDrainerDeps } from "./internal/resident-queue-drainer";
+import { sessionPendingQueue } from "./internal/pending-queue-store";
 import { usePrepareConversationSubmit } from "./conversation-submit";
 import { createSurfaceActivity } from "../primitives/surface-activity";
 import { InteractionRegion } from "../primitives/interaction-region";
@@ -43,12 +50,13 @@ import { shortId } from "@amiba/app-runtime/utils";
 import {
   attachmentToBadge,
   classify,
-  deleteAttachmentFile,
   formatBytesShort,
   formatFileAttachmentsForPrompt,
   getAgentPresets,
   isAttachmentReadOk,
   normalizeAgentContext,
+  loadSessionMeta,
+  loadMessages,
   readBlobAsAttachment,
   useSessions,
   type AgentExecutionContext,
@@ -118,6 +126,7 @@ import {
   type UiMessage,
 } from "./internal/types";
 import {
+  findSnapshotAssistant,
   settleStreamingMessage,
   withHostAssistantPlaceholder,
   withHostUserMessage,
@@ -308,6 +317,11 @@ export interface ChatSurfaceProps {
      * is byte-identical to before.
      */
     inputOverlay?: ReactNode;
+    inputAttachments?: import("./Composer").ComposerAttachmentsRenderer;
+    inputDock?: ReactNode;
+    composerDock?: ReactNode;
+    inputLeft?: ReactNode;
+    inputRight?: ReactNode;
     /** Session-scoped plugin notices and tool annotations. */
     notice?: MessageNoticeRenderer;
     progress?: () => ReactNode;
@@ -322,7 +336,13 @@ export interface ChatSurfaceProps {
      * Amiba's own `ToolSpec`-driven chip, which is also the `fallback` of
      * every unclaimed tool name.
      */
+    messageImages?: (images: NonNullable<import("@amiba/app-runtime/protocol").ChatMessage["images"]>) => ReactNode;
+    approvalDetail?: (callId: string) => ReactNode;
     assistantActions?: (messageId: string) => ReactNode;
+    turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
+    messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
+    timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[];
+    turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
     toolView?: ToolCallSeatRenderer;
     /**
      * renderSlot-backed dispatch of Amiba's KEYED `amiba.conversation.question`
@@ -455,7 +475,7 @@ export default function ChatSurface({
     resolveChatSurfaceMode(sessions.activeId) === "conversation";
   const workspacePane = useWorkspacePane();
 
-  const [input, setInput] = useState("");
+  const [input, setInput, setSessionInput, composerDraftSource] = useSessionComposerDraft(sessions.activeId);
   const handledNewConversationRequestRef = useRef(newConversationRequestKey);
   const defaultProfileIdRef = useRef("default");
   const [draftAgent, setDraftAgent] = useState<AgentExecutionContext>({
@@ -464,6 +484,7 @@ export default function ChatSurface({
   const currentSessionMeta = sessions.sessions.find(
     (session) => session.id === sessions.activeId,
   );
+  const readOnly = currentSessionMeta?.subagentAddress?.mode === "one-shot";
   const effectiveAgent = normalizeAgentContext(
     currentSessionMeta?.agent ?? draftAgent,
   );
@@ -549,7 +570,10 @@ export default function ChatSurface({
   // them under a transient composer id while the home surface is active;
   // only `runChatTurn()` may mint the real conversation id.
   const draftUploadSessionRef = useRef(shortId("draft"));
+  const queuedAttachmentsRef = useRef<Attachment[]>([]);
   const att = useComposerAttachments({
+    isAttachmentRetained: id => queuedAttachmentsRef.current.some(a => a.attachmentId === id),
+    registerDraftImage: triggerRuntime?.registerDraftImage,
     getSessionId: () => sessions.activeId || draftUploadSessionRef.current,
   });
   const {
@@ -628,8 +652,9 @@ export default function ChatSurface({
    * in-flight sessions don't trample each other.
    */
   const inFlightTurnByIdRef = useRef<
-    Map<string, { user: UiMessage; assistantUiId: string }>
+    Map<string, { user: UiMessage; assistantUiId: string; owner?: "resident" }>
   >(new Map());
+  const nativeAdmissions = useRef(new Map<string, ReturnType<typeof nativeSubmissionAdmission>>());
   const agentBySessionRef = useRef<Map<string, AgentExecutionContext>>(
     new Map(),
   );
@@ -803,9 +828,14 @@ export default function ChatSurface({
   // down in this component body, so JS hoisting makes the forward
   // reference safe (the value resolves at call time, not capture time).
   const queueHook = usePendingQueue({
+    readOnly,
     sessions,
     client,
     input,
+    draftSource: composerDraftSource,
+    submitComposer: () => composerRef.current?.submit?.() ?? false,
+    resolveQueuedDraft: (draft, signal) => composerRef.current?.resolveQueuedDraft?.(draft, signal)
+      ?? Promise.reject(new Error("Input editor is not mounted")),
     setInput,
     attachments,
     setAttachments,
@@ -813,6 +843,10 @@ export default function ChatSurface({
     attachmentUploading,
     setPendingSourceApp,
     busy,
+    hasNativeTurn: id => {
+      const turn = inFlightTurnByIdRef.current.get(id);
+      return !!turn && turn.owner !== "resident";
+    },
     markCurrentAssistantStopped: () => markCurrentAssistantStopped(),
     rejectPendingTurn: (sid, err) => rejectPendingTurn(sid, err),
     runChatTurn: (args: RunChatTurnArgs) => runChatTurn(args),
@@ -825,6 +859,7 @@ export default function ChatSurface({
     suppressFinallyDrainRef,
     ignoreAbortForSessionRef,
     setQueue: setPendingQueue,
+    resetView: resetPendingQueueView,
     setPaused: setQueuePaused,
     setEditingQueueId,
     send,
@@ -834,6 +869,9 @@ export default function ChatSurface({
     cancelEdit: cancelQueueEdit,
     remove: removePendingQueueItem,
   } = queueHook;
+  queuedAttachmentsRef.current = pendingQueue.flatMap(q => q.attachments);
+  const queueDrainRef = useRef({ sessionId: sessions.activeId, drain: queueHook.drainHead });
+  queueDrainRef.current = { sessionId: sessions.activeId, drain: queueHook.drainHead };
 
   // Pick up a prompt handed off from the new-tab Home launcher or from
   // an external surface (Quick-Ask Spotlight selection, Region Snip
@@ -965,7 +1003,7 @@ export default function ChatSurface({
       // `pendingTurnRef` is set the instant runChatTurn posts submit,
       // so it's the authoritative "we're mid-submission" signal.
       if (pendingTurnRef.current?.sessionId === sessionId) return;
-      setBusy(false);
+      setBusy(frame.hostRunning ?? false);
       resetApprovals();
       resetQuestions();
       // Interaction waits outlive turn state: DSH keeps unanswered
@@ -1010,7 +1048,7 @@ export default function ChatSurface({
     //     made the label jump to the latest turn after a reload.
     const { state } = frame;
     stream.hydrateFromSnapshot(state);
-    setBusy(state.streaming);
+    setBusy(frame.hostRunning ?? state.streaming);
     setPendingApprovals(state.pendingApprovals ?? []);
     setPendingQuestions(state.pendingQuestions ?? []);
     setActiveTurnId(state.turnId ?? null);
@@ -1054,6 +1092,7 @@ export default function ChatSurface({
       const merged: Partial<UiMessage> = {
         content: state.assistantText,
         assistantMessageId: state.assistantMessageId,
+        runtimeTurn: state.runtimeTurn,
         streaming: state.streaming,
         // Carry the chip URL the engine captured at end-of-turn through to
         // any panel that opens AFTER the stream finished. While the panel
@@ -1066,10 +1105,11 @@ export default function ChatSurface({
             }
           : {}),
       };
-      const idx = arr.findIndex((m) => m.uiId === state.assistantUiId);
+      const idx = findSnapshotAssistant(arr, state);
       if (idx >= 0) {
         const next = arr.slice();
-        next[idx] = { ...next[idx], ...merged };
+        // Keep the durable row and metadata, but let subsequent engine flushes find it.
+        next[idx] = { ...next[idx], ...merged, uiId: state.assistantUiId! };
         return next;
       }
       // Cold-open mid-stream OR switch-back-during-stream: the panel
@@ -1148,6 +1188,7 @@ export default function ChatSurface({
     if (sessionId !== sessions.activeId) {
       inFlightTurnByIdRef.current.delete(sessionId);
       resolvePendingTurn(sessionId);
+      residentQueueDrainer.completed(sessionId);
       return;
     }
     stream.cancelStreamChunkFlush();
@@ -1179,6 +1220,7 @@ export default function ChatSurface({
     setBusy(false);
     inFlightTurnByIdRef.current.delete(sessionId);
     resolvePendingTurn(sessionId);
+    residentQueueDrainer.completed(sessionId);
   }
 
   /**
@@ -1233,6 +1275,7 @@ export default function ChatSurface({
       sessionId === sessions.activeId &&
       assistantUiId !== stream.getCurrentAssistantUiId()
     ) {
+      residentQueueDrainer.displaced(sessionId);
       sessions.setActiveMessages((prev) =>
         settleStreamingMessage(prev as UiMessage[], assistantUiId),
       );
@@ -1245,6 +1288,7 @@ export default function ChatSurface({
     // wrong bubble. So bail completely on the echoed abort.
     if (ignoreAbortForSessionRef.current === sessionId) {
       ignoreAbortForSessionRef.current = null;
+      residentQueueDrainer.displaced(sessionId);
       return;
     }
     if (sessionId !== sessions.activeId) {
@@ -1254,16 +1298,24 @@ export default function ChatSurface({
       // user bubble for a turn that's already over.
       inFlightTurnByIdRef.current.delete(sessionId);
       rejectPendingTurn(sessionId, new DOMException("aborted", "AbortError"));
+      residentQueueDrainer.interrupted(sessionId);
       return;
     }
     markCurrentAssistantStopped();
     rejectPendingTurn(sessionId, new DOMException("aborted", "AbortError"));
+    residentQueueDrainer.interrupted(sessionId);
   }
 
   function handleStreamError(
     sessionId: string,
     event: Extract<StreamEvent, { kind: "error" }>,
   ): void {
+    residentQueueDrainer.interrupted(sessionId);
+    const admission = nativeAdmissions.current.get(sessionId);
+    if (admission?.protectsQueue) {
+      sessionPendingQueue(getPlatform().storage, sessionId).setPaused(true);
+      if (admission.notice) event = { ...event, message: admission.notice };
+    }
     if (sessionId !== sessions.activeId) {
       inFlightTurnByIdRef.current.delete(sessionId);
       rejectPendingTurn(sessionId, new Error(event.message));
@@ -1271,14 +1323,12 @@ export default function ChatSurface({
     }
     const assistantUiId = stream.getCurrentAssistantUiId() ?? null;
     stream.reset();
-    setPendingQueue((pq) => {
-      for (const q of pq) {
-        for (const a of q.attachments) void deleteAttachmentFile(a);
-      }
+    if (!admission?.protectsQueue) setPendingQueue((pq) => {
+      deleteUnretainedAttachments(pq.flatMap(q => q.attachments), attachments);
       return [];
     });
     // Errors wipe the queue, so the paused flag (if any) is meaningless now.
-    setQueuePaused(false);
+    if (!admission?.protectsQueue) setQueuePaused(false);
     resetApprovals();
     resetQuestions();
     setError({
@@ -1348,12 +1398,14 @@ export default function ChatSurface({
         // the durable-log projection derives, so re-reading history (a tab
         // switch, a reload) lands on the same bubble instead of a second
         // one — and an event that arrives after the read is a no-op.
-        const { uiId, content, sentAt, origin, notice } = event;
+        const { uiId, content, images, attachmentBadges, sentAt, origin, notice } = event;
         sessions.setActiveMessages((prev) => {
           const arr = prev as UiMessage[];
           const next = withHostUserMessage(arr, {
             uiId,
             content,
+            images,
+            attachmentBadges,
             sentAt,
             origin,
             notice,
@@ -1363,8 +1415,11 @@ export default function ChatSurface({
         });
         break;
       }
+      case "assistantTextSource":
+        stream.onAssistantTextSource(event);
+        break;
       case "chunk":
-        stream.onChunk(event.text);
+        stream.onChunk(event.text, event.runtimeStep);
         break;
       case "reasoning":
         stream.onReasoning(event.text);
@@ -1387,9 +1442,13 @@ export default function ChatSurface({
           );
         }
         break;
-      case "turn":
+      case "turn": {
         setActiveTurnId(event.turnId || null);
+        const assistantUiId = stream.getCurrentAssistantUiId();
+        if (assistantUiId) sessions.setActiveMessages(prev => (prev as UiMessage[]).map(message =>
+          message.uiId === assistantUiId ? { ...message, runtimeTurn: event.runtimeTurn } : message));
         break;
+      }
       case "approvalRequest":
         onApprovalRequestEvent(event.request);
         break;
@@ -1488,12 +1547,11 @@ export default function ChatSurface({
       // busy/stop state after New chat.
       if (!sessions.activeId) setBusy(false);
       if (wasInitialised) {
-        // Drop in-memory queue; the load-effect below will repopulate
-        // from the new session's persisted queue.
-        setPendingQueue([]);
-        // Queue is scoped to a session; switching tabs drops it, so
-        // any paused flag for the prior session must drop too.
-        setQueuePaused(false);
+        // The queue hook switches its projection to the new session;
+        // switching views does not mutate either session's queue.
+        setEditingQueueId(null);
+        // The queue's Stop/Edit pause belongs to its session and survives
+        // navigation; the queue hook projects the incoming session's value.
         // Pending approvals are also session-scoped — clear them on
         // switch; the new session's snapshot will repopulate if it has
         // its own pending approvals.
@@ -1504,7 +1562,7 @@ export default function ChatSurface({
         setError(null);
         // Same fire-and-forget GC as `newChat` — the composer-time
         // attachments belonged to the session we're leaving.
-        for (const a of attachments) void deleteAttachmentFile(a);
+        deleteUnretainedAttachments(attachments, pendingQueue.flatMap(q => q.attachments));
         setAttachments([]);
         setAttachmentError(null);
         // The "from <App>" source hint belongs to the hand-off prompt
@@ -1533,26 +1591,131 @@ export default function ChatSurface({
 
   const prepareMarkdownTurn = usePrepareMarkdownTurn();
   const prepareConversationSubmit = usePrepareConversationSubmit();
+  const residentTurnDeps = useRef<ResidentTurnSenderDeps>(null!);
+  const residentReadyListeners = useRef(new Set<() => void>());
+  useEffect(() => { for (const changed of [...residentReadyListeners.current]) changed(); });
+  const residentTurnSender = useMemo(() => createResidentTurnSender({
+    unavailable: id => residentTurnDeps.current.unavailable(id),
+    prepare: id => residentTurnDeps.current.prepare(id),
+    waitUntilReady: (id, signal) => residentTurnDeps.current.waitUntilReady!(id, signal),
+    read: id => residentTurnDeps.current.read(id),
+    workspace: id => residentTurnDeps.current.workspace(id),
+    checkpoint: (id, index) => residentTurnDeps.current.checkpoint(id, index),
+    markdown: id => residentTurnDeps.current.markdown(id),
+    dispatch: plan => residentTurnDeps.current.dispatch(plan),
+  }), []);
+  const residentTurnMounted = useRef(true);
+  useEffect(() => {
+    residentTurnMounted.current = true;
+    return () => {
+      residentTurnMounted.current = false;
+      for (const changed of [...residentReadyListeners.current]) changed();
+    };
+  }, []);
+  residentTurnDeps.current = {
+    unavailable: id => !residentTurnMounted.current || sessions.getSnapshot().activeId === id || inFlightTurnByIdRef.current.has(id) || triggerRuntime?.isSessionRunning?.(id) === true,
+    prepare: prepareConversationSubmit,
+    waitUntilReady: (id, signal) => waitForResidentReady({
+      unavailable: () => !residentTurnMounted.current || sessions.getSnapshot().activeId === id,
+      busy: () => inFlightTurnByIdRef.current.has(id) || triggerRuntime?.isSessionRunning?.(id) === true,
+      watch: changed => {
+        residentReadyListeners.current.add(changed);
+        const off = triggerRuntime?.inputStateSource?.(id).subscribe(changed);
+        return () => { off?.(); residentReadyListeners.current.delete(changed); };
+      },
+    }, signal),
+    read: async id => {
+      const known = sessions.getSnapshot().sessions.find(item => item.id === id);
+      const session = await loadSessionMeta(id, known?.subagentAddress);
+      if (!session) throw new Error("The target conversation does not exist.");
+      return { session, messages: await loadMessages(id, session.subagentAddress) };
+    },
+    workspace: async id => {
+      const workspaces = getPlatform().workspaces;
+      const path = await ensureSessionWorkspace(id);
+      if (workspaces && !path) throw new Error("The target workspace root is unavailable.");
+      return path ?? undefined;
+    },
+    checkpoint: (id, index) => workspacePane.beginTurnFor(id, index),
+    markdown: prepareMarkdownTurn,
+    dispatch: async ({ payload, messages, workspacePath }) => {
+      if (!client.submitWithReceipt) return { kind: "rejected", error: "The chat transport does not provide submission receipts." };
+      nativeAdmissions.current.delete(payload.sessionId);
+      const user: UiMessage = { uiId: shortId("u"), role: "user", content: payload.history[payload.history.length - 1].content,
+        sentAt: Date.now(), ...(workspacePath ? { workspacePath } : {}) };
+      const cached = { user, assistantUiId: payload.assistantUiId, owner: "resident" as const };
+      inFlightTurnByIdRef.current.set(payload.sessionId, cached);
+      agentBySessionRef.current.set(payload.sessionId, payload.agent!);
+      const receipt = await client.submitWithReceipt(payload);
+      if (receipt.kind === "rejected") {
+        if (inFlightTurnByIdRef.current.get(payload.sessionId) === cached) inFlightTurnByIdRef.current.delete(payload.sessionId);
+      } else if (receipt.kind === "accepted") {
+        // Host admission is final even if a local index write fails afterwards.
+        void sessions.touchSession(payload.sessionId, [...messages, user]).catch(error => console.warn("[resident-submit] session metadata update failed", error));
+      }
+      return receipt;
+    },
+  };
+  useEffect(() => triggerRuntime?.bindResidentTurnSender?.(residentTurnSender, id => residentTurnSender.isBusy(id) || inFlightTurnByIdRef.current.has(id)), [triggerRuntime, residentTurnSender]);
+  const residentQueueDeps = useRef<ResidentQueueDrainerDeps>(null!);
+  const residentQueueDrainer = useMemo(() => createResidentQueueDrainer({
+    queue: id => sessionPendingQueue(getPlatform().storage, id),
+    offscreen: id => residentQueueDeps.current.offscreen(id),
+    busy: id => residentQueueDeps.current.busy(id),
+    watchReadiness: (id, changed) => residentQueueDeps.current.watchReadiness(id, changed),
+    resolve: (id, draft, signal) => residentQueueDeps.current.resolve(id, draft, signal),
+    send: request => residentQueueDeps.current.send(request),
+    drainNative: id => residentQueueDeps.current.drainNative(id),
+    retainedAttachments: () => residentQueueDeps.current.retainedAttachments(),
+  }), []);
+  residentQueueDeps.current = {
+    queue: id => sessionPendingQueue(getPlatform().storage, id),
+    offscreen: id => residentTurnMounted.current && !!triggerRuntime && sessions.getSnapshot().activeId !== id,
+    busy: id => inFlightTurnByIdRef.current.has(id) || triggerRuntime?.isSessionRunning?.(id) === true,
+    watchReadiness: (id, changed) => triggerRuntime?.inputStateSource?.(id).subscribe(changed) ?? (() => {}),
+    resolve: (id, draft, signal) => triggerRuntime?.resolveResidentDraft?.(id, draft, signal) ?? Promise.reject(new Error("The queued draft resolver is unavailable.")),
+    send: residentTurnSender,
+    retainedAttachments: () => attachments,
+    drainNative: id => {
+      const current = queueDrainRef.current;
+      if (current.sessionId === id && !sessionPendingQueue(getPlatform().storage, id).isPaused()) current.drain();
+    },
+  };
+  useEffect(() => {
+    residentQueueDrainer.setEnabled(true);
+    return () => residentQueueDrainer.setEnabled(false);
+  }, [residentQueueDrainer]);
+  useEffect(() => residentQueueDrainer.enteredForeground(sessions.activeId), [residentQueueDrainer, sessions.activeId]);
   const handoffConversationSubmit = useConversationSubmitHandoff({
     activeId: sessions.activeId,
     prepare: prepareConversationSubmit,
     refresh: sessions.refresh,
     open: sessions.openTab,
-    run: (args: { text: string; attachments: Attachment[] }) => runChatTurn(args),
+    run: (args: RunChatTurnArgs) => runChatTurn(args),
   });
 
 
-  async function runChatTurn(args: {
-    text: string;
-    attachments: Attachment[];
-  }): Promise<void> {
+  async function runChatTurn(args: RunChatTurnArgs): Promise<void> {
+    return withSendingAttachments(args.attachments, () => runChatTurnWithFiles(args));
+  }
+
+  async function runChatTurnWithFiles(args: RunChatTurnArgs): Promise<void> {
     const { text, attachments: attachmentsForTurn } = args;
+    const restoreDraft = () => {
+      if (args.draft) composerDraftSource.setParts(args.draft.parts);
+      else setInput(text);
+    };
+    if (readOnly) {
+      restoreDraft();
+      setAttachments(attachmentsForTurn);
+      return;
+    }
 
     setError(null);
     try {
       if (await handoffConversationSubmit(args)) return;
     } catch (error) {
-      setInput(text);
+      restoreDraft();
       setAttachments(attachmentsForTurn);
       setError({ message: error instanceof Error ? error.message : String(error), source: "run" });
       return;
@@ -1586,7 +1749,7 @@ export default function ChatSurface({
           // The send path has already consumed the composer values. Restore
           // them so the user can choose another directory and retry without
           // losing the prompt or its attachments.
-          setInput(text);
+          setSessionInput(sessionId, text, args.draft);
           setAttachments(attachmentsForTurn);
           return;
         }
@@ -1611,7 +1774,7 @@ export default function ChatSurface({
       } catch (e) {
         const message = String((e as Error)?.message || e);
         setWorkspaceError(message);
-        setInput(text);
+        setSessionInput(sessionId, text, args.draft);
         setAttachments(attachmentsForTurn);
         return;
       }
@@ -1676,7 +1839,12 @@ export default function ChatSurface({
     // thumbnails are ready.
     void badgesPromise.then((attachmentBadges) => {
       if (!attachmentBadges) return;
-      sessions.setActiveMessages((prev) => {
+      const cached = inFlightTurnByIdRef.current.get(sessionId);
+      if (cached?.user.uiId === userMsg.uiId) {
+        cached.user = { ...cached.user, attachmentBadges };
+      }
+      sessions.updateActiveMessagesFor(sessionId, (prev) => {
+        if (!prev.some(m => (m as UiMessage).uiId === userMsg.uiId)) return prev;
         const next = (prev as UiMessage[]).map((m) =>
           m.uiId === userMsg.uiId ? { ...m, attachmentBadges } : m,
         );
@@ -1719,9 +1887,10 @@ export default function ChatSurface({
       const modelSelection = pendingModelSelectionRef.current;
       pendingModelSelectionRef.current = null;
       await new Promise<void>((resolve, reject) => {
-        pendingTurnRef.current = { sessionId, resolve, reject };
+        const pending = { sessionId, resolve, reject };
+        pendingTurnRef.current = pending;
         try {
-          client.submit({
+          const admission = nativeSubmissionAdmission(client, {
             sessionId,
             sessionTitle: sessions.sessions.find(
               (session) => session.id === sessionId,
@@ -1744,7 +1913,28 @@ export default function ChatSurface({
               : {}),
             agent: agentForTurn,
             ...(modelSelection ? { modelSelection } : {}),
+          }, {
+            accepted() {
+              if (nativeAdmissions.current.get(sessionId) !== admission) return;
+              nativeAdmissions.current.delete(sessionId);
+              args.onAccepted?.();
+            },
+            failed(message) {
+              if (nativeAdmissions.current.get(sessionId) !== admission) return;
+              const queue = sessionPendingQueue(getPlatform().storage, sessionId);
+              queue.setPaused(true);
+              queue.setNotice(message);
+              queue.update(previous => [{ queueId: shortId("q"), text,
+                ...(args.draft ? { draft: args.draft } : {}),
+                attachments: attachmentsForTurn.map(item => ({ ...item })),
+              }, ...previous]);
+              // Some rejection paths have no stream event (disposed/busy engine).
+              // Settle only this attempt, never a newer pending turn.
+              if (pendingTurnRef.current === pending) streamHandlerRef.current(sessionId, { kind: "error", message });
+            },
           });
+          nativeAdmissions.current.set(sessionId, admission);
+          admission.start();
           submitted = true;
         } catch (e) {
           pendingTurnRef.current = null;
@@ -1777,18 +1967,8 @@ export default function ChatSurface({
       } else if (!queuePausedRef.current) {
         // If the user hit Stop, the queue was deliberately frozen — don't
         // re-fire it until they explicitly resume. Otherwise drain the head.
-        setPendingQueue((prev) => {
-          if (prev.length === 0) return prev;
-          const [head, ...tail] = prev;
-          queueMicrotask(
-            () =>
-              void runChatTurn({
-                text: head.text,
-                attachments: head.attachments,
-              }),
-          );
-          return tail;
-        });
+        const current = queueDrainRef.current;
+        if (current.sessionId === sessionId) current.drain();
       }
     }
   }
@@ -1874,14 +2054,16 @@ export default function ChatSurface({
     // The persisted queue still belongs to the outgoing session; only its
     // in-memory projection is cleared so it cannot flash inside the empty
     // persistent Composer while the session transition finishes.
-    setPendingQueue([]);
+    // New chat interrupts the outgoing turn; its retained queue must remain
+    // parked until an explicit send resumes that conversation.
+    setQueuePaused(true);
+    resetPendingQueueView();
     setEditingQueueId(null);
-    setQueuePaused(false);
     resetApprovals();
     resetQuestions();
     // Drop any composer-time attachments and unlink their on-disk files —
     // they were tied to the old session and won't be referenced again.
-    for (const a of attachments) void deleteAttachmentFile(a);
+    deleteUnretainedAttachments(attachments, pendingQueue.flatMap(q => q.attachments));
     setAttachments([]);
     setAttachmentError(null);
     pendingWorkspacePathRef.current = null;
@@ -1968,10 +2150,13 @@ export default function ChatSurface({
   // state. Most hosts still choose one branch or the other; Quick Ask opts
   // into the persistent dock path so React keeps this exact subtree mounted
   // while the first session is created or New chat returns to empty.
+  const canSubmitDraft = (text: string) => !readOnly && text.trim().length > 0 && !attachmentUploading && !attachmentBusy;
   const composerNode = (
     <Composer
       ref={composerRef}
+      disabled={readOnly}
       value={input}
+      draftSource={composerDraftSource}
       onChange={setInput}
       onSubmit={(text) => {
         void send(text);
@@ -1984,8 +2169,9 @@ export default function ChatSurface({
         // send has no user words to anchor the turn, and rather than the app
         // inventing a stand-in downstream, sending is simply not enabled
         // until something is typed.
-        input.trim().length > 0 && !attachmentUploading && !attachmentBusy
+        canSubmitDraft(input)
       }
+      canSubmitDraft={canSubmitDraft}
       contextRail={
         pendingSourceApp || pendingQueue.length > 0 ? (
           <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
@@ -2041,6 +2227,11 @@ export default function ChatSurface({
       approvalModePicker
       planSeat={slots?.planSeat}
       inputOverlay={slots?.inputOverlay}
+      inputAttachments={slots?.inputAttachments}
+      inputDock={slots?.inputDock}
+      composerDock={slots?.composerDock}
+      inputLeft={slots?.inputLeft}
+      inputRight={slots?.inputRight}
       permissionSessionId={sessions.activeId}
       topAffordance={
         editingQueueId != null ? (
@@ -2241,7 +2432,19 @@ export default function ChatSurface({
                         }
                       >
                         <MessageTurns
+                          messageImages={slots?.messageImages}
                           assistantActions={slots?.assistantActions}
+                          messageText={slots?.messageText}
+                          turnTail={slots?.turnTail}
+                          timelineRows={slots?.timelineRows}
+                          turnTailAnchors={slots?.turnTailAnchors}
+                          openTurnFile={path => {
+                            if (path === ".") {
+                              if (!workspacePane.files || !sessions.activeId) throw new Error("Workspace folder access is unavailable.");
+                              return workspacePane.files.openExternal(sessions.activeId, path);
+                            }
+                            return openWorkspaceFile({ path });
+                          }}
                           sessionId={sessions.activeId ?? undefined}
                           messages={messages}
                           onReviewWorkspaceChanges={
@@ -2329,6 +2532,7 @@ export default function ChatSurface({
             )}
             {hasActive && pendingApprovals.length > 0 && (
               <ApprovalBanner
+                renderDetail={slots?.approvalDetail}
                 approvals={pendingApprovals}
                 inFlight={approvalInFlight}
                 error={approvalError}

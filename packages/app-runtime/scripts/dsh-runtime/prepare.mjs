@@ -1,3 +1,4 @@
+import { patchSetDigest, canReusePatchSet } from "./reuse-dependencies.mjs";
 import { packageCommand, applyManagedRuntimePatches } from "./process-tools.mjs";
 import { validateDependencyLock, validatePluginBuildSources } from "./dependency-lock.mjs";
 import { createHash } from "node:crypto";
@@ -179,6 +180,10 @@ async function sourceFiles(root) {
 const pluginSkillAssets = await Promise.all(pluginSourceDirs.map((directory, index) =>
   pluginPackages[index].files?.includes("skills") ? sourceFiles(path.join(directory, "skills")) : [],
 ));
+const licenseName = /^(?:LICENSE|NOTICE)(?:[.-][A-Za-z0-9_.-]+)?$/u;
+const pluginLicenseAssets = pluginSourceDirs.map((directory, index) =>
+  (pluginPackages[index].files ?? []).filter(name => licenseName.test(name)).map(name => path.join(directory, name)),
+);
 
 async function computeAmibaSourceDigest() {
   const sourceDirectories = [];
@@ -232,6 +237,7 @@ async function computeAmibaSourceDigest() {
     if (fs.existsSync(skillsDir)) files.push(...(await sourceFiles(skillsDir)));
   }
   const patchesDir = path.join(workspaceDir, "patches");
+  files.push(...pluginLicenseAssets.flat());
   if (fs.existsSync(patchesDir)) files.push(...(await sourceFiles(patchesDir)));
   files.push(path.join(workspaceDir, "package.json"));
   files.push(path.join(workspaceDir, "scripts/dsh-client-inputs.mjs"));
@@ -277,6 +283,9 @@ if (args.has("--update-lock")) {
 
 const dependencyLockContent = await fsp.readFile(dependencyLock, "utf8");
 validateDependencyLock(JSON.parse(appPackageJsonContent), JSON.parse(await fsp.readFile(dependencyManifest, "utf8")), JSON.parse(dependencyLockContent));
+const workspaceManifest = JSON.parse(await fsp.readFile(path.join(workspaceDir, "package.json"), "utf8"));
+const reviewedPatches = { ...workspaceManifest.pnpm?.patchedDependencies, ...workspaceManifest.amiba?.runtimePatches };
+const patchSetHash = await patchSetDigest(reviewedPatches, file => fsp.readFile(path.resolve(workspaceDir, file), "utf8"));
 const hostLock = JSON.parse(dependencyLockContent);
 const pluginLockContents = await Promise.all(pluginInstalls.map(async entry => {
   checkHostContract(entry.manifest, hostLock);
@@ -304,6 +313,7 @@ function expectedMarker() {
     dependencyInstallMode: "isolated-plugins-v2",
     appTreeHash,
     dependencyLockHash,
+    patchSetHash,
     platform: process.platform,
     arch: process.arch,
   };
@@ -425,6 +435,9 @@ function verify(root = outputDir) {
     ...pluginNames.map((name) => amibaPlugin(root, name)),
     ...pluginSkillAssets.flatMap((files, index) => files.map(file =>
       path.join(root, "app/node_modules/@amiba", pluginNames[index], path.relative(pluginSourceDirs[index], file)),
+    )),
+    ...pluginLicenseAssets.flatMap((files, index) => files.map(file =>
+      path.join(root, "app/node_modules/@amiba", pluginNames[index], path.basename(file)),
     )),
     ...pluginPackages.flatMap((manifest, index) =>
       manifest.dsh?.client
@@ -648,6 +661,7 @@ async function reuseAppDependencyTree(appDir) {
     );
     // Only reuse trees created by the registry-only installer, never earlier injected trees.
     if (installedMarker.dependencyInstallMode !== "isolated-plugins-v2") return false;
+    if (!canReusePatchSet(installedMarker, patchSetHash)) return false;
     const sameDependencies = installedMarker.appTreeHash === appTreeHash;
     const reusable =
       sameDependencies && installedMarker.dependencyLockHash === dependencyLockHash &&
@@ -766,6 +780,14 @@ try {
       await fsp.cp(path.join(pluginSourceDir, "skills"), skillDestination, { recursive: true });
     }
     const patch = pluginPackages[index].dsh?.bundle?.patch;
+    // Root legal notices declared in package.files must accompany copied code,
+    // including reused installations; lib-only copying loses these notices.
+    for (const name of await fsp.readdir(pluginDestination)) {
+      if (licenseName.test(name)) await fsp.rm(path.join(pluginDestination, name), { force: true });
+    }
+    for (const file of pluginLicenseAssets[index]) {
+      await fsp.copyFile(file, path.join(pluginDestination, path.basename(file)));
+    }
     if (patch) {
       await fsp.copyFile(path.join(pluginSourceDir, patch), path.join(pluginDestination, patch));
     }

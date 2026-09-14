@@ -223,3 +223,47 @@ it("includes provider media inventory in search without adding it to chat choice
   const picker = screen.getByRole("dialog");
   expect(within(picker).queryByRole("option",{name:/Seedream/})).toBeNull();
 });
+
+it("adds official card/footer content without changing native provider controls", async () => {
+  vi.clearAllMocks();
+  const card = {
+    provider: { provider: "deepseek-official", displayName: "DeepSeek", settingsNs: "deepseek", settingsPath: [], active: true },
+    configured: true, keyConfigured: true,
+  };
+  snapshot.mockResolvedValue({ ...modelPlaneSnapshot, providers: [{ ...modelPlaneSnapshot.providers[0], providerCard: card }] });
+  const result = render(<ModelProviderConfigTab adapter={adapter} />);
+  await screen.findByText("options.models.config.defaultsTitle");
+  const native = result.container.querySelector("[data-provider-row]")!;
+  const before = native.cloneNode(true);
+  const renderCard = vi.fn(owner => <button>Card extension {owner.provider.provider}</button>);
+  result.rerender(<ModelProviderConfigTab adapter={adapter} renderProviderCard={renderCard} footer={<button>Models footer</button>} />);
+  await screen.findByRole("button", { name: "Models footer" });
+  expect(renderCard).toHaveBeenCalledWith(card);
+  expect(native.isEqualNode(before)).toBe(true);
+  expect(result.container.querySelector("[data-provider-row]")).toBe(native);
+  expect(screen.getByRole("button", { name: "Card extension deepseek-official" })).toBeVisible();
+  const add = screen.getByRole("button", { name: "options.models.provider.addCustom" });
+  expect(add.nextElementSibling).toBe(result.container.querySelector("[data-model-settings-footer]"));
+  result.rerender(<ModelProviderConfigTab adapter={adapter} />);
+  expect(result.container.querySelector("[data-model-settings-footer]")).toBeNull();
+  expect(native.isEqualNode(before)).toBe(true);
+});
+
+it("isolates a throwing card renderer and footer while native configuration remains usable", async () => {
+  vi.clearAllMocks();
+  snapshot.mockResolvedValue({ ...modelPlaneSnapshot, providers: [{ ...modelPlaneSnapshot.providers[0], providerCard: {
+    provider: { provider: "deepseek-official", displayName: "DeepSeek", settingsNs: "deepseek", settingsPath: [], active: true },
+    configured: true, keyConfigured: false,
+  } }] });
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const Broken = (): never => { throw new Error("model footer failure"); };
+    render(<ModelProviderConfigTab adapter={adapter} footer={<Broken />} renderProviderCard={() => { throw new Error("model card failure"); }} />);
+    await screen.findByText("options.models.config.defaultsTitle");
+    expect(document.querySelector("[data-provider-row]")).toBeInTheDocument();
+    expect(document.querySelector("[data-model-provider-extension]")?.childNodes).toHaveLength(0);
+    expect(document.querySelector("[data-model-settings-footer]")?.childNodes).toHaveLength(0);
+    await userEvent.click(screen.getByRole("button", { name: "options.models.provider.addCustom" }));
+    expect(await screen.findByRole("dialog")).toBeVisible();
+  } finally { error.mockRestore(); }
+});

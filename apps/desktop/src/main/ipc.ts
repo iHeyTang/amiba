@@ -1,4 +1,9 @@
-import { readPreviewFile } from "./file-preview";
+import { registerDocumentFileIpc } from "./document-file-ipc";
+import { DshFileUploadCarrier } from "./dsh-file-upload";
+import { readDocumentFile } from "./document-file-reader";
+import { observeWorkspaceFile } from "./workspace-file-observer";
+import { registerFileResourceIpc } from "./file-resource-ipc";
+import { readPreviewFile, statWorkspaceFile } from "./file-preview";
 import { resolve as resolvePath } from "node:path";
 
 import {
@@ -18,6 +23,7 @@ import { dshRuntime, managedDshPaths } from "./dsh-runtime";
 import {
   loadDshClientBoot,
   proxyDshClientFetch,
+  resolveDshSessionDownloadUrl,
   type DshProxyRequest,
 } from "./dsh-client-boot";
 import { dshDiagnostics } from "./dsh-diagnostics";
@@ -80,6 +86,27 @@ function broadcastWorkspaceChange(change: WorkspaceChange) {
 }
 
 export function registerIpcHandlers() {
+  const fileUploads = new DshFileUploadCarrier();
+  const uploadSenders = new Map<number, { generation: number }>();
+  ipcMain.handle('dsh-client:upload-open', async (event, url: string) => {
+    const sender = event.sender;
+    if (!uploadSenders.has(sender.id)) {
+      const lifetime = { generation: 0 };
+      uploadSenders.set(sender.id, lifetime);
+      sender.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => { if (isMainFrame && !isInPlace) { lifetime.generation++; fileUploads.release(sender.id); } });
+      sender.once('destroyed', () => { fileUploads.release(sender.id); uploadSenders.delete(sender.id); });
+    }
+    const lifetime = uploadSenders.get(sender.id)!;
+    const generation = lifetime.generation;
+    const { baseUrl } = await dshRuntime.ensureStarted();
+    if (sender.isDestroyed() || lifetime.generation !== generation) throw new Error('Upload window closed or navigated.');
+    return fileUploads.open(sender.id, url, baseUrl);
+  });
+  ipcMain.handle('dsh-client:upload-write', (event, id: string, bytes: Uint8Array) => fileUploads.write(event.sender.id, id, bytes));
+  ipcMain.handle('dsh-client:upload-finish', (event, id: string) => fileUploads.finish(event.sender.id, id));
+  ipcMain.handle('dsh-client:upload-cancel', (event, id: string) => fileUploads.cancel(event.sender.id, id));
+  registerDocumentFileIpc(ipcMain, (sessionId, path) => workspaceManager.resolveFileForSession(sessionId, path), readDocumentFile);
+  registerFileResourceIpc(ipcMain, sessionId => workspaceManager.getForSession(sessionId), observeWorkspaceFile, listener => workspaceManager.onChange(listener));
   const dshProfilePlugins = new DshProfilePluginManager({
     paths: managedDshPaths(),
     runtime: dshRuntime,
@@ -94,6 +121,14 @@ export function registerIpcHandlers() {
     (_event, request: DshProxyRequest) =>
       proxyDshClientFetch(dshRuntime, request),
   );
+
+  ipcMain.handle("dsh-client:download", async (event, rawUrl: string) => {
+    const { baseUrl } = await dshRuntime.ensureStarted();
+    const target = resolveDshSessionDownloadUrl(rawUrl, baseUrl);
+    // Native downloads have no file-page Origin or cross-site fetch metadata.
+    // The Host still enforces its normal authority checks and streams the ZIP.
+    event.sender.session.downloadURL(target.href, { headers: { Origin: target.origin } });
+  });
 
   // The Plugins Client contribution owns the product workflow. Electron only
   // supplies the native file picker and the process boundary required to run
@@ -175,6 +210,12 @@ export function registerIpcHandlers() {
     "workspace:bind",
     (_e, args: { sessionId: string; path: string }) =>
       workspaceManager.bind(args.sessionId, args.path),
+  );
+  ipcMain.handle("workspace:bind-if-unbound", (_e, args: { sessionId: string; path: string }) =>
+    workspaceManager.bindIfUnbound(args.sessionId, args.path),
+  );
+  ipcMain.handle("workspace:resolve-runtime-cwd", (_e, args: { sessionId: string; cwd: string }) =>
+    workspaceManager.resolveRuntimeCwd(args.sessionId, args.cwd),
   );
   ipcMain.handle("workspace:unbind", (_e, sessionId: string) =>
     workspaceManager.unbind(sessionId),
@@ -355,6 +396,11 @@ export function registerIpcHandlers() {
     (_e, args: { sessionId: string; path: string }) =>
       readWorkspaceFile(args.sessionId, args.path),
   );
+
+  ipcMain.handle("files:stat", async (_e, args: { sessionId: string; path: string }) => {
+    const resolved = await workspaceManager.resolveFileForSession(args.sessionId, args.path);
+    return statWorkspaceFile(resolved);
+  });
 
   ipcMain.handle("files:read-bytes", (_e, args: { sessionId: string; path: string }) => readWorkspaceFile(args.sessionId, args.path, true));
 

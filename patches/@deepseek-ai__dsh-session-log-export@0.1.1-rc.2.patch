@@ -1,0 +1,32 @@
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -23,7 +23,11 @@
+ 		* @param url - same-origin Host download URL.
+ 		* @param filename - browser download filename.
+ 		*/
+-		function downloadUrl(url, filename) {
++		async function downloadUrl(url, filename) {
++			if (globalThis.location?.protocol === "file:" && globalThis.amiba?.dshClient?.download) {
++				await globalThis.amiba.dshClient.download(url);
++				return;
++			}
+ 			const anchor = document.createElement("a");
+ 			anchor.href = url;
+ 			anchor.download = filename;
+@@ -32,6 +36,7 @@
+ 		/** Resolve the browser's Host base with the connection carrier's null-origin fallback. */
+ 		function hostBase() {
+ 			const origin = globalThis.location?.origin;
++			if (globalThis.location?.protocol === "file:" && typeof globalThis.__AMIBA_DSH_TRANSPORT_URL__ === "string") return globalThis.__AMIBA_DSH_TRANSPORT_URL__;
+ 			return origin !== void 0 && origin !== "null" ? origin : "http://dsh.internal";
+ 		}
+ 		function messageOf(error) {
+@@ -112,7 +117,7 @@
+ 						const detail = await response.text().catch(() => "");
+ 						throw new Error(`Export failed: HTTP ${response.status}${detail === "" ? "" : ` ${detail}`}`);
+ 					}
+-					this.save(url.toString(), sessionLogZipFilename(sessionId));
++					await this.save(url.toString(), sessionLogZipFilename(sessionId));
+ 					const open = this.store.getSnapshot().bySession[String(sessionId)]?.open ?? true;
+ 					this.publish(sessionId, {
+ 						open,

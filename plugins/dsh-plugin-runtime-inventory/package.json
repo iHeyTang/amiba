@@ -22,12 +22,15 @@
       "external": [
         "react",
         "react-dom",
-        "react/jsx-runtime"
+        "react/jsx-runtime",
+        "@amiba/dsh-plugin-ui-shell",
+        "@deepseek-ai/dsh-client-runtime"
       ],
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-api-remotes",
-        "@amiba/dsh-plugin-ui-shell"
+        "@amiba/dsh-plugin-ui-shell",
+        "@deepseek-ai/dsh-client-connection"
       ],
       "platform": "web"
     }
@@ -51,7 +54,9 @@
     "@deepseek-ai/dsh-client-ui-slots": "catalog:",
     "@deepseek-ai/dsh-host-plugin-inventory": "catalog:",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "@deepseek-ai/dsh-client-ui-settings-plugins": "catalog:",
+    "@deepseek-ai/dsh-client-connection": "catalog:"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "catalog:",
@@ -66,6 +71,8 @@
     "react-dom": "18.3.1",
     "typescript": "5.6.3",
     "vite": "^5.4.11",
-    "lucide-react": "^0.460.0"
+    "lucide-react": "^0.460.0",
+    "@deepseek-ai/dsh-client-ui-settings-plugins": "catalog:",
+    "@deepseek-ai/dsh-client-connection": "catalog:"
   }
 }
