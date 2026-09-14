@@ -90,6 +90,11 @@ export function apply(ctx) {
   // The probe injects hmr, so activation waits for the watcher's ready event.
   const diagnostics = await fs.readFile(events, "utf8");
   console.log("HMR startup diagnostics:", diagnostics);
+  const watch = diagnostics.trim().split("\n").map(line => JSON.parse(line)).find(row => row.kind === "watch-ready");
+  assert(watch, "HMR watcher must be ready before editing the plugin");
+  assert.equal(watch.ignoredRoot, false, "HMR incorrectly ignores the linked plugin root");
+  assert.equal(watch.ignoredFile, false, "HMR incorrectly ignores the linked plugin entry");
+  assert.equal(watch.cached, true, "HMR must track the plugin's loaded module URL");
   await fs.writeFile(path.join(project, "lib/index.js"), source(2));
   const rows = await waitFor(2);
   assert(rows.some(row => row.kind === "stop" && row.version === 1));

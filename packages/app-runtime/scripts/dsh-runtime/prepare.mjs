@@ -1,4 +1,4 @@
-import { packageCommand, applyRuntimePatch } from "./process-tools.mjs";
+import { packageCommand, applyManagedRuntimePatches } from "./process-tools.mjs";
 import { validateDependencyLock, validatePluginBuildSources } from "./dependency-lock.mjs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -716,18 +716,7 @@ try {
       },
     );
   }
-  // npm does not consume pnpm.patchedDependencies. Apply the same reviewed
-  // patches to the managed tree, including when dependencies were reused.
-  const workspaceManifest = JSON.parse(await fsp.readFile(path.join(workspaceDir, "package.json"), "utf8"));
-  for (const [specifier, patchPath] of Object.entries(workspaceManifest.pnpm?.patchedDependencies ?? {})) {
-    const split = specifier.lastIndexOf("@");
-    const name = specifier.slice(0, split);
-    const version = specifier.slice(split + 1);
-    const packageDir = path.join(appDir, "node_modules", name);
-    const installed = JSON.parse(await fsp.readFile(path.join(packageDir, "package.json"), "utf8"));
-    if (installed.version !== version) fail(`Patch version mismatch for ${specifier}`);
-    applyRuntimePatch(packageDir, path.resolve(workspaceDir, patchPath));
-  }
+  applyManagedRuntimePatches(appDir, workspaceDir);
   const amibaScope = path.join(appDir, "node_modules", "@amiba");
   await fsp.mkdir(amibaScope, { recursive: true });
   for (const [index, pluginSourceDir] of pluginSourceDirs.entries()) {

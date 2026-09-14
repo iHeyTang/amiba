@@ -42,6 +42,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item (Get-Command node).Source "$runtime/node/node.exe"
           "AMIBA_DSH_RUNTIME_DIR=$runtime" >> $env:GITHUB_ENV
+      - name: Apply reviewed host patches
+        run: node --input-type=module -e "import { applyManagedRuntimePatches } from './packages/app-runtime/scripts/dsh-runtime/process-tools.mjs'; import path from 'node:path'; applyManagedRuntimePatches(path.join(process.env.AMIBA_DSH_RUNTIME_DIR, 'app'), process.cwd());"
       - name: Smoke test linked development plugins
         run: node apps/desktop/scripts/smoke-plugin-development.mjs
   dependencies:

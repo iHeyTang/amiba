@@ -1,4 +1,4 @@
-import { realpathSync } from 'node:fs';
+import { realpathSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -30,6 +30,19 @@ export function applyRuntimePatch(packageDir, patchFile) {
   } else {
     const reverse = invoke(['--check', '--reverse']);
     if (reverse.error || reverse.status !== 0) throw new Error(`Cannot apply or verify runtime patch: ${check.stderr}`);
+  }
+}
+
+/** npm ignores pnpm patches; host-only dependencies also need reviewed fixes. */
+export function applyManagedRuntimePatches(appDir, workspaceDir) {
+  const manifest = JSON.parse(readFileSync(path.join(workspaceDir, 'package.json'), 'utf8'));
+  const patches = { ...manifest.pnpm?.patchedDependencies, ...manifest.amiba?.runtimePatches };
+  for (const [specifier, patchFile] of Object.entries(patches)) {
+    const split = specifier.lastIndexOf('@');
+    const directory = path.join(appDir, 'node_modules', specifier.slice(0, split));
+    const installed = JSON.parse(readFileSync(path.join(directory, 'package.json'), 'utf8'));
+    if (installed.version !== specifier.slice(split + 1)) throw new Error(`Patch version mismatch for ${specifier}`);
+    applyRuntimePatch(directory, path.resolve(workspaceDir, patchFile));
   }
 }
 
