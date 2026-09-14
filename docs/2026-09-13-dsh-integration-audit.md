@@ -44,3 +44,24 @@ CI now runs profile/catalog/native regressions and the linked-plugin smoke on
 the three existing runtime targets, in addition to packaged composition checks.
 Windows/macOS Intel results depend on those CI runs. This audit does not claim
 an interactive test of every feature or a newly built installer on every OS.
+
+## Windows HMR diagnosis
+
+The Windows development smoke exposed a host HMR defect after startup succeeded.
+The diagnostic run recorded `watched: {}`, `ignoredRoot: true`, `ignoredFile:
+true`, and `cached: true`; the process was still alive at timeout. This rules out
+an unready watcher, a missing loaded module, or an exited process in that run.
+
+Cordis HMR 1.0.16 passes `path.relative()` directly to picomatch. On Windows, an
+out-of-profile source path begins with `..\..\..\`; the POSIX glob matcher
+misinterprets it as a hidden filename and the default `**/.*` rule excludes the
+entire source root. A pinned runtime patch normalizes platform separators to `/`
+before matching. The timeout remains 20 seconds.
+
+Host-only patches are recorded under `amiba.runtimePatches` and applied by the
+same version-checked, idempotent patch installer as the workspace patches. The
+runtime source digest includes patch files and package.json, so cached builds
+are invalidated. The lightweight Windows job uses the committed host lock and
+these patches; the full runtime job additionally checks packaged composition.
+The smoke waits for the HMR service, asserts the plugin is watched and cached,
+and logs watcher events and exit state if reloading fails.
