@@ -29,10 +29,8 @@ import {
   type AgentModelSelection,
   type AgentSubagentAddress,
 } from "@amiba/app-runtime/platform";
-import type {
-  SessionListState,
-  WorkspaceListState,
-} from "@deepseek-ai/dsh-client-runtime/client";
+import type { SessionListState } from "@deepseek-ai/dsh-api-session-controller/client";
+import type { WorkspaceListState } from "@deepseek-ai/dsh-api-workspace-controller/client";
 import type {
   PropsRenderSlots,
   SnapshotSelectorHook,
@@ -405,7 +403,7 @@ interface ProductShellProps {
    */
   useOfficialSessions: SnapshotSelectorHook<SessionListState>;
   lineageAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
-  openLineageSession: (sessionId: import("@deepseek-ai/dsh-client-runtime/client").SessionId) => void;
+  openLineageSession: (sessionId: import("@deepseek-ai/dsh-session/types").SessionId) => void;
   /**
    * The framework's `useWorkspaces` standard hook, from the same
    * `GlobalStandardProps` kit. The archive set is workspace-registry state,

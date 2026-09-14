@@ -1,5 +1,5 @@
 import { createLauncher, type Launcher } from "./launcher.js";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { ConnectionHandle } from "@deepseek-ai/dsh-api-remotes/client";
 import type {
   PropsRenderSlots,

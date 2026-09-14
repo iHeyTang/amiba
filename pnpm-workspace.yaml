@@ -7,7 +7,7 @@ packages:
 # Shared dependency versions, declared once.
 #
 # Every @deepseek-ai package is pinned to an EXACT version on purpose: DSH has
-# never shipped a non-prerelease release (0.0.1-rc.1 through 0.1.1-rc.2), and
+# never shipped a non-prerelease release (0.0.1-rc.1 through 0.1.5-rc.1), and
 # semver refuses to match a prerelease against a range whose major/minor/patch
 # tuple differs — `^0.1.0` and even `*` match none of them. Exact pins are the
 # only specifier that can express the dependency at all, so the problem was
@@ -18,47 +18,51 @@ packages:
 # `catalog:` resolves at install time and is replaced by the concrete version
 # when a package is published, so consumers of @amiba/* see real versions.
 catalog:
-  "@deepseek-ai/dsh-client-ui-workspace": "0.1.1-rc.2"
-  "@deepseek-ai/dsh-client-connection": "0.1.1-rc.2"
-  "@deepseek-ai/cordis": ^4.0.1
-  "@deepseek-ai/dsh-agent": 0.1.1-rc.2
-  "@deepseek-ai/dsh-agent-presets": 0.1.1-rc.2
-  "@deepseek-ai/dsh-api-remotes": 0.1.1-rc.2
-  "@deepseek-ai/dsh-attachment": 0.1.1-rc.2
-  "@deepseek-ai/dsh-client-locale": 0.1.1-rc.2
+  "@deepseek-ai/dsh-client-ui-workspace": "0.1.5-rc.1"
+  "@deepseek-ai/dsh-client-connection": "0.1.5-rc.1"
+  "@deepseek-ai/cordis": 4.0.2
+  "@deepseek-ai/dsh-agent": 0.1.5-rc.1
+  "@deepseek-ai/dsh-agent-presets": 0.1.5-rc.1
+  "@deepseek-ai/dsh-api-remotes": 0.1.5-rc.1
+  "@deepseek-ai/dsh-attachment": 0.1.5-rc.1
+  "@deepseek-ai/dsh-client-locale": 0.1.5-rc.1
   "@deepseek-ai/dsh-client-runtime": 0.1.1-rc.2
-  "@deepseek-ai/dsh-client-ui-commands": 0.1.1-rc.2
-  "@deepseek-ai/dsh-client-ui-conversation": 0.1.1-rc.2
-  "@deepseek-ai/dsh-client-ui-input-trigger": 0.1.1-rc.2
-  "@deepseek-ai/dsh-client-ui-layout": 0.1.1-rc.2
-  "@deepseek-ai/dsh-client-ui-settings": 0.1.1-rc.2
-  "@deepseek-ai/dsh-client-ui-sidebar": 0.1.1-rc.2
-  "@deepseek-ai/dsh-client-ui-settings-plugins": 0.1.1-rc.2
-  "@deepseek-ai/dsh-client-ui-slots": 0.1.1-rc.2
-  "@deepseek-ai/dsh-client-ui-tool": 0.1.1-rc.2
-  "@deepseek-ai/dsh-client-ui-trajectory": 0.1.1-rc.2
-  "@deepseek-ai/dsh-commands": 0.1.1-rc.2
-  "@deepseek-ai/dsh-credentials": 0.1.1-rc.2
-  "@deepseek-ai/dsh-host-plugin-inventory": 0.1.1-rc.2
-  "@deepseek-ai/dsh-llm": 0.1.1-rc.2
-  "@deepseek-ai/dsh-mcp-client": 0.1.1-rc.2
-  "@deepseek-ai/dsh-schedule": 0.1.1-rc.2
-  "@deepseek-ai/dsh-session": 0.1.1-rc.2
-  "@deepseek-ai/dsh-session-query": 0.1.1-rc.2
-  "@deepseek-ai/dsh-session-log-export": 0.1.1-rc.2
-  "@deepseek-ai/dsh-settings": 0.1.1-rc.2
-  "@deepseek-ai/dsh-skill": 0.1.1-rc.2
-  "@deepseek-ai/dsh-skill-filesystem": 0.1.1-rc.2
-  "@deepseek-ai/dsh-system-prompt": 0.1.1-rc.2
-  "@deepseek-ai/dsh-timeout": 0.1.1-rc.2
-  "@deepseek-ai/dsh-tools": 0.1.1-rc.2
-  "@deepseek-ai/dsh-typert-protocol": 0.1.1-rc.2
-  "@deepseek-ai/dsh-user-questions": 0.1.1-rc.2
+  "@deepseek-ai/dsh-client-ui-commands": 0.1.5-rc.1
+  "@deepseek-ai/dsh-client-ui-conversation": 0.1.5-rc.1
+  "@deepseek-ai/dsh-client-ui-input-trigger": 0.1.5-rc.1
+  "@deepseek-ai/dsh-client-ui-layout": 0.1.5-rc.1
+  "@deepseek-ai/dsh-client-ui-settings": 0.1.5-rc.1
+  "@deepseek-ai/dsh-client-ui-sidebar": 0.1.5-rc.1
+  "@deepseek-ai/dsh-client-ui-settings-plugins": 0.1.5-rc.1
+  "@deepseek-ai/dsh-client-ui-slots": 0.1.5-rc.1
+  "@deepseek-ai/dsh-client-ui-tool": 0.1.5-rc.1
+  "@deepseek-ai/dsh-client-ui-trajectory": 0.1.5-rc.1
+  "@deepseek-ai/dsh-commands": 0.1.5-rc.1
+  "@deepseek-ai/dsh-credentials": 0.1.5-rc.1
+  "@deepseek-ai/dsh-host-plugin-inventory": 0.1.5-rc.1
+  "@deepseek-ai/dsh-llm": 0.1.5-rc.1
+  "@deepseek-ai/dsh-mcp-client": 0.1.5-rc.1
+  "@deepseek-ai/dsh-schedule": 0.1.5-rc.1
+  "@deepseek-ai/dsh-session": 0.1.5-rc.1
+  "@deepseek-ai/dsh-session-query": 0.1.5-rc.1
+  "@deepseek-ai/dsh-session-log-export": 0.1.5-rc.1
+  "@deepseek-ai/dsh-settings": 0.1.5-rc.1
+  "@deepseek-ai/dsh-skill": 0.1.5-rc.1
+  "@deepseek-ai/dsh-skill-filesystem": 0.1.5-rc.1
+  "@deepseek-ai/dsh-system-prompt": 0.1.5-rc.1
+  "@deepseek-ai/dsh-timeout": 0.1.5-rc.1
+  "@deepseek-ai/dsh-tools": 0.1.5-rc.1
+  "@deepseek-ai/dsh-typert-protocol": 0.1.5-rc.1
+  "@deepseek-ai/dsh-user-questions": 0.1.5-rc.1
   "@deepseek-ai/schemastery": ^3.0.0
-  "@deepseek-ai/dsh-subagent": 0.1.1-rc.2
-  "@deepseek-ai/dsh-jobs": 0.1.1-rc.2
-  "@deepseek-ai/dsh-session-persistence": 0.1.1-rc.2
-  "@deepseek-ai/dsh-storage": 0.1.1-rc.2
-  "@deepseek-ai/dsh-storage-json": 0.1.1-rc.2
-  "@deepseek-ai/dsh-storage-domain": 0.1.1-rc.2
-  "@deepseek-ai/dsh-llm-pi-ai": 0.1.1-rc.2
+  "@deepseek-ai/dsh-subagent": 0.1.5-rc.1
+  "@deepseek-ai/dsh-jobs": 0.1.5-rc.1
+  "@deepseek-ai/dsh-session-persistence": 0.1.5-rc.1
+  "@deepseek-ai/dsh-storage": 0.1.5-rc.1
+  "@deepseek-ai/dsh-storage-json": 0.1.5-rc.1
+  "@deepseek-ai/dsh-storage-domain": 0.1.5-rc.1
+  "@deepseek-ai/dsh-llm-pi-ai": 0.1.5-rc.1
+  "@deepseek-ai/dsh-api-session-controller": 0.1.5-rc.1
+  "@deepseek-ai/dsh-api-workspace-controller": 0.1.5-rc.1
+  "@deepseek-ai/dsh-api-settings-controller": 0.1.5-rc.1
+  "@deepseek-ai/dsh-client-store": 0.1.5-rc.1

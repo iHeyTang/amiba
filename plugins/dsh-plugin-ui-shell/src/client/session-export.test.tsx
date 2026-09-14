@@ -7,7 +7,7 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import type { SessionId } from "@deepseek-ai/dsh-client-runtime/client";
+import type { SessionId } from "@deepseek-ai/dsh-session/types";
 import type { SessionLogDownloadState } from "@deepseek-ai/dsh-session-log-export/client";
 import { SessionExportDialog } from "./session-export.js";
 

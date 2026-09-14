@@ -1,7 +1,5 @@
-import type {
-  ClientContext,
-  ISessions,
-} from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
+import type { ISessions } from "@deepseek-ai/dsh-api-session-controller/client";
 import type {} from "@deepseek-ai/dsh-client-ui-slots";
 import { createToolviews } from "./toolviews.js";
 export const name = "amiba-browser-core-ui";

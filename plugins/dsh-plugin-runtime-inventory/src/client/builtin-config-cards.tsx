@@ -10,10 +10,8 @@ import {
   type AgentLoopCardState,
   type WebSearchCardState,
 } from "@deepseek-ai/dsh-client-ui-settings-plugins/client";
-import type {
-  ClientContext,
-  SettingsScope,
-} from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
+import type { SettingsScope } from "@deepseek-ai/dsh-client-ui-settings/client";
 import { PluginConfigCard } from "@amiba/ui/plugin/runtime-inventory";
 import { usePluginT } from "@amiba/ui/plugin";
 

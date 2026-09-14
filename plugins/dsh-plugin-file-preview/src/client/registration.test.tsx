@@ -5,7 +5,7 @@ import {
   type PropsRenderSlots,
   SlotCore,
 } from "@deepseek-ai/dsh-client-ui-slots";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import { apply } from "./index";
 import { createWorkbenchSource } from "../../../dsh-plugin-ui-shell/src/client/workbench-source";
 import { WorkbenchExtensionsProvider } from "../../../../packages/ui/src/chat/workbench-extensions";

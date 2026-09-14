@@ -1,6 +1,7 @@
 import { useCallback, useSyncExternalStore, type ReactNode } from "react";
 import type { CommandRowOwner } from "@amiba/extension-sdk";
-import type { ConversationSnapshot, ObservableSnapshot } from "@deepseek-ai/dsh-client-runtime/client";
+import type { ConversationSnapshot } from "@deepseek-ai/dsh-client-runtime/client";
+import type { ObservableSnapshot } from "@deepseek-ai/dsh-client-store";
 
 /** Use the official Chat projection, including its explicit compaction correlation. */
 export function commandRowOwners(snapshot: Pick<ConversationSnapshot, "chat"> | undefined): { id: string; seq: number; owner: CommandRowOwner }[] {

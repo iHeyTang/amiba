@@ -11,7 +11,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createElement, type ComponentType, type ReactNode } from "react";
 import { SlotCore } from "@deepseek-ai/dsh-client-ui-slots";
 import type { PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import { apply } from "../../../dsh-plugin-runtime-inventory/src/client/index.js";
 
 // This test owns generic slot registration, not the built-in browser cards.

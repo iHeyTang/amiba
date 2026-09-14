@@ -3,7 +3,7 @@ import {
   SlotCore,
   type PropsRenderSlots,
 } from "@deepseek-ai/dsh-client-ui-slots";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import { apply } from "./index.js";
 it("declares extension slots once, accepts contributed steps, and removes them on unload", () => {
   const core = new SlotCore();

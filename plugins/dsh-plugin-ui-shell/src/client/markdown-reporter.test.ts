@@ -1,5 +1,5 @@
 import { Context, Service } from "@deepseek-ai/cordis";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import { expect, it, vi } from "vitest";
 import { createMarkdownReporter } from "./markdown-reporter.js";
 

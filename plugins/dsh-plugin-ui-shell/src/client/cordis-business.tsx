@@ -1,6 +1,7 @@
 import { useCallback, useSyncExternalStore, type ReactNode } from "react";
 import type { ObservableSnapshot, ToolCallOwnerProps } from "@amiba/extension-sdk";
-import type { ConversationSnapshot, ToolCallBlock } from "@deepseek-ai/dsh-client-runtime/client";
+import type { ConversationSnapshot } from "@deepseek-ai/dsh-client-runtime/client";
+import type { ToolCallBlock } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type { CordisDynamicPluginId, CordisDynamicPackageId, CordisDynamicPluginRunId } from "@deepseek-ai/dsh-api-remotes/client";
 
 /** Pinned ui-cordis owner contract; no dependency on its replacement card. */

@@ -1,4 +1,4 @@
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { ConnectionHandle } from "@deepseek-ai/dsh-api-remotes/client";
 import { resolveSlotLabel } from "@deepseek-ai/dsh-client-ui-slots";
 import type {

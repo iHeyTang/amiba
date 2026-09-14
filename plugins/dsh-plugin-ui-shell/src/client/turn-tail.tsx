@@ -2,10 +2,8 @@ import type { AssistantTimelineItem } from "@amiba/app-runtime/protocol";
 import { WorkspaceTextMentionsContext } from "@amiba/ui";
 import type { ChatFileMentions } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import type {
-  ConversationSnapshot,
-  ObservableSnapshot,
-} from "@deepseek-ai/dsh-client-runtime/client";
+import type { ConversationSnapshot } from "@deepseek-ai/dsh-client-runtime/client";
+import type { ObservableSnapshot } from "@deepseek-ai/dsh-client-store";
 import type { TurnTailOwnerProps } from "@deepseek-ai/dsh-client-ui-conversation/client";
 
 export function turnTailOwner(

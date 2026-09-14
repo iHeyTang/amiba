@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import type { ObservableSnapshot, WorkbenchPanelOwner } from "@amiba/extension-sdk";
-import type { ConversationSnapshot, ToolCallBlock } from "@deepseek-ai/dsh-client-runtime/client";
+import type { ConversationSnapshot } from "@deepseek-ai/dsh-client-runtime/client";
+import type { ToolCallBlock } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type { DetailsToolOwnerProps } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import { WorkbenchViewBoundary } from "@amiba/ui/plugin";
 

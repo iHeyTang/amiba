@@ -37,7 +37,8 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
     "@deepseek-ai/dsh-client-runtime": "catalog:",
-    "@deepseek-ai/dsh-client-ui-slots": "catalog:"
+    "@deepseek-ai/dsh-client-ui-slots": "catalog:",
+    "@deepseek-ai/dsh-api-session-controller": "catalog:"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "catalog:",
@@ -47,7 +48,8 @@
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
     "vite": "^5.4.11",
-    "lucide-react": "^0.460.0"
+    "lucide-react": "^0.460.0",
+    "@deepseek-ai/dsh-api-session-controller": "catalog:"
   },
   "dsh": {
     "client": {

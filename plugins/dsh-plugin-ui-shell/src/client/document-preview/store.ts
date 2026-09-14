@@ -14,7 +14,7 @@
  * ends, and a tab that never read has no bucket to forget.
  */
 import type { RemoteFailure } from '@deepseek-ai/dsh-typert-protocol'
-import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
+import { defineStore, type EngineStoreHandle } from "@deepseek-ai/dsh-client-store";
 import type { TabId } from '../sidebar-right/dockkit/index.js'
 import type { WorkspaceFileText } from './wire.js'
 import type { DocumentFileBytes } from './rpc.js'

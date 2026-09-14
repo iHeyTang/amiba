@@ -1,4 +1,4 @@
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type {} from "@amiba/dsh-plugin-connector-core/client";
 import { Webhook } from "lucide-react";
 import { usePluginT } from "@amiba/ui/plugin";

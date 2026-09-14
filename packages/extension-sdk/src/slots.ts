@@ -278,7 +278,7 @@ export type {
  * `PopupSelectController.state`) is one of these, and an Amiba-side mirror of
  * the shape would be a second definition of an official contract.
  */
-export type { ObservableSnapshot } from "@deepseek-ai/dsh-client-runtime/client";
+export type { ObservableSnapshot } from "@deepseek-ai/dsh-client-store";
 
 /**
  * Merge anchor for the official COMMAND-UI vocabulary (`ctx.commandUi`, from
@@ -377,11 +377,7 @@ declare module "@deepseek-ai/dsh-client-ui-tool/client" {
   }
 }
 export type { ToolCallOwnerProps } from "@deepseek-ai/dsh-client-ui-tool/client";
-export type {
-  RunningToolCall,
-  ToolCallBlock,
-  ToolResultNode,
-} from "@deepseek-ai/dsh-client-runtime/client";
+export type { RunningToolCall, ToolCallBlock, ToolResultNode } from "@deepseek-ai/dsh-client-ui-conversation/client";
 
 /**
  * Official owner contract of `tool.call.toolview` — the keyed per-tool call

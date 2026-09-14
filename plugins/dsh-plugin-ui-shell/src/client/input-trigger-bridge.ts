@@ -32,7 +32,7 @@ import { shortId } from "@amiba/app-runtime/utils";
  */
 
 import { createInputStateSource, type InputStateSource, type InputQueueSession } from "./input-state-source.js";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type {
   CommandPopupController,
   ComposerImageOps,

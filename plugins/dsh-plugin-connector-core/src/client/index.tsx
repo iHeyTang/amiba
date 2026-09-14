@@ -1,7 +1,7 @@
 import { DesktopSyncHeader } from "./DesktopSyncSettings.js";
 import { createConnectorMessageSource } from "./message-source.js";
 import { createExternalSessionGroup } from "./session-group.js";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { PropsRuntime, PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import { Cable } from "lucide-react";

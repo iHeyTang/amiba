@@ -13,7 +13,7 @@ import {
   toolCallSettled,
   usePluginT,
 } from "@amiba/ui/plugin";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { MediaArtifact, MediaRecord } from "../store.js";
 import type {} from "../remote.js";
 type Api = ClientContext["remote"]["amibaMediaUi"];

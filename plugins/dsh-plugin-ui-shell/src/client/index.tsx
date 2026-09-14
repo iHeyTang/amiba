@@ -40,7 +40,7 @@ import { createMarkdownReporter } from "./markdown-reporter.js";
 import { MarkdownProvider, type MarkdownExtension, type MarkdownCapabilities } from "@amiba/markdown";
 import { useSyncExternalStore } from "react";
 import { createMarkdownSource } from "./markdown-source.js";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import { mountSessionExportChrome } from "./session-export.js";
 import {
   DshApiClient,
@@ -271,7 +271,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     settingsOnboardingSteps: SettingsOnboardingStepsSource;
     openSettingsSection: (sectionId: string) => void;
     sessionsBridge: AmibaSessionsBridge;
-    openLineageSession: (sessionId: import("@deepseek-ai/dsh-client-runtime/client").SessionId) => void;
+    openLineageSession: (sessionId: import("@deepseek-ai/dsh-session/types").SessionId) => void;
     triggerRuntime: AmibaInputTriggerBridge;
     hiddenSessionIds: HiddenSessionsSource;
     sessionListGroups: ContributionsSource<SessionGroupRow>;
@@ -783,8 +783,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
             getSnapshot: () => ctx.slots.entriesOfSlot("conversation.session.header.lineage").length > 0,
             subscribe: (listener: () => void) => ctx.slots.subscribe("conversation.session.header.lineage", listener),
           },
-          openLineageSession: (sessionId: import("@deepseek-ai/dsh-client-runtime/client").SessionId) => ctx.sessions.open(sessionId),
-          conversationSource: (sessionId: string) => ctx.get("sessions")?.binding(sessionId as import("@deepseek-ai/dsh-client-runtime/client").SessionId)?.session,
+          openLineageSession: (sessionId: import("@deepseek-ai/dsh-session/types").SessionId) => ctx.sessions.open(sessionId),
+          conversationSource: (sessionId: string) => ctx.get("sessions")?.binding(sessionId as import("@deepseek-ai/dsh-session/types").SessionId)?.session,
           surfaces,
           reportMarkdown,
           prepareConversation,
