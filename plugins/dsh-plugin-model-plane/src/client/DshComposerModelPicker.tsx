@@ -292,8 +292,9 @@ export function DshComposerModelPicker({
   }
 
   return (
-    <div className="flex min-w-0 items-center gap-0.5">
+    <div data-composer-model-picker className="flex min-w-0 items-center gap-0.5">
       <button
+        data-composer-model-trigger
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-invalid={Boolean(error) || undefined}
@@ -314,7 +315,7 @@ export function DshComposerModelPicker({
           <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
         ) : (
           <ModelIcon
-            className="h-3.5 w-3.5"
+            className="h-3.5 w-3.5 shrink-0"
             model={current?.model ?? ""}
             provider={current?.provider ?? ""}
           />
@@ -345,6 +346,7 @@ export function DshComposerModelPicker({
         <Popover open={effortOpen} onOpenChange={setEffortOpen}>
           <PopoverTrigger asChild>
             <button
+              data-composer-effort-trigger
               aria-expanded={effortOpen}
               aria-haspopup="menu"
               aria-label={`${t("sidepanel.modelPicker.reasoningEffort")}: ${

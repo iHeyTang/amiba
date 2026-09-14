@@ -250,12 +250,9 @@ describe("WorkspacePane responsive behavior", () => {
       "relative",
       "shrink-0",
       "self-stretch",
-      "max-[1100px]:!w-1/2",
+
     );
-    expect(pane).toHaveClass(
-      "max-[1100px]:!w-full",
-      "max-[1100px]:!max-w-none",
-    );
+    expect(screen.getByRole("separator")).toHaveAttribute("tabindex", "0");
 
     await userEvent.click(openEdgeToggle);
     expect(toggle).toHaveAttribute("aria-pressed", "false");
@@ -670,4 +667,37 @@ describe("WorkspacePane responsive behavior", () => {
       expect(screen.getByLabelText("workspace width")).toHaveTextContent("620");
     });
   });
+  it("allows a large preview, fits smaller windows and restores the preferred width", async () => {
+    const previous = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", {configurable: true, value: 2000});
+    const view = render(<WorkspacePaneProvider capability={{files:{}} as WorkspaceInspectorCapability} sessionId="wide-session"><Probe/><WorkspacePane/></WorkspacePaneProvider>);
+    try {
+      fireEvent.click(screen.getByRole("button", {name: "toggle workspace"}));
+      const separator = screen.getByRole("separator");
+      fireEvent.keyDown(separator, {key: "End"});
+      expect(screen.getByLabelText("workspace width")).toHaveTextContent("1680");
+      expect(screen.getByLabelText("workspacePane.title").style.width).toBe("1680px");
+      Object.defineProperty(window, "innerWidth", {configurable: true, value: 1000});
+      fireEvent(window, new Event("resize"));
+      expect(screen.getByLabelText("workspacePane.title").style.width).toBe("680px");
+      Object.defineProperty(window, "innerWidth", {configurable: true, value: 2000});
+      fireEvent(window, new Event("resize"));
+      expect(screen.getByLabelText("workspacePane.title").style.width).toBe("1680px");
+    } finally {view.unmount(); Object.defineProperty(window,"innerWidth",{configurable:true,value:previous});}
+  });
+  it("shields web content while dragging and rolls back cancelled resizing", () => {
+    render(<WorkspacePaneProvider capability={{files:{}} as WorkspaceInspectorCapability} sessionId="cancel-session"><Probe/><WorkspacePane/></WorkspacePaneProvider>);
+    fireEvent.click(screen.getByRole("button", {name: "toggle workspace"}));
+    const separator = screen.getByRole("separator");
+    const pane = screen.getByLabelText("workspacePane.title");
+    fireEvent(separator,pointerEvent("pointerdown",500));
+    expect(document.querySelector("[data-workspace-resize-shield]")).toBeInTheDocument();
+    fireEvent(separator,pointerEvent("pointermove",400));
+    expect(pane.style.width).toBe("620px");
+    fireEvent(separator,pointerEvent("pointercancel",400));
+    expect(pane.style.width).toBe("520px");
+    expect(document.querySelector("[data-workspace-resize-shield]")).toBeNull();
+    expect(screen.getByLabelText("workspace width")).toHaveTextContent("520");
+  });
+
 });

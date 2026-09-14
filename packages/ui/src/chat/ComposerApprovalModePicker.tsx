@@ -192,7 +192,7 @@ export function ComposerApprovalModePicker({
           ) : (
             <CurrentIcon aria-hidden className="h-3.5 w-3.5 shrink-0" />
           )}
-          <span className="truncate">{label}</span>
+          <span data-composer-secondary-label className="truncate">{label}</span>
         </button>
       </PopoverTrigger>
 
