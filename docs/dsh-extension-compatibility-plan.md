@@ -2083,3 +2083,12 @@ keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入�
 对照固定官方 chip-node：getTextContent 用 clipboardText 供复制，而 Amiba 的 MentionNode 使用内部 token 供原持久化。新增无界面的剪贴板插件，仅在选区包含 dsh.reference 时按插件 clipboardText 投影，其他文字（包括形似 token 的字面量）及原生引用保持原复制文本。普通选区继续原处理器。剪切先成功写剪贴板再删选区；原 getTextContent、存储格式、样式及附件粘贴路径不变。选区边界逻辑参照已安装 Lexical 的 MIT 实现，保留版权说明及 LICENSE.lexical。
 
 45 项剪贴板和输入回归、UI 类型检查通过。完整桌面构建及 `--compat --resident-draft` 回归退出 0：通过真实桌面 DOM Selection、ClipboardEvent 和 DataTransfer 验证复制 owner 文本、原草稿不变、粘贴到另一会话且 token 状普通文字不误生成引用。该用例没有写系统剪贴板；不声称系统快捷键/操作系统剪贴板端到端已验证。正反向部分选区、剪切、多段落和原生引用混排由 Lexical 测试覆盖。日志 `/tmp/amiba-reference-clipboard-regression.log`、`/tmp/amiba-reference-clipboard-types.log`、`/tmp/amiba-reference-clipboard-build.log`、`/tmp/amiba-reference-clipboard-smoke.log`。完整粘贴 lexicon/附件混排、invalid/appearance、新旧撤销及跨重启仍继续核对。
+
+
+#### 输入版本与粘贴能力边界重新核对
+
+直接核对实际安装的 rc.2 `ui-conversation/lib/types/client/input/contract.d.ts`：Occurrence.offset/length 明确属于 display text；`machine.d.ts` 的 projectClipboard 另将引用范围展开成 clipboardText。固定新版 c291e796 的 `input/editor/projection.ts` 则使用 clipboardStart/clipboardLength，facade.compose 的 draft 也是 clipboardText。两版契约不同。当前 Amiba 的全标签投影符合运行基线，不应为追新版直接替换，破坏原 rc.2 插件的坐标。新版输入 facade 需要版本区分和完整适配，继续列为未完成；现有引用 ID/剪贴板修复不代表新版坐标已支持。
+
+粘贴能力核对：实际 rc.2 `lib/client.js` onPaste 仅调用 keyboard.pasteBegin(text, sel)，没有传入 components/generation；InputTriggerController 的公开声明没有 paste matcher，ReferenceCodec 只有 clipboardText 与 serialize。固定新版的 facade.paste 也按普通文本插入，词表装饰另行处理。因而“插件任意复制文本自动恢复为结构化引用”不能仅凭内部 PasteAttempt/paste-upgrade 类型推断为官方已接线功能。前一轮纯文本粘贴不自动生成引用的桌面证据符合这一范围。
+
+后续应继续适配公开 lexicon 的文本装饰、appearance/invalid、文件与文本混合粘贴、撤销边界和新旧版本输入协议。不能把所有粘贴相关内部类型逐个暴露当作完成条件，也不能据此取消以上真实缺口。本轮未修改产品代码或样式；结论来自已安装发布包与固定新版源码对照，未运行新测试。
