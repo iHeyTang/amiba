@@ -7,7 +7,6 @@ const noSubmissionSubscription = () => () => {};
 import type { ComposerDraftSource } from "./composer-draft-store";
 import { parseTokens } from "./composer/serialize";
 import { commandImages } from "./composer/command-attachments";
-import { ComposerAccessory } from "../primitives/empty-state-visual";
 import { useT } from "@amiba/i18n";
 import { Paperclip } from "lucide-react";
 import { ComposerAddMenuContext } from "./composer/ComposerAddMenuContext";
@@ -1074,7 +1073,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               {dropOverlay}
             </div>
           ) : null}
-          <ComposerAccessory />
           {topAffordance}
           {renderedChipRow}
           {attachmentSeat}

@@ -13,7 +13,6 @@ it("persists explicit selection, keeps missing choices and restores candidates a
       name: "root",
       children: {
         "amiba.emptyState.visual": { kind: "list", scope: "root" },
-        "amiba.composer.accessory": { kind: "list", scope: "root" },
         "amiba.message.decoration": { kind: "list", scope: "root" },
       },
     },
@@ -21,7 +20,6 @@ it("persists explicit selection, keeps missing choices and restores candidates a
       renderSlot,
     }: PropsRenderSlots<
       | "amiba.emptyState.visual"
-      | "amiba.composer.accessory"
       | "amiba.message.decoration"
     >) => {
       void renderSlot;
@@ -52,12 +50,12 @@ it("persists explicit selection, keeps missing choices and restores candidates a
   ).toEqual(["a"]);
   expect(state.getSnapshot().choices["amiba.emptyState.visual"]).toBe("b");
   const reloaded = createSurfaceSelections(core, storage);
-  await reloaded.set("amiba.composer.accessory", "");
+  await reloaded.set("amiba.message.decoration", "");
   expect(reloaded.getSnapshot().choices["amiba.emptyState.visual"]).toBe("b");
   await reloaded.set("amiba.emptyState.visual", "");
   expect(reloaded.getSnapshot().choices["amiba.emptyState.visual"]).toBe("");
   const disabled = createSurfaceSelections(core, storage);
-  await disabled.set("amiba.composer.accessory", undefined);
+  await disabled.set("amiba.message.decoration", undefined);
   expect(disabled.getSnapshot().choices["amiba.emptyState.visual"]).toBe("");
   await reloaded.set("amiba.emptyState.visual", undefined);
   expect(

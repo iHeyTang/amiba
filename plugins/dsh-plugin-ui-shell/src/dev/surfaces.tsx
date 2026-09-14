@@ -99,7 +99,6 @@ function App({
   renderSlot,
 }: Slots.PropsRenderSlots<
   | "amiba.emptyState.visual"
-  | "amiba.composer.accessory"
   | "amiba.message.decoration"
   | "shell.overlay"
 >) {
@@ -180,7 +179,6 @@ core.register(
     name: "root",
     children: {
       "amiba.emptyState.visual": { kind: "list", scope: "root" },
-      "amiba.composer.accessory": { kind: "list", scope: "root" },
       "amiba.message.decoration": { kind: "list", scope: "root" },
       "shell.overlay": { kind: "list", scope: "root" },
     },

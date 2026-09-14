@@ -123,30 +123,6 @@ app
         path.join(tmpdir(), "amiba-pets-companion.png"),
         (await win.webContents.capturePage()).toPNG(),
       );
-      await js('window.petsHarness.select("amiba.composer.accessory","mofli")');
-      await wait('!!document.querySelector("[data-composer-card] [data-composer-accessory] [data-mofli-pet] svg")');
-      await wait('document.querySelector("[data-composer-accessory] svg").style.opacity === "0"');
-      await assert('document.querySelectorAll(".surface [data-mofli-pet] svg[data-playing=true]").length === 1');
-      await click("[data-conversation]");
-      await wait('document.querySelector("[data-composer-accessory] svg").style.opacity === "1"');
-      await assert('document.querySelectorAll(".surface [data-mofli-pet]").length === 1');
-      await assert(`(()=>{const pet=document.querySelector("[data-composer-accessory]").getBoundingClientRect();const card=document.querySelector("[data-composer-card]").getBoundingClientRect();return pet.top<card.top && pet.bottom>card.top && pet.bottom<=card.top+9 && pet.right<=card.right})()`);
-      await js(`(()=>{const r=document.querySelector('[data-composer-perch]').getBoundingClientRect();const e=document.createElement('div');e.id='test-popup';e.setAttribute('role','listbox');e.style.cssText='position:fixed;z-index:100;background:#eee;left:'+r.left+'px;top:'+r.top+'px;width:180px;height:120px';document.body.append(e)})()`);
-      await wait(`(()=>{const p=document.querySelector('[data-composer-perch]').getBoundingClientRect(),r=document.querySelector('#test-popup').getBoundingClientRect();return p.left>=r.right || p.right<=r.left || p.bottom<=r.top || p.top>=r.bottom})()`);
-      await js("document.querySelector('#test-popup').remove()");
-      await wait("document.querySelector('[data-composer-perch]').style.transform==='translate(0px, 0px)'");
-      await new Promise(r => setTimeout(r, 250));
-      await assert(`(()=>{const p=document.querySelector('[data-composer-perch]').getBoundingClientRect(),c=document.querySelector('[data-composer-card]').getBoundingClientRect();return Math.abs(c.right-p.right-16)<2})()`);
-      await assert('document.querySelector("[data-composer-accessory] svg").dataset.companionScene === "idle"');
-      await assert(`(()=>{const p=document.querySelector('[data-composer-perch]').getBoundingClientRect(),d=document.querySelector('[data-composer-dock]').getBoundingClientRect();return p.top>=d.top+8 && document.querySelector('[data-composer-dock]').style.getPropertyValue('--amiba-companion-clearance')==='84px'})()`);
-      await writeFile(path.join(tmpdir(), "amiba-pets-composer-docked.png"), (await win.webContents.capturePage()).toPNG());
-      await assert('!window.petsHarness.getSurfaces().rows["amiba.message.decoration"].some(row=>row.id==="mofli")');
-      win.setSize(560, 900);
-      await new Promise(r=>setTimeout(r, 150));
-      await assert(`(()=>{const pet=document.querySelector("[data-composer-accessory]").getBoundingClientRect();const card=document.querySelector("[data-composer-card]").getBoundingClientRect();return pet.left>=card.left && pet.right<=card.right && pet.bottom<=card.bottom})()`);
-      win.setSize(1100, 900);
-      await click("[data-conversation]");
-      await wait('document.querySelector("[data-composer-accessory] svg").style.opacity === "0"');
       await js("window.petsHarness.remote.activate(null)");
       await wait('!document.querySelector(".surface [data-mofli-pet]")');
       await click("[data-switch]");

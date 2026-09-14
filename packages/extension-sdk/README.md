@@ -326,23 +326,16 @@ not a registered occupant. Plugins register uniquely identified candidates. User
 choose one provider per surface in Settings → General; installing a plugin does
 not replace the default automatically. Choices persist in platform storage.
 An unavailable selected provider falls back to the host default (or an empty
-accessory/message region), without silently choosing another plugin.
+message region), without silently choosing another plugin.
 
 This interface has no Mofli dependency and does not constrain the visual to a
 pet. Its optional `interaction` is a read-only subscription to its nearest
 host region (see below). A root-scoped registration does not authorize access
 to any conversation's data.
 
-### Composer accessory and regional activity
+### Regional activity
 
-`amiba.composer.accessory` is a root-scoped **list** slot for persistent
-compact content perched on the composer’s upper-right edge, with a small visual gap.
-The host reserves an 80px-wide region, clips overflow at 80px high, moves it away from visible menus and popovers, and hides it if no clear on-screen position exists. An empty slot takes no space. Content
-must fit this region; do not use portals or fixed positioning to escape it.
-The official `conversation.input.overlay` still belongs to menus positioned
-against the composer card, independently of this accessory region.
-
-All three visual slots receive an optional `SurfaceInteraction`:
+Both visual slots receive an optional `SurfaceInteraction`:
 
 ```tsx
 const snapshot = useSyncExternalStore(
@@ -369,7 +362,7 @@ This is regional input observation, not a global keyboard hook.
 
 ### Session activity and coordinated presentation
 
-All three visual owners also expose optional `activity` and `presentation`.
+Both visual owners also expose optional `activity` and `presentation`.
 `activity` is available inside ChatSurface and follows the existing engine
 snapshot/event handlers. It is not a second execution controller and adds no
 engine subscription. Its read-only snapshot contains `sessionId`, `phase`,

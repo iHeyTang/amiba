@@ -1,4 +1,3 @@
-import { EmptyStateVisualProvider } from "../../primitives/empty-state-visual";
 import { render } from "@testing-library/react";
 import { forwardRef, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -86,18 +85,6 @@ describe("Composer conversation.input.overlay seat", () => {
     expect(container.querySelector("[data-composer-card]")).not.toBeNull();
   });
 });
-
-it("preserves the existing persistent accessory inside the composer card", () => {
-  const { container } = render(<EmptyStateVisualProvider render={({defaultVisual}) => defaultVisual} accessory={() => <span data-test-accessory="" />}>
-    <Composer value="" onChange={() => {}} onSubmit={() => {}} inputOverlay={<div data-input-overlay="" />} />
-  </EmptyStateVisualProvider>);
-  const frame = card(container);
-  const accessory = container.querySelector('[data-composer-accessory]')!;
-  expect(frame.contains(accessory)).toBe(true);
-  expect(accessory.closest("[data-composer-card]")).toBe(frame);
-  expect(container.querySelector('[data-input-overlay]')!.parentElement).toBe(frame);
-});
-
 
 describe("additive official input regions", () => {
   it("keeps docks outside the card and controls in the existing tool row", () => {

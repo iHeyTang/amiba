@@ -18,8 +18,8 @@ export function SurfaceSettings({ surfaces }: { surfaces: SurfaceSelections }) {
   const { language } = useT();
   const zh = language.startsWith("zh");
   const labels = zh
-    ? ["空状态展示", "输入区展示", "消息装饰"]
-    : ["Empty-state visual", "Composer accessory", "Message decoration"];
+    ? ["空状态展示", "消息装饰"]
+    : ["Empty-state visual", "Message decoration"];
   return (
     <div className="space-y-3">
       {SURFACE_SLOTS.map((slot, i) => {

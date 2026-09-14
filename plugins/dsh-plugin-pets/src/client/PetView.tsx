@@ -3,7 +3,7 @@ import { createSpatialRenderer, renderSpatial, dimensionOf } from "../mofli-capa
 import { createSpatialHitMap } from "./spatial-hit-map.js";
 import { createSvgRenderer } from "@mofli/core/browser";
 import type { Activity, PetConfig } from "@mofli/core";
-import type { ComposerAccessoryOwner } from "@amiba/extension-sdk";
+import type { SurfaceVisualOwner } from "@amiba/extension-sdk";
 import {
   companionScene,
   companionPose,
@@ -23,7 +23,7 @@ export function PetView({
   previewActivity,
   previewScene,
   className = "h-24 w-24",
-}: ComposerAccessoryOwner & {
+}: SurfaceVisualOwner & {
   desktop?: {
     api: import("@amiba/app-runtime/platform").DesktopPetBridge;
     menu(): void;

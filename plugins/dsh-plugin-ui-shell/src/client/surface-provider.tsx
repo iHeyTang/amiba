@@ -35,13 +35,6 @@ export function SurfaceProvider({
             })
           : owner.defaultVisual;
       }}
-      accessory={(owner) => {
-        if (!state.ready) return null;
-        const id = selected("amiba.composer.accessory");
-        return id
-          ? renderSlot("amiba.composer.accessory", owner, { only: id })
-          : null;
-      }}
       message={(owner) => {
         if (!state.ready) return null;
         const id = selected("amiba.message.decoration");

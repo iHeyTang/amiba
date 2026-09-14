@@ -154,7 +154,6 @@ function App({
   | "amiba.session.observer"
   | "amiba.workspace.view"
   | "amiba.emptyState.visual"
-  | "amiba.composer.accessory"
   | "amiba.message.decoration"
 >) {
   const [readStates, setReadStates] = React.useState<{sessionId:string;readAt:number}[]>([]);
@@ -211,10 +210,7 @@ function App({
               )}
               <div
                 data-composer-dock=""
-                style={{
-                  paddingTop:
-                    "calc(8px + var(--amiba-companion-clearance, 0px))",
-                }}
+                style={{ paddingTop: 8 }}
               >
                 <Composer value="" onChange={() => {}} onSubmit={() => {}} />
               </div>
@@ -237,7 +233,6 @@ core.register(
       "amiba.workspace.view": { kind: "list", scope: "root" },
       "amiba.session.observer": { kind: "list", scope: "root" },
       "amiba.emptyState.visual": { kind: "list", scope: "root" },
-      "amiba.composer.accessory": { kind: "list", scope: "root" },
       "amiba.message.decoration": { kind: "list", scope: "root" },
     },
   },
