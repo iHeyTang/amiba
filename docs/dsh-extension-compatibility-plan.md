@@ -2231,3 +2231,12 @@ OfficialTriggerPlugin 订阅公开词表，以编辑器所在窗口的 CSS Custo
 验证中发现并修正：Cordis 包装方法导致旧清理判断失效；安装目录遗漏根许可证。Host 图片探针最初使用损坏 PNG，被严格后端正确拒绝，改用已有持久图片测试的有效 PNG 后通过，未放宽生产解码校验。
 
 下一步仍是命令 receipt 解析、上传授权及生命周期，再连接浏览器普通文件；原 64 插槽和相关服务总体目标不变。
+
+
+### 2026-09-14 Host 文件上传凭据授权
+
+- 为现有附件插件接入 fileUploads 服务，按真实 Agent scope 与精确 Session 身份保管凭据；落盘后检查 Agent 仍驻留，才签发凭据。
+- 保留官方接收绑定的 commit/rollback、按请求回收及会话释放语义，保持新版子会话文件上传的明确拒绝。未改动原生子会话附件能力。
+- rc.2 没有新版 RemoteError，使用 Host FileUploadError 明确保留 code/data；远程通道与错误映射、命令 resolver 和接收调用方仍待接通。
+- 验证：16 项附件测试（含 5 项授权测试），插件 typecheck、verify:architecture、runtime:prepare 和 runtime:verify 通过；真实 Desktop --compat --input-state --command-images 通过，覆盖安装后的 Host 文件凭据解析、回滚保留与成功回收，以及旧图片能力。
+- 日志：/tmp/amiba-receipts-{tests,types,architecture,build,verify,smoke}.log。首次桌面失败为探针遗漏 agents 注入，修复探针后同一生产构建通过。

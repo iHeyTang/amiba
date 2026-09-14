@@ -10,6 +10,8 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { AmibaAttachmentStore } from "./attachment-store.js";
 import { applyAttachmentsRemote } from "./remote-service.js";
 import { installOfficialFileStorage } from "./official-file-storage/index.js";
+import { FileUploads } from "./file-uploads.js";
+import type { createOfficialFileStorage } from "./official-file-storage/index.js";
 
 export * from "./attachment-store.js";
 export * from "./remote.js";
@@ -292,6 +294,12 @@ export function apply(ctx: Context, config: Config): void {
     const service = scope.get("attachments");
     if (!service) return;
     scope.effect(() => installOfficialFileStorage(service, join(config.root, "official-files", "v1")), "official file storage compatibility");
+    scope.inject(["agents"], (uploadScope) => {
+      if (uploadScope.get("fileUploads")) return;
+      const storage = service as unknown as ReturnType<typeof createOfficialFileStorage>;
+      if (typeof storage.admitEncodedFile !== "function" || typeof storage.saveFileStream !== "function") return;
+      new FileUploads(uploadScope, storage);
+    });
   });
   const store = new AmibaAttachmentStore(config.root);
   applyAttachmentsRemote(ctx, store);

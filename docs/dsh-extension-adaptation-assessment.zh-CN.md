@@ -158,3 +158,5 @@
 下一步应按存储→命令解析→上传授权→输入生命周期成组迁移。这是可实施但尚未完成的服务迁移，不是“普通文件永远不能支持”。本次没有安装新版依赖或替换当前运行时。
 
 证据定位：当前受管 app/node_modules 下 dsh-attachment/lib/types/index.d.ts、dsh-commands/lib/types/index.d.ts 和实际模块导出；固定源码 packages/client/file-upload/src/index.ts（commit/assertOrdinaryAgent/bindPrompt/observeSessionEvent）、packages/client/ui-conversation/src/client/service.ts（beginFileUpload/serializeDraftAttachments）、packages/interaction/commands/src/index.ts（registerFileReceiptResolver）。注意抽象 saveImage 不出现在基类运行时 prototype，不能用该现象推断图片不受支持。
+
+真实 Host 验证补充：安装后的 fileUploads 与实际 Agent 已完成上传、文件解析、接收失败回滚及成功绑定后回收验证；同次桌面新旧图片命令、混合粘贴和原输入历史回归通过。运行时 prepare/verify、类型检查与架构检查通过。此证据不覆盖远程上传端点、文件命令或模型文件提交。
