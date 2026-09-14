@@ -12,7 +12,9 @@ const entryKey = Symbol.for("cordis.entry");
 export function shippedEntries(ctx: Context, bundleNames: readonly string[]): Map<string, string> {
   const shippedBundles = new Set(bundleNames);
   const profileDir = resolve(fileURLToPath(ctx.root.baseUrl!));
-  const require = createRequire(import.meta.url);
+  // Linked development plugins live outside the managed DSH installation.
+  // Resolve through the active profile and DSH's profiles/node_modules fallback.
+  const require = createRequire(resolve(profileDir, "package.json"));
   const profile = loadProfile("amiba-tool-catalog", basename(profileDir), require.resolve("@deepseek-ai/dsh/package.json"), dirname(dirname(profileDir)), { userLayer: false });
   const result = new Map<string, string>();
   const visit = (rows: ReturnType<typeof composeEntries>) => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DesktopExtensionHost, resolveDesktopExtension } from "../desktop-extensions.ts";
@@ -51,4 +51,13 @@ test("resolves real bundled CommonJS and rejects uninstalled packages and escape
   f.write("outside.cjs", "exports.create = () => ({})");
   f.write("node_modules/bundle/node_modules/browser/package.json", JSON.stringify({ name: "browser", dsh: { native: "../../../../outside.cjs" } }));
   assert.throws(() => resolveDesktopExtension(f.manifest, "browser"), /escapes/);
+});
+
+test("resolves hoisted native dependencies whose package.json is not exported", t => {
+  const f = fixture(t);
+  rmSync(path.join(f.root, "node_modules/bundle/node_modules/browser"), { recursive: true });
+  f.write("node_modules/browser/package.json", JSON.stringify({ name: "browser", exports: { ".": "./index.js" }, dsh: { native: "./native.cjs" } }));
+  f.write("node_modules/browser/index.js", "export {};");
+  f.write("node_modules/browser/native.cjs", "exports.create = () => ({});");
+  assert.equal(resolveDesktopExtension(f.manifest, "browser"), realpathSync(path.join(f.root, "node_modules/browser/native.cjs")));
 });
