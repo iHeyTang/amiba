@@ -2112,3 +2112,12 @@ keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入�
 76 项投影/序列化/引用 UI 测试及 21 项输入提供者测试通过，UI 和插件类型检查、完整桌面构建通过。`--compat --resident-draft` 真实回归退出 0：插件提供 file 外观，现场 DOM 存在图标，会话往返、renderer 重载后的 Occurrence 仍保留 file；复制、纯文本粘贴和旧版本写入保护保持通过。已查看 `/var/folders/w1/6rt3z_zs1395fn30txrlysvr0000gn/T/amiba-reference-appearance.png`，图标与标签正常对齐，原输入器布局保留。folder/session 由组件和状态测试覆盖，未声称所有主题/平台均已实测。日志 `/tmp/amiba-reference-appearance-tests.log`、`/tmp/amiba-reference-appearance-provider-tests.log`、`/tmp/amiba-reference-appearance-ui-types.log`、`/tmp/amiba-reference-appearance-plugin-types.log`、`/tmp/amiba-reference-appearance-build.log`、`/tmp/amiba-reference-appearance-smoke.log`。
 
 同轮核对 invalid：rc.2 set-invalid 是内部状态机分支，实际 facade 没有公开接线，固定新版仅保留节点字段/恢复。不能自行将来源暂时不可用永久写成 invalid；原提交 codec 失败拒绝发送和引用保留继续有效。完整失效展示与恢复的兼容语义仍需进一步核对，未标记完成。
+
+
+#### 引用剪切与真实键盘撤销/重做
+
+扩展 --resident-draft 桌面用例：选中包含一条 file 外观引用及 token 状字面文字的草稿，以 DOM ClipboardEvent/DataTransfer 剪切，确认剪贴文本是 owner 投影、草稿及 occurrence 清空；通过 CDP 原生键盘事件撤销，逐字段恢复原 occurrence（含 ID、范围、appearance），公开 draftRev 前进；重做清空、再次撤销仍恢复相同 ID。随后继续既有离屏交接、返回会话及重载验证，全部退出 0。
+
+首次重做测试错把 CDP modifier 1（Alt）当作 Shift；更正为 8 后通过，没有修改产品历史实现。当前用例在当前平台选择 Meta/Control，重做额外加 Shift；剪切只写本地 DataTransfer，不读写操作系统剪贴板。日志 `/tmp/amiba-reference-history-smoke-2.log`。本轮只增加桌面验证与记录，沿用最近一次完整构建；没有改能力或样式。
+
+这证明当前编辑器中的引用剪切/恢复及其后续会话交接，不证明编辑器卸载后仍保留整个 undo/redo 栈，也不证明跨重启恢复历史栈。多引用/附件混合撤销、其他平台快捷键、词表装饰、新版输入协议等仍待完成。

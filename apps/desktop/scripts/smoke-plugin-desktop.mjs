@@ -794,6 +794,25 @@ try {
       assert.deepEqual(copied,{text:copiedText,handled:true});
       assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft"),originalDraft.draft);
 
+      const cut = await evaluate("(()=>{const data=new DataTransfer();const event=new ClipboardEvent('cut',{bubbles:true,cancelable:true,clipboardData:data});document.querySelector('[data-auto-grow-editor]').dispatchEvent(event);return {text:data.getData('text/plain'),handled:event.defaultPrevented}})()");
+      assert.deepEqual(cut,{text:copiedText,handled:true});
+      await wait(()=>evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft==='' && window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).occurrences.length===0"));
+      const undoModifier = await evaluate("/Mac/.test(navigator.platform) ? 4 : 2");
+      const historyChord = async redo => {
+        await call('Input.dispatchKeyEvent',{type:'keyDown',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:undoModifier+(redo?8:0)});
+        await call('Input.dispatchKeyEvent',{type:'keyUp',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:undoModifier+(redo?8:0)});
+      };
+      await historyChord(false);
+      await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===${JSON.stringify(originalDraft.draft)}`));
+      const undoDraft = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
+      assert.deepEqual(undoDraft.occurrences,originalDraft.occurrences,"undo must restore reference ID, range and cached appearance");
+      assert.ok(undoDraft.draftRev>originalDraft.draftRev);
+      await historyChord(true);
+      await wait(()=>evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===''") );
+      await historyChord(false);
+      await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===${JSON.stringify(originalDraft.draft)}`));
+      assert.deepEqual(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).occurrences"),originalDraft.occurrences);
+      console.log('Native reference cut, keyboard undo/redo and repeated restoration preserved identity, appearance and literal text.');
       await evaluate("window.__residentInputActions=window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions;void 0");
       assert.equal(await evaluate("typeof window.__residentInputActions?.setDraft"),"function");
       await evaluate(`window.__otherDraftFrames=[];window.__otherDraftOff=window.__probeCtx.composerInputs.inputDraftSource(${JSON.stringify(otherId)}).subscribe(()=>window.__otherDraftFrames.push(window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft));window.__probeCtx.sessions.open(${JSON.stringify(otherId)});void 0`);
