@@ -980,6 +980,15 @@ try {
       const binaryCommand=await evaluate(`window.__probeCtx.remote.commands.execute(${JSON.stringify(commandSessionId)},'/compat-file-receipt',[{type:'file',receiptId:${JSON.stringify(binaryUpload.result.value.receiptId)}}])`);
       assert.equal(binaryCommand.ok,true);assert.equal(binaryCommand.value.result.text,'COMPAT_FILE_RECEIPT_OK');
       console.log('The installed binary upload HTTP route returned an authorized receipt and the official command consumed it.');
+      const streamedUpload=await evaluate(`(async()=>{const progress=[];const stream=new ReadableStream({start(controller){controller.enqueue(new Uint8Array([0,255]));controller.enqueue(new Uint8Array([42,128,7]));controller.close();}});const result=await window.__compatFileUpload.upload(${JSON.stringify(commandSessionId)},stream,'command.bin',undefined,value=>progress.push(value.loaded));return {available:window.__compatFileUpload.available,result,progress};})()`);
+      assert.equal(streamedUpload.available,true);assert.equal(streamedUpload.result.ok,true);
+      assert.equal(streamedUpload.result.value.file.attachmentId,fileStorageResult.ref.attachmentId);
+      assert.deepEqual(streamedUpload.progress,[2,5]);
+      const streamedCommand=await evaluate(`window.__probeCtx.remote.commands.execute(${JSON.stringify(commandSessionId)},'/compat-file-receipt',[{type:'file',receiptId:${JSON.stringify(streamedUpload.result.value.receiptId)}}])`);
+      assert.equal(streamedCommand.ok,true);assert.equal(streamedCommand.value.result.text,'COMPAT_FILE_RECEIPT_OK');
+      const streamCancellation=await evaluate(`(async()=>{const abort=new AbortController();let cancelled=false;let loaded=0;const stream=new ReadableStream({pull(controller){controller.enqueue(new Uint8Array(65536));},cancel(){cancelled=true;}});try{await window.__compatFileUpload.upload(${JSON.stringify(commandSessionId)},stream,'cancel-stream.bin',abort.signal,progress=>{loaded=progress.loaded;if(loaded>=196608)abort.abort();});return {aborted:false};}catch(error){return {aborted:error.name==='AbortError',cancelled,loaded};}})()`);
+      assert.equal(streamCancellation.aborted,true);assert.equal(streamCancellation.cancelled,true);assert.ok(streamCancellation.loaded>=196608);
+      console.log('Desktop background stream upload preserved bytes and progress, executed the file command, and cancelled an active multi-chunk source.');
 
 
       // Hot lexicons decorate native text without creating reference objects or history edits.

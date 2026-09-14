@@ -2273,3 +2273,6 @@ OfficialTriggerPlugin 订阅公开词表，以编辑器所在窗口的 CSS Custo
 
 
 2026-09-14 流式 Host 通道进展：为 rc.2 Connection 增加按调用插件生命周期注册的精确 Fetch 路由和 streaming 请求模式；普通 RPC 继续缓冲并执行原大小上限，上传继续经过现有 Host/Origin 来源检查。注意 rc.2 的来源检查不是新版浏览器 token/cookie 认证，本次没有声称迁入新版认证。新增 /api/session/uploadFileBinary，将请求分块直接交给精确会话授权的 fileUploads.uploadStream，连接断开传递取消，失败返回结构化错误。实际 HTTP 测试证明请求 EOF 前已接收分块，并验证跨站拒绝、普通 RPC 上限及卸载回退；真实桌面安装后的路由签发凭据并成功执行官方文件命令。附件原有 23 项测试与新增 2 项 HTTP 测试通过，类型、架构、运行时构建/校验和桌面回归通过。浏览器后台 Worker/ReadableStream 调用仍待接入，客户端 available 仍为 false；不能据此宣布端到端后台流式上传完成。
+
+
+2026-09-14 后台客户端上传进展：fileUpload 服务新增 Blob/ReadableStream 后台承载，保留 Uint8Array 编码 Remote 回退。网页端适配官方 Worker 的 Blob XHR 与流式 fetch；桌面通过预启动 __DSH_FILE_UPLOAD__ hook 使用窗口隔离的 IPC，每块最多 64 KiB，等待写入确认再读取，Host 地址和路径固定校验。窗口关闭/导航、调用取消及提供服务的插件卸载会取消对应上传，回收 IPC 状态；进度和结构化结果已接通。实际桌面 Blob 与分块 ReadableStream 上传均获得有效凭据并执行官方文件命令；多块传输中取消触发 AbortError 并取消源读取，原文件/图片命令、粘贴和历史回归通过。28 项附件测试、9 项运输/分块测试、插件与桌面类型检查、架构检查、完整构建及运行时/桌面包验证通过。桌面客户端 available 为 true；网页 Worker 有逻辑测试，独立 Web 实际部署、浏览器网络协议条件仍待验收，不能把桌面结果外推到所有 Web 环境。普通文件模型输入、离屏注册、队列及跨窗口文件语义仍未完成。

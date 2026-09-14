@@ -11,10 +11,10 @@ function fixture() {
 it('uploads the exact byte view and Blob bytes without using native attachment IDs', async () => {
   const {service,upload}=fixture();
   const result=await service.upload('session-a',new Uint8Array([9,0,255,42,8]).subarray(1,4),'file.bin');
-  expect(upload).toHaveBeenLastCalledWith('session-a',{data:'AP8q',name:'file.bin'},undefined);
+  expect(upload).toHaveBeenLastCalledWith('session-a',{data:'AP8q',name:'file.bin'},expect.any(AbortSignal));
   expect(result).toMatchObject({ok:true,value:{receiptId:'receipt'}});
   await service.upload('session-b',new Blob([new Uint8Array([0,255,42])]));
-  expect(upload).toHaveBeenLastCalledWith('session-b',{data:'AP8q'},undefined);
+  expect(upload).toHaveBeenLastCalledWith('session-b',{data:'AP8q'},expect.any(AbortSignal));
 });
 it('honors cancellation before RPC and after asynchronous Blob reading', async () => {
   const {service,upload}=fixture(); const abort=new AbortController();abort.abort();
@@ -49,6 +49,6 @@ it('retains namespace authority when another plugin calls the upload service', a
     expect(() => ctx.remote.fileUploads).toThrow('without inject');
     expect(await ctx.fileUpload.upload('session',new Uint8Array([1]))).toMatchObject({ok:true});
   });
-  expect(call).toHaveBeenCalledWith('session',{data:'AQ=='},undefined);
+  expect(call).toHaveBeenCalledWith('session',{data:'AQ=='},expect.any(AbortSignal));
   await consumer.dispose();await owner.dispose();await namespace.dispose();await remote.dispose();
 });

@@ -37,6 +37,10 @@ interface AmibaBridgeApi {
     standaloneTitleBar?: boolean;
   };
   dshClient: {
+    uploadOpen(url: string): Promise<string>;
+    uploadWrite(id: string, bytes: Uint8Array): Promise<void>;
+    uploadFinish(id: string): Promise<{status:number;body:string}>;
+    uploadCancel(id: string): Promise<void>;
     download(url: string): Promise<void>;
     boot(): Promise<{
       baseUrl: string;

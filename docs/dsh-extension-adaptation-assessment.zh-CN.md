@@ -150,7 +150,7 @@
 | --- | --- | --- |
 | 附件存储 | rc.2 原包类型仍只有图片；现已由 Amiba Host 插件为旧服务实例补齐 saveFile、saveFileStream、readFileStream、fileHostPath、admitEncodedFile 和错误分类，真实 Host 验证通过 | 存储层已接入，使用独立 official-files/v1；仍需连接 receipt 授权、命令解析与浏览器输入，不代表完整文件上传已完成 |
 | 命令接收 | 已为 rc.2 补齐 registerFileReceiptResolver、混合文件/图片接收与 Host/浏览器发布包参数校验；真实旧客户端及新版 HTTP 字段执行均通过 | 命令接收已验证；浏览器上传和输入器的普通文件消费仍需接通，不能把 Host 接收等同完整输入支持 |
-| 上传与授权 | Host 编码上传、原生前台文件命令及二进制流式 HTTP 路由已接通；真实桌面上传和命令执行通过 | 按真实 Agent/Session 签发凭据；浏览器后台 Worker/ReadableStream、离屏/队列文件和新版模块依赖仍待适配，不能用原生 att_* ID 替代 |
+| 上传与授权 | Host 编码/二进制流式上传及桌面 Blob/ReadableStream 后台通道已接通；真实桌面上传、进度、途中取消和官方文件命令通过 | 按真实 Agent/Session 签发凭据；独立 Web 部署、离屏/队列文件及新版模块依赖仍待适配，不能用原生 att_* ID 替代 |
 | 接收及回收 | 新版 FileUploads.bindPrompt 具有提交/回滚，队列移除和带 rpcId 的 user/message 会退休 receipt | 与真实接收确认、队列和历史观察接通，失败保留重试权限，不能提前释放 |
 | 浏览器输入 | 新版 conversation 通过 fileUpload.upload 保存 receipt，serializeDraftAttachments 只接受 ready 文件并按原顺序输出 | 接入上传状态、取消、原顺序和非图片注册对象；保留现有原生文字/PDF/图片功能和样式 |
 | 新版子会话文件上传 | 固定 c291e796 的 commit 先调用 assertOrdinaryAgent；origin=subagent 时明确抛 SUBAGENT_FILE_UNSUPPORTED | 此官方路径不能支持子会话文件上传。属于固定新版的明确限制，不意味着 Amiba 原有子会话附件能力应被删除 |
@@ -162,3 +162,6 @@
 真实 Host 验证补充：安装后的 fileUploads 与实际 Agent 已完成上传、文件解析、接收失败回滚及成功绑定后回收验证；同次桌面新旧图片命令、混合粘贴和原输入历史回归通过。运行时 prepare/verify、类型检查与架构检查通过。此证据不覆盖远程上传端点、文件命令或模型文件提交。
 
 2026-09-14 流式 Host 通道进展：为 rc.2 Connection 增加按调用插件生命周期注册的精确 Fetch 路由和 streaming 请求模式；普通 RPC 继续缓冲并执行原大小上限，上传继续经过现有 Host/Origin 来源检查。注意 rc.2 的来源检查不是新版浏览器 token/cookie 认证，本次没有声称迁入新版认证。新增 /api/session/uploadFileBinary，将请求分块直接交给精确会话授权的 fileUploads.uploadStream，连接断开传递取消，失败返回结构化错误。实际 HTTP 测试证明请求 EOF 前已接收分块，并验证跨站拒绝、普通 RPC 上限及卸载回退；真实桌面安装后的路由签发凭据并成功执行官方文件命令。附件原有 23 项测试与新增 2 项 HTTP 测试通过，类型、架构、运行时构建/校验和桌面回归通过。浏览器后台 Worker/ReadableStream 调用仍待接入，客户端 available 仍为 false；不能据此宣布端到端后台流式上传完成。
+
+
+2026-09-14 后台客户端上传进展：fileUpload 服务新增 Blob/ReadableStream 后台承载，保留 Uint8Array 编码 Remote 回退。网页端适配官方 Worker 的 Blob XHR 与流式 fetch；桌面通过预启动 __DSH_FILE_UPLOAD__ hook 使用窗口隔离的 IPC，每块最多 64 KiB，等待写入确认再读取，Host 地址和路径固定校验。窗口关闭/导航、调用取消及提供服务的插件卸载会取消对应上传，回收 IPC 状态；进度和结构化结果已接通。实际桌面 Blob 与分块 ReadableStream 上传均获得有效凭据并执行官方文件命令；多块传输中取消触发 AbortError 并取消源读取，原文件/图片命令、粘贴和历史回归通过。28 项附件测试、9 项运输/分块测试、插件与桌面类型检查、架构检查、完整构建及运行时/桌面包验证通过。桌面客户端 available 为 true；网页 Worker 有逻辑测试，独立 Web 实际部署、浏览器网络协议条件仍待验收，不能把桌面结果外推到所有 Web 环境。普通文件模型输入、离屏注册、队列及跨窗口文件语义仍未完成。

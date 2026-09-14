@@ -74,6 +74,10 @@ const api = {
   windowChrome: getWindowChrome(process.platform),
 
   dshClient: {
+    uploadOpen: (url: string): Promise<string> => ipcRenderer.invoke('dsh-client:upload-open', url),
+    uploadWrite: (id: string, bytes: Uint8Array): Promise<void> => ipcRenderer.invoke('dsh-client:upload-write', id, bytes),
+    uploadFinish: (id: string): Promise<{status:number;body:string}> => ipcRenderer.invoke('dsh-client:upload-finish', id),
+    uploadCancel: (id: string): Promise<void> => ipcRenderer.invoke('dsh-client:upload-cancel', id),
     download: (url: string) => ipcRenderer.invoke("dsh-client:download", url),
     boot: () => ipcRenderer.invoke("dsh-client:boot"),
     fetch: (request: {

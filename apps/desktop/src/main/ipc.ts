@@ -1,4 +1,5 @@
 import { registerDocumentFileIpc } from "./document-file-ipc";
+import { DshFileUploadCarrier } from "./dsh-file-upload";
 import { readDocumentFile } from "./document-file-reader";
 import { observeWorkspaceFile } from "./workspace-file-observer";
 import { registerFileResourceIpc } from "./file-resource-ipc";
@@ -85,6 +86,25 @@ function broadcastWorkspaceChange(change: WorkspaceChange) {
 }
 
 export function registerIpcHandlers() {
+  const fileUploads = new DshFileUploadCarrier();
+  const uploadSenders = new Map<number, { generation: number }>();
+  ipcMain.handle('dsh-client:upload-open', async (event, url: string) => {
+    const sender = event.sender;
+    if (!uploadSenders.has(sender.id)) {
+      const lifetime = { generation: 0 };
+      uploadSenders.set(sender.id, lifetime);
+      sender.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => { if (isMainFrame && !isInPlace) { lifetime.generation++; fileUploads.release(sender.id); } });
+      sender.once('destroyed', () => { fileUploads.release(sender.id); uploadSenders.delete(sender.id); });
+    }
+    const lifetime = uploadSenders.get(sender.id)!;
+    const generation = lifetime.generation;
+    const { baseUrl } = await dshRuntime.ensureStarted();
+    if (sender.isDestroyed() || lifetime.generation !== generation) throw new Error('Upload window closed or navigated.');
+    return fileUploads.open(sender.id, url, baseUrl);
+  });
+  ipcMain.handle('dsh-client:upload-write', (event, id: string, bytes: Uint8Array) => fileUploads.write(event.sender.id, id, bytes));
+  ipcMain.handle('dsh-client:upload-finish', (event, id: string) => fileUploads.finish(event.sender.id, id));
+  ipcMain.handle('dsh-client:upload-cancel', (event, id: string) => fileUploads.cancel(event.sender.id, id));
   registerDocumentFileIpc(ipcMain, (sessionId, path) => workspaceManager.resolveFileForSession(sessionId, path), readDocumentFile);
   registerFileResourceIpc(ipcMain, sessionId => workspaceManager.getForSession(sessionId), observeWorkspaceFile, listener => workspaceManager.onChange(listener));
   const dshProfilePlugins = new DshProfilePluginManager({

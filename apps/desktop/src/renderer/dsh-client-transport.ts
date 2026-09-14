@@ -1,3 +1,5 @@
+import { createDshFileUploadFetch } from './dsh-file-upload.ts';
+
 interface DshTransportInstall {
   baseUrl: string;
   dispose(): void;
@@ -95,6 +97,9 @@ export function installDshClientTransport(
   const transportGlobal = globalThis as typeof globalThis & { __AMIBA_DSH_TRANSPORT_URL__?: string };
   const previousTransportUrl = transportGlobal.__AMIBA_DSH_TRANSPORT_URL__;
   transportGlobal.__AMIBA_DSH_TRANSPORT_URL__ = baseUrl.origin;
+  const uploadGlobal = globalThis as typeof globalThis & { __DSH_FILE_UPLOAD__?: { fetch(input: URL, init: RequestInit): Promise<Response> } };
+  const previousUpload = uploadGlobal.__DSH_FILE_UPLOAD__;
+  uploadGlobal.__DSH_FILE_UPLOAD__ = { fetch: createDshFileUploadFetch(window.amiba.dshClient, baseUrl.origin) };
   const nativeFetch = globalThis.fetch.bind(globalThis);
   const NativeWebSocket = globalThis.WebSocket;
   const NativeEventSource = globalThis.EventSource;
@@ -145,6 +150,8 @@ export function installDshClientTransport(
   return {
     baseUrl: baseUrl.origin,
     dispose() {
+      if (previousUpload === undefined) delete uploadGlobal.__DSH_FILE_UPLOAD__;
+      else uploadGlobal.__DSH_FILE_UPLOAD__ = previousUpload;
       if (previousTransportUrl === undefined) delete transportGlobal.__AMIBA_DSH_TRANSPORT_URL__;
       else transportGlobal.__AMIBA_DSH_TRANSPORT_URL__ = previousTransportUrl;
       globalThis.fetch = nativeFetch;
