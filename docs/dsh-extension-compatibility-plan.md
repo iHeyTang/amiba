@@ -2121,3 +2121,13 @@ keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入�
 首次重做测试错把 CDP modifier 1（Alt）当作 Shift；更正为 8 后通过，没有修改产品历史实现。当前用例在当前平台选择 Meta/Control，重做额外加 Shift；剪切只写本地 DataTransfer，不读写操作系统剪贴板。日志 `/tmp/amiba-reference-history-smoke-2.log`。本轮只增加桌面验证与记录，沿用最近一次完整构建；没有改能力或样式。
 
 这证明当前编辑器中的引用剪切/恢复及其后续会话交接，不证明编辑器卸载后仍保留整个 undo/redo 栈，也不证明跨重启恢复历史栈。多引用/附件混合撤销、其他平台快捷键、词表装饰、新版输入协议等仍待完成。
+
+#### 会话切换保留输入历史
+
+新增 ComposerHistoryPlugin，继续使用 Lexical 公共 HistoryPlugin，在相同 ComposerDraftSource 的未变更文档上保存、恢复历史。缓存仅保留 EditorState，恢复时将历史项绑定到当前 editor；各次挂载获得独立栈，避免指向已卸载编辑器或共享可变栈。恢复同一节点树时跳过字符串重建，保留引用 NodeKey。后台文档已变化时不恢复旧树；原输入器、控件和样式未改动。
+
+首次桌面回归在会话返回后的 redo 等待失败（/tmp/amiba-session-history-smoke.log）：保存校验直接比较原始 parts JSON，而引用字段的顺序与规范化 document 不同，误判为内容变化并丢弃历史。改用 composerDraftDocument 规范化后比较。新增带引用的两个回归场景，分别覆盖复用 editor 和重新挂载：在另一会话撤销不影响原稿，返回后先 redo 再 undo，完整文档及节点键一致；已有测试覆盖文本历史和后台新稿保护。
+
+55 项相关测试、UI 类型检查、架构检查及完整桌面构建通过。真实 --compat --resident-draft 退出 0：原生键盘 redo/undo 跨会话保留，引用 ID、范围、appearance 恢复一致；随后后台编辑、返回、renderer 重载及其他既有回归仍通过。日志：/tmp/amiba-session-history-fix-regression.log、/tmp/amiba-session-history-fix-types.log、/tmp/amiba-session-history-fix-architecture.log、/tmp/amiba-session-history-fix-build.log、/tmp/amiba-session-history-fix-smoke.log。
+
+范围仍有限：这是进程内未变更草稿的历史保留，不是跨 renderer 重载/进程重启的历史持久化，也未完成后台编辑与既有历史的合并、多引用与附件混合撤销或其他平台验证。这些仍属于可继续适配项。

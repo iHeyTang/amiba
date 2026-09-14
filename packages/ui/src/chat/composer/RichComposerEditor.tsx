@@ -3,7 +3,7 @@ import { LexicalComposer } from "@lexical/react/LexicalComposer"
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
 import { ContentEditable } from "@lexical/react/LexicalContentEditable"
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary"
-import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin"
+import { ComposerHistoryPlugin } from "./plugins/ComposerHistoryPlugin"
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin"
 import {
   forwardRef,
@@ -138,7 +138,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
             }
             ErrorBoundary={LexicalErrorBoundary}
           />
-          <HistoryPlugin />
+          <ComposerHistoryPlugin source={draftSource} />
           <ReferenceClipboardPlugin />
           <EditableStatePlugin disabled={disabled} />
           <AutoGrowPlugin

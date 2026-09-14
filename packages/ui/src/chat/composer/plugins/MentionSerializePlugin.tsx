@@ -1,3 +1,4 @@
+import { consumeRestoredDocument } from "./ComposerHistoryPlugin"
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
 import { $getRoot, $createParagraphNode, $createTextNode } from "lexical"
 import { useEffect, useRef, useSyncExternalStore } from "react"
@@ -47,6 +48,7 @@ export function MentionSerializePlugin({ value, onChange, draftSource }: {
     lastSource.current = draftSource
     lastDocument.current = document
     lastEmitted.current = document?.text ?? value
+    if (document && consumeRestoredDocument(editor, document)) return
     const parts = document?.parts ?? parseTokens(value)
     editor.update(() => {
       const root = $getRoot()

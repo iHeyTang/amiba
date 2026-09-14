@@ -1,4 +1,5 @@
 import { createComposerDraftSource } from "../../composer-draft-store"
+import { $isElementNode } from "lexical"
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
 import { render, screen, waitFor } from "@testing-library/react"
 import {
@@ -7,6 +8,7 @@ import {
   $getRoot,
   $isTextNode,
   KEY_ENTER_COMMAND,
+  UNDO_COMMAND, REDO_COMMAND,
   type LexicalEditor,
 } from "lexical"
 import { useEffect, createRef, act } from "react"
@@ -224,4 +226,74 @@ it("switches identical canonical strings without confusing literal text with a r
   rerender(<RichComposerEditor ref={ref} value={token} draftSource={literal} onChange={literal.set} />);
   await waitFor(() => expect(ref.current?.getParts?.()).toEqual([{ kind: "text", text: token }]));
   expect(screen.getByRole("textbox")).toBe(editor);
+});
+
+
+it("restores a session history on a new editor without retaining the old editor target", async () => {
+  const source = createComposerDraftSource(); source.set("one");
+  let editor!: LexicalEditor;
+  const view = () => <RichComposerEditor value={source.getSnapshot()} draftSource={source} onChange={source.set}><EditorRefCapture onReady={next => { editor = next; }} /></RichComposerEditor>;
+  const first = render(view());
+  await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe("one"));
+  act(() => editor.update(() => { $getRoot().clear().append($createParagraphNode().append($createTextNode("two"))); }, { discrete: true, tag: "history-push" }));
+  await waitFor(() => expect(source.getSnapshot()).toBe("two"));
+  const oldEditor = editor;
+  first.unmount();
+  render(view());
+  await waitFor(() => expect(editor).not.toBe(oldEditor));
+  await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe("two"));
+  act(() => { editor.dispatchCommand(UNDO_COMMAND, undefined); });
+  await waitFor(() => expect(source.getSnapshot()).toBe("one"));
+  act(() => { editor.dispatchCommand(REDO_COMMAND, undefined); });
+  await waitFor(() => expect(source.getSnapshot()).toBe("two"));
+});
+
+it.each([true, false])("retains reference redo history across session changes (remount=%s)", async remount => {
+  const source = createComposerDraftSource(), other = createComposerDraftSource();
+  source.set("@[dsh.reference:files|id|Label|clip|file]");
+  const original = source.getDocument();
+  let editor!: LexicalEditor;
+  const view = (draft = source) => <RichComposerEditor key={remount ? (draft === source ? "a" : "b") : undefined}
+    value={draft.getSnapshot()} draftSource={draft} onChange={draft.set}>
+    <EditorRefCapture onReady={next => { editor = next; }} />
+  </RichComposerEditor>;
+  const mounted = render(view());
+  await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe(original.text));
+  const nodeKeys = () => editor.getEditorState().read(() => {
+    const paragraph = $getRoot().getFirstChildOrThrow();
+    return $isElementNode(paragraph) ? paragraph.getChildrenKeys() : [];
+  });
+  const keys = nodeKeys();
+  act(() => editor.update(() => { $getRoot().clear().append($createParagraphNode()); }, { discrete: true, tag: "history-push" }));
+  await waitFor(() => expect(source.getSnapshot()).toBe(""));
+  act(() => { editor.dispatchCommand(UNDO_COMMAND, undefined); });
+  await waitFor(() => expect(source.getDocument()).toEqual(original));
+  mounted.rerender(view(other));
+  await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe(""));
+  act(() => { editor.dispatchCommand(UNDO_COMMAND, undefined); });
+  expect(other.getSnapshot()).toBe("");
+  expect(source.getDocument()).toEqual(original);
+  mounted.rerender(view());
+  await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe(original.text));
+  act(() => { editor.dispatchCommand(REDO_COMMAND, undefined); });
+  await waitFor(() => expect(source.getSnapshot()).toBe(""));
+  act(() => { editor.dispatchCommand(UNDO_COMMAND, undefined); });
+  await waitFor(() => expect(source.getDocument()).toEqual(original));
+  expect(nodeKeys()).toEqual(keys);
+});
+
+it("does not restore a stale history over an offscreen draft edit", async () => {
+  const source = createComposerDraftSource(); source.set("one");
+  let editor!: LexicalEditor;
+  const view = () => <RichComposerEditor value={source.getSnapshot()} draftSource={source} onChange={source.set}><EditorRefCapture onReady={next => { editor = next; }} /></RichComposerEditor>;
+  const first = render(view());
+  await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe("one"));
+  act(() => editor.update(() => { $getRoot().clear().append($createParagraphNode().append($createTextNode("two"))); }, { discrete: true, tag: "history-push" }));
+  await waitFor(() => expect(source.getSnapshot()).toBe("two"));
+  first.unmount();
+  source.setDisplayText("external");
+  render(view());
+  await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe("external"));
+  act(() => { editor.dispatchCommand(UNDO_COMMAND, undefined); });
+  await waitFor(() => expect(source.getSnapshot()).toBe("external"));
 });
