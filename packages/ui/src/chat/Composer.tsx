@@ -929,7 +929,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     ) => {
       if (onPaste) onPaste(e);
       if (e.defaultPrevented) return;
+      const text = trigger.official ? e.clipboardData.getData("text/plain") : "";
       attachments?.handlePaste(e);
+      // The native attachment handler consumes file-bearing events synchronously.
+      // Official mixed paste also inserts the accompanying literal text; preserve
+      // the existing attachment-only behavior on non-runtime surfaces.
+      if (e.defaultPrevented && text) innerRef.current?.pasteText?.(text);
     };
 
     // Built-in attachment chip strip merged with the optional `chipRow`

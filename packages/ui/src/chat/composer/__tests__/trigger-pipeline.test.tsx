@@ -20,7 +20,7 @@
  * router) is the real Amiba code under test.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -208,6 +208,7 @@ function ControlledComposer(props: {
   mentionProviders?: React.ComponentProps<typeof Composer>["mentionProviders"];
   valueRef?: { current: string };
   filePicker?: () => Promise<void>;
+  onPaste?: React.ComponentProps<typeof Composer>["onPaste"];
   submitOptions?: Pick<React.ComponentProps<typeof Composer>, "busy" | "disabled" | "canSubmit" | "canSubmitDraft" | "onAbort">;
   editDraft?: { current: (text: string) => void };
   initialAttachments?: import("@amiba/app-runtime/core").Attachment[];
@@ -229,6 +230,7 @@ function ControlledComposer(props: {
       mentionProviders={props.mentionProviders}
       draftSource={props.draftSource}
       onChange={setValue}
+      onPaste={props.onPaste}
       onSubmit={props.onSubmit}
       permissionSessionId={props.sessionId}
       triggerRuntime={props.runtime}
@@ -808,4 +810,34 @@ it("invalidates trigger spans when reference identity changes without a string e
   act(() => draftSource.setParts([{kind:"text", text}]));
   await waitFor(() => expect(controller.tracked.at(-1)!.draft).toBe(text));
   expect(controller.tracked.at(-1)!.draftRev).toBeGreaterThan(before.draftRev);
+});
+
+
+it.each([false, true])("handles mixed paste once and honors surface interception (%s)", async intercept => {
+  const rect = Object.getOwnPropertyDescriptor(Range.prototype, "getBoundingClientRect");
+  Object.defineProperty(Range.prototype, "getBoundingClientRect", { configurable: true, value: () => new DOMRect() });
+  try {
+  const controller = controllerDouble(fixtureSource());
+  const runtime = runtimeFor(controller);
+  const attachmentsRef = { current: undefined as import("../../useComposerAttachments").UseComposerAttachmentsResult | undefined };
+  const valueRef = { current: "" };
+  render(<ControlledComposer sessionId="mixed-paste" onPaste={intercept ? event => event.preventDefault() : undefined} initial="" initialAttachments={[]} attachmentsRef={attachmentsRef} valueRef={valueRef} controller={controller} runtime={runtime} onSubmit={vi.fn()}/>);
+  await userEvent.setup().click(screen.getByRole("textbox"));
+  const intake = vi.spyOn(attachmentsRef.current!, "handlePaste").mockImplementation(async event => { event.preventDefault(); });
+  const text = "mixed @[dsh.reference:literal|id|label|clip]";
+  fireEvent.paste(screen.getByRole("textbox"), { clipboardData: {
+    items: [{ kind: "file", getAsFile: () => new File(["png"], "photo.png", { type: "image/png" }) }],
+    getData: (type: string) => type === "text/plain" ? text : "",
+  } });
+  await waitFor(() => expect(intake).toHaveBeenCalledTimes(intercept ? 0 : 1));
+  await waitFor(() => expect(valueRef.current).toBe(intercept ? "" : text));
+  expect(screen.getByRole("textbox").querySelector('[data-mention-type]')).toBeNull();
+  if (!intercept) {
+    await userEvent.setup().keyboard("{Control>}z{/Control}");
+    await waitFor(() => expect(valueRef.current).toBe(""));
+  }
+  } finally {
+    if (rect) Object.defineProperty(Range.prototype, "getBoundingClientRect", rect);
+    else Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
+  }
 });

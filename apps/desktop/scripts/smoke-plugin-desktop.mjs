@@ -1021,6 +1021,19 @@ try {
         await evaluate("window.__officialInputActions.removeImage(window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId)[0].id);void 0");
         await wait(() => evaluate("window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId).length===0"));
         console.log("Default official attachment component and native drop handler staged one image without duplicate upload");
+        const beforeMixedPaste = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft");
+        await evaluate("window.__officialInputActions.setDraft('');window.__regionEditor.focus()");
+        await wait(()=>evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft===''") );
+        const mixedText = 'MIXED_PASTE @[dsh.reference:literal|id|label|clip]';
+        await evaluate(`(()=>{const data=new DataTransfer();data.items.add(window.__extensionImage.file);data.setData('text/plain',${JSON.stringify(mixedText)});window.__regionEditor.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}))})()`);
+        await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft===${JSON.stringify(mixedText)} && window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId)?.length===1 && window.__probeCtx.composerInputs.addInputImages(window.__compatSessionId,[])`));
+        assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).occurrences.length"),0);
+        assert.ok(await evaluate("window.__regionEditor.isConnected && window.__regionCard.className===window.__regionBaseline.className"));
+        await evaluate("window.__officialInputActions.removeImage(window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId)[0].id)");
+        await wait(()=>evaluate("window.__probeCtx.composerInputs.inputImagesFor(window.__compatSessionId).length===0"));
+        await evaluate(`window.__officialInputActions.setDraft(${JSON.stringify(beforeMixedPaste)})`);
+        console.log('Official mixed clipboard paste staged exactly one image and inserted literal text once, preserving native editor and upload cleanup.');
+
       }
 
     }

@@ -14,6 +14,8 @@ export interface RichComposerHandle {
   select(): void
   getValue(): string
   getParts?(): readonly ParsedPart[]
+  /** Insert literal clipboard text at the current selection as one undo step. */
+  pasteText?(text: string): void
   getTextarea(): HTMLTextAreaElement | null
 }
 
@@ -23,6 +25,14 @@ export function ImperativeHandlePlugin({ handleRef }: { handleRef: Ref<RichCompo
     handleRef,
     (): RichComposerHandle => ({
       getParts: () => editor.getEditorState().read($readComposerParts),
+      pasteText: text => {
+        if (!editor.isEditable() || !text) return
+        editor.update(() => {
+          const selection = $getSelection()
+          const range = $isRangeSelection(selection) ? selection : $getRoot().selectEnd()
+          range.insertText(text)
+        }, { tag: "history-push" })
+      },
       getValue: () => editor.getEditorState().read(() => $getRoot().getTextContent()),
       focus: () => editor.focus(),
       openMention: () => {

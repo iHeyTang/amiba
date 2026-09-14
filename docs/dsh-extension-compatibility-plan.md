@@ -2092,3 +2092,12 @@ keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入�
 粘贴能力核对：实际 rc.2 `lib/client.js` onPaste 仅调用 keyboard.pasteBegin(text, sel)，没有传入 components/generation；InputTriggerController 的公开声明没有 paste matcher，ReferenceCodec 只有 clipboardText 与 serialize。固定新版的 facade.paste 也按普通文本插入，词表装饰另行处理。因而“插件任意复制文本自动恢复为结构化引用”不能仅凭内部 PasteAttempt/paste-upgrade 类型推断为官方已接线功能。前一轮纯文本粘贴不自动生成引用的桌面证据符合这一范围。
 
 后续应继续适配公开 lexicon 的文本装饰、appearance/invalid、文件与文本混合粘贴、撤销边界和新旧版本输入协议。不能把所有粘贴相关内部类型逐个暴露当作完成条件，也不能据此取消以上真实缺口。本轮未修改产品代码或样式；结论来自已安装发布包与固定新版源码对照，未运行新测试。
+
+
+#### 官方输入的文件与文字混合粘贴
+
+原附件 handlePaste 在读取文件后 preventDefault，会消费随附文字；Lexical 的原生监听又先于 React 冒泡运行，不能只在冒泡回调追加文字。官方输入现使用捕获阶段协调：先尊重调用方 onPaste，交给原附件处理；若附件处理消费事件，插入随附普通文字并停止后续重复处理。无官方运行时的输入仍走原冒泡路径，纯文本未被消费时继续 Lexical；没有改附件上传、注册、移除、样式或储存格式。新增 pasteText 使用原选区插入字面文字并设单独 history-push 边界。
+
+47 项输入与剪贴板回归通过，含调用方拦截优先、文字仅插一次和一次撤销文字；补充范围复跑原输入 33 项通过。UI 类型检查、完整桌面构建、架构检查通过。真实 `--compat --input-state --command-images` 退出 0：DOM ClipboardEvent 同带一张 PNG 和 token 状普通文字，只生成一张原生上传图片，文字出现一次且无引用 occurrence；图片移除后注册清零，原编辑器仍连接、卡片 class 保留。原官方输入四阶段、图片命令原始字节、卸载尺寸保留等也通过。使用 DOM DataTransfer，未读写系统剪贴板。
+
+日志 `/tmp/amiba-mixed-paste-tests-5.log`、`/tmp/amiba-mixed-paste-undo-tests.log`、`/tmp/amiba-mixed-paste-final-types.log`、`/tmp/amiba-mixed-paste-build.log`、`/tmp/amiba-mixed-paste-smoke.log`、`/tmp/amiba-mixed-paste-architecture.log`。首次测试缺少会话 ID 未进入官方路径，后续补齐；JSDOM 缺少 Range 几何接口的测试环境问题使用局部替身解决，未用替身替代实际桌面上传验证。系统剪贴板快捷键、文件与引用混合的完整撤销、词表装饰、invalid/appearance、新版坐标仍待核对。

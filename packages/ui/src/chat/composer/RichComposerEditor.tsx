@@ -105,7 +105,13 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
                 role="textbox"
                 aria-multiline="true"
                 spellCheck
-                onPaste={disabled ? undefined : onPaste}
+                onPaste={disabled || trigger?.official ? undefined : onPaste}
+                onPasteCapture={disabled || !trigger?.official ? undefined : event => {
+                  onPaste?.(event)
+                  // File intake has consumed this event. Prevent Lexical's
+                  // native listener from processing the same payload again.
+                  if (event.defaultPrevented) event.stopPropagation()
+                }}
                 style={style}
                 className={cn(
                   "resize-none overflow-hidden border-0 bg-transparent text-sm outline-none",
