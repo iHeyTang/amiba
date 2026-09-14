@@ -103,3 +103,14 @@
  			const endpoint = endpointFromPath(channel, new URL(request.url).pathname);
  			const interceptor = this.interceptors.get(channel);
  			if (endpoint === void 0 || interceptor === void 0 || !interceptor.matches(endpoint)) return fallback.fetch(request);
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -5403,7 +5403,7 @@
+ 			mediaType: imageMediaTypeSchema,
+ 			data: string(),
+ 			name: string().optional()
+-		})]);
++		}), object({ type: literal("file"), receiptId: string().min(1) })]);
+ 		object({
+ 			sessionId: sessionIdSchema,
+ 			mode: union([literal("queue"), literal("steer")]),

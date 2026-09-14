@@ -991,6 +991,15 @@ try {
       const streamCancellation=await evaluate(`(async()=>{const abort=new AbortController();let cancelled=false;let loaded=0;const stream=new ReadableStream({pull(controller){controller.enqueue(new Uint8Array(65536));},cancel(){cancelled=true;}});try{await window.__compatFileUpload.upload(${JSON.stringify(commandSessionId)},stream,'cancel-stream.bin',abort.signal,progress=>{loaded=progress.loaded;if(loaded>=196608)abort.abort();});return {aborted:false};}catch(error){return {aborted:error.name==='AbortError',cancelled,loaded};}})()`);
       assert.equal(streamCancellation.aborted,true);assert.equal(streamCancellation.cancelled,true);assert.ok(streamCancellation.loaded>=196608);
       console.log('Desktop background stream upload preserved bytes and progress, executed the file command, and cancelled an active multi-chunk source.');
+      const submitFileModel=async(rpcId)=>evaluate(`(async()=>{const response=await window.amiba.dshClient.fetch({url:'/api/session.prompt',method:'POST',headers:{'content-type':'application/json'},body:new TextEncoder().encode(JSON.stringify({type:'client-request',rpcId:${JSON.stringify(rpcId)},method:'session.prompt',payload:{sessionId:${JSON.stringify(commandSessionId)},mode:'queue',content:[{type:'text',text:'Read the uploaded file'},{type:'file',receiptId:${JSON.stringify(streamedUpload.result.value.receiptId)}}]}}))});return JSON.parse(new TextDecoder().decode(response.body)).result;})()`);
+      assert.equal((await submitFileModel('compat-file-model-1')).ok,false);
+      assert.deepEqual(await submitFileModel('compat-file-model-2'),{ok:true,value:{accepted:true}});
+      const modelLogs=await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_FILE_MODEL '})");
+      const modelAttempts=modelLogs.entries.filter(entry=>entry.message.includes('AMIBA_PROBE_FILE_MODEL ')).map(entry=>JSON.parse(entry.message.split('AMIBA_PROBE_FILE_MODEL ')[1])).sort((a,b)=>a.attempt-b.attempt);
+      assert.deepEqual(modelAttempts.map(entry=>entry.attempt),[1,2]);
+      assert.deepEqual(modelAttempts[1].content.map(part=>part.type),['text','file']);
+      assert.equal(modelAttempts[1].content[1].attachment.attachmentId,fileStorageResult.ref.attachmentId);
+      console.log('The installed session prompt API retained the file receipt after refusal and accepted its retry as structured model content.');
 
 
       // Hot lexicons decorate native text without creating reference objects or history edits.

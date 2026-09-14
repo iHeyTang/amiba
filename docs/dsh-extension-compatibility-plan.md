@@ -2279,3 +2279,6 @@ OfficialTriggerPlugin 订阅公开词表，以编辑器所在窗口的 CSS Custo
 
 
 2026-09-14 模型文件表示进展：核对固定 c291e796 后确认，官方普通文件从不以原生文件块发送给模型提供方，而是在最终 adapter 调度前转换为只读文件路径文本。已给 rc.2 LLM 补齐 contentHasFile、fileHandleText、projectFilesToText 和 fileRequestText，递归覆盖工具结果，保留不可变原消息及不相关消息身份；先转换文件，再按原策略处理不支持图片的模型。补齐 FileAttachmentRef/FileBlock 类型，以及 FS 的保守默认路径映射和 Local FS 的绝对路径映射；未知执行环境或坏引用明确返回无法读取路径的说明，未扩大文件写权限。4 项新增真实 LLM/存储测试及全部 32 项附件测试、类型/架构、运行时构建/校验通过；真实桌面 Host 的 fileRequestText 返回实际存储文件路径，同轮流式上传、命令及原输入能力回归通过。新增开发测试依赖不改变受管运行时的 DSH 版本。模型提交入口、token 统计、队列和完整文件历史仍待接通，不能将请求转换层完成等同端到端文件模型提交完成。
+
+
+2026-09-14 文件模型提交 API 进展：rc.2 session.prompt 的 Host 与实际浏览器发布包均接受 {type:'file',receiptId}；公共 PromptContentPart 类型同步扩展。Host 在任何图片持久化前验证整批文件的精确会话凭据，保持文字/文件/图片及重复文件的原顺序，生成结构化 UserMessage；接收时按 request.rpcId 绑定文件，失败回滚、成功提交，接收前核对 Agent 仍驻留。未知凭据返回 attachment-error/FILE_NOT_STAGED。33 项附件测试、类型/架构和运行时构建/校验通过；真实桌面安装后的 session.prompt 首次受控拒绝、同凭据重试成功及原输入回归通过。该桌面用例在 Agent 接收边界使用受控接收器，不调用外部模型；不覆盖真实模型整轮、持久历史和队列出队。原输入器模型文件发送、离屏注册、队列、token 统计及历史展示仍待闭环。

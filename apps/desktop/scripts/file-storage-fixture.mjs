@@ -13,6 +13,15 @@ if (!fileStorageChecked) {
     const uploads = ctx.get('fileUploads');
     const agent = ctx.agents.get(s.id);
     if (!agent) throw new Error('file upload fixture requires live Agent');
+    let filePromptAttempts = 0;
+    const originalFollowup = agent.followup;
+    agent.followup = function(message) {
+      if (!String(message.source?.rpcId ?? '').startsWith('compat-file-model-')) return originalFollowup.call(this,message);
+      filePromptAttempts++;
+      console.log('AMIBA_PROBE_FILE_MODEL '+JSON.stringify({attempt:filePromptAttempts,source:message.source,content:message.content}));
+      if (filePromptAttempts===1) throw new Error('COMPAT_FILE_MODEL_RETRY');
+    };
+    ctx.effect(()=>()=>{agent.followup=originalFollowup;});
     const upload = await uploads.upload(agent,{data:bytes.toString('base64'),name:'receipt.bin'},new AbortController().signal);
     const receiptResolved = uploads.resolve(agent,upload.receiptId)?.attachmentId===ref.attachmentId;
     const failed = uploads.bindPrompt(agent,[upload.receiptId],'file-fixture-failed'); failed[Symbol.dispose]();
