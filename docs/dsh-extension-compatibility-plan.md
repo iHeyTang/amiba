@@ -2131,3 +2131,11 @@ keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入�
 55 项相关测试、UI 类型检查、架构检查及完整桌面构建通过。真实 --compat --resident-draft 退出 0：原生键盘 redo/undo 跨会话保留，引用 ID、范围、appearance 恢复一致；随后后台编辑、返回、renderer 重载及其他既有回归仍通过。日志：/tmp/amiba-session-history-fix-regression.log、/tmp/amiba-session-history-fix-types.log、/tmp/amiba-session-history-fix-architecture.log、/tmp/amiba-session-history-fix-build.log、/tmp/amiba-session-history-fix-smoke.log。
 
 范围仍有限：这是进程内未变更草稿的历史保留，不是跨 renderer 重载/进程重启的历史持久化，也未完成后台编辑与既有历史的合并、多引用与附件混合撤销或其他平台验证。这些仍属于可继续适配项。
+
+#### 历史恢复排队期间的后台写入保护
+
+补齐挂载恢复的提交前校验：useMemo 选中历史缓存后，后台写入可能在 layout 阶段到达，而旧 EditorState 在下一微任务才恢复。新增可复现测试在同一挂载阶段写入新稿；修复前实际得到 cached 而非 incoming（/tmp/amiba-history-race-red.log）。恢复微任务现在重新检查源文档身份，变化则放弃旧树并清空此次挂载携带的旧历史，交由正常文档同步应用新稿。覆盖非空新稿及显式清空，随后 undo/redo 均不会恢复旧缓存。
+
+57 项编辑器、触发器和文档测试通过，UI 类型检查通过，git diff --check 通过。日志 /tmp/amiba-history-race-regression.log、/tmp/amiba-history-race-types.log。本次未重新运行完整桌面构建或桌面回归；竞态证据来自实际 React/Lexical 生命周期测试，上一提交的桌面通过记录仍仅代表上一提交。
+
+另外确认后台写入历史不能无差别套用新版本：实际 rc.2 InputFacade.setDraft 派发 draft-changed 事件，固定 c291e796 的 setDraft 明确使用 HISTORY_MERGE_TAG。两版 commitSend 均单独切断已发送内容的历史。后续完整后台历史合并必须区分程序写入、用户编辑和提交消费，不能把所有文档变化都作为可撤销编辑，也不能把尚未完成的版本适配宣称为已兼容。

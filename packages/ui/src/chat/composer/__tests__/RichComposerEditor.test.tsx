@@ -11,7 +11,7 @@ import {
   UNDO_COMMAND, REDO_COMMAND,
   type LexicalEditor,
 } from "lexical"
-import { useEffect, createRef, act } from "react"
+import { useEffect, useLayoutEffect, createRef, act } from "react"
 import { describe, expect, it, vi } from "vitest"
 import { RichComposerEditor, type RichComposerHandle } from "../RichComposerEditor"
 
@@ -296,4 +296,29 @@ it("does not restore a stale history over an offscreen draft edit", async () => 
   await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe("external"));
   act(() => { editor.dispatchCommand(UNDO_COMMAND, undefined); });
   await waitFor(() => expect(source.getSnapshot()).toBe("external"));
+});
+
+it.each(["incoming", ""])("keeps a draft update arriving while cached history restoration is queued: %j", async incomingText => {
+  const source = createComposerDraftSource(); source.set("before");
+  let editor!: LexicalEditor;
+  function IncomingDraft({ enabled }: { enabled: boolean }) {
+    useLayoutEffect(() => { if (enabled) source.setDisplayText(incomingText); }, [enabled]);
+    return null;
+  }
+  const view = (incoming = false) => <RichComposerEditor value={source.getSnapshot()} draftSource={source} onChange={source.set}>
+    <EditorRefCapture onReady={next => { editor = next; }} />
+    <IncomingDraft enabled={incoming} />
+  </RichComposerEditor>;
+  const first = render(view());
+  await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe("before"));
+  act(() => editor.update(() => { $getRoot().clear().append($createParagraphNode().append($createTextNode("cached"))); }, { discrete: true, tag: "history-push" }));
+  await waitFor(() => expect(source.getSnapshot()).toBe("cached"));
+  first.unmount();
+  render(view(true));
+  await waitFor(() => expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe(incomingText));
+  expect(source.getSnapshot()).toBe(incomingText);
+  act(() => { editor.dispatchCommand(UNDO_COMMAND, undefined); });
+  await waitFor(() => expect(source.getSnapshot()).toBe(incomingText));
+  act(() => { editor.dispatchCommand(REDO_COMMAND, undefined); });
+  await waitFor(() => expect(source.getSnapshot()).toBe(incomingText));
 });

@@ -40,7 +40,19 @@ export function ComposerHistoryPlugin({ source }: { source?: ComposerDraftSource
     if (saved) {
       restored.set(editor, saved.document);
       // Reconcile decorators outside React's layout phase (Lexical may flushSync).
-      queueMicrotask(() => { if (active) editor.setEditorState(saved.state, { tag: "historic" }); });
+      queueMicrotask(() => {
+        if (!active) return;
+        // A resident write can land after render/layout but before this task.
+        // Revalidate at the actual commit boundary, not only in useMemo.
+        if (source?.getDocument() !== saved.document) {
+          restored.delete(editor);
+          history.current = null;
+          history.undoStack = [];
+          history.redoStack = [];
+          return;
+        }
+        editor.setEditorState(saved.state, { tag: "historic" });
+      });
     }
     return () => {
       active = false;
