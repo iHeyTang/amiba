@@ -26,7 +26,7 @@ import { tmpdir } from "node:os";
 import { createServer } from "node:net";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 
 const runtimePackageDir = path.resolve(
@@ -488,9 +488,20 @@ try {
     ),
     writeFile(
       path.join(externalSource, "index.js"),
-      `export const name = "amiba-smoke-external";
-export const inject = ["jobs", "tools", "amibaBackgroundJobs", "amibaMedia"];
+      `import { LlmAdapter } from ${JSON.stringify(pathToFileURL(path.join(runtimeDir, "app/node_modules/@deepseek-ai/dsh-llm/lib/index.js")).href)};
+export const name = "amiba-smoke-external";
+export const inject = ["jobs", "tools", "amibaBackgroundJobs", "amibaMedia", "llm"];
+class SmokeAdapter extends LlmAdapter {
+  providerInfo() { return { id: "amiba-smoke", name: "Local smoke fixture" }; }
+  async *stream() {
+    yield { type: "block-start", index: 0, blockType: "text" };
+    yield { type: "text-delta", index: 0, text: "Attachment admitted." };
+    yield { type: "block-end", index: 0, block: { type: "text", text: "Attachment admitted." } };
+    yield { type: "finish", reason: { kind: "stop" } };
+  }
+}
 export function apply(ctx) {
+  ctx.llm.registerAdapter(["amiba-smoke"], new SmokeAdapter());
   const pending = new Map();
   const media = { prepare: async request => request, id: "smoke-media", describe: async () => ({ provider:"smoke-media",name:"Smoke", models:[{id:"fixture-image",name:"Fixture image",protocols:["fixture"],operations:["image.generate"]}],protocols:[{id:"fixture",operations:["image.generate"],documentation:[],instructions:"Local smoke fixture"}]}),
     generate: async () => ({status:"succeeded",artifacts:[{kind:"image",bytes:Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9WQAAAAASUVORK5CYII=","base64")}]}) };
@@ -1235,6 +1246,9 @@ export function apply(ctx) {
   await check("official file upload, receipt isolation, and durable prompt admission", async () => {
     const owner = await rpc(baseUrl, "session.create", { cwd: workspacePath });
     const other = await rpc(baseUrl, "session.create", { cwd: workspacePath });
+    // Admission queues a message; the Agent persists it only after preparing a model call.
+    // Keep this storage assertion independent of provider credentials and network access.
+    await rpc(baseUrl, "session.selectModel", { sessionId: owner.sessionId, provider: "amiba-smoke", model: "fixture" });
     const bytes = Buffer.from("official upload smoke\n", "utf8");
     const uploaded = await rpc(baseUrl, "fileUploads/upload", { args: { agentId: owner.sessionId, request: { name: "notes.txt", data: bytes.toString("base64") } } });
     assert.equal(uploaded.file.name, "notes.txt");
@@ -1242,10 +1256,12 @@ export function apply(ctx) {
     assert.equal(typeof uploaded.receiptId, "string");
     await assert.rejects(() => rpc(baseUrl, "session.prompt", { sessionId: other.sessionId, mode: "queue", content: [{ type: "text", text: "Inspect file" }, { type: "file", receiptId: uploaded.receiptId }] }), /receipt|file|scope|unavailable/i);
     await rpc(baseUrl, "session.prompt", { sessionId: owner.sessionId, mode: "queue", content: [{ type: "text", text: "Inspect file" }, { type: "file", receiptId: uploaded.receiptId }] });
+    let observedEvents = [];
     await waitFor("official durable file reference", async () => {
       const history = await rpc(baseUrl, "session.history", { sessionId: owner.sessionId });
+      observedEvents = history.events.map(({ event }) => ({ type: event.type, ...(event.type === "turn/end" ? { reason: event.data.reason } : {}) }));
       return history.events.some(({ event }) => event.type === "user/message" && event.data.content?.some(part => part.type === "file" && part.attachment.attachmentId === uploaded.file.attachmentId));
-    });
+    }).catch(error => { throw new Error(`${error.message}; observed events: ${JSON.stringify(observedEvents)}`, { cause: error }); });
     await rpc(baseUrl, "session.cancel", { sessionId: owner.sessionId });
     await rpc(baseUrl, "workspace.archiveSession", { sessionId: owner.sessionId });
     await rpc(baseUrl, "workspace.archiveSession", { sessionId: other.sessionId });
