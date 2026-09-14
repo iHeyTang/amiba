@@ -1174,3 +1174,15 @@ describe("realDingtalkDeps.createCard", () => {
     ).rejects.toThrow("dingtalk_approval_card_template_id_missing");
   });
 });
+
+it("delivers a desktop mirror without an inbound reply id once the chat webhook is ready", async () => {
+  const deps = fakeDeps();
+  const runtime = await createDingtalkProvider(deps).start(fakeHandle());
+  const mirror = { ...outbound({ text: "用户 · 来自桌面端\n\nhello" }), inReplyTo: "", sync: { scope: "scope", sourceMessageId: "desktop", author: "user" as const, source: "desktop" as const } };
+  await expect(runtime.deliver!({ key: "cid_1", kind: "p2p" }, mirror)).rejects.toThrow("session_webhook_unavailable");
+  deps.handlers!.onRobotMessage(rawTextMessage());
+  await flush();
+  await runtime.deliver!({ key: "cid_1", kind: "p2p" }, mirror);
+  expect(deps.postWebhook).toHaveBeenCalledWith(expect.any(String), { msgtype: "text", text: { content: mirror.text } });
+  await runtime.stop();
+});

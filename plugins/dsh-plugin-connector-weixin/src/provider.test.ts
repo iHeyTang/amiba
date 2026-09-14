@@ -217,3 +217,15 @@ it("restores quoted text and voice transcripts", async () => {
     text: "summarize that\n[引用消息：hello]",
   });
 });
+
+it("syncs desktop text as bot messages, ignores bot echoes and deduplicates mirror retries", async () => {
+  const run = await setup([message(), { ...message("echo"), message_type: 2 }]);
+  await vi.waitFor(() => expect(run.inbound).toHaveBeenCalledTimes(1));
+  const mirror = { ...envelope, inReplyTo: "", text: "用户 · 来自桌面端\n\nhello", sync: { scope: "scope", sourceMessageId: "desktop", author: "user" as const, source: "desktop" as const } };
+  await run.runtime.deliver!({ key: "owner", kind: "p2p" }, mirror);
+  await run.runtime.deliver!({ key: "owner", kind: "p2p" }, mirror);
+  const sent = run.bodies.filter(row => row.endpoint === "sendmessage");
+  expect(sent).toHaveLength(1);
+  expect(sent[0].body.msg.message_type).toBe(2);
+  expect(sent[0].body.msg.item_list[0].text_item.text).toBe(mirror.text);
+});

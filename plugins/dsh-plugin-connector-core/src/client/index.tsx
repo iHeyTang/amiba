@@ -1,3 +1,4 @@
+import { DesktopSyncHeader } from "./DesktopSyncSettings.js";
 import { createConnectorMessageSource } from "./message-source.js";
 import { createExternalSessionGroup } from "./session-group.js";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
@@ -128,6 +129,9 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         }, () => null),
       );
       const adapter = buildConnectAdapter(injectedCtx.remote.amibaConnectors);
+      const disposeSync = injectedCtx.slots.inject("conversation.session.header.actions", () =>
+        injectedCtx.slots.register({ name: "conversation.session.header.actions", id: "connector-desktop-sync", inject: () => ({ adapter }) }, DesktopSyncHeader),
+      );
       // `connection` is a client-root service present regardless of this
       // plugin's own `inject` declaration above (mirrors how
       // dsh-plugin-agent-preset's client/data.ts consumes it) — read via
@@ -188,6 +192,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
         disposeMessageSource();
         messageSource.dispose();
         disposeGroup();
+        disposeSync();
         group.dispose();
         disposeToolview();
         disposeQuestionSeat();

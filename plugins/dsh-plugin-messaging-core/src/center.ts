@@ -1,3 +1,4 @@
+import { projectDesktopSync, syncScope, inputTurn } from "./desktop-sync.js";
 import { sharedConversationSeed, type ConversationCadence, type ConversationLifecycle, type ConversationView } from "@amiba/dsh-plugin-session-features";
 import type { Agent } from "@deepseek-ai/dsh-agent";
 import {
@@ -46,11 +47,13 @@ export interface MessageChannelView {
 }
 
 export interface MessageConversationSettingsInput {
-  action: "status" | "configure" | "new";
+  action: "status" | "configure" | "new" | "retry-sync";
   cadence?: ConversationCadence;
+  desktopSync?: boolean;
 }
 export interface MessageConversationView extends ConversationView {
   access: "owner" | "shared";
+  desktopSync?: Awaited<ReturnType<MessageCenterStore["syncStatus"]>>;
 }
 
 export interface MessageChannelProviderView {
@@ -123,6 +126,7 @@ export interface OutboundMessageEnvelope {
   channelId: string;
   sessionId: string;
   inReplyTo: string;
+  sync?: import("./desktop-sync.js").DesktopSyncDelivery["sync"];
   text: string;
   createdAt: string;
 }
@@ -386,7 +390,7 @@ export class MessageChannelCenter {
     });
     this.approvals.register();
     ctx.on("session/event", (session, event) => {
-      if (event.type === "turn/end") {
+      if (event.type === "turn/end" || event.type === "user/message") {
         void this.reconcileSession(session).catch((error) => {
           this.ctx
             .logger("amiba-messaging-core")
@@ -414,12 +418,14 @@ export class MessageChannelCenter {
     this.started = true;
     this.ctx.effect(() => {
       const timer = setInterval(() => {
+        void this.recoverSync();
         void this.recoverPending();
         void this.pumpDeliveries();
       }, RECOVERY_INTERVAL_MS);
       timer.unref?.();
       return () => clearInterval(timer);
     }, "amiba-messaging-core.recovery");
+    await this.recoverSync();
     await this.recoverPending();
     await this.pumpDeliveries();
   }
@@ -553,14 +559,33 @@ export class MessageChannelCenter {
     if (!registered || registered.plugin !== origin.plugin || registered.entry !== origin.entry || registered.scope !== origin.scope)
       throw new Error("conversation_ownership_mismatch");
     if (input.action === "configure") {
-      if (!input.cadence) throw new Error("conversation_cadence_required");
-      await lifecycle.configureCadence(origin, input.cadence);
+      if (!input.cadence && input.desktopSync === undefined) throw new Error("conversation_cadence_required");
+      if (input.cadence) await lifecycle.configureCadence(origin, input.cadence);
+      if (input.desktopSync !== undefined) {
+        const scope = syncScope(binding);
+        const previous = (await this.store.syncPolicies())[scope];
+        if (previous?.enabled !== input.desktopSync) {
+          const since = Date.now();
+          const floors: Record<string, number> = {};
+          for (const item of input.desktopSync ? await this.store.listConversations(channelId, true) : []) {
+            if (syncScope(item) !== scope || this.isSessionArchived(item.sessionId)) continue;
+            const events = await this.sessionEvents(item.sessionId);
+            floors[item.sessionId] = events.reduce((max, event) => Math.max(max, event.seq), -1);
+          }
+          await this.store.configureSync(scope, { enabled: input.desktopSync, since, floors });
+        }
+      }
+    } else if (input.action === "retry-sync") {
+      if (this.deliveryPump) await this.deliveryPump;
+      const ids = (await this.store.listOutbox()).filter(item => item.envelope.sync?.scope === syncScope(binding)).map(item => item.id);
+      await this.store.retryDeliveries(channelId, ids);
+      await this.pumpDeliveries();
     } else if (input.action === "new") {
       await lifecycle.newConversation(origin);
     } else if (input.action !== "status") {
       throw new Error("invalid_conversation_action");
     }
-    return { ...await lifecycle.view(origin), access: binding.access ?? "owner" };
+    return { ...await lifecycle.view(origin), access: binding.access ?? "owner", desktopSync: await this.store.syncStatus(syncScope(binding)) };
   }
 
   async shareConversationResources(channelId: string, conversationKey: string, grants: Array<{ reference: string; title: string }>): Promise<MessageConversationView> {
@@ -892,6 +917,13 @@ export class MessageChannelCenter {
         consumedAsApproval: true,
       };
     }
+    const waiting = (await this.store.listOutbox()).filter(item => item.channelId === channel.id &&
+      item.envelope.sync && /session_webhook_unavailable|weixin_conversation_expired_send_a_message_first|connector_not_live/.test(item.lastError ?? ""));
+    const activeBinding = await this.store.findConversationBySession(sessionId);
+    if (activeBinding) {
+      await this.store.retryDeliveries(channel.id, waiting.filter(item => item.envelope.sync?.scope === syncScope(activeBinding)).map(item => item.id));
+      void this.pumpDeliveries();
+    }
     const agent = await this.ensureAgent(sessionId);
     const message = createUserMessage({
       content: [{ type: "text", text: envelope.text.trim() }],
@@ -962,12 +994,43 @@ export class MessageChannelCenter {
     return resume;
   }
 
-  private async reconcileSession(session: Session): Promise<void> {
+  private async sessionEvents(sessionId: string): Promise<SessionEvent[]> {
+    const live = this.ctx.agents.get(sessionId as never) as Agent | undefined;
+    if (live) return [...live.session.events];
+    const runtime = this.ctx as MessageRuntimeContext;
+    return [...(await runtime.sessionPersistence.inspect(sessionId)).events];
+  }
+
+  private syncRecovery?: Promise<void>;
+  private recoverSync(): Promise<void> {
+    if (this.syncRecovery) return this.syncRecovery;
+    this.syncRecovery = (async () => {
+      const policies = await this.store.syncPolicies();
+      for (const binding of await this.store.listConversations(undefined, true)) {
+        if (!policies[syncScope(binding)]?.enabled || this.isSessionArchived(binding.sessionId)) continue;
+        try {
+          const events = await this.sessionEvents(binding.sessionId);
+          await this.reconcileSession({ id: binding.sessionId as Session["id"], events });
+        } catch (error) {
+          this.ctx.logger("amiba-messaging-core").warn(`Sync recovery failed for ${binding.sessionId}: ${String(error)}`);
+        }
+      }
+    })().finally(() => { this.syncRecovery = undefined; });
+    return this.syncRecovery;
+  }
+
+  private async reconcileSession(session: Pick<Session, "id" | "events">): Promise<void> {
+    const binding = await this.store.findConversationBySession(session.id);
+    const policy = binding ? (await this.store.syncPolicies())[syncScope(binding)] : undefined;
+    const mirrors = binding && policy ? projectDesktopSync(session.id, session.events, binding, policy) : [];
+    for (const envelope of mirrors) await this.store.queueOutbound(envelope);
     const pending = await this.store.listPending(session.id);
     for (const item of pending) {
       const reply = completedTurnReply(session.events, item);
       if (!reply) continue;
-      await this.store.queueReply(item.key, {
+      const turn = inputTurn(session.events, item.dshMessageId);
+      const mirrored = mirrors.find(envelope => envelope.sync.author === "assistant" && envelope.sync.turn === turn);
+      await this.store.queueReply(item.key, mirrored ?? {
         id: `${reply.messageId}:${item.channelId}:${item.messageId}`,
         channelId: item.channelId,
         sessionId: item.sessionId,
@@ -1057,7 +1120,13 @@ export class MessageChannelCenter {
       channels.map((channel) => [channel.id, channel]),
     );
     const now = Date.now();
+    const routes = new Map((await this.store.listConversations(undefined, true)).map(binding => [binding.sessionId, syncScope(binding)]));
+    const blocked = new Set<string>();
     for (const delivery of outbox) {
+      const approval = delivery.envelope.inReplyTo.startsWith("approval:");
+      const route = approval ? delivery.id : (routes.get(delivery.envelope.sessionId) ?? JSON.stringify([delivery.channelId, delivery.envelope.sessionId]));
+      if (blocked.has(route)) continue;
+      if (!approval && routes.has(delivery.envelope.sessionId)) blocked.add(route);
       if (!delivery.nextAttemptAt || Date.parse(delivery.nextAttemptAt) > now)
         continue;
       const channel = channelById.get(delivery.channelId);
@@ -1068,10 +1137,13 @@ export class MessageChannelCenter {
         continue;
       }
       if (!provider.supportsOutbound || !provider.deliver) {
+        if (delivery.envelope.sync) { await this.failDelivery(delivery, "outbound_unsupported"); continue; }
         await this.store.markDelivered(delivery.id);
+        blocked.delete(route);
         continue;
       }
       await this.deliverOne(provider, channel, delivery);
+      if (!(await this.store.listOutbox()).some(item => item.id === delivery.id)) blocked.delete(route);
     }
   }
 
@@ -1101,6 +1173,11 @@ export class MessageChannelCenter {
       return;
     }
     try {
+      if (delivery.envelope.sync) {
+        const policies = await this.store.syncPolicies();
+        if (!policies[delivery.envelope.sync.scope]?.enabled) return;
+        if (!await this.store.markSyncSending(delivery.id)) return;
+      }
       await provider.deliver!(channel, delivery.envelope);
       await this.store.markDelivered(delivery.id);
     } catch (error) {
@@ -1115,13 +1192,15 @@ export class MessageChannelCenter {
     reason: string,
   ): Promise<void> {
     const attempts = delivery.attempts + 1;
-    const terminal = attempts >= DELIVERY_MAX_ATTEMPTS;
+    const waiting = /session_webhook_unavailable|weixin_conversation_expired_send_a_message_first|connector_not_live/.test(reason);
+    const unconfirmed = Boolean(delivery.envelope.sync) && !waiting;
+    const terminal = unconfirmed || (!waiting && attempts >= DELIVERY_MAX_ATTEMPTS);
     const retryAt = terminal
       ? undefined
       : new Date(
           Date.now() + Math.min(60 * 60_000, 2_000 * 2 ** attempts),
         ).toISOString();
-    await this.store.markDeliveryFailed(delivery.id, reason, retryAt);
+    await this.store.markDeliveryFailed(delivery.id, unconfirmed ? "sync_delivery_unconfirmed" : reason, retryAt);
     // Out of retries: an approval prompt sitting in this envelope will never
     // reach its conversation, so wake the relay and let it delegate to the
     // desktop answerer instead of holding the tool call open.

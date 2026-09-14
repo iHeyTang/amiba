@@ -72,7 +72,7 @@ export interface ApiLike {
   botOpenId(): Promise<string>;
   userDisplayName(openId: string): Promise<string | undefined>;
   /** Plain-text message. Kept as `runtime.deliver()`'s fallback when `sendCard` rejects. */
-  sendText(chatId: string, text: string): Promise<void>;
+  sendText(chatId: string, text: string, requestId?: string): Promise<void>;
   /** Interactive-card message rendering `markdown` — Feishu text messages don't render markdown. */
   sendCard(chatId: string, markdown: string): Promise<void>;
   /** Adds a reaction to `messageId`; resolves with the reaction id (needed to remove it later). */
@@ -424,6 +424,12 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
           ws.close({ force: false });
         },
         async deliver(conversation, envelope): Promise<void> {
+          if (envelope.sync) {
+            // Plain text keeps user-authored content literal; a stable UUID lets
+            // the API deduplicate a retry without a card-to-text double send.
+            await api.sendText(conversation.key, envelope.text, envelope.id.slice(-32));
+            return;
+          }
           // Best-effort: clear the "typing" reaction left on the message
           // this reply answers, if any is still on file. A removal failure
           // must never block the reply itself.
@@ -820,13 +826,14 @@ export const realLarkDeps: LarkDeps = {
         const user = res.data?.user;
         return user?.name?.trim() || user?.nickname?.trim() || user?.en_name?.trim() || undefined;
       },
-      async sendText(chatId, text): Promise<void> {
+      async sendText(chatId, text, requestId): Promise<void> {
         const res = (await client.im.message.create({
           params: { receive_id_type: "chat_id" },
           data: {
             receive_id: chatId,
             msg_type: "text",
             content: JSON.stringify({ text }),
+            ...(requestId ? { uuid: requestId } : {}),
           },
         })) as MessageCreateResponse;
         if (res.code) {

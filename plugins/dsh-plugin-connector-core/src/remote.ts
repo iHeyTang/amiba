@@ -9,6 +9,10 @@ import type { MessageConversationSettingsInput, MessageConversationView } from "
 export type { MessageConversationSettingsInput, MessageConversationView } from "@amiba/dsh-plugin-messaging-core";
 
 const conversationViewSchema = z.object({
+  desktopSync: z.object({ enabled: z.boolean(), messages: z.array(z.object({
+    id: z.string(), sourceMessageId: z.string(), sessionId: z.string(), author: z.enum(["user", "assistant"]), text: z.string(),
+    state: z.enum(["queued", "sent", "cancelled", "failed"]), error: z.string().optional(),
+  })) }).optional(),
   access: z.enum(["owner", "shared"]),
   policy: z.object({ cadence: z.enum(["daily", "weekly", "manual"]), timeZone: z.string() }),
   currentSessionId: z.string().optional(),
@@ -317,7 +321,7 @@ export const AMIBA_CONNECTORS_REMOTE: TypertRemoteContribution = {
     descriptor("conversationSettings", [
       { name: "id", wire: "id", source: "json", codec: stringCodec },
       { name: "conversationKey", wire: "conversationKey", source: "json", codec: stringCodec },
-      { name: "input", wire: "input", source: "json", codec: codec(z.object({ action: z.enum(["status", "configure", "new"]), cadence: z.enum(["daily", "weekly", "manual"]).optional() }).strict(), "@amiba/connectors#conversation-settings-input") },
+      { name: "input", wire: "input", source: "json", codec: codec(z.object({ action: z.enum(["status", "configure", "new", "retry-sync"]), cadence: z.enum(["daily", "weekly", "manual"]).optional(), desktopSync: z.boolean().optional() }).strict(), "@amiba/connectors#conversation-settings-input") },
     ], codec(conversationViewSchema, "@amiba/connectors#conversation-view")),
     descriptor(
       "getConnectDetails",
