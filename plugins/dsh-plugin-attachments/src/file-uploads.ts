@@ -11,7 +11,7 @@ import type { FileAttachmentRef } from './official-file-storage/types.js'
 import type { createOfficialFileStorage } from './official-file-storage/index.js'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
-import { Remote, TypertLookupFailure, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { Remote, TypertLookupFailure, TypertRemoteService, type TypertLookupRegistry } from '@deepseek-ai/dsh-typert-protocol'
 interface EncodedFileUploadRequest { data: string; name?: string }
 export type FileUploadReceiptId = string;
 export interface FileUploadValue { receiptId: FileUploadReceiptId; file: FileAttachmentRef }
@@ -80,6 +80,12 @@ export class FileUploads extends TypertRemoteService {
       if (!registry || !('register' in registry) || typeof registry.register !== 'function') throw new Error('File upload requires the Host Typert registry')
       const register = registry.register.bind(registry)
       scope.effect(() => register(FILE_UPLOAD_HOST), 'file upload remote contract')
+      const lookups = (registry as unknown as { lookups: TypertLookupRegistry }).lookups
+      scope.effect(() => this.registerAgentResolver(async sessionId => {
+        const agent = await lookups?.get('agent')?.resolve(sessionId) as Agent | undefined
+        if (!agent || agent.id !== sessionId) throw new FileUploadError('session/not-found', `session "${sessionId}" is unavailable`, { sessionId })
+        return agent
+      }), 'file upload session recovery')
     })
     ctx.inject(['commands'], scope => {
       const commands = scope.get('commands') as { registerFileReceiptResolver?: (resolve: (agent: Agent, receiptId: string) => FileAttachmentRef | undefined) => () => void } | undefined

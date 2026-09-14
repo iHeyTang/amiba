@@ -496,6 +496,7 @@ export type StreamEvent =
       uiId: string;
       content: string;
       images?: ChatMessage["images"];
+      attachmentBadges?: Array<Omit<RuntimeAttachment, "attachmentId"> & { uiId: string; attachmentId?: string; thumbDataUrl?: string }>;
       /** Wall-clock time of the durable user-message event. */
       sentAt: number;
       origin?: ChatMessage["origin"];

@@ -160,6 +160,7 @@ export type DshImageMediaType =
 
 export type DshPromptContentPart =
   | { type: "text"; text: string }
+  | { type: "file"; receiptId: string }
   | {
       type: "image"
       mediaType: DshImageMediaType

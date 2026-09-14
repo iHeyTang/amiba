@@ -14,8 +14,16 @@ if (!fileStorageChecked) {
     const agent = ctx.agents.get(s.id);
     if (!agent) throw new Error('file upload fixture requires live Agent');
     let filePromptAttempts = 0;
+    let nativeModelAttempts = 0;
     const originalFollowup = agent.followup;
     agent.followup = function(message) {
+      if (message.content.some(part=>part.type==='text'&&part.text==='COMPAT_NATIVE_MODEL_FILE')) {
+        const file=message.content.find(part=>part.type==='file');
+        if(!file || file.attachment.name!=='native-model.txt')throw new Error('Missing native model file');
+        console.log('AMIBA_PROBE_NATIVE_MODEL '+JSON.stringify({attempt:++nativeModelAttempts,content:message.content}));
+        if(nativeModelAttempts===1)throw new Error('NATIVE_MODEL_RETRY');
+        return originalFollowup.call(this,message);
+      }
       if (!String(message.source?.rpcId ?? '').startsWith('compat-file-model-')) return originalFollowup.call(this,message);
       filePromptAttempts++;
       console.log('AMIBA_PROBE_FILE_MODEL '+JSON.stringify({attempt:filePromptAttempts,source:message.source,content:message.content}));
@@ -46,8 +54,25 @@ if (!fileStorageChecked) {
       console.log('AMIBA_PROBE_NATIVE_FILE '+JSON.stringify({attempt:nativeFileAttempts,name:attachments[0].attachment.name,content:Buffer.concat(chunks).toString('utf8'),result}));
       return result;
     }});
-    const modelHandle = await new Promise((resolve,reject)=>ctx.inject(['llm','fs','attachments','tokenMeter'],scope=>{
+    const modelHandle = await new Promise((resolve,reject)=>ctx.inject(['llm','fs','attachments','tokenMeter'],async scope=>{
       try {
+        const adapterUrl='COMPAT_LLM_MODULE_URL';
+        const { LlmAdapter }=await import(adapterUrl);
+        class FileFixtureAdapter extends LlmAdapter {
+          async *stream(options) {
+            const content=options.messages.filter(m=>m.role==='user').flatMap(m=>m.content);
+            const handle=content.find(part=>part.type==='text'&&part.text.includes('native-model.txt')&&part.text.includes('official-files'));
+            if(!handle || content.some(part=>part.type==='file'))throw new Error('Model did not receive the projected file handle');
+            console.log('AMIBA_PROBE_NATIVE_MODEL_HANDLE '+JSON.stringify(handle));
+            const text='COMPAT_NATIVE_MODEL_REPLY';
+            yield {type:'block-start',index:0,blockType:'text'};
+            yield {type:'text-delta',index:0,text};
+            yield {type:'block-end',index:0,block:{type:'text',text}};
+            yield {type:'finish',reason:{kind:'stop'}};
+          }
+        }
+        const off=scope.llm.registerAdapter(['compat-native-file'],new FileFixtureAdapter());
+        scope.effect(()=>()=>off());
         const text=scope.llm.fileRequestText(ref);
         const tokens=scope.tokenMeter.measure({events:[{seq:0,type:'user/message',surfaceOp:'append',data:{role:'user',content:[{type:'file',attachment:ref}]}}]}).surfaceTokens;
         if(tokens!==Math.ceil(text.length/4)+8)throw new Error('File token pricing differs from the actual model handle');

@@ -345,11 +345,13 @@ function productCapabilities(): ChatSurfaceCapabilities {
 }
 
 function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string) => AgentSubagentAddress | undefined,
-  sessionActivity: ProductShellProps["conversationSource"]): DshChatEngineClient {
+  sessionActivity: ProductShellProps["conversationSource"],
+  uploadFile: import("@amiba/app-runtime/dsh-client").DshChatEngineOptions["uploadFile"]): DshChatEngineClient {
   return new DshChatEngineClient({
     client: dshClient,
     resolveSubagent,
     sessionActivity,
+    uploadFile,
     attachments: getPlatform().agentAttachments,
     resolveSession: payload => resolveSessionCreationWorkspace(payload.sessionId),
     selectModel: async (sessionId, selection, signal) => {
@@ -533,7 +535,7 @@ function ProductShellInner({
   const activitySource = useRef(conversationSource);
   activitySource.current = conversationSource;
   const client = useMemo(() => createChatClient(dshClient, (id) => childAddressSource.current(id),
-    (id) => activitySource.current(id)), [dshClient]);
+    (id) => activitySource.current(id), triggerRuntime?.uploadCommandFile), [dshClient, triggerRuntime]);
   const capabilities = useMemo(productCapabilities, []);
   const homeDirectory = useSyncExternalStore(directoryFlows.home.subscribe, directoryFlows.home.getSnapshot, directoryFlows.home.getSnapshot);
   const workspaceDirectory = useSyncExternalStore(directoryFlows.workspace.subscribe, directoryFlows.workspace.getSnapshot, directoryFlows.workspace.getSnapshot);

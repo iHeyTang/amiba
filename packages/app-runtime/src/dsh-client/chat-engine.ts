@@ -57,6 +57,8 @@ export interface DshChatEngineOptions {
   /** Current durable navigation address, including children whose parent is cold. */
   resolveSubagent?: (sessionId: string) => AgentSubagentAddress | undefined;
   attachments?: AgentAttachmentsAdapter;
+  /** Stage ordinary files in the receiving session; native child attachments keep their existing path. */
+  uploadFile?: (sessionId: string, dataBase64: string, name: string, signal: AbortSignal) => Promise<string>;
   resolveSession?: (
     payload: SubmitPayload,
     signal: AbortSignal,
@@ -138,23 +140,35 @@ function imageMediaType(attachment: RuntimeAttachment): DshImageMediaType | null
 async function promptAttachments(
   adapter: AgentAttachmentsAdapter | undefined,
   attachments: RuntimeAttachment[] | undefined,
+  uploadFile?: (dataBase64: string, name: string) => Promise<string>,
+  signal?: AbortSignal,
 ): Promise<DshPromptContentPart[]> {
   if (!attachments?.length) return [];
   if (!adapter) throw new Error("DSH attachment plugin is unavailable.");
   const parts: DshPromptContentPart[] = [];
+  // Validate the complete batch before creating any official file receipts.
+  const prepared = [];
   for (const attachment of attachments) {
-    if (attachment.kind !== "image") continue;
+    if (attachment.kind !== "image" && !uploadFile) continue;
+    signal?.throwIfAborted();
     const stored = await adapter.readForPrompt(attachment.attachmentId);
-    const mediaType = imageMediaType(attachment);
-    if (!mediaType || stored.kind !== "image" || stored.size !== attachment.size) {
-      throw new Error(`Attachment ${attachment.name} failed image validation.`);
+    signal?.throwIfAborted();
+    if (stored.attachmentId !== attachment.attachmentId || stored.kind !== attachment.kind || stored.size !== attachment.size
+      || (attachment.kind === "image" && !imageMediaType(attachment))) {
+      throw new Error(`Attachment ${attachment.name} failed validation.`);
     }
-    parts.push({
-      type: "image",
-      mediaType,
-      data: stored.dataBase64,
-      name: stored.name,
-    });
+    prepared.push({ attachment, stored });
+  }
+  for (const { attachment, stored } of prepared) {
+    signal?.throwIfAborted();
+    if (attachment.kind !== "image") {
+      const receiptId = await uploadFile!(stored.dataBase64, stored.name);
+      signal?.throwIfAborted();
+      if (!receiptId) throw new Error("File upload returned no receipt.");
+      parts.push({ type: "file", receiptId });
+    } else {
+      parts.push({ type: "image", mediaType: imageMediaType(attachment)!, data: stored.dataBase64, name: stored.name });
+    }
   }
   return parts;
 }
@@ -557,9 +571,13 @@ export class DshChatEngineClient implements ChatEngineClient {
         if (!address) await waitUntilSubscribed(iterator, sessionId, bridge, (event) =>
           this.emit(sessionId, event),
         );
-        const imageParts = await promptAttachments(
+        const attachmentParts = await promptAttachments(
           this.options.attachments,
           payload.attachments,
+          !address && this.options.uploadFile
+            ? (data, name) => this.options.uploadFile!(sessionId, data, name, controller.signal)
+            : undefined,
+          controller.signal,
         );
         const textParts: DshPromptContentPart[] = [
           // Attachment metadata rides its own part; the user's words ride
@@ -570,20 +588,20 @@ export class DshChatEngineClient implements ChatEngineClient {
             : []),
           { type: "text" as const, text: lastUserText(payload) },
         ];
-        if (address && imageParts.length) throw new Error("Image input is unavailable for subagent continuations");
+        if (address && attachmentParts.length) throw new Error("Image input is unavailable for subagent continuations");
         // Cancellation during preparation must not dispatch a later prompt,
         // even when an attachment/storage adapter did not observe the signal.
         controller.signal.throwIfAborted();
         admission?.dispatch();
         let childMessageId: string | undefined;
         const response = address
-          ? (childMessageId = (await client.subagentPrompt({ ...address, mode: "continuable" }, [...textParts, ...imageParts], {
+          ? (childMessageId = (await client.subagentPrompt({ ...address, mode: "continuable" }, [...textParts, ...attachmentParts], {
               clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
               signal: controller.signal,
             })).messageId, { accepted: true as const, command: undefined })
           : await client.prompt(
           sessionId,
-          [...textParts, ...imageParts],
+          [...textParts, ...attachmentParts],
           {
             mode: "queue",
             clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,

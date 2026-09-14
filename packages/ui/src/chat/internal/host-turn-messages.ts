@@ -72,6 +72,7 @@ export function withHostUserMessage(
     uiId: string;
     content: string;
     images?: ChatMessage["images"];
+    attachmentBadges?: UiMessage["attachmentBadges"];
     sentAt?: number;
     origin?: ChatMessage["origin"];
     notice?: ChatMessage["notice"];
@@ -87,6 +88,7 @@ export function withHostUserMessage(
       role: "user",
       content: message.content,
       ...(message.images?.length ? { images: message.images } : {}),
+      ...(message.attachmentBadges?.length ? { attachmentBadges: message.attachmentBadges } : {}),
       ...(message.sentAt !== undefined ? { sentAt: message.sentAt } : {}),
       ...(message.origin ? { origin: message.origin } : {}),
       ...(message.notice ? { notice: message.notice } : {}),

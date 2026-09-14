@@ -607,3 +607,37 @@ describe("official running baseline", () => {
     engine.dispose();
   });
 });
+
+it("stages native files for an ordinary model prompt, preserving metadata and mixed order", async () => {
+  const prompt = vi.fn(async () => ({ accepted: true, command: { text: "ok" } }));
+  const client = { createSession: vi.fn(), prompt, async *events() { yield { rpcId: "s", payload: { type: "session/subscribed", sessionId: "session-1", lastSeq: 0 } }; } } as unknown as DshApiClient;
+  const attachments = [
+    { attachmentId: "native-file", name: "notes.txt", mime: "text/plain", size: 3, kind: "text" as const },
+    { attachmentId: "native-image", name: "image.png", mime: "image/png", size: 3, kind: "image" as const },
+  ];
+  const readForPrompt = vi.fn(async (id: string) => ({ ...attachments.find(item => item.attachmentId === id)!, dataBase64: "AQID" }));
+  const uploadFile = vi.fn(async () => "file-receipt");
+  const engine = new DshChatEngineClient({ client, uploadFile, attachments: { put: vi.fn(), remove: vi.fn(), readForPrompt } });
+  expect(await engine.submitWithReceipt(payload({ attachments, attachmentPrompt: "legacy native metadata" }))).toEqual({ kind: "accepted", command: { text: "ok" } });
+  expect(uploadFile).toHaveBeenCalledWith("session-1", "AQID", "notes.txt", expect.any(AbortSignal));
+  expect(readForPrompt.mock.invocationCallOrder[1]).toBeLessThan(uploadFile.mock.invocationCallOrder[0]);
+  expect(prompt.mock.calls[0]).toEqual(["session-1", [
+    { type: "text", text: "legacy native metadata" }, { type: "text", text: "/status" },
+    { type: "file", receiptId: "file-receipt" }, { type: "image", name: "image.png", mediaType: "image/png", data: "AQID" },
+  ], expect.any(Object)]);
+});
+
+it("does not dispatch after file preparation fails or is cancelled", async () => {
+  for (const cancel of [false, true]) {
+    const prompt = vi.fn();
+    const client = { createSession: vi.fn(), prompt, cancel: vi.fn(async () => ({ accepted: true as const })), async *events() { yield { rpcId: "s", payload: { type: "session/subscribed", sessionId: "session-1", lastSeq: 0 } }; } } as unknown as DshApiClient;
+    const file = { attachmentId: "native-file", name: "notes.txt", mime: "text/plain", size: 3, kind: "text" as const };
+    const engine = new DshChatEngineClient({ client, attachments: { put: vi.fn(), remove: vi.fn(), readForPrompt: async () => ({ ...file, dataBase64: "AQID" }) }, uploadFile: async () => {
+      if (cancel) { engine.abort("session-1"); return "late-receipt"; }
+      throw new Error("upload rejected");
+    } });
+    const receipt = await engine.submitWithReceipt(payload({ attachments: [file] }));
+    expect(receipt.kind).not.toBe("accepted");
+    expect(prompt).not.toHaveBeenCalled();
+  }
+});

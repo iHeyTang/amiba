@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import { createScope } from '@deepseek-ai/dsh-scope';
-import type { Session } from '@deepseek-ai/dsh-session';
+import { SessionId, type Session } from '@deepseek-ai/dsh-session';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -90,10 +90,10 @@ it('resolves cold sessions through one registered authority and removes that aut
   const { uploads, agent } = await fixture();
   const off = uploads.registerAgentResolver(async id => agent(id));
   expect(() => uploads.registerAgentResolver(async id => agent(id))).toThrow('already registered');
-  const value = await uploads.uploadStream({ sessionId: 'cold' as never, data: (async function* () { yield Buffer.from('cold'); })() });
+  const value = await uploads.uploadStream({ sessionId: SessionId('cold') as never, data: (async function* () { yield Buffer.from('cold'); })() });
   expect(value.file.bytes).toBe(4);
   off();
-  await expect(uploads.uploadStream({ sessionId: 'missing' as never, data: (async function* () {})() })).rejects.toMatchObject({ code: 'session/not-found' });
+  await expect(uploads.uploadStream({ sessionId: SessionId('missing') as never, data: (async function* () {})() })).rejects.toMatchObject({ code: 'session/not-found' });
 });
 
 it('releases a cold-session resolver registered through the Cordis service facade', async () => {
@@ -107,4 +107,20 @@ it('maps upload failures to the rc.2 typed Remote failure carrier', async () => 
   const { uploads, agent } = await fixture();
   await expect(uploads.uploadRemote(agent('root'),{data:'???'},signal())).rejects.toMatchObject({failure:{code:'session/attachment-invalid',details:{reason:'INVALID_FILE_BASE64'}}});
   await expect(uploads.uploadRemote(agent('child','subagent'),{data:'AQ=='},signal())).rejects.toMatchObject({failure:{code:'subagent/attachment-invalid',details:{reason:'SUBAGENT_FILE_UNSUPPORTED'}}});
+});
+
+it('resolves a cold streaming target through the Host lookup policy and rejects an unavailable target', async () => {
+  const { ctx, uploads, agent, storage } = await fixture();
+  const resolved: string[] = [];
+  ctx.provide('typert', {
+    register: () => () => {},
+    lookups: { get: () => ({ resolve: async (id: string) => { resolved.push(id); return id === 'cold' ? agent(id) : undefined; } }) },
+  });
+  // Cordis activates the late dependency through its effect queue.
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const value = await uploads.uploadStream({ sessionId: SessionId('cold'), name: 'cold.txt', data: (async function* () { yield new Uint8Array([65]); })() });
+  expect(resolved).toEqual(['cold']);
+  const chunks = []; for await (const chunk of storage.readFileStream(value.file)) chunks.push(chunk);
+  expect(Buffer.concat(chunks).toString()).toBe('A');
+  await expect(uploads.uploadStream({ sessionId: SessionId('missing'), data: (async function* () { yield new Uint8Array([65]); })() })).rejects.toMatchObject({ code: 'session/not-found' });
 });
