@@ -41,6 +41,7 @@ it("explains the zero state and creates an editable entry with an open action", 
   await screen.findByText(
     "No stewards yet. Create one or start an ordinary conversation.",
   );
+  fireEvent.click(screen.getByRole("button", { name: "Create steward" }));
   fireEvent.change(screen.getByLabelText("Name"), {
     target: { value: "Research" },
   });
@@ -51,7 +52,7 @@ it("explains the zero state and creates an editable entry with an open action", 
     target: { value: "Initial topic" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Create steward" }));
-  const open = await screen.findByRole("button", { name: "Open steward" });
+  const open = await screen.findByRole("button", { name: "Open Research" });
   await waitFor(() => expect(open).not.toBeDisabled());
   expect(p.save).toHaveBeenCalledWith({
     name: "Research",
@@ -74,10 +75,9 @@ it("selects the exact instance and deleting the last entry returns to zero", asy
   };
   const p = props([item]);
   render(<StewardDirectory {...p} />);
-  await screen.findByRole("option", { name: "Default" });
-  fireEvent.change(screen.getByLabelText("Select steward"), {
-    target: { value: "main" },
-  });
+  await screen.findByRole("heading", { name: "Default" });
+  expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Edit Default" }));
   expect(screen.getByLabelText("Working context")).toHaveValue("Pending");
   fireEvent.click(
     screen.getByRole("button", { name: "Delete steward, keep conversations" }),
@@ -95,6 +95,7 @@ it("surfaces failed writes and keeps the entered profile for retry", async () =>
   await screen.findByText(
     "No stewards yet. Create one or start an ordinary conversation.",
   );
+  fireEvent.click(screen.getByRole("button", { name: "Create steward" }));
   fireEvent.change(screen.getByLabelText("Name"), { target: { value: "New" } });
   fireEvent.change(screen.getByLabelText("Responsibilities"), {
     target: { value: "Tasks" },
@@ -105,4 +106,42 @@ it("surfaces failed writes and keeps the entered profile for retry", async () =>
   expect(
     screen.getByRole("button", { name: "Create steward" }),
   ).not.toBeDisabled();
+});
+
+it("shows every configured steward immediately and opens the exact row", async () => {
+  document.documentElement.lang = "en";
+  const items = ["A", "B"].map((id) => ({
+    id,
+    name: `Steward ${id}`,
+    responsibilities: `Duties ${id}`,
+    background: "",
+    context: "",
+    sessionIds: [],
+    state: { version: 1 as const, tasks: [] },
+  }));
+  const p = props(items);
+  render(<StewardDirectory {...p} />);
+  await screen.findByRole("heading", { name: "Steward A" });
+  expect(
+    screen.getByRole("heading", { name: "Steward B" }),
+  ).toBeInTheDocument();
+  expect(screen.getByText("Duties B")).toBeInTheDocument();
+  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Open Steward B" }));
+  await waitFor(() => expect(p.open).toHaveBeenCalledWith("B"));
+});
+it("returns from an unsaved creation to the list without saving", async () => {
+  const p = props();
+  render(<StewardDirectory {...p} />);
+  await screen.findByText(
+    "No stewards yet. Create one or start an ordinary conversation.",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Create steward" }));
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Draft" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Back to list" }));
+  expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+  expect(p.save).not.toHaveBeenCalled();
 });

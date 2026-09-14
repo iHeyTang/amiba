@@ -127,8 +127,8 @@ try {
     await evaluate(`[...document.querySelectorAll('[data-testid=settings-sidebar] button')].find(b => new RegExp(${JSON.stringify(pattern)}).test(b.textContent.trim())).click()`);
   };
   await openSetting('^(管家|Stewards)$');
-  await wait(() => evaluate('!!document.querySelector("[data-steward-directory] select option[value=main]")'));
-  await evaluate('const entry=document.querySelector("[data-steward-directory] select");entry.value="main";entry.dispatchEvent(new Event("change",{bubbles:true}))');
+  await wait(() => evaluate('!!document.querySelector("[data-steward-row=main]")'));
+  await evaluate('document.querySelector("[data-steward-row=main] button[aria-label^=编辑], [data-steward-row=main] button[aria-label^=Edit]").click()');
   await wait(() => evaluate('!!document.querySelector("[data-steward-settings] select")'));
   await evaluate('const select=document.querySelector("[data-steward-settings] select");select.value="manual";select.dispatchEvent(new Event("change",{bubbles:true}))');
   await wait(() => evaluate('document.querySelector("[data-steward-settings] select")?.value === "manual" && !document.querySelector("[data-steward-settings] select").disabled'));
@@ -136,8 +136,8 @@ try {
   await wait(() => evaluate('!!document.querySelector("[data-testid=pets-page]")'));
   console.log('Pet management opens from its registered settings section');
   await openSetting('^(管家|Stewards)$');
-  await wait(() => evaluate('!!document.querySelector("[data-steward-directory] select option[value=main]")'));
-  await evaluate('const entry=document.querySelector("[data-steward-directory] select");entry.value="main";entry.dispatchEvent(new Event("change",{bubbles:true}))');
+  await wait(() => evaluate('!!document.querySelector("[data-steward-row=main]")'));
+  await evaluate('document.querySelector("[data-steward-row=main] button[aria-label^=编辑], [data-steward-row=main] button[aria-label^=Edit]").click()');
   await wait(() => evaluate('document.querySelector("[data-steward-settings] select")?.value === "manual"'));
   await evaluate('[...document.querySelectorAll("[data-steward-settings] button")].find(b=>/^(下条消息开始新对话|Start fresh with the next message)$/.test(b.textContent.trim())).click()');
   await wait(() => evaluate('/下次发送消息时将开启新对话|Your next message will start a new conversation/.test(document.body.innerText)'));
