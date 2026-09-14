@@ -26,7 +26,7 @@ import { useMemo, useState, type ReactNode } from "react";
 
 import type { SessionMeta } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
-import { CascadeMenu, type CascadeMenuItem, cn } from "../primitives";
+import { CascadeMenu, type CascadeMenuItem, cn, ScrollArea } from "../primitives";
 import { SidebarItem } from "./SidebarItem";
 import { SessionRowsList, SessionsListView } from "./SessionsListView";
 import {
@@ -264,7 +264,7 @@ export function Sidebar({
       </div>
 
       {/* History groups share one scroll area and follow their content height. */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-2">
+      <ScrollArea className="min-h-0 flex-1 px-2">
         <section className="[--session-group-sticky-top:2rem]">
           <div
             data-testid="sessions-header"
@@ -401,7 +401,7 @@ export function Sidebar({
             />
           </TopSection>
         ))}
-      </div>
+      </ScrollArea>
 
       <div className="mt-1 border-t border-border/30 p-2">
         <ProfileMenu
