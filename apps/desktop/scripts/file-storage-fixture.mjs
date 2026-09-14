@@ -20,6 +20,7 @@ if (!fileStorageChecked) {
       filePromptAttempts++;
       console.log('AMIBA_PROBE_FILE_MODEL '+JSON.stringify({attempt:filePromptAttempts,source:message.source,content:message.content}));
       if (filePromptAttempts===1) throw new Error('COMPAT_FILE_MODEL_RETRY');
+      agent.session.append('user/message',message,{surfaceOp:'append'});
     };
     ctx.effect(()=>()=>{agent.followup=originalFollowup;});
     const upload = await uploads.upload(agent,{data:bytes.toString('base64'),name:'receipt.bin'},new AbortController().signal);
@@ -45,8 +46,13 @@ if (!fileStorageChecked) {
       console.log('AMIBA_PROBE_NATIVE_FILE '+JSON.stringify({attempt:nativeFileAttempts,name:attachments[0].attachment.name,content:Buffer.concat(chunks).toString('utf8'),result}));
       return result;
     }});
-    const modelHandle = await new Promise((resolve,reject)=>ctx.inject(['llm','fs','attachments'],scope=>{
-      try { resolve(scope.llm.fileRequestText(ref)); } catch(error) { reject(error); }
+    const modelHandle = await new Promise((resolve,reject)=>ctx.inject(['llm','fs','attachments','tokenMeter'],scope=>{
+      try {
+        const text=scope.llm.fileRequestText(ref);
+        const tokens=scope.tokenMeter.measure({events:[{seq:0,type:'user/message',surfaceOp:'append',data:{role:'user',content:[{type:'file',attachment:ref}]}}]}).surfaceTokens;
+        if(tokens!==Math.ceil(text.length/4)+8)throw new Error('File token pricing differs from the actual model handle');
+        resolve(text);
+      } catch(error) { reject(error); }
     }));
     console.log('AMIBA_PROBE_FILE_STORAGE '+JSON.stringify({
       modelHandle,

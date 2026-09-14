@@ -1000,6 +1000,18 @@ try {
       assert.deepEqual(modelAttempts[1].content.map(part=>part.type),['text','file']);
       assert.equal(modelAttempts[1].content[1].attachment.attachmentId,fileStorageResult.ref.attachmentId);
       console.log('The installed session prompt API retained the file receipt after refusal and accepted its retry as structured model content.');
+      const fileHistory=await evaluate(`(async()=>{const response=await window.amiba.dshClient.fetch({url:'/api/session.history',method:'POST',headers:{'content-type':'application/json'},body:new TextEncoder().encode(JSON.stringify({type:'client-request',rpcId:crypto.randomUUID(),method:'session.history',payload:{sessionId:${JSON.stringify(commandSessionId)},maxMessages:100}}))});return JSON.parse(new TextDecoder().decode(response.body)).result;})()`);
+      assert.equal(fileHistory.ok,true);
+      const findFileMessage=value=>{
+        if(!value||typeof value!=='object')return undefined;
+        if(value.role==='user'&&value.source?.rpcId==='compat-file-model-2')return value;
+        for(const child of Object.values(value)){const found=findFileMessage(child);if(found)return found;}
+      };
+      const storedFileMessage=findFileMessage(fileHistory.value);
+      assert.ok(storedFileMessage,'history API must retain the accepted file message');
+      assert.deepEqual(storedFileMessage.content.map(part=>part.type),['text','file']);
+      assert.equal(storedFileMessage.content[1].attachment.attachmentId,fileStorageResult.ref.attachmentId);
+      console.log('The real Host priced the exact model file handle and the session history API preserved its structured file message.');
 
 
       // Hot lexicons decorate native text without creating reference objects or history edits.

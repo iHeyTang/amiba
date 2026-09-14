@@ -54,7 +54,9 @@
       "@deepseek-ai/dsh-attachment@0.1.1-rc.2": "patches/@deepseek-ai__dsh-attachment@0.1.1-rc.2.patch",
       "@deepseek-ai/dsh-fs@0.1.1-rc.2": "patches/@deepseek-ai__dsh-fs@0.1.1-rc.2.patch",
       "@deepseek-ai/dsh-fs-local@0.1.1-rc.2": "patches/@deepseek-ai__dsh-fs-local@0.1.1-rc.2.patch",
-      "@deepseek-ai/dsh-host-apiproxy@0.1.1-rc.2": "patches/@deepseek-ai__dsh-host-apiproxy@0.1.1-rc.2.patch"
+      "@deepseek-ai/dsh-host-apiproxy@0.1.1-rc.2": "patches/@deepseek-ai__dsh-host-apiproxy@0.1.1-rc.2.patch",
+      "@deepseek-ai/dsh-token-meter@0.1.1-rc.2": "patches/@deepseek-ai__dsh-token-meter@0.1.1-rc.2.patch",
+      "@deepseek-ai/dsh-compaction-basic@0.1.1-rc.2": "patches/@deepseek-ai__dsh-compaction-basic@0.1.1-rc.2.patch"
     }
   }
 }

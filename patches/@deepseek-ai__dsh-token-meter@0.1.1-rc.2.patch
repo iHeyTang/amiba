@@ -1,0 +1,123 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1,6 +1,6 @@
+ import { Service } from "@deepseek-ai/cordis";
+ import z from "@deepseek-ai/schemastery";
+-import { BlockAssembler, deepFreeze } from "@deepseek-ai/dsh-llm";
++import { BlockAssembler, deepFreeze, contentHasFile, fileHandleText } from "@deepseek-ai/dsh-llm";
+ import { canonicalHeader, deriveEventMessage, headerEquals, isSurfaceEvent } from "@deepseek-ai/dsh-session";
+ import { z as z$1 } from "zod";
+ //#region lib/types/estimate.js
+@@ -418,15 +418,17 @@
+ *   logs are surface-validated at append time, so an unresolvable range is log
+ *   corruption and must fail loud rather than skip the event.
+ */
+-function foldSurfaceTokens(nodes, event) {
++function foldSurfaceTokens(nodes, event, priceMessage = estimateMessage) {
+ 	const message = deriveEventMessage(event);
+-	const tokens = message === null ? 0 : estimateMessage(message);
++	const tokens = message === null ? 0 : priceMessage(message);
++	const heuristicTokens = message === null ? 0 : estimateMessage(message);
+ 	const op = event.surfaceOp;
+ 	if (op === "append") return {
+ 		tokens,
+ 		nodes: [...nodes, {
+ 			seq: event.seq,
+-			tokens
++			tokens,
++			...(tokens === heuristicTokens ? {} : { heuristicTokens })
+ 		}],
+ 		deltaTokens: tokens
+ 	};
+@@ -437,7 +439,8 @@
+ 	const next = [...nodes];
+ 	next.splice(startIdx, endIdx - startIdx + 1, {
+ 		seq: event.seq,
+-		tokens
++		tokens,
++		...(tokens === heuristicTokens ? {} : { heuristicTokens })
+ 	});
+ 	return {
+ 		tokens,
+@@ -534,15 +537,28 @@
+ 	* @param message - message to price without mutation.
+ 	* @returns content and role-framing tokens under the fixed service heuristic.
+ 	*/
+-	estimateMessage(message) {
+-		return estimateMessage(message);
++	fileText(ref) {
++		const llm = this.ctx.get("llm");
++		return typeof llm?.fileRequestText === "function" ? llm.fileRequestText(ref) : fileHandleText(ref, undefined);
++	}
++	estimateMessage(message) { return estimateMessage(message); }
++	_estimateRequestMessage(message) {
++		if (!contentHasFile(message.content)) return estimateMessage(message);
++		const project = blocks => blocks.map(block => block.type === "file" ? {type:"text",text:this.fileText(block.attachment)} : block.type === "tool-result" ? {...block,content:project(block.content)} : block);
++		return estimateMessage({...message,content:project(message.content)});
+ 	}
+ 	/** Catch one session's fold up to the current durable tail. */
+ 	_sync(session) {
+ 		let state = this.states.get(session);
++		// Only file-bearing sessions need repricing when the execution-world path changes.
++		if (state !== undefined && [...state.filePrices.values()].some(entry => this.fileText(entry.ref) !== entry.text)) {
++			this.states.delete(session);
++			state = undefined;
++		}
+ 		if (state === void 0) {
+ 			state = {
+ 				consumedEvents: 0,
++				filePrices: new Map(),
+ 				header: void 0,
+ 				surface: [],
+ 				surfaceTokens: 0,
+@@ -584,7 +600,18 @@
+ 				break;
+ 			default: break;
+ 		}
+-		const surface = isSurfaceEvent(event) ? foldSurfaceTokens(state.surface, event) : void 0;
++		const surface = isSurfaceEvent(event) ? foldSurfaceTokens(state.surface, event, message => this._estimateRequestMessage(message)) : void 0;
++		const filePrices = [];
++		if (surface !== undefined) {
++			const message = deriveEventMessage(event);
++			const collect = blocks => {
++				for (const block of blocks) {
++					if (block.type === "file") filePrices.push({ ref: block.attachment, text: this.fileText(block.attachment) });
++					else if (block.type === "tool-result") collect(block.content);
++				}
++			};
++			if (message !== null) collect(message.content);
++		}
+ 		if (event.type === "assistant/message") {
+ 			const stepStart = state.stepStart;
+ 			if (stepStart === void 0 || stepStart.turn !== event.data.turn || stepStart.step !== event.data.step) throw new Error(`token meter: assistant/message at seq ${event.seq} has no matching step/start event`);
+@@ -625,6 +652,7 @@
+ 			state.surfaceTokens += surface.deltaTokens;
+ 		}
+ 		state.anchor = nextAnchor;
++		for (const entry of filePrices) state.filePrices.set(JSON.stringify(entry.ref), entry);
+ 	}
+ 	/**
+ 	* Reassemble provider output from the exact cited chunk seqs for a usage anchor.
+@@ -646,7 +674,7 @@
+ 			assembler.push(sourceEvent.data.chunk);
+ 		}
+ 		const providerContent = assembler.blocks();
+-		return providerContent.length === 0 ? 0 : estimateContent(providerContent) + 4;
++		return providerContent.length === 0 ? 0 : this._estimateRequestMessage({content: providerContent});
+ 	}
+ };
+ //#endregion
+--- a/lib/types/types.d.ts
++++ b/lib/types/types.d.ts
+@@ -38,7 +38,9 @@
+ export interface TokenSurfaceNode {
+     /** Durable sequence number of the surface event. */
+     readonly seq: number;
+-    /** Heuristic tokens for the exact message projected by this node. */
++    /** Structural price retained for persisted compaction shadow accounting when request pricing differs. */
++    readonly heuristicTokens?: number;
++    /** Request tokens for the exact message projected by this node. */
+     readonly tokens: number;
+ }
+ //# sourceMappingURL=types.d.ts.map
+\ No newline at end of file
