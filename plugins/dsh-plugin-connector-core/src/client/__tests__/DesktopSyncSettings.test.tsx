@@ -83,14 +83,14 @@ it("opens sync controls, updates the header immediately and dismisses with Escap
   const trigger = await screen.findByRole("button", {
     name: "Message sync: Feishu · Team",
   });
-  expect(trigger).toHaveTextContent("On");
+  expect(trigger).toHaveTextContent("Sync to Feishu");
   await user.click(trigger);
   const toggle = await screen.findByRole("switch", {
     name: "Sync desktop messages",
   });
   await waitFor(() => expect(toggle).not.toBeDisabled());
   await user.click(toggle);
-  await waitFor(() => expect(trigger).toHaveTextContent("Off"));
+  await waitFor(() => expect(trigger).toHaveTextContent("Sync off"));
   await user.keyboard("{Escape}");
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),

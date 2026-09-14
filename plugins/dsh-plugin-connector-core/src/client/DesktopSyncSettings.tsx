@@ -203,6 +203,7 @@ export function DesktopSyncHeader({
     connectId: string;
     key: string;
     target: string;
+    accountName: string;
     enabled: boolean;
   }>();
   useEffect(() => {
@@ -228,6 +229,7 @@ export function DesktopSyncHeader({
           found = {
             connectId: connect.id,
             key: binding.key,
+            accountName: connect.name,
             target: `${connect.name} · ${binding.title || (zh ? "当前聊天" : "Current chat")}`,
             enabled: view.desktopSync?.enabled ?? false,
           };
@@ -253,19 +255,16 @@ export function DesktopSyncHeader({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex max-w-80 items-center gap-2 rounded-lg border border-border/60 bg-background px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex max-w-48 items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={`${zh ? "同步消息" : "Message sync"}: ${route.target}`}
+          title={`${route.target} · ${route.enabled ? (zh ? "已开启" : "On") : (zh ? "已关闭" : "Off")}`}
         >
           <MessagesSquare className="size-3.5 shrink-0" aria-hidden="true" />
-          <span className="truncate">{route.target}</span>
-          <span className="flex shrink-0 items-center gap-1.5 border-l border-border pl-2">
-            <span
-              className={`size-1.5 rounded-full ${route.enabled ? "bg-primary" : "bg-muted-foreground/40"}`}
-              aria-hidden="true"
-            />
-            {route.enabled ? (zh ? "已开启" : "On") : zh ? "已关闭" : "Off"}
+          <span className="truncate">
+            {route.enabled
+              ? zh ? `同步${route.accountName}` : `Sync to ${route.accountName}`
+              : zh ? "同步已关闭" : "Sync off"}
           </span>
-          <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
         </button>
       </PopoverTrigger>
       <PopoverContent
