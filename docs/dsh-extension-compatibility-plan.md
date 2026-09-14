@@ -2044,3 +2044,10 @@ pipelines retain mounted component state.
 keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入口；不放开任意 keyed 声明。输入桥检查要求旧绑定失效保护；提交检查改为结构化 parts 经官方 codec 解析并传入本次取消信号，避免要求回退到重新解析普通文字。
 
 完整架构检查及上述 14 项检查器测试通过；另运行输入桥 26 项和原输入触发管线回归。本次仅修改验证脚本、测试和记录，未改产品能力或样式。完整扩展兼容仍未完成，独立 Web、跨窗口与重启队列等范围继续保留。
+
+
+#### 右侧标签菜单跨会话验证
+
+真实桌面回归覆盖第 58 项：在 A 会话打开菜单并保存 owner/dismiss，切到 B 后旧菜单自动移除；B 的同类型标签菜单收到 B 的 sessionId 和真实 tab。重复调用旧 A dismiss，等待两帧后 B 菜单仍可操作；正常关闭 B 菜单并返回 A，没有过期菜单残留。
+
+初次测试错误要求标签 ID 跨会话唯一，实测失败；store 的计数器明确是每个 surface 独立生成，故按 sessionId 与 tabId 联合核对身份，未修改产品 ID 语义。修正后的完整 `--compat --sidebar-right` 桌面回归退出 0，日志 `/tmp/amiba-sidebar-menu-session-smoke-2.log`。本次只增加测试与验证记录，没有改产品能力或样式；独立 Web 仍待验证。

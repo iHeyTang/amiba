@@ -20,7 +20,7 @@ export async function smokeSidebarRight({ evaluate, wait, screenshot, fileWorksp
       }));
       child.effect(()=>child.slots.register({name:'main',key:'compat-sidebar-global'},()=>h('article',{'data-sidebar-global':''},'Global sidebar probe')));
       child.effect(()=>child.slots.register({name:'sidebar.right.tab.guide',priority:-100,select:()=>true}, props=>h('output',{'data-sidebar-guide-probe':''},props.useTabInfo().tab.kind)));
-      child.effect(()=>child.slots.register({name:'sidebar.right.tab.menu.item',id:'compat-menu-item'}, props=>h('button',{'data-sidebar-menu-probe':'',onClick:()=>{window.__sidebarMenuKind=props.tab.kind;props.dismiss()}},'Probe menu item')));
+      child.effect(()=>child.slots.register({name:'sidebar.right.tab.menu.item',id:'compat-menu-item'}, props=>{window.__sidebarMenuProps=props;return h('button',{'data-sidebar-menu-probe':'','data-menu-session':props.sessionId,'data-menu-tab':props.tab.id,onClick:()=>{window.__sidebarMenuKind=props.tab.kind;props.dismiss()}},'Probe menu item')}));
       child.effect(()=>child.sidebarRightTabs.register({id:'compat/sidebar-page',kind:'compat-page',title:()=> 'Compat page'}));
       child.effect(()=>child.slots.register({name:'sidebar.right.pane.tab',key:'compat/sidebar-page'}, props=>{
         React.useEffect(()=>{window.__sidebarBodyMounts++},[]);
@@ -109,6 +109,23 @@ export async function smokeSidebarRight({ evaluate, wait, screenshot, fileWorksp
   await wait(() => evaluate("!!document.querySelector('[data-sidebar-menu-probe]')"));
   await evaluate("document.querySelector('[data-sidebar-menu-probe]').click()");
   await wait(() => evaluate("window.__sidebarMenuKind==='compat-page' && !document.querySelector('[data-sidebar-menu-probe]')"));
+  // Retain an old callback across a real session change: it must not close
+  // a newly opened menu, even when both sessions register the same tab kind.
+  await evaluate("document.querySelector('[data-sidebar-title]').closest('[data-dockkit-tab]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:300,clientY:300}))");
+  await wait(() => evaluate("document.querySelector('[data-sidebar-menu-probe]')?.dataset.menuSession===window.__sidebarSessionA"));
+  assert.ok(await evaluate("window.__sidebarMenuProps.tab.id===window.__sidebarInfo.tab.id"));
+  await evaluate("window.__sidebarOldMenu=window.__sidebarMenuProps;window.__probeCtx.sessions.open(window.__sidebarSessionB)");
+  await wait(() => evaluate("document.querySelector('[data-sidebar-page]')?.dataset.sidebarBornSession===window.__sidebarSessionB && !document.querySelector('[data-sidebar-menu-probe]')"));
+  await evaluate("document.querySelector('[data-sidebar-title]').closest('[data-dockkit-tab]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:300,clientY:300}))");
+  await wait(() => evaluate("document.querySelector('[data-sidebar-menu-probe]')?.dataset.menuSession===window.__sidebarSessionB"));
+  assert.ok(await evaluate("window.__sidebarMenuProps.tab.id===window.__sidebarInfo.tab.id && window.__sidebarOldMenu.sessionId!==window.__sidebarMenuProps.sessionId && window.__sidebarOldMenu.sessionId===window.__sidebarSessionA"));
+  await evaluate("window.__sidebarOldMenu.dismiss();window.__sidebarOldMenu.dismiss()");
+  await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+  assert.ok(await evaluate("document.querySelector('[data-sidebar-menu-probe]')?.dataset.menuSession===window.__sidebarSessionB && document.querySelector('[data-sidebar-page]')?.dataset.sidebarBornSession===window.__sidebarSessionB"));
+  await evaluate("document.querySelector('[data-sidebar-menu-probe]').click()");
+  await wait(() => evaluate("!document.querySelector('[data-sidebar-menu-probe]')"));
+  await evaluate("window.__probeCtx.sessions.open(window.__sidebarSessionA)");
+  await wait(() => evaluate("document.querySelector('[data-sidebar-page]')?.dataset.sidebarBornSession===window.__sidebarSessionA && !document.querySelector('[data-sidebar-menu-probe]')"));
   await evaluate("window.__sidebarService.openTab('guide')");
   await wait(() => evaluate("document.querySelector('[data-sidebar-guide-probe]')?.textContent==='guide'"));
   await evaluate("window.__sidebarService.openTab('compat-page')");
@@ -128,5 +145,5 @@ export async function smokeSidebarRight({ evaluate, wait, screenshot, fileWorksp
   await evaluate("window.__sidebarService.toggleExpanded()");
   await wait(() => evaluate("(!document.querySelector('[data-sidebar-right-native]') || document.querySelector('[data-sidebar-right-native]').hidden)"));
   await smokeSidebarGuide({ evaluate, wait, screenshot, activateFocused });
-  console.log('Sidebar panel passed actual public service, framework session store, body/title hooks, guide chain and menu owner/dismissal, repeated navigation, fullscreen body retention, 767/768px automatic fullscreen/exit and mode restoration, session switching/local-state isolation and original-session callbacks, global-page binding/float/fullscreen isolation and restoration, collapse component/local-state retention, type unload fallback and native panel restoration.');
+  console.log('Sidebar panel passed actual public service, framework session store, body/title hooks, guide chain and menu owner/dismissal including cross-session stale callback isolation, repeated navigation, fullscreen body retention, 767/768px automatic fullscreen/exit and mode restoration, session switching/local-state isolation and original-session callbacks, global-page binding/float/fullscreen isolation and restoration, collapse component/local-state retention, type unload fallback and native panel restoration.');
 }
