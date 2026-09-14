@@ -1,3 +1,4 @@
+import { desktopSyncCard } from "./desktop-sync-card.js";
 import { createSenderNameResolver } from "./sender-name.js";
 import { PERSONAL_SCOPES } from "./personal.js";
 import { larkMcpTools } from "./mcp-tools.js";
@@ -74,7 +75,7 @@ export interface ApiLike {
   /** Plain-text message. Kept as `runtime.deliver()`'s fallback when `sendCard` rejects. */
   sendText(chatId: string, text: string, requestId?: string): Promise<void>;
   /** Interactive-card message rendering `markdown` — Feishu text messages don't render markdown. */
-  sendCard(chatId: string, markdown: string): Promise<void>;
+  sendCard(chatId: string, markdown: string, sync?: { author: "user" | "assistant"; requestId: string }): Promise<void>;
   /** Adds a reaction to `messageId`; resolves with the reaction id (needed to remove it later). */
   addReaction(messageId: string, emoji: string): Promise<string>;
   removeReaction(messageId: string, reactionId: string): Promise<void>;
@@ -425,9 +426,12 @@ export function createLarkProvider(deps: LarkDeps = realLarkDeps): ConnectorProv
         },
         async deliver(conversation, envelope): Promise<void> {
           if (envelope.sync) {
-            // Plain text keeps user-authored content literal; a stable UUID lets
-            // the API deduplicate a retry without a card-to-text double send.
-            await api.sendText(conversation.key, envelope.text, envelope.id.slice(-32));
+            // Keep the stable UUID and propagate failures to the outbox. A text
+            // fallback could duplicate a card accepted before a network timeout.
+            await api.sendCard(conversation.key, envelope.text, {
+              author: envelope.sync.author,
+              requestId: envelope.id.slice(-32),
+            });
             return;
           }
           // Best-effort: clear the "typing" reaction left on the message
@@ -840,13 +844,14 @@ export const realLarkDeps: LarkDeps = {
           throw new Error(res.msg ?? `lark_send_text_failed:${res.code}`);
         }
       },
-      async sendCard(chatId, markdown): Promise<void> {
+      async sendCard(chatId, markdown, sync): Promise<void> {
         const res = (await client.im.message.create({
           params: { receive_id_type: "chat_id" },
           data: {
             receive_id: chatId,
             msg_type: "interactive",
-            content: JSON.stringify(markdownCard(markdown)),
+            content: JSON.stringify(sync ? desktopSyncCard(markdown, sync.author) : markdownCard(markdown)),
+            ...(sync ? { uuid: sync.requestId } : {}),
           },
         })) as MessageCreateResponse;
         if (res.code) {
