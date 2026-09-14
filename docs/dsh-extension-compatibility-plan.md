@@ -2076,3 +2076,10 @@ keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入�
 新增用例复现同名引用交换时被 JSON 去重忽略的问题。草稿源现在对保留引用对象的位置变化单独判定：显示文字不变也发布新文档及 occurrence 顺序、推进公开 draftRev；正常等价序列化回传不更新快照、不额外通知。恢复原结构化顺序恢复原 ID 顺序。沿用原存储格式与界面，没有根据相同标签猜测未知引用的身份。
 
 草稿源、文档、离屏投影及原输入管线 51 项测试、UI 类型检查和完整架构检查通过。日志 `/tmp/amiba-reference-reorder-tests.log`、`/tmp/amiba-reference-reorder-types.log`、`/tmp/amiba-reference-reorder-architecture.log`。本次验证是源状态与输入管线测试，未重新运行完整桌面构建/回归。跨重启、丢失结构后的纯文本歧义、真实键盘撤销与交接组合仍未完成。
+
+
+#### 官方引用的剪贴板文本
+
+对照固定官方 chip-node：getTextContent 用 clipboardText 供复制，而 Amiba 的 MentionNode 使用内部 token 供原持久化。新增无界面的剪贴板插件，仅在选区包含 dsh.reference 时按插件 clipboardText 投影，其他文字（包括形似 token 的字面量）及原生引用保持原复制文本。普通选区继续原处理器。剪切先成功写剪贴板再删选区；原 getTextContent、存储格式、样式及附件粘贴路径不变。选区边界逻辑参照已安装 Lexical 的 MIT 实现，保留版权说明及 LICENSE.lexical。
+
+45 项剪贴板和输入回归、UI 类型检查通过。完整桌面构建及 `--compat --resident-draft` 回归退出 0：通过真实桌面 DOM Selection、ClipboardEvent 和 DataTransfer 验证复制 owner 文本、原草稿不变、粘贴到另一会话且 token 状普通文字不误生成引用。该用例没有写系统剪贴板；不声称系统快捷键/操作系统剪贴板端到端已验证。正反向部分选区、剪切、多段落和原生引用混排由 Lexical 测试覆盖。日志 `/tmp/amiba-reference-clipboard-regression.log`、`/tmp/amiba-reference-clipboard-types.log`、`/tmp/amiba-reference-clipboard-build.log`、`/tmp/amiba-reference-clipboard-smoke.log`。完整粘贴 lexicon/附件混排、invalid/appearance、新旧撤销及跨重启仍继续核对。

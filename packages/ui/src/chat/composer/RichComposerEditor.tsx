@@ -17,6 +17,7 @@ import { baseEditorConfig } from "./lexical-config"
 import { AutoGrowPlugin } from "./plugins/AutoGrowPlugin"
 import { ImeEnterPlugin } from "./plugins/ImeEnterPlugin"
 import { ImperativeHandlePlugin, type RichComposerHandle } from "./plugins/ImperativeHandlePlugin"
+import { ReferenceClipboardPlugin } from "./plugins/ReferenceClipboardPlugin"
 import { MentionSerializePlugin } from "./plugins/MentionSerializePlugin"
 import { OfficialTriggerPlugin } from "./plugins/OfficialTriggerPlugin"
 import { TriggerMenuPlugin } from "./plugins/TriggerMenuPlugin"
@@ -132,6 +133,7 @@ export const RichComposerEditor = forwardRef<RichComposerHandle, RichComposerEdi
             ErrorBoundary={LexicalErrorBoundary}
           />
           <HistoryPlugin />
+          <ReferenceClipboardPlugin />
           <EditableStatePlugin disabled={disabled} />
           <AutoGrowPlugin
             maxHeightPx={maxHeightPx ?? 200}

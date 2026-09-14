@@ -785,6 +785,13 @@ try {
       await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)?.draft===${JSON.stringify(mixedDraft)}`));
       originalDraft = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
       assert.equal(originalDraft.occurrences.length,1);
+      const copiedText = originalDraft.draft.slice(0, originalDraft.occurrences[0].offset) + expectedReference.clipboardText + originalDraft.draft.slice(originalDraft.occurrences[0].offset + originalDraft.occurrences[0].length);
+      await evaluate("(()=>{const editor=document.querySelector('[data-auto-grow-editor]');editor.focus();const range=document.createRange();range.selectNodeContents(editor);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);document.dispatchEvent(new Event('selectionchange'))})()");
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      const copied = await evaluate("(()=>{const data=new DataTransfer();const event=new ClipboardEvent('copy',{bubbles:true,cancelable:true,clipboardData:data});document.querySelector('[data-auto-grow-editor]').dispatchEvent(event);return {text:data.getData('text/plain'),handled:event.defaultPrevented}})()");
+      assert.deepEqual(copied,{text:copiedText,handled:true});
+      assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft"),originalDraft.draft);
+
       await evaluate("window.__residentInputActions=window.__probeCtx.sessions.currentProvideInfo.getSnapshot().props.inputActions;void 0");
       assert.equal(await evaluate("typeof window.__residentInputActions?.setDraft"),"function");
       await evaluate(`window.__otherDraftFrames=[];window.__otherDraftOff=window.__probeCtx.composerInputs.inputDraftSource(${JSON.stringify(otherId)}).subscribe(()=>window.__otherDraftFrames.push(window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft));window.__probeCtx.sessions.open(${JSON.stringify(otherId)});void 0`);
@@ -794,6 +801,11 @@ try {
       await evaluate("window.__offscreenInput=window.__probeCtx.composerInputs.inputStateSource(window.__compatSessionId);window.__offscreenSeen=[];window.__offscreenOff=window.__offscreenInput.subscribe(()=>window.__offscreenSeen.push(window.__offscreenInput.getSnapshot()));window.__offscreenBefore=window.__offscreenInput.getSnapshot();void 0");
       assert.deepEqual(await evaluate("({phase:window.__offscreenBefore.phase,images:window.__offscreenBefore.imageIds,refs:window.__offscreenBefore.occurrences.length})"),{phase:'plain',images:[],refs:1});
       assert.equal(await evaluate("window.__offscreenBefore.occurrences[0].occurrenceId"), originalDraft.occurrences[0].occurrenceId, "unchanged reference must retain its ID when the editor unmounts");
+      await evaluate(`(()=>{const data=new DataTransfer();data.setData('text/plain',${JSON.stringify(copiedText)});const editor=document.querySelector('[data-auto-grow-editor]');editor.focus();editor.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}))})()`);
+      await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft===${JSON.stringify(copiedText)}`));
+      assert.equal(await evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)}).occurrences.length`),0,"plain clipboard text must not mint token-shaped references");
+      await evaluate(`window.__probeCtx.composerInputs.setInputDraft(${JSON.stringify(otherId)},'')`);
+      await wait(()=>evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)})?.draft===''`));
       originalDraft={...originalDraft,draft:originalDraft.draft+' OFFSCREEN_APPEND😀'};
       await evaluate(`window.__residentInputActions.setDraft(${JSON.stringify(originalDraft.draft)});void 0`);
       assert.equal(await evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)}).draft`),"");
