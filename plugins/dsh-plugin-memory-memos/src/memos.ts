@@ -1,3 +1,4 @@
+import { scopedMemoryContext } from "./scoped-memory.js";
 import type { Config as UpstreamConfig } from "@memtensor/memos-local-plugin/dist/adapters/deepseek-harness/index.js";
 import type { Context } from "@deepseek-ai/cordis";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -59,7 +60,7 @@ export async function mountMemos(
         status.state = "starting";
         status.error = null;
         try {
-          const dispose = await upstream.apply(child, engineConfig);
+          const dispose = await upstream.apply(scopedMemoryContext(child), engineConfig);
           status.state = "ready";
           status.viewerUrl = `http://127.0.0.1:${options.viewerPort}`;
           return async () => {
