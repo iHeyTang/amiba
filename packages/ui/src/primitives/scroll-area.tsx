@@ -21,6 +21,8 @@ const ScrollArea = React.forwardRef<
   ) => (
     <ScrollAreaPrimitive.Root
       ref={ref}
+      type="scroll"
+      scrollHideDelay={700}
       data-amiba-scroll-area=""
       className={cn("relative overflow-hidden", className)}
       {...props}

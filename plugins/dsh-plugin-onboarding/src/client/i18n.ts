@@ -17,7 +17,7 @@ export const guideI18n: PluginCatalogOverlay = {
     "guide.later": "Continue later",
     "guide.done": "Start using Amiba",
     "guide.deferred":
-      "We skipped some setup. You can finish it later in Settings → Setup guide.",
+      "We skipped some setup. You can finish it later in Settings → Appearance → Open setup guide.",
     "guide.ready": "You're all set. Tell me what you'd like to work on!",
     "guide.step": "Let's take this one step at a time.",
     "guide.skip": "Skip this step",
@@ -29,7 +29,7 @@ export const guideI18n: PluginCatalogOverlay = {
     "guide.settings": "Setup guide",
     "guide.saved": "Resume setup or revisit your connections.",
     "guide.none":
-      "No setup steps are available yet. You can return from Settings → Setup guide.",
+      "No setup steps are available yet. You can return from Settings → Appearance → Open setup guide.",
   },
   "zh-CN": {
     "guide.companionLabel": "起步",
@@ -47,7 +47,7 @@ export const guideI18n: PluginCatalogOverlay = {
     "guide.later": "稍后继续",
     "guide.done": "开始使用 Amiba",
     "guide.deferred":
-      "有些配置暂时跳过了。以后可以从「设置 → 入门引导」回来完成。",
+      "有些配置暂时跳过了。以后可以从「设置 → 外观 → 打开入门引导」回来完成。",
     "guide.ready": "准备好啦，告诉我你想一起做什么吧！",
     "guide.step": "别着急，我们一步一步来。",
     "guide.skip": "跳过这一步",
@@ -57,6 +57,6 @@ export const guideI18n: PluginCatalogOverlay = {
     "guide.reopen": "打开入门引导",
     "guide.settings": "入门引导",
     "guide.saved": "继续未完成的配置，或重新了解接入方式。",
-    "guide.none": "暂时没有可用的引导步骤。以后可以从「设置 → 入门引导」回来。",
+    "guide.none": "暂时没有可用的引导步骤。以后可以从「设置 → 外观 → 打开入门引导」回来。",
   },
 };

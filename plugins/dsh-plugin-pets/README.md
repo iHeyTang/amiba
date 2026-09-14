@@ -6,11 +6,8 @@ A DSH plugin integrating the `@mofli/core` and `@mofli/grove` 0.2.0 offline pack
 Open **Settings → Pets** to create, name, preview and save
 multiple pets. Select a skin and accessories, test activity states and rig
 guides, import Studio's `pet.json`, or export a configuration for another app.
-Choose an active companion to show it on the empty page and composer by default.
-Settings → General lets you select a different surface provider or turn that display off. During a conversation the
-companion perches on the composer’s upper-right edge. The host moves it away from popovers and hides it when no clear position is available. A visible empty-state
-companion takes precedence, so the two never appear together. Pets do not register
-message decorations.
+Choose an active companion to show it on the empty page by default.
+Settings → General lets you select a different surface provider or turn that display off.
 
 On desktop, **Show desktop pet** opens an independent transparent, always-on-top
 companion overlay. Drag the pet across the full screen, including the Dock area.
@@ -53,7 +50,7 @@ while visible), so Agent changes appear without reopening the page. Pointer,
 input, session activity and visibility use Amiba's shared surface contracts;
 Mofli owns hit testing and click reactions. The presentation group
 `mofli.companion` elects one reacting surface within a window. Hidden documents
-cancel animation frames. Message decorations do not replace message contents.
+cancel animation frames.
 
 ```sh
 pnpm --dir plugins/dsh-plugin-pets typecheck

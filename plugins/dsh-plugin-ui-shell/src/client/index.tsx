@@ -804,8 +804,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "conversation.hero.workspace.directoryFlow": { kind: "single", scope: "root" },
           "sidebar.workspaces.directoryFlow": { kind: "single", scope: "root" },
           "sidebar.footer.action": { kind: "list", scope: "root" },
-          "amiba.message.decoration": { kind: "list", scope: "root" },
-          "amiba.composer.accessory": { kind: "list", scope: "root" },
           "amiba.emptyState.visual": { kind: "list", scope: "root" },
           "amiba.navigation.before": { kind: "list", scope: "root" },
           "amiba.navigation.after": { kind: "list", scope: "root" },

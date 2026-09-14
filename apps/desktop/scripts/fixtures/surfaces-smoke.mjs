@@ -52,8 +52,6 @@ app
       await wait('!!document.querySelector("[data-probe=overlay]")');
       for (const slot of [
         "amiba.emptyState.visual",
-        "amiba.composer.accessory",
-        "amiba.message.decoration",
       ]) {
         await click(`[data-surface-selector="${slot}"]`);
         await wait(
@@ -77,19 +75,10 @@ app
       await js('document.getElementById("scroll-test").remove();window.scrollTo(0,0)');
       await wait('document.querySelector("[data-probe=empty]")?.dataset.enabled==="true"');
       await assert(
-        'document.querySelector("[data-probe=composer]")?.dataset.enabled==="false" && document.querySelector("[data-probe=overlay]")?.dataset.enabled==="false"',
-      );
-      await wait(
-        '!!document.querySelector("[data-message-decoration=message-a] [data-probe]")',
-      );
-      await assert(
-        '!document.querySelector("[data-composer-card]").contains(document.querySelector("[data-composer-accessory]"))',
+        'document.querySelector("[data-probe=overlay]")?.dataset.enabled==="false"',
       );
       await click("header button:nth-child(3)");
       await wait('!!document.querySelector("[data-menu]")');
-      await assert(
-        'document.querySelector("[data-menu]").getBoundingClientRect().bottom <= document.querySelector("[data-composer-accessory]").getBoundingClientRect().top',
-      );
       const r = await js(
         '(()=>{const r=document.querySelector("[data-testid=surface]").getBoundingClientRect();return {x:Math.round(r.right-10),y:Math.round(r.y+30)}})()',
       );

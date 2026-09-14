@@ -726,35 +726,6 @@
   border-bottom-color: hsl(var(--border) / 0.4);
 }
 
-/* Horizontal tab rails (workbench tabs) overflow sideways. Their scrollbar is
- * a position INDICATOR, not a control: nobody drags a tab strip's bar, they
- * use the wheel. So it is a hairline, and deliberately NOT `scrollbar-width:
- * thin` — Chromium ignores every ::-webkit-scrollbar rule once that property
- * is set to anything but `auto`, and its own "thin" is still ~11px. Firefox
- * has no equivalent knob and keeps its default; the app target is Chromium. */
-.amiba-tab-rail::-webkit-scrollbar {
-  height: 3px;
-}
-
-.amiba-tab-rail::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.amiba-tab-rail::-webkit-scrollbar-thumb {
-  border: 0;
-  background: var(--scrollbar-thumb);
-  border-radius: 999px;
-}
-
-.amiba-tab-rail:hover::-webkit-scrollbar-thumb {
-  border: 0;
-  background: var(--scrollbar-thumb-hover);
-}
-
-.amiba-tab-rail::-webkit-scrollbar-thumb:active {
-  background: var(--scrollbar-thumb-drag);
-}
-
 /* The workspace terminal is a native pane surface, not an embedded black
  * console card. xterm still owns cursor/input/rendering; these rules only
  * align its viewport and scrollbar with Amiba's surrounding workbench. */

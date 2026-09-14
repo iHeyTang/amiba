@@ -2488,7 +2488,7 @@ export default function ChatSurface({
         <footer
           ref={composerDockRef}
           data-composer-dock=""
-          style={{ paddingTop: "calc(8px + var(--amiba-companion-clearance, 0px))" }}
+          style={{ paddingTop: 8 }}
           className={cn(
             // The sticky user-question strip inside the scroll viewport is
             // z-20. Composer popovers live inside the composer's own z-10
