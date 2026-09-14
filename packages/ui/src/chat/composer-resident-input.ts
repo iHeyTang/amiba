@@ -5,6 +5,7 @@ import type { ComposerInputDraft } from "./composer/triggers/contracts";
 /** Projection of the native document after its editor/command owner is released. */
 export class ResidentInputProjection {
   private nextId = 0;
+  private readonly ids = new WeakMap<object, number>();
   private snapshot: ComposerInputDraft | undefined;
 
   update(document: ComposerDraftDocument): ComposerInputDraft {
@@ -18,6 +19,13 @@ export class ResidentInputProjection {
       if (!edit || item.offset + item.length <= edit.from) candidates.set(item.offset, item);
       else if (item.offset >= edit.to) candidates.set(item.offset + delta, item);
     }
+    // Reserve identities carried by actual retained document occurrences before
+    // matching text coordinates. A new lookalike must not steal a survivor's ID.
+    const retainedIds = new Set(document.parts.flatMap(part => {
+      const id = this.ids.get(part);
+      return id === undefined ? [] : [id];
+    }));
+    const assigned = new Set<number>();
     let offset = 0;
     const occurrences: ComposerInputDraft["occurrences"][number][] = [];
     for (const part of document.parts) {
@@ -33,7 +41,13 @@ export class ResidentInputProjection {
       const candidate = candidates.get(offset);
       const same = candidate && candidate.source === value.source && candidate.ref === value.ref &&
         candidate.label === value.label && candidate.clipboardText === value.clipboardText;
-      occurrences.push(Object.freeze({ ...value, occurrenceId: same ? candidate.occurrenceId : ++this.nextId }));
+      const retained = this.ids.get(part);
+      const occurrenceId = retained !== undefined ? retained
+        : same && !retainedIds.has(candidate.occurrenceId) && !assigned.has(candidate.occurrenceId)
+          ? candidate.occurrenceId : ++this.nextId;
+      this.ids.set(part, occurrenceId);
+      assigned.add(occurrenceId);
+      occurrences.push(Object.freeze({ ...value, occurrenceId }));
       offset += text.length;
     }
     if (previous && previous.draft === draft && JSON.stringify(previous.occurrences) === JSON.stringify(occurrences)) return previous;

@@ -2060,3 +2060,12 @@ keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入�
 新增测试先复现交接 ID 变化，再通过修复；输入绑定、桥接和标准提供者共 47 项测试通过，插件类型检查通过。完整桌面构建及 `--compat --resident-draft` 回归退出 0，实测前台到离屏、离屏追加普通文字再恢复编辑器的 occurrenceId 不变，旧版本写入拒绝、原草稿和其他会话仍保留。日志 `/tmp/amiba-reference-handoff-tests-2.log`、`/tmp/amiba-reference-handoff-types-2.log`、`/tmp/amiba-reference-handoff-build.log`、`/tmp/amiba-reference-handoff-smoke.log`。
 
 本次没有修改输入器、序列化格式或样式。交接投影不同情况下的部分引用连续性、跨重启 occurrenceId、离屏重复引用的精确删除/撤销身份仍需进一步适配；不能据本次验证宣称引用全语义兼容。
+
+
+#### 离屏结构化草稿的重复引用身份
+
+新增失败用例复现：两条内容相同的引用，结构化删除第一条后，原算法按文本偏移将第二条误认成第一条。文档规范化现保留未改动且深层冻结的引用 part；同一 part 重复插入仍复制成独立 occurrence。ResidentInputProjection 用 WeakMap 跟踪实际保留对象，先为保留对象预留 ID，防止新引用通过坐标匹配占用幸存引用的 ID。未带对象身份的输入仍沿用原坐标匹配；没有改持久化格式、输入器能力或样式。
+
+测试覆盖删除第一条同名引用、前缀移动、重复插入独立 ID、删除后用原结构化文档恢复身份。草稿与原输入触发管线共 51 项测试、UI/插件类型检查通过。完整桌面构建、`--compat --resident-draft` 回归及架构检查均退出 0；真实桌面回归验证交接、恢复及旧版本写入保护，本次精确重复删除/结构化恢复由状态测试证明，不将其冒充真实键盘撤销实测。日志 `/tmp/amiba-resident-duplicate-tests-2.log`、`/tmp/amiba-resident-duplicate-ui-types.log`、`/tmp/amiba-resident-duplicate-plugin-types.log`、`/tmp/amiba-resident-duplicate-build.log`、`/tmp/amiba-resident-duplicate-smoke.log`、`/tmp/amiba-resident-duplicate-architecture.log`。
+
+仍待核对：同文字的纯身份重排、仅凭文本推断重复引用删除位置、真实编辑器撤销与离屏交接组合、跨重启身份及完整粘贴/失效语义。完整兼容目标保持未完成。

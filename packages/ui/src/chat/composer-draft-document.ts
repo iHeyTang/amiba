@@ -8,14 +8,22 @@ export interface ComposerDraftDocument {
 
 export function composerDraftDocument(parts: readonly ParsedPart[]): ComposerDraftDocument {
   const normalized: ParsedPart[] = [];
+  const retained = new Set<ParsedPart>();
   for (const part of parts) {
     if (part.kind === "text") {
       if (!part.text) continue;
       const previous = normalized.at(-1);
       if (previous?.kind === "text") previous.text += part.text;
       else normalized.push({ kind: "text", text: part.text });
-    } else normalized.push({ kind: "mention", raw: part.raw,
-      mention: Object.freeze({ type: part.mention.type, display: part.mention.display, payload: Object.freeze({ ...part.mention.payload }) }) });
+    } else {
+      // Untouched immutable occurrences retain their identity through document
+      // edits. Reusing one occurrence twice creates a distinct second copy.
+      const stable = !retained.has(part) && Object.isFrozen(part) &&
+        Object.isFrozen(part.mention) && Object.isFrozen(part.mention.payload);
+      normalized.push(stable ? part : { kind: "mention", raw: part.raw,
+        mention: Object.freeze({ type: part.mention.type, display: part.mention.display, payload: Object.freeze({ ...part.mention.payload }) }) });
+      retained.add(part);
+    }
   }
   return Object.freeze({
     text: normalized.map(part => part.kind === "text" ? part.text : part.raw).join(""),

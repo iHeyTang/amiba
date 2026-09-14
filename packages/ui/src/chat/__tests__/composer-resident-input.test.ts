@@ -39,3 +39,33 @@ it("observes same-label identity changes and edits away and back between reads",
   expect(source.readInputDraft()).toMatchObject({ draft: recreated.draft, occurrences: [] });
   expect(source.readInputDraft().draftRev).toBeGreaterThan(recreated.draftRev);
 });
+
+
+it("retains the surviving duplicate reference when structured edits remove the first", () => {
+  const source = createComposerDraftSource();
+  source.set("@[dsh.reference:files|one|Same|clip] @[dsh.reference:files|one|Same|clip]");
+  const before = source.readInputDraft();
+  const second = source.getDocument().parts[2];
+  source.setParts([second]);
+  expect(source.readInputDraft().occurrences[0].occurrenceId).toBe(before.occurrences[1].occurrenceId);
+  source.setDisplayText("prefix " + source.readInputDraft().draft);
+  expect(source.readInputDraft().occurrences[0].occurrenceId).toBe(before.occurrences[1].occurrenceId);
+});
+
+
+it("keeps independent duplicate IDs through insertion, removal and structured undo", () => {
+  const source = createComposerDraftSource();
+  source.set("@[dsh.reference:files|one|Same|clip]");
+  const original = source.getDocument().parts[0];
+  const id = source.readInputDraft().occurrences[0].occurrenceId;
+  source.setParts([original, { kind: "text", text: " " }, original]);
+  const expanded = source.getDocument();
+  const ids = source.readInputDraft().occurrences.map(item => item.occurrenceId);
+  expect(ids[0]).toBe(id);
+  expect(ids[1]).not.toBe(id);
+  expect(expanded.parts[0]).not.toBe(expanded.parts[2]);
+  source.setParts([expanded.parts[2]]);
+  expect(source.readInputDraft().occurrences[0].occurrenceId).toBe(ids[1]);
+  source.setParts(expanded.parts);
+  expect(source.readInputDraft().occurrences.map(item => item.occurrenceId)).toEqual(ids);
+});
