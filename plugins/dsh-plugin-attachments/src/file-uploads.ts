@@ -3,6 +3,7 @@
 /** Host file-upload service: streamed intake and Agent-scoped staged receipts. */
 
 import { FILE_UPLOAD_HOST } from './file-upload-remote.js'
+import { applyFileUploadHttp } from './file-upload-http.js'
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -71,6 +72,7 @@ export class FileUploads extends TypertRemoteService {
   /** @param ctx - Host context carrying Agent and attachment services. */
   constructor(ctx: Context, private readonly storage: ReturnType<typeof createOfficialFileStorage>) {
     super(ctx, 'fileUploads')
+    applyFileUploadHttp(ctx, this)
     ctx.on('session/event', (session, event) => { this.observeSessionEvent(session, event) })
     ctx.on('session/disposed', (session) => { this.stagedFiles.delete(session) })
     ctx.inject(['typert'], scope => {

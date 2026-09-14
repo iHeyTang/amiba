@@ -2270,3 +2270,6 @@ OfficialTriggerPlugin 订阅公开词表，以编辑器所在窗口的 CSS Custo
 - 证据：UI 23 项、桥接与官方发布包 29 项测试通过；UI/插件类型检查、架构检查、Desktop build 和 runtime prepare/verify 通过。真实 Desktop --compat --input-state --command-images 使用原文件选择器和官方命令入口，Host 第一次返回错误后正文和附件保留，第二次成功后对应内容清理；两次实际文件内容一致。新旧图片、混合粘贴、输入历史等原能力同轮通过。
 - 仍待完成：离屏普通文件注册/恢复、队列绑定与跨窗口生命周期、后台流式上传、模型文件提交等；此处前台文件命令成功不是整个附件组完成。
 - 日志：/tmp/amiba-composer-files-{ui-tests,bridge-tests,ui-types,shell-types,architecture,build,runtime-build,verify,smoke}.log。
+
+
+2026-09-14 流式 Host 通道进展：为 rc.2 Connection 增加按调用插件生命周期注册的精确 Fetch 路由和 streaming 请求模式；普通 RPC 继续缓冲并执行原大小上限，上传继续经过现有 Host/Origin 来源检查。注意 rc.2 的来源检查不是新版浏览器 token/cookie 认证，本次没有声称迁入新版认证。新增 /api/session/uploadFileBinary，将请求分块直接交给精确会话授权的 fileUploads.uploadStream，连接断开传递取消，失败返回结构化错误。实际 HTTP 测试证明请求 EOF 前已接收分块，并验证跨站拒绝、普通 RPC 上限及卸载回退；真实桌面安装后的路由签发凭据并成功执行官方文件命令。附件原有 23 项测试与新增 2 项 HTTP 测试通过，类型、架构、运行时构建/校验和桌面回归通过。浏览器后台 Worker/ReadableStream 调用仍待接入，客户端 available 仍为 false；不能据此宣布端到端后台流式上传完成。

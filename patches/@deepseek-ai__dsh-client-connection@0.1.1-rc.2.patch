@@ -13,3 +13,93 @@
  				hostDescription: {
  					getSnapshot: () => description,
  					subscribe: (listener) => {
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1,3 +1,4 @@
++import { Readable as AmibaReadable } from "node:stream";
+ import z from "@deepseek-ai/schemastery";
+ import { toFetchHandler } from "@deepseek-ai/dsh-host-apiproxy";
+ import { Service } from "@deepseek-ai/cordis";
+@@ -40,6 +41,17 @@
+ 	res.on("close", () => {
+ 		if (!res.writableEnded) abort.abort();
+ 	});
++	const url = new URL(req.url ?? "/", "http://dsh.internal");
++	const method = req.method ?? "GET";
++	const streaming = apiHandler.requestBodyMode?.({ method, url }) === "streaming";
++	let request;
++	if (streaming && method !== "GET" && method !== "HEAD") {
++		request = new Request(url, {
++			method,
++			headers: Object.fromEntries(Object.entries(req.headers).filter(([, v]) => typeof v === "string")),
++			body: AmibaReadable.toWeb(req), signal: abort.signal, duplex: "half"
++		});
++	} else {
+ 	const declaredLength = req.headers["content-length"];
+ 	if (declaredLength !== void 0 && Number(declaredLength) > maxRequestBodyBytes) {
+ 		res.writeHead(413, { connection: "close" });
+@@ -62,16 +74,19 @@
+ 	}
+ 	/* v8 ignore next 3 -- `??` arms: node:http always sets url/method on server
+ 	requests; the fields are only optional on the client-side IncomingMessage type */
+-	const request = new Request(new URL(req.url ?? "/", "http://dsh.internal"), {
++	request = new Request(new URL(req.url ?? "/", "http://dsh.internal"), {
+ 		method: req.method ?? "GET",
+ 		headers: Object.fromEntries(Object.entries(req.headers).filter(([, v]) => typeof v === "string")),
+ 		...chunks.length > 0 ? { body: Buffer.concat(chunks) } : {},
+ 		signal: abort.signal
+ 	});
++	}
+ 	const response = await apiHandler.fetch(request);
+-	res.writeHead(response.status, Object.fromEntries(response.headers.entries()));
++	const unread = streaming && !req.readableEnded;
++	res.writeHead(response.status, { ...Object.fromEntries(response.headers.entries()), ...(unread ? { connection: "close" } : {}) });
+ 	if (response.body === null) {
+ 		res.end();
++		if (unread) req.destroy();
+ 		return;
+ 	}
+ 	for await (const chunk of response.body) if (!res.write(chunk)) await new Promise((resolve) => {
+@@ -84,6 +99,7 @@
+ 		res.once("close", done);
+ 	});
+ 	res.end();
++	if (unread) req.destroy();
+ }
+ //#endregion
+ //#region lib/types/loopback-hostname.js
+@@ -206,6 +222,7 @@
+ var HostConnectionService = class extends Service {
+ 	trustedHosts;
+ 	interceptors = /* @__PURE__ */ new Map();
++	fetchRoutes = new Map();
+ 	/**
+ 	* Provide the Host half over the active HTTP server.
+ 	* @param ctx - owning Connection plugin context.
+@@ -229,8 +246,25 @@
+ 	* @param fallback - handler for endpoints not claimed by the interceptor.
+ 	* @returns Fetch handler that selects exactly one target for each request.
+ 	*/
++	get fetch() {
++		const owner = this.ctx;
++		return { register: (route) => {
++			if (!/^\/api\/[A-Za-z0-9_$./-]+$/.test(route.path) || route.path.includes("..") || !Array.isArray(route.methods) || !route.methods.length || route.methods.some(method => !/^[A-Z]+$/.test(method)) || !["buffered", "streaming"].includes(route.requestBody) || typeof route.fetch !== "function") throw new Error("connection: invalid Fetch route");
++			const registered = { methods: new Set(route.methods), requestBody: route.requestBody, fetch: route.fetch };
++			return owner.effect(() => {
++				if (this.fetchRoutes.has(route.path)) throw new Error("connection: duplicate Fetch route " + route.path);
++				this.fetchRoutes.set(route.path, registered);
++				return () => { if (this.fetchRoutes.get(route.path) === registered) this.fetchRoutes.delete(route.path); };
++			}, "client-connection: exact Fetch route");
++		} };
++	}
+ 	createSharedFetchHandler(channel, fallback) {
+-		return { fetch: (request) => {
++		return { requestBodyMode: ({ method, url }) => {
++			const route = this.fetchRoutes.get(url.pathname);
++			return route?.methods.has(method) ? route.requestBody : "buffered";
++		}, fetch: (request) => {
++			const route = this.fetchRoutes.get(new URL(request.url).pathname);
++			if (route?.methods.has(request.method)) return route.fetch(request);
+ 			const endpoint = endpointFromPath(channel, new URL(request.url).pathname);
+ 			const interceptor = this.interceptors.get(channel);
+ 			if (endpoint === void 0 || interceptor === void 0 || !interceptor.matches(endpoint)) return fallback.fetch(request);

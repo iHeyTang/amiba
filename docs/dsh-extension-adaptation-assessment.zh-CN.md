@@ -150,7 +150,7 @@
 | --- | --- | --- |
 | 附件存储 | rc.2 原包类型仍只有图片；现已由 Amiba Host 插件为旧服务实例补齐 saveFile、saveFileStream、readFileStream、fileHostPath、admitEncodedFile 和错误分类，真实 Host 验证通过 | 存储层已接入，使用独立 official-files/v1；仍需连接 receipt 授权、命令解析与浏览器输入，不代表完整文件上传已完成 |
 | 命令接收 | 已为 rc.2 补齐 registerFileReceiptResolver、混合文件/图片接收与 Host/浏览器发布包参数校验；真实旧客户端及新版 HTTP 字段执行均通过 | 命令接收已验证；浏览器上传和输入器的普通文件消费仍需接通，不能把 Host 接收等同完整输入支持 |
-| 上传与授权 | 本地桥接已接通 Host fileUploads/upload 严格远程描述及客户端 fileUpload 的字节/Blob 编码上传；真实浏览器上传后命令执行通过 | 按真实 Agent/Session 签发凭据；后台流式通道、原输入器消费及新版模块整体依赖仍待适配，不能用原生 att_* ID 替代 |
+| 上传与授权 | Host 编码上传、原生前台文件命令及二进制流式 HTTP 路由已接通；真实桌面上传和命令执行通过 | 按真实 Agent/Session 签发凭据；浏览器后台 Worker/ReadableStream、离屏/队列文件和新版模块依赖仍待适配，不能用原生 att_* ID 替代 |
 | 接收及回收 | 新版 FileUploads.bindPrompt 具有提交/回滚，队列移除和带 rpcId 的 user/message 会退休 receipt | 与真实接收确认、队列和历史观察接通，失败保留重试权限，不能提前释放 |
 | 浏览器输入 | 新版 conversation 通过 fileUpload.upload 保存 receipt，serializeDraftAttachments 只接受 ready 文件并按原顺序输出 | 接入上传状态、取消、原顺序和非图片注册对象；保留现有原生文字/PDF/图片功能和样式 |
 | 新版子会话文件上传 | 固定 c291e796 的 commit 先调用 assertOrdinaryAgent；origin=subagent 时明确抛 SUBAGENT_FILE_UNSUPPORTED | 此官方路径不能支持子会话文件上传。属于固定新版的明确限制，不意味着 Amiba 原有子会话附件能力应被删除 |
@@ -160,3 +160,5 @@
 证据定位：当前受管 app/node_modules 下 dsh-attachment/lib/types/index.d.ts、dsh-commands/lib/types/index.d.ts 和实际模块导出；固定源码 packages/client/file-upload/src/index.ts（commit/assertOrdinaryAgent/bindPrompt/observeSessionEvent）、packages/client/ui-conversation/src/client/service.ts（beginFileUpload/serializeDraftAttachments）、packages/interaction/commands/src/index.ts（registerFileReceiptResolver）。注意抽象 saveImage 不出现在基类运行时 prototype，不能用该现象推断图片不受支持。
 
 真实 Host 验证补充：安装后的 fileUploads 与实际 Agent 已完成上传、文件解析、接收失败回滚及成功绑定后回收验证；同次桌面新旧图片命令、混合粘贴和原输入历史回归通过。运行时 prepare/verify、类型检查与架构检查通过。此证据不覆盖远程上传端点、文件命令或模型文件提交。
+
+2026-09-14 流式 Host 通道进展：为 rc.2 Connection 增加按调用插件生命周期注册的精确 Fetch 路由和 streaming 请求模式；普通 RPC 继续缓冲并执行原大小上限，上传继续经过现有 Host/Origin 来源检查。注意 rc.2 的来源检查不是新版浏览器 token/cookie 认证，本次没有声称迁入新版认证。新增 /api/session/uploadFileBinary，将请求分块直接交给精确会话授权的 fileUploads.uploadStream，连接断开传递取消，失败返回结构化错误。实际 HTTP 测试证明请求 EOF 前已接收分块，并验证跨站拒绝、普通 RPC 上限及卸载回退；真实桌面安装后的路由签发凭据并成功执行官方文件命令。附件原有 23 项测试与新增 2 项 HTTP 测试通过，类型、架构、运行时构建/校验和桌面回归通过。浏览器后台 Worker/ReadableStream 调用仍待接入，客户端 available 仍为 false；不能据此宣布端到端后台流式上传完成。

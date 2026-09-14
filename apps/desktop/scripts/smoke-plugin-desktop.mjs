@@ -973,6 +973,13 @@ try {
       const abortedUpload=await evaluate(`(async()=>{const abort=new AbortController();abort.abort();try{await window.__compatFileUpload.upload(${JSON.stringify(commandSessionId)},new Uint8Array([1]),'cancel.bin',abort.signal);return false;}catch(error){return error.name==='AbortError';}})()`);
       assert.equal(abortedUpload,true);
       console.log('Browser Blob upload returned a real session receipt, executed through the official command, and honored cancellation.');
+      const binaryUpload=await evaluate(`(async()=>{const response=await window.amiba.dshClient.fetch({url:'/api/session/uploadFileBinary?sessionId='+encodeURIComponent(${JSON.stringify(commandSessionId)})+'&name=command.bin',method:'POST',headers:{'content-type':'application/octet-stream'},body:new Uint8Array([0,255,42,128,7])});return {status:response.status,result:JSON.parse(new TextDecoder().decode(response.body))};})()`);
+      assert.equal(binaryUpload.status,200);
+      assert.equal(binaryUpload.result.ok,true);
+      assert.equal(binaryUpload.result.value.file.attachmentId,fileStorageResult.ref.attachmentId);
+      const binaryCommand=await evaluate(`window.__probeCtx.remote.commands.execute(${JSON.stringify(commandSessionId)},'/compat-file-receipt',[{type:'file',receiptId:${JSON.stringify(binaryUpload.result.value.receiptId)}}])`);
+      assert.equal(binaryCommand.ok,true);assert.equal(binaryCommand.value.result.text,'COMPAT_FILE_RECEIPT_OK');
+      console.log('The installed binary upload HTTP route returned an authorized receipt and the official command consumed it.');
 
 
       // Hot lexicons decorate native text without creating reference objects or history edits.
