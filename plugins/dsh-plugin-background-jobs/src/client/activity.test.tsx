@@ -5,7 +5,7 @@ function completeRelations(rows: Partial<JobRelation>[]): JobRelation[] {
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Activity, WorkbenchActivity, RunningJobs, Notice } from "./index.js";
+import { Activity, WorkbenchActivity, apply } from "./index.js";
 import { createRelations } from "./relations.js";
 afterEach(cleanup);
 const fixtureStart = Date.now()-3000;
@@ -20,30 +20,6 @@ function fixture() {
   relations.set("s1",completeRelations([{id:"bash-1",callId:"call-1",title:"运行测试"}]));
   return {props, jobs};
 }
-describe("conversation background progress", () => {
-  it("keeps running tasks visible, opens the workbench and removes terminal tasks", () => {
-    const {props,jobs}=fixture();
-    const view=render(<RunningJobs {...props as any}/>);
-    expect(screen.getByRole("region",{name:"进行中的后台任务"})).toBeInTheDocument();
-    expect(screen.queryByText(/进行中 ·/)).toBeNull();
-    expect(screen.queryByText(/查看任务/)).toBeNull();
-    expect(screen.getByRole("button",{name:/运行测试，运行中/})).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button",{name:/运行测试/}));
-    expect(props.relations.requestedJob("s1")).toBe("bash-1");
-    jobs[0]!.status="stopping"; view.rerender(<RunningJobs {...props as any}/>);
-    expect(screen.getByText(/停止中 ·/)).toBeInTheDocument();
-    jobs[0]!.status="completed"; view.rerender(<RunningJobs {...props as any}/>);
-    expect(screen.queryByRole("region")).toBeNull();
-  });
-  it("does not show another session's jobs or expose raw command labels", () => {
-    const {props}=fixture();
-    const view=render(<RunningJobs {...props as any}/>);
-    expect(document.body.textContent).not.toContain("PRIVATE_KEY");
-    view.rerender(<RunningJobs {...props as any} sessionId="s2"/>);
-    expect(screen.queryByRole("region")).toBeNull();
-  });
-});
-
 describe("session workbench jobs", () => {
   it("renders grouped tasks in the workbench, with output, original call and stop", async () => {
     const {props}=fixture(); render(<Activity {...props as any}/>);
@@ -98,40 +74,53 @@ describe("session workbench jobs", () => {
     fireEvent.click(screen.getByRole("button",{name:/已结束/}));
     expect(screen.queryByText("hello")).toBeNull();
   });
-  it("opens the workbench from its tab and from a completion notice", async () => {
+  it("opens the workbench from its tab", () => {
     const {props}=fixture();
-    render(<><WorkbenchActivity {...props as any}/><Activity {...props as any}/><Notice {...props as any} body="raw notification" summary="后台任务已结束" reference={{kind:"background-job",sessionId:"s1",id:"bash-1",instance:String(fixtureStart)}}/></>);
+    render(<WorkbenchActivity {...props as any}/>);
     fireEvent.click(screen.getByRole("tab",{name:/后台任务/}));
     expect(props.openPanel).toHaveBeenCalledWith("background-jobs");
-    expect(screen.getByLabelText("1 个任务进行中")).toBeInTheDocument();
-    props.openPanel.mockClear();
-    fireEvent.click(screen.getByText("后台任务已结束 · 查看任务"));
-    await waitFor(()=>expect(props.openPanel).toHaveBeenCalledWith("background-jobs"));
-    await waitFor(()=>expect(props.api.inspect).toHaveBeenCalledWith("s1", "bash-1"));
-    expect(screen.queryByText("raw notification")).toBeNull();
   });
 });
 
-it("rejects malformed job notices instead of interpreting an older shape", () => {
-  const {props}=fixture();
-  expect(() => render(<Notice {...props as any} summary="完成" body="old" reference={undefined}/>)).toThrow("Invalid background task notice reference");
-});
-it("does not resolve an old runtime id as a durable record id", () => {
-  const {props}=fixture();
-  props.relations.set("s1",completeRelations([{id:"bash-1",recordId:"new-record",title:"task"}]));
-  render(<Notice {...props as any} summary="完成" reference={{kind:"background-job",sessionId:"s1",id:"bash-1",instance:String(fixtureStart)}}/>);
-  expect(screen.getByRole("button")).toBeDisabled();
-});
-
-it("restores collapsed history and notification navigation with an empty runtime registry", async () => {
+it("restores collapsed history with an empty runtime registry", async () => {
   const {props,jobs}=fixture();jobs.splice(0);
   props.relations.set("s1",completeRelations([{id:"bash-1",recordId:"record-old",kind:"subagent",status:"completed",startedAt:1000,finishedAt:31000,title:"历史任务",callId:"old-call"}]));
-  const view=render(<><Activity {...props as any}/><Notice {...props as any} summary="历史任务 · 已完成" body="raw fallback" reference={{kind:"background-job",sessionId:"s1",id:"record-old",instance:"1000"}}/></>);
+  render(<Activity {...props as any}/>);
   expect(screen.getByRole("button",{name:/已结束/})).toHaveAttribute("aria-expanded","false");
-  expect(screen.queryByText("raw fallback")).toBeNull();
-  fireEvent.click(screen.getByRole("button",{name:/查看任务/}));
+  props.relations.open("s1","record-old");
   await screen.findByText("hello");
   expect(props.api.inspect).toHaveBeenCalledWith("s1","record-old");
-  expect(screen.getByRole("button",{name:/已结束/})).toHaveAttribute("aria-expanded","true");
-  view.unmount();
+});
+
+it("leaves tool rendering and conversation progress to the host", async () => {
+  const entries: Array<{name: string; key?: string; component: any}> = [];
+  const effects: Array<() => void> = [];
+  const unmount = vi.fn();
+  const child = {
+    remote: {amibaJobs: {}},
+    slots: {
+      inject: (_name: string, register: () => () => void) => register(),
+      register: (entry: any, component: any) => {
+        entries.push({...entry, component});
+        return vi.fn();
+      },
+    },
+  };
+  const dispose = await apply({
+    effect: (setup: () => () => void) => effects.push(setup()),
+    remote: {$mount: vi.fn(async () => unmount)},
+    inject: (_deps: string[], setup: (ctx: any) => () => void) => ({dispose: setup(child)}),
+  } as any);
+  expect(entries.some(entry => entry.name === "amiba.tool.execution")).toBe(false);
+  expect(entries.some(entry => entry.name === "amiba.conversation.progress")).toBe(false);
+  expect(entries.some(entry => entry.name === "amiba.workbench.panel")).toBe(true);
+  for (const entry of entries.filter(entry => entry.name === "amiba.conversation.notice")) {
+    const View = entry.component;
+    const view = render(<View summary="后台任务已完成"/>);
+    expect(view.container).toBeEmptyDOMElement();
+    view.unmount();
+  }
+  await dispose();
+  effects.forEach(cleanup => cleanup());
+  expect(unmount).toHaveBeenCalledOnce();
 });

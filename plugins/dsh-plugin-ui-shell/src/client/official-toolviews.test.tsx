@@ -88,6 +88,17 @@ describe("tool views", () => {
     expect(screen.getByText("shell.tool.runCommand")).toBeTruthy();
     expect(screen.queryByText("generic")).toBeNull();
   });
+  it("renders background result reads as independent tool rows", () => {
+    const reads = [owner("job_output", {job_id: "job-1"}), owner("job_output", {job_id: "job-1", wait: true})];
+    render(<>{reads.map((call, index) => <div key={index}>
+      {renderOfficialToolFallback({...call, callId: `read-${index}`}, <span>generic</span>)}
+    </div>)}</>);
+    expect(screen.getByText("shell.tool.readJob")).toBeTruthy();
+    expect(screen.getByText("shell.tool.waitJob")).toBeTruthy();
+    screen.getAllByRole("button").forEach(button => fireEvent.click(button));
+    expect(screen.getAllByText("result evidence")).toHaveLength(2);
+    expect(screen.queryByText("generic")).toBeNull();
+  });
   it("leaves unknown/plugin tools to their owner and the generic fallback", () => {
     render(
       <>
