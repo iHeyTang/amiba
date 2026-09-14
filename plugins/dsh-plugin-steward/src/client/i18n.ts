@@ -2,9 +2,9 @@ import type { PluginCatalogOverlay } from "@amiba/ui/plugin";
 
 export const stewardI18n: PluginCatalogOverlay = {
   "zh-CN": {
-    "steward.nav": "大管家",
-    "steward.settingsHint": "管理大管家的工作偏好和对话方式。",
-    "steward.conversations": "大管家的对话",
+    "steward.nav": "管家",
+    "steward.settingsHint": "管理管家的工作偏好和对话方式。",
+    "steward.conversations": "管家的对话",
     "steward.conversationHint": "按日期回看之前的交流。独立任务会继续执行，不受对话切换影响。",
     "steward.cadence": "新对话周期",
     "steward.cadenceHint": "在下次发消息时切换，历史对话仍可查找",
@@ -15,11 +15,11 @@ export const stewardI18n: PluginCatalogOverlay = {
     "steward.pendingConversation": "下次发送消息时将开启新对话。",
     "steward.history": "历史对话",
     "steward.current": "当前",
-    "steward.noHistory": "和大管家聊过之后，对话会保存在这里。",
+    "steward.noHistory": "和管家聊过之后，对话会保存在这里。",
     "steward.settingsFailed": "暂时无法更新对话设置，请重试。",
     "steward.retry": "重试",
     "steward.loading": "正在读取对话…",
-    "steward.adopt": "交给大管家",
+    "steward.adopt": "交给管家",
   },
   en: {
     "steward.nav": "Steward",

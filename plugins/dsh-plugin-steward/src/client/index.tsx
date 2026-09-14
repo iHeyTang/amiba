@@ -1,199 +1,247 @@
 import { TOOLVIEWS } from "./toolviews.js";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
-// Type-only: SlotMap entries for `amiba.sessions.list.group` /
-// `amiba.sessions.item.menu` / `amiba.message.source`.
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import type { ReactNode } from "react";
-
-import { AMIBA_STEWARD_REMOTE } from "../remote.js";
-import { STEWARD_SOURCE, type AdoptResult, type StewardTask } from "../types.js";
 import { ConciergeBell } from "lucide-react";
-import { StewardSettings } from "./StewardSettings.js";
+import { AMIBA_STEWARD_REMOTE } from "../remote.js";
+import { STEWARD_SOURCE } from "../types.js";
 import { StewardNavigation } from "./StewardNavigation.js";
-import { createStewardClientState, stewardGroupFace, stewardMenuFace } from "./state.js";
+import { StewardDirectory } from "./StewardDirectory.js";
+import { createStewardClientState, stewardGroupFace } from "./state.js";
 
 export const name = "amiba-steward-ui";
-export const inject = ["slots", "remote", "layout", "sessions", "amibaSessionVisibility"];
-
-const NAV_ID = "steward";
-type StewardRemote = ClientContext["remote"]["amibaSteward"];
-
-function errorOf(value: unknown): Error {
-  if (value && typeof value === "object") {
-    const message = (value as { message?: unknown }).message;
-    if (typeof message === "string") return new Error(message);
-  }
-  return new Error(String(value));
-}
-
-async function valueOf<T>(promise: Promise<{ ok: true; value: T } | { ok: false; error: unknown }>): Promise<T> {
-  const result = await promise;
-  if (!result.ok) throw errorOf(result.error);
-  return result.value;
-}
-
-function copy() {
-  return document.documentElement.lang.toLowerCase().startsWith("zh") ? "大管家" : "Steward";
-}
-
-/** Same resolution style as `copy()` above — the `steward.adopt` i18n
- *  strings, read outside React since the registered menu component is
- *  never mounted (see `NoopComponent`'s doc comment). */
-function adoptCopy() {
-  return document.documentElement.lang.toLowerCase().startsWith("zh") ? "交给大管家" : "Hand to steward";
-}
-
-/**
- * The registered component for `amiba.sessions.list.group` /
- * `amiba.sessions.item.menu` — never rendered. The shell reads these
- * registrations by enumerating `entriesOfSlot` and calling `options.label` /
- * `inject().claim` / `inject().run` directly (see
- * `createSessionGroupsSource` / `createSessionMenuItemsSource` in
- * `dsh-plugin-ui-shell`'s `session-list-sources.ts`); it never mounts the
- * component through a slot renderer. A component is still required to
- * satisfy `ctx.slots.register`'s signature, exactly like `settings.section`
- * registrants that also carry a component argument.
- */
+export const inject = [
+  "slots",
+  "remote",
+  "layout",
+  "sessions",
+  "amibaSessionVisibility",
+];
 function NoopComponent(): ReactNode {
   return null;
 }
-
-/** How often the adopted-session set is re-fetched while the plugin is mounted. */
-const REFRESH_INTERVAL_MS = 20_000;
-
-function openSession(sessionId: string): void {
-  // The host's open-by-id seam (see cron's client): admits any valid DSH id,
-  // including ones hidden from the history list.
-  window.dispatchEvent(new CustomEvent("amiba:open-session", { detail: { sessionId } }));
+async function valueOf<T>(
+  promise: Promise<{ ok: true; value: T } | { ok: false; error: unknown }>,
+): Promise<T> {
+  const result = await promise;
+  if (!result.ok)
+    throw new Error(
+      String((result.error as { message?: string })?.message ?? result.error),
+    );
+  return result.value;
 }
+function openSession(sessionId: string) {
+  window.dispatchEvent(
+    new CustomEvent("amiba:open-session", { detail: { sessionId } }),
+  );
+}
+const copy = () =>
+  document.documentElement.lang.toLowerCase().startsWith("zh")
+    ? "管家"
+    : "Stewards";
 
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   ctx.effect(() => {
-    const disposers = TOOLVIEWS.map(({ key, component }) => ctx.slots.inject("tool.call.toolview", () => ctx.slots.register({ name: "tool.call.toolview", key }, component)));
-    return () => { for (const dispose of disposers) dispose(); };
+    const disposers = TOOLVIEWS.map(({ key, component }) =>
+      ctx.slots.inject("tool.call.toolview", () =>
+        ctx.slots.register({ name: "tool.call.toolview", key }, component),
+      ),
+    );
+    return () => {
+      for (const dispose of disposers) dispose();
+    };
   });
   const disposeRemote = await ctx.remote.$mount(AMIBA_STEWARD_REMOTE);
-  const state = createStewardClientState();
   const fiber = ctx.inject(
-    ["slots", "remote.amibaSteward", "layout", "sessions", "amibaSessionVisibility"],
+    [
+      "slots",
+      "remote.amibaSteward",
+      "layout",
+      "sessions",
+      "amibaSessionVisibility",
+    ],
     (injectedCtx) => {
-      const remote: StewardRemote = injectedCtx.remote.amibaSteward;
-      const hiddenSessions = new Map<string, () => void>();
+      const remote = injectedCtx.remote.amibaSteward;
+      const hidden = new Map<string, () => void>();
+      const entries = new Map<
+        string,
+        {
+          state: ReturnType<typeof createStewardClientState>;
+          name: string;
+          dispose(): void;
+        }
+      >();
+      let allSessions = new Set<string>(),
+        allTasks = new Set<string>();
       let disposed = false;
-      const ensureStewardSession = () =>
-        valueOf(remote.ensureStewardSession()).then(({ sessionId, sessionIds }) => {
-          if (disposed) throw new Error("Steward client disposed");
-          const ids = sessionIds ?? [sessionId];
-          for (const id of ids) {
-            if (!hiddenSessions.has(id)) hiddenSessions.set(id, injectedCtx.amibaSessionVisibility.hideSession(id));
+      const open = async (id: string) => {
+        const result = await valueOf(remote.ensureStewardSession(id));
+        injectedCtx.layout.openChat();
+        openSession(result.sessionId);
+        await refresh();
+      };
+      let pending: Promise<void> | undefined;
+      const refresh = (): Promise<void> =>
+        (pending ??= (async () => {
+          const rows = await valueOf(remote.instances());
+          if (disposed) return;
+          allSessions = new Set(rows.flatMap((item) => item.sessionIds));
+          allTasks = new Set(
+            rows.flatMap((item) =>
+              item.state.tasks.map((task) => task.sessionId),
+            ),
+          );
+          for (const [id, release] of hidden)
+            if (!allSessions.has(id)) {
+              release();
+              hidden.delete(id);
+            }
+          for (const id of allSessions)
+            if (!hidden.has(id))
+              hidden.set(
+                id,
+                injectedCtx.amibaSessionVisibility.hideSession(id),
+              );
+          for (const [id, entry] of entries)
+            if (
+              !rows.some((item) => item.id === id && item.name === entry.name)
+            ) {
+              entry.dispose();
+              entries.delete(id);
+            }
+          for (const item of rows) {
+            if (!entries.has(item.id)) {
+              const state = createStewardClientState();
+              const navigation = injectedCtx.slots.inject(
+                "amiba.workspace.navigation",
+                () =>
+                  injectedCtx.slots.register(
+                    {
+                      name: "amiba.workspace.navigation",
+                      id: `steward-${item.id}`,
+                      order: 90,
+                      label: () => item.name,
+                      inject: () => ({
+                        state,
+                        label: item.name,
+                        open: () => {
+                          void open(item.id).catch(console.error);
+                        },
+                      }),
+                    },
+                    StewardNavigation as (
+                      props: PropsRuntime<"amiba.workspace.navigation">,
+                    ) => ReactNode,
+                  ),
+              );
+              const group = injectedCtx.slots.inject(
+                "amiba.sessions.list.group",
+                () =>
+                  injectedCtx.slots.register(
+                    {
+                      name: "amiba.sessions.list.group",
+                      id: `steward-${item.id}`,
+                      order: 50,
+                      label: () => item.name,
+                      inject: () => stewardGroupFace(state),
+                    },
+                    NoopComponent,
+                  ),
+              );
+              const menu = injectedCtx.slots.inject(
+                "amiba.sessions.item.menu",
+                () =>
+                  injectedCtx.slots.register(
+                    {
+                      name: "amiba.sessions.item.menu",
+                      id: `steward-adopt-${item.id}`,
+                      order: 50,
+                      label: () =>
+                        document.documentElement.lang.startsWith("zh")
+                          ? `交给 ${item.name}`
+                          : `Hand to ${item.name}`,
+                      inject: () => ({
+                        visible: (session: { id: string }) =>
+                          !allSessions.has(session.id) &&
+                          !allTasks.has(session.id),
+                        run: async (session: { id: string }) => {
+                          await valueOf(
+                            remote.adopt({
+                              stewardId: item.id,
+                              sessionId: session.id,
+                            }),
+                          );
+                          await refresh();
+                        },
+                        subscribe: state.subscribe,
+                      }),
+                    },
+                    NoopComponent,
+                  ),
+              );
+              entries.set(item.id, {
+                state,
+                name: item.name,
+                dispose: () => {
+                  navigation();
+                  group();
+                  menu();
+                },
+              });
+            }
+            const state = entries.get(item.id)!.state;
+            state.setStewardSessionIds(item.sessionIds);
+            if (item.state.stewardSessionId)
+              state.setStewardSessionId(item.state.stewardSessionId);
+            const tasks = await valueOf(
+              remote.listTasks({ stewardId: item.id, includeDone: true }),
+            );
+            if (!disposed)
+              state.setAdopted(tasks.map((task) => task.sessionId));
           }
-          state.setStewardSessionIds(ids);
-          state.setStewardSessionId(sessionId);
-          return sessionId;
-        });
-      const listTasks = (includeDone: boolean): Promise<StewardTask[]> => valueOf(remote.listTasks(includeDone));
-      // `listTasks(true)` (include done) so a task's session keeps its
-      // 大管家 group membership even after the task itself finishes — the
-      // managed set is about "did the steward ever adopt this session", not
-      // "is it still active".
-      const refreshAdopted = () =>
-        listTasks(true).then((tasks) => state.setAdopted(tasks.map((task) => task.sessionId))).catch(() => undefined);
-      const adopt = (sessionId: string): Promise<AdoptResult> =>
-        valueOf(remote.adopt({ sessionId })).then((result) => {
-          // `stewardMenuFace`'s `run` already adds `result.task.sessionId`
-          // to the local set optimistically; this refetches from the host
-          // so the set stays correct even if adopt routed to a
-          // different/existing session than the one that was clicked (see
-          // `AdoptResult`).
-          if (result.kind === "adopted") void refreshAdopted();
-          return result;
-        });
-      // Learn the steward id up front so the nav row can highlight and the
-      // header seats can tell the steward session apart before the first click.
-      void ensureStewardSession().catch(() => undefined);
-      void refreshAdopted();
-      // Task completion, and adoption from another client/window, don't
-      // notify this client — poll so the group set stays close to the
-      // host's truth without a push channel.
-      const refreshIntervalId = setInterval(() => { void refreshAdopted(); void ensureStewardSession().catch(() => undefined); }, REFRESH_INTERVAL_MS);
-
-      const disposeNavigation = injectedCtx.slots.inject("amiba.workspace.navigation", () =>
-        injectedCtx.slots.register(
-          {
-            name: "amiba.workspace.navigation",
-            id: NAV_ID,
-            order: 90,
-            label: copy,
-            inject: () => ({
-              state,
-              open: () => {
-                void ensureStewardSession()
-                  .then((id) => {
-                    injectedCtx.layout.openChat();
-                    openSession(id);
-                  })
-                  .catch(() => undefined);
-              },
-            }),
-          },
-          StewardNavigation as (props: PropsRuntime<"amiba.workspace.navigation">) => ReactNode,
-        ),
-      );
-      const settings = (input: import("../remote.js").ConversationSettingsInput) => valueOf(remote.conversationSettings(input));
+        })().finally(() => {
+          pending = undefined;
+        }));
+      const list = () => valueOf(remote.instances());
+      const save: import("./StewardDirectory.js").DirectoryProps["save"] =
+        async (input) => {
+          const row = await valueOf(remote.saveInstance(input));
+          await refresh();
+          return row;
+        };
+      const remove = async (id: string) => {
+        const result = await valueOf(remote.deleteInstance(id));
+        await refresh();
+        return result;
+      };
+      const settings: import("./StewardDirectory.js").DirectoryProps["settings"] =
+        (input) => valueOf(remote.conversationSettings(input));
       const disposeSettings = injectedCtx.slots.inject("settings.section", () =>
-        injectedCtx.slots.register({
-          name: "settings.section",
-          id: NAV_ID,
-          order: 290,
-          label: copy,
-          inject: () => ({ navIcon: () => <ConciergeBell /> }),
-        }, () => <StewardSettings settings={settings} openSession={(sessionId) => {
-          injectedCtx.layout.openChat();
-          openSession(sessionId);
-        }} />),
-      );
-      // Session list: group every session the steward has ever adopted into
-      // its own 「大管家」 section below the built-in recent-tasks section.
-      // `claim` reads
-      // `state.adoptedSessionIds()` live (see `stewardGroupFace` in
-      // `state.ts`), so `refreshAdopted()` above — at apply, after an
-      // adopt, and every `REFRESH_INTERVAL_MS` — is all that's needed to
-      // keep it current; the registered component itself is never rendered
-      // (see `NoopComponent`'s doc comment).
-      const disposeGroup = injectedCtx.slots.inject("amiba.sessions.list.group", () =>
         injectedCtx.slots.register(
           {
-            name: "amiba.sessions.list.group",
-            id: NAV_ID,
-            order: 50,
+            name: "settings.section",
+            id: "steward",
+            order: 290,
             label: copy,
-            inject: () => stewardGroupFace(state),
+            inject: () => ({ navIcon: () => <ConciergeBell /> }),
           },
-          NoopComponent,
+          () => (
+            <StewardDirectory
+              list={list}
+              save={save}
+              remove={remove}
+              open={open}
+              settings={settings}
+              openSession={(id) => {
+                injectedCtx.layout.openChat();
+                openSession(id);
+              }}
+            />
+          ),
         ),
       );
-      // Session row ⋯ menu: "交给大管家" on every ordinary, not-yet-adopted
-      // session. `stewardMenuFace` reads/writes the same `state` as the
-      // group above, so adopting from here flips that live too.
-      const disposeMenu = injectedCtx.slots.inject("amiba.sessions.item.menu", () =>
-        injectedCtx.slots.register(
-          {
-            name: "amiba.sessions.item.menu",
-            id: "steward-adopt",
-            order: 50,
-            label: adoptCopy,
-            inject: () => stewardMenuFace(state, { adopt, refreshAdopted }),
-          },
-          NoopComponent,
-        ),
-      );
-      // Chat bubble attribution: messages the steward dispatches carry
-      // `source.plugin === STEWARD_SOURCE` (see `service.ts`'s relay send),
-      // so the bubble shows "来自 大管家" instead of the raw plugin id. Purely
-      // declarative — no business face, see `amiba.message.source`'s doc
-      // comment in dsh-plugin-ui-shell.
-      const disposeMessageSource = injectedCtx.slots.inject("amiba.message.source", () =>
+      const source = injectedCtx.slots.inject("amiba.message.source", () =>
         injectedCtx.slots.register(
           {
             name: "amiba.message.source",
@@ -204,16 +252,23 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
           NoopComponent,
         ),
       );
+      const openEntry = (event: Event) => {
+        const id = (event as CustomEvent<{ id?: string }>).detail?.id;
+        if (id) void open(id).catch(console.error);
+      };
+      window.addEventListener("amiba:open-steward", openEntry);
+      void refresh().catch(console.error);
+      const interval = setInterval(() => {
+        void refresh().catch(console.error);
+      }, 5000);
       return () => {
+        window.removeEventListener("amiba:open-steward", openEntry);
         disposed = true;
-        clearInterval(refreshIntervalId);
-        disposeMessageSource();
-        disposeMenu();
-        disposeGroup();
-        disposeNavigation();
+        clearInterval(interval);
+        source();
         disposeSettings();
-        for (const dispose of hiddenSessions.values()) dispose();
-        hiddenSessions.clear();
+        for (const entry of entries.values()) entry.dispose();
+        for (const release of hidden.values()) release();
       };
     },
   );

@@ -2,7 +2,7 @@
   "name": "@amiba/dsh-plugin-steward",
   "version": "0.1.0",
   "private": true,
-  "description": "Amiba steward (\u5927\u7ba1\u5bb6): one hidden, always-live conversation that routes each user request to an existing or fresh task session and reports the reply back.",
+  "description": "Amiba steward (\u5927\u7ba1\u5bb6): independent user-defined stewards that route work to owned task sessions and report results.",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

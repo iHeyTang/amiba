@@ -9,6 +9,7 @@ import type { StewardClientState } from "./state.js";
 
 export type StewardNavigationProps = PropsRuntime<"amiba.workspace.navigation"> & {
   state: StewardClientState;
+  label?: string;
   open(): void;
 };
 
@@ -17,10 +18,11 @@ export function StewardNavigation({
   state,
   sessionActivity,
   open,
+  label: entryLabel,
 }: StewardNavigationProps): ReactNode {
   const { t } = usePluginT(stewardI18n);
   const stewardId = useSyncExternalStore(state.subscribe, state.stewardSessionId);
-  const label = t("steward.nav");
+  const label = entryLabel ?? t("steward.nav");
   return (
     <WorkspaceNavigationRow
       navigation={{ activeView, sessionActivity }}
