@@ -13,4 +13,3 @@ export const MARKDOWN_BODY_ID = '@deepseek-ai/dsh-client-ui-sidebar-documentprev
 export function markdownDefinition(title: () => string): DocumentPreviewDefinition {
   return { id: MARKDOWN_BODY_ID, extensions: ['md', 'markdown'], priority: 'builtin', title, loading: 'text-pages', wrap: false }
 }
-

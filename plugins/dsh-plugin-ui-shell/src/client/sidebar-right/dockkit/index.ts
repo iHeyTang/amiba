@@ -61,4 +61,3 @@ export type { IdMinter, TabFactory } from './engine/initial.js'
 
 // Outward contracts.
 export type { DockIntents, DockLabels, TabMenuExtras, TabRenderer } from './contract/adapter.js'
-

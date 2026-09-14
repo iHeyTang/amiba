@@ -23,4 +23,3 @@ export function page(offset: number, lines: readonly string[], eof: boolean, ver
 export function failure(code: string, details: Record<string, unknown> = {}): RemoteResult<WorkspaceFileText> {
   return { ok: false, error: { code, message: 'boom', details } as unknown as RemoteFailure }
 }
-

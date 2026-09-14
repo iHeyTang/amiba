@@ -13,4 +13,3 @@ export const PDF_BODY_ID = '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/p
 export function pdfBodyDefinition(title: () => string): DocumentPreviewDefinition {
   return { id: PDF_BODY_ID, extensions: ['pdf'], priority: 'builtin', title, loading: 'bytes-complete', wrap: false }
 }
-

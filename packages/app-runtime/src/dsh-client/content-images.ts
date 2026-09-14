@@ -36,4 +36,3 @@ function isImageReference(value: unknown): value is MessageImage["attachment"] {
   }
   return true
 }
-

@@ -70,4 +70,3 @@ export interface SidebarRightOpenTabOptions<K extends string = string> extends S
   /** That kind's navigation parameters, typed by kind; delivered as `navigation.params`. */
   readonly params?: SidebarRightTabParamsFor<K>
 }
-

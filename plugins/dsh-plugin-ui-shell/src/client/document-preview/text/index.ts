@@ -13,4 +13,3 @@ export const PLAIN_BODY_ID = '@deepseek-ai/dsh-client-ui-sidebar-documentpreview
 export function textBodyDefinition(title: () => string): DocumentPreviewDefinition {
   return { id: PLAIN_BODY_ID, extensions: [], priority: 'builtin', title, loading: 'text-pages', wrap: true }
 }
-
