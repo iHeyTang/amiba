@@ -148,7 +148,7 @@
 
 | 层次 | 当前实际状态 | 完整接入必须完成的工作 |
 | --- | --- | --- |
-| 附件存储 | 当前 dsh-attachment 0.1.1-rc.2 的公开类型只有图片存储；没有 FileAttachmentRef、admitEncodedFile、saveFileStream | 迁移官方文件引用、完整性校验及持久化实现，同时保留当前图片策略和原生附件存储 |
+| 附件存储 | rc.2 原包类型仍只有图片；现已由 Amiba Host 插件为旧服务实例补齐 saveFile、saveFileStream、readFileStream、fileHostPath、admitEncodedFile 和错误分类，真实 Host 验证通过 | 存储层已接入，使用独立 official-files/v1；仍需连接 receipt 授权、命令解析与浏览器输入，不代表完整文件上传已完成 |
 | 命令接收 | 当前 dsh-commands 0.1.1-rc.2 实际类没有 registerFileReceiptResolver；公开 execute 只接收编码图片，Invocation.attachments 为 ImageBlock[] | 迁移文件 receipt 解析、完整命令输入校验与文件块；不能只把图片回调参数改名 |
 | 上传与授权 | 受管 app 无法解析 dsh-client-file-upload（MODULE_NOT_FOUND）；新版 FileUploads 注入 commands、attachments、agents、connection | 注册上传服务及承载通道，按真实 Agent/Session 生成和解析 receipt；不能用原生 att_* ID 替代 |
 | 接收及回收 | 新版 FileUploads.bindPrompt 具有提交/回滚，队列移除和带 rpcId 的 user/message 会退休 receipt | 与真实接收确认、队列和历史观察接通，失败保留重试权限，不能提前释放 |

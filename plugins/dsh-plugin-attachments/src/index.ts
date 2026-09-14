@@ -9,6 +9,7 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 import { AmibaAttachmentStore } from "./attachment-store.js";
 import { applyAttachmentsRemote } from "./remote-service.js";
+import { installOfficialFileStorage } from "./official-file-storage/index.js";
 
 export * from "./attachment-store.js";
 export * from "./remote.js";
@@ -287,6 +288,11 @@ export function applyAttachments(ctx: Context, store: AmibaAttachmentStore): voi
 }
 
 export function apply(ctx: Context, config: Config): void {
+  ctx.inject(["attachments"], (scope) => {
+    const service = scope.get("attachments");
+    if (!service) return;
+    scope.effect(() => installOfficialFileStorage(service, join(config.root, "official-files", "v1")), "official file storage compatibility");
+  });
   const store = new AmibaAttachmentStore(config.root);
   applyAttachmentsRemote(ctx, store);
   applyAttachments(ctx, store);

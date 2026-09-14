@@ -2216,3 +2216,18 @@ OfficialTriggerPlugin 订阅公开词表，以编辑器所在窗口的 CSS Custo
 另发现固定 c291e796 的文件上传 commit 明确拒绝 origin=subagent（SUBAGENT_FILE_UNSUPPORTED），已与普通根会话尚未迁移分开。没有借此缩小整体兼容目标，也没有改变 Amiba 原有子会话附件能力。
 
 修正新版声明 attachments:true 的命令遇到普通文件时的提示：说明当前运行时尚未接入，而不是错误声称命令仅接受图片。旧命令诊断保留，仍在读取文件前拒绝，原有失败保留链路不变。9 项 command-attachments 测试通过，涵盖新版文件诊断和拒绝时不读取字节。本次仅诊断文案及证据更新，没有重复完整构建或桌面回归。
+
+
+## 2026-09-14 — 官方文件存储能力接入现有 Host 服务
+
+在 dsh-plugin-attachments 内迁入固定 c291e796 的 file-store 和不可变文件发布部分，以及结构化附件错误；保留 DeepSeek MIT 许可证。新文件以 sha256 引用，保存原始字节、清理文件名、流式写入和读取、校验摘要与长度，支持空文件和规范 base64。通过 Cordis attachments 注入，只为没有文件接口的旧服务实例添加文件方法，已有后端不覆盖；原图片服务和 att_* 存储不替换。文件根目录是原插件配置下的 official-files/v1。
+
+卸载按原始属性描述符识别自己添加的方法；Cordis 每次读取会包装函数，不能比较读取到的函数身份。真实 Cordis 服务作用域测试和后续替换不被删除的测试均通过。此处只连接存储，尚未创建 receipt 或开放普通文件命令输入。
+
+运行时打包器修复了根许可证文件的遗漏：复制 package.files 声明的 LICENSE/NOTICE，纳入源摘要和产物存在性校验，复用安装时移除旧声明残留。受管安装中的 LICENSE.deepseek 已与源文件逐字节比较一致。
+
+验证：11 项文件存储、Cordis 清理及原生文字/PDF/附件测试通过；插件 typecheck、架构检查、runtime:prepare 和 runtime:verify 通过。真实 Desktop --compat --input-state --command-images exit 0：ctx.attachments 保存二进制、分块写入同内容并去重、读回原字节，同时实际调用旧图片 saveImage/readImage 成功；新旧图片命令、原输入卡片样式与尺寸和混合粘贴同轮通过。没有重建桌面前端。日志 /tmp/amiba-official-file-store-{tests,types,architecture,build,verify,smoke}.log。
+
+验证中发现并修正：Cordis 包装方法导致旧清理判断失效；安装目录遗漏根许可证。Host 图片探针最初使用损坏 PNG，被严格后端正确拒绝，改用已有持久图片测试的有效 PNG 后通过，未放宽生产解码校验。
+
+下一步仍是命令 receipt 解析、上传授权及生命周期，再连接浏览器普通文件；原 64 插槽和相关服务总体目标不变。
