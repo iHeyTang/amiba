@@ -122,6 +122,7 @@ export const en = {
   "workspacePane.copyPath": "Copy path",
   "workspacePane.revealFile": "Reveal in Finder",
   "workspacePane.openExternal": "Open with default app",
+  "workspacePane.openInDefaultBrowser": "Open in default browser",
   "workspacePane.expandFile": "Expand file",
   "workspacePane.collapseFile": "Collapse file",
   "workspacePane.expandAll": "Expand all",

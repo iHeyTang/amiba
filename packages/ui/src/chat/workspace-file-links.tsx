@@ -1,6 +1,7 @@
 import { ChatMarkdown } from "@amiba/markdown";
 import type { TextSourceRange } from "./text-source-ranges";
 import { useT } from "@amiba/i18n";
+import { ExternalLink } from "lucide-react";
 import {
   createContext,
   useContext,
@@ -32,6 +33,48 @@ export type WorkspaceFileOpener = (
 export const WorkspaceFileOpenerContext = createContext<
   WorkspaceFileOpener | undefined
 >(undefined);
+
+export const WorkspaceUrlOpenerContext = createContext<{
+  open(url: string): void;
+  openExternal(url: string): void;
+} | undefined>(undefined);
+
+export function WorkspaceMarkdownLink({
+  href, children, node: _node, onClick, ...props
+}: ComponentProps<"a"> & { node?: unknown }) {
+  const opener = useContext(WorkspaceUrlOpenerContext);
+  const { t } = useT();
+  const reference = parseReferenceHref(href);
+  if (reference) {
+    return <ReferenceButton source={reference.source} reference={reference.ref}>{children}</ReferenceButton>;
+  }
+  if (!opener || !href || !/^https?:\/\//i.test(href)) {
+    return <a href={href} onClick={onClick} {...props}>{children}</a>;
+  }
+  return (
+    <>
+      <a {...props} href={href} onClick={(event) => {
+        onClick?.(event);
+        if (event.defaultPrevented) return;
+        event.preventDefault();
+        event.stopPropagation();
+        opener.open(href);
+      }}>{children}</a>
+      <button
+        type="button"
+        className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded align-text-bottom text-muted-foreground hover:bg-muted/45 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        title={t("workspacePane.openInDefaultBrowser")}
+        aria-label={t("workspacePane.openInDefaultBrowser")}
+        onClick={(event) => {
+          event.stopPropagation();
+          opener.openExternal(href);
+        }}
+      >
+        <ExternalLink className="h-3 w-3" aria-hidden="true" />
+      </button>
+    </>
+  );
+}
 
 export function useWorkspaceFileOpener(): WorkspaceFileOpener | undefined {
   return useContext(WorkspaceFileOpenerContext);
@@ -194,8 +237,5 @@ export function WorkspaceInlineCode({
 /** Pass to every chat `<Streamdown components>` so paths link uniformly. */
 export const chatMarkdownComponents: Components = {
   inlineCode: WorkspaceInlineCode,
-  a: ({ href, children, node: _node, ...props }) => {
-    const ref = parseReferenceHref(href);
-    return ref ? <ReferenceButton source={ref.source} reference={ref.ref}>{children}</ReferenceButton> : <a href={href} {...props}>{children}</a>;
-  },
+  a: WorkspaceMarkdownLink,
 };

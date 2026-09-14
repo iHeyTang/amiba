@@ -236,7 +236,12 @@ export function CookieImportPanel({
           >
             {t(running ? "running" : result ? resultTitle : "title")}
           </h2>
-          <p className="mx-auto mt-2 max-w-xs text-xs leading-6 text-muted-foreground">
+          <p
+            className={
+              "mx-auto mt-2 text-xs leading-6 text-muted-foreground " +
+              (running ? "whitespace-pre-line text-balance" : "max-w-xs")
+            }
+          >
             {t(
               running
                 ? "runningHint"
