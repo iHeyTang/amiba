@@ -9,7 +9,8 @@ import { createDevelopmentProfile, managedDshEnvironment, resolveManagedDshRunti
 
 const workspace = fileURLToPath(new URL("../../../", import.meta.url));
 const runtimeDir = resolveManagedDshRuntimeDir({ env: process.env });
-const sandbox = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), "amiba-dev-profile-")));
+// Spaces and URL fragment characters also require URL encoding for --import.
+const sandbox = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), "amiba dev # profile-")));
 const base = resolveManagedDshRuntimePaths({ surface: "desktop", home: path.join(sandbox, "home"), runtimeDir });
 const project = path.join(sandbox, "dsh-plugin-probe");
 const events = path.join(sandbox, "events.jsonl");
@@ -46,11 +47,11 @@ try {
     plugin.Remote(service.ping, {name:'ping', addInitializer(fn) { fn.call(service); }});
     assert.equal(gateway.remoteMethods(service)[0]?.method, 'ping');
   `;
-  execFileSync(base.node, ['--import', profile.preload, '--input-type=module', '--eval', identityProbe]);
+  execFileSync(base.node, ['--import', pathToFileURL(profile.preload).href, '--input-type=module', '--eval', identityProbe]);
 
   assert.equal(await fs.readFile(base.profileManifest, "utf8"), original);
   assert.equal(await fs.realpath(path.join(profile.paths.profileDir, "node_modules/dsh-plugin-probe")), project);
-  child = spawn(base.node, ["--import", profile.preload, base.entrypoint, "--profile", profile.paths.profileName, "--patch", profile.overlay], {
+  child = spawn(base.node, ["--import", pathToFileURL(profile.preload).href, base.entrypoint, "--profile", profile.paths.profileName, "--patch", profile.overlay], {
     env: { ...managedDshEnvironment(base), DSH_TELEMETRY_DISABLED: "1", PROBE_EVENTS: events }, stdio: ["ignore", "pipe", "pipe"],
   });
   child.stdout.on("data", chunk => logs += chunk);

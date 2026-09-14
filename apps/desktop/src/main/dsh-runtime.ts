@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto"
 import { existsSync } from "node:fs"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 import { app } from "electron"
 import { DshApiClient } from "@amiba/app-runtime/dsh-client"
 import type { AgentRuntimeLogEntry, AgentRuntimeLogLevel } from "@amiba/app-runtime/platform"
@@ -263,7 +264,7 @@ export class DshRuntimeController {
     const child = spawn(
       launch.node,
       [
-        ...(developmentProfile ? ["--import", developmentProfile.preload] : []),
+        ...(developmentProfile ? ["--import", pathToFileURL(developmentProfile.preload).href] : []),
         launch.entrypoint,
         "--profile",
         managed.profileName,
