@@ -793,6 +793,7 @@ try {
       assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)===undefined"),true);
       await evaluate("window.__offscreenInput=window.__probeCtx.composerInputs.inputStateSource(window.__compatSessionId);window.__offscreenSeen=[];window.__offscreenOff=window.__offscreenInput.subscribe(()=>window.__offscreenSeen.push(window.__offscreenInput.getSnapshot()));window.__offscreenBefore=window.__offscreenInput.getSnapshot();void 0");
       assert.deepEqual(await evaluate("({phase:window.__offscreenBefore.phase,images:window.__offscreenBefore.imageIds,refs:window.__offscreenBefore.occurrences.length})"),{phase:'plain',images:[],refs:1});
+      assert.equal(await evaluate("window.__offscreenBefore.occurrences[0].occurrenceId"), originalDraft.occurrences[0].occurrenceId, "unchanged reference must retain its ID when the editor unmounts");
       originalDraft={...originalDraft,draft:originalDraft.draft+' OFFSCREEN_APPEND😀'};
       await evaluate(`window.__residentInputActions.setDraft(${JSON.stringify(originalDraft.draft)});void 0`);
       assert.equal(await evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(otherId)}).draft`),"");
@@ -805,6 +806,7 @@ try {
       await wait(() => evaluate(`window.__probeCtx.composerInputs.inputDraftFor(${JSON.stringify(originalId)})?.draft===${JSON.stringify(originalDraft.draft)}`));
       const reboundDraft = await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId)");
       assert.ok(reboundDraft.draftRev > originalDraft.draftRev, "public draft revision must advance across a session revisit");
+      assert.equal(reboundDraft.occurrences[0].occurrenceId, originalDraft.occurrences[0].occurrenceId, "resident reference must retain its ID when the editor remounts");
       assert.equal(await evaluate(`window.__probeCtx.composerInputs.setInputDraft(${JSON.stringify(originalId)},'COMPAT_STALE_REVISION',${originalDraft.draftRev})`),false);
       assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor(window.__compatSessionId).draft"),originalDraft.draft);
       await evaluate("window.__draftReferenceOff();window.__residentDraftBoot=true;void 0");

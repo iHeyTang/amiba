@@ -2051,3 +2051,12 @@ keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入�
 真实桌面回归覆盖第 58 项：在 A 会话打开菜单并保存 owner/dismiss，切到 B 后旧菜单自动移除；B 的同类型标签菜单收到 B 的 sessionId 和真实 tab。重复调用旧 A dismiss，等待两帧后 B 菜单仍可操作；正常关闭 B 菜单并返回 A，没有过期菜单残留。
 
 初次测试错误要求标签 ID 跨会话唯一，实测失败；store 的计数器明确是每个 surface 独立生成，故按 sessionId 与 tabId 联合核对身份，未修改产品 ID 语义。修正后的完整 `--compat --sidebar-right` 桌面回归退出 0，日志 `/tmp/amiba-sidebar-menu-session-smoke-2.log`。本次只增加测试与验证记录，没有改产品能力或样式；独立 Web 仍待验证。
+
+
+#### 引用身份在未改动投影交接时保留
+
+发现并修复 input-draft-binding 每次重建都分配全新 occurrenceId 的问题。会话级 cursor 现在保留最后的公开快照；新编辑器或离屏绑定的草稿及全部引用投影完全一致时，按出现位置承接原 ID。同名重复引用仍各有自己的 ID。绑定内部仍以原 NodeKey/局部 ID 为准，删除再创建不复用旧 ID；来源、引用、标签或剪贴板内容变化不套用旧身份。公开 draftRev 继续前进，旧 CAS 写入仍拒绝。
+
+新增测试先复现交接 ID 变化，再通过修复；输入绑定、桥接和标准提供者共 47 项测试通过，插件类型检查通过。完整桌面构建及 `--compat --resident-draft` 回归退出 0，实测前台到离屏、离屏追加普通文字再恢复编辑器的 occurrenceId 不变，旧版本写入拒绝、原草稿和其他会话仍保留。日志 `/tmp/amiba-reference-handoff-tests-2.log`、`/tmp/amiba-reference-handoff-types-2.log`、`/tmp/amiba-reference-handoff-build.log`、`/tmp/amiba-reference-handoff-smoke.log`。
+
+本次没有修改输入器、序列化格式或样式。交接投影不同情况下的部分引用连续性、跨重启 occurrenceId、离屏重复引用的精确删除/撤销身份仍需进一步适配；不能据本次验证宣称引用全语义兼容。

@@ -6,6 +6,8 @@ type Draft = ReturnType<NonNullable<TriggerEditorOps["readInputDraft"]>>;
 export interface InputDraftCursor {
   revision: number;
   occurrence: number;
+  /** Last public projection, shared only within this session. */
+  snapshot?: Draft;
 }
 
 export function bindInputDraft(ops: TriggerEditorOps, cursor: InputDraftCursor) {
@@ -20,14 +22,30 @@ export function bindInputDraft(ops: TriggerEditorOps, cursor: InputDraftCursor) 
     offset ??= Math.max(0, cursor.revision + 1 - local.draftRev);
     const draftRev = local.draftRev + offset;
     cursor.revision = Math.max(cursor.revision, draftRev);
-    const occurrences = local.occurrences.map(occurrence => {
+    // Only transfer identity at a binding boundary with an exactly unchanged
+    // projection. During a binding, NodeKey/local IDs remain authoritative:
+    // deleting and recreating an identical chip must still produce a new ID.
+    const handoff = previous === undefined ? cursor.snapshot : undefined;
+    const sameProjection = handoff?.draft === local.draft &&
+      handoff.occurrences.length === local.occurrences.length &&
+      local.occurrences.every((item, index) => {
+        const old = handoff.occurrences[index];
+        return old.source === item.source && old.ref === item.ref &&
+          old.offset === item.offset && old.length === item.length &&
+          old.label === item.label && old.clipboardText === item.clipboardText;
+      });
+    const occurrences = local.occurrences.map((occurrence, index) => {
       let id = ids.get(occurrence.occurrenceId);
-      if (id === undefined) { id = ++cursor.occurrence; ids.set(occurrence.occurrenceId, id); }
+      if (id === undefined) {
+        id = sameProjection ? handoff!.occurrences[index].occurrenceId : ++cursor.occurrence;
+        ids.set(occurrence.occurrenceId, id);
+      }
       return id === occurrence.occurrenceId ? occurrence : Object.freeze({ ...occurrence, occurrenceId: id });
     });
     previous = local;
     snapshot = draftRev === local.draftRev && occurrences.every((item, index) => item === local.occurrences[index])
       ? local : Object.freeze({ ...local, draftRev, occurrences: Object.freeze(occurrences) });
+    cursor.snapshot = snapshot;
     return snapshot;
   };
   // Reserve this binding's revision even without any current subscribers.
