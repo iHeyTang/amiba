@@ -311,3 +311,35 @@ it("keeps the replacement owner's resident watch and releases stale owner watche
   expect(source.getSnapshot()).toBe("replacement resident draft");
   provider.dispose();provider.dispose();expect(watches).toBe(0);
 });
+
+it("retains the resident draft, history and pause on queue persistence failure and admits retry once", async () => {
+  let rejectSave!: (error: Error) => void;
+  const storage = { get: async () => ({}), set: vi.fn(() => new Promise<void>((_resolve, reject) => { rejectSave = reject; })), remove: async () => {}, watch: () => () => {} };
+  const source = createComposerDraftSource(), queue = sessionPendingQueue(storage, "a");
+  queue.setPaused(true);
+  const { bridge, actions, provider } = fixture(() => source, () => queue);
+  const action = actions("a");
+  const send = vi.fn(async () => ({ kind: "accepted" as const }));
+  bridge.bindResidentTurnSender!(send, () => true);
+  action.setDraft("retain until durable");
+  action.submit(); action.submit();
+  await vi.waitFor(() => expect(storage.set).toHaveBeenCalledOnce());
+  expect(source.getSnapshot()).toBe("retain until durable");
+  expect(source.getHistoryVersion()).toBe(0);
+  expect(queue.getSnapshot()).toEqual([]);
+  rejectSave(new Error("disk full"));
+  await vi.waitFor(() => expect(bridge.inputSubmissionSource!("a").getSnapshot().pending).toBe(false));
+  expect(source.getSnapshot()).toBe("retain until durable");
+  expect(source.getHistoryVersion()).toBe(0);
+  expect(queue.getSnapshot()).toEqual([]);
+  expect(queue.isPaused()).toBe(true);
+  expect(bridge.inputSubmissionSource!("a").getSnapshot().notice).toContain("disk full");
+  storage.set.mockImplementation(async () => {});
+  action.submit();
+  await vi.waitFor(() => expect(source.getSnapshot()).toBe(""));
+  expect(source.getHistoryVersion()).toBe(1);
+  expect(queue.getSnapshot()).toHaveLength(1);
+  expect(queue.isPaused()).toBe(false);
+  expect(send).not.toHaveBeenCalled();
+  provider.dispose();
+});

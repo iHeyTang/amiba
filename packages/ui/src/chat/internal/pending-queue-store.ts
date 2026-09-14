@@ -20,6 +20,7 @@ export function createPendingQueueSource(storage: StorageAdapter, sessionId: str
   // Runtime control belongs to the session too. It is deliberately separate
   // from the persisted row format and does not arm a queue after a restart.
   let paused = false;
+  let pauseVersion = 0;
   let notice: string | null = null;
   let loaded = false, revision = 0, generation = 0, pendingWrites = 0;
   let loading: Promise<void> | undefined;
@@ -40,15 +41,18 @@ export function createPendingQueueSource(storage: StorageAdapter, sessionId: str
     snapshot = next;
     notify();
   };
-  const persist = () => {
-    const value = snapshot;
+  const write = (operation: () => Promise<void>) => {
     pendingWrites++;
-    const write = writes.catch(() => {}).then(() => value.length ? storage.set({ [key]: value }) : storage.remove(key));
-    writes = write.finally(() => { pendingWrites--; });
+    const task = writes.catch(() => {}).then(operation);
+    writes = task.finally(() => { pendingWrites--; });
     // Native synchronous mutations remain fire-and-forget. Explicit callers
     // can await flush() and must retain their draft on a persistence failure.
     void writes.catch(error => console.warn("[pending-queue] save failed", error));
+    return writes;
   };
+  // Read at execution time so writes queued during an admission include its
+  // committed row instead of subsequently overwriting it with an older snapshot.
+  const persist = () => write(() => snapshot.length ? storage.set({ [key]: snapshot }) : storage.remove(key));
   const apply = (base: PendingChatTurn[], change: Change) => {
     if ("replace" in change) return change.replace;
     const next = base.filter(row => !change.removed.has(row.queueId)).map(row => change.changed.get(row.queueId) ?? row);
@@ -83,6 +87,7 @@ export function createPendingQueueSource(storage: StorageAdapter, sessionId: str
       notify();
     },
     setPaused(value: boolean) {
+      pauseVersion++;
       if (paused === value && (value || notice === null)) return;
       paused = value;
       if (!value) notice = null;
@@ -90,6 +95,24 @@ export function createPendingQueueSource(storage: StorageAdapter, sessionId: str
     },
     ready: () => load(),
     flush: async () => { await load(); await writes; },
+    async appendPersisted(row: PendingChatTurn, options?: { resume?: boolean }): Promise<void> {
+      const previousPauseVersion = pauseVersion;
+      await load();
+      await write(async () => {
+        if (snapshot.some(item => item.queueId === row.queueId)) throw new Error("Queue item already exists");
+        await storage.set({ [key]: [...snapshot, row] });
+        // A Stop pressed during persistence wins over this older submission.
+        if (options?.resume && pauseVersion === previousPauseVersion) {
+          pauseVersion++;
+          paused = false;
+          notice = null;
+        }
+        // Native synchronous edits may have landed during the storage await.
+        // Merge with that current snapshot; their queued writes run after us.
+        revision++;
+        publish([...snapshot, row]);
+      });
+    },
     update(action: Update) {
       const previous = snapshot;
       const next = typeof action === "function" ? action(previous) : action;

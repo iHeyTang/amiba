@@ -316,12 +316,11 @@ export function createInputTriggerBridge(
           request.signal?.throwIfAborted();
           request.onDispatch?.(id);
           const queueId = shortId("q");
-          queue.update(previous => [...previous, { queueId, text: request.text, draft: request.draft,
-            attachments: request.attachments.map(attachment => ({ ...attachment })) }]);
+          await queue.appendPersisted({ queueId, text: request.text, draft: request.draft,
+            attachments: request.attachments.map(attachment => ({ ...attachment })) }, { resume: true });
           // The existing native queue now owns these files. Browser registry
           // consumption must not delete bytes needed for queue edit or send.
           for (const image of images) imageStaging.transfer(image);
-          queue.setPaused(false);
           return { queueId };
         },
         controller: () => bridge.controllerFor(id), providers: () => deps.mentionProviders?.(id) ?? [],

@@ -1339,6 +1339,16 @@ try {
         await wait(() => evaluate("!!window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child') && document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Edit]').length===2"));
         assert.equal(await evaluate("window.__probeCtx.composerInputs.isSessionRunning('compat-continuable-child')"), false);
         assert.equal((await evaluate("window.amiba.agentDiagnostics.logs({search:'AMIBA_PROBE_LITERAL_INPUT'})")).entries.some(entry => entry.message.includes(JSON.stringify(expected))), false);
+        const queueHistoryModifier = await evaluate("/Mac/.test(navigator.platform) ? 4 : 2");
+        for (const redo of [false, true]) {
+          await evaluate("document.querySelector('[data-auto-grow-editor]').focus()");
+          await call('Input.dispatchKeyEvent',{type:'keyDown',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:queueHistoryModifier+(redo?8:0)});
+          await call('Input.dispatchKeyEvent',{type:'keyUp',key:'z',code:'KeyZ',windowsVirtualKeyCode:90,modifiers:queueHistoryModifier+(redo?8:0)});
+          await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+          assert.equal(await evaluate("window.__probeCtx.composerInputs.inputDraftFor('compat-continuable-child').draft"), "", "durably queued input must not return through undo or redo");
+          assert.equal((await readQueue()).length, 2);
+        }
+        console.log("Persisted offscreen queue admissions consumed prior input history across navigation; undo/redo left both queued rows intact.");
         // rc.2 child model input does not support images. Exercise original
         // queue deletion for that row, then send the supported text row.
         await evaluate("document.querySelectorAll('[data-composer-context-rail] ul button[aria-label=Delete]')[1].click();void 0");

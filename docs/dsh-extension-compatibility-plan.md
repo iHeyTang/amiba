@@ -2151,3 +2151,13 @@ keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入�
 最终真实 --compat --resident-draft --input-state --command-images 退出 0：图片命令完成后原生键盘 undo/redo 仍为空；会话切换引用历史、输入状态四阶段、混合文件文字粘贴、原控件样式和卸载回退等既有回归同时通过。日志 /tmp/amiba-send-history-regression-3.log、/tmp/amiba-send-history-provider-tests.log、/tmp/amiba-send-history-types-2.log、/tmp/amiba-send-history-plugin-types-2.log、/tmp/amiba-send-history-architecture-final.log、/tmp/amiba-send-history-build-3.log、/tmp/amiba-send-history-smoke.log。
 
 尚未覆盖原生普通发送和所有队列交接的成功边界，未将它们统一改成消费操作；完整后台编辑历史合并、跨重启和跨窗口历史仍待适配。本轮没有改变原输入框及附件栏的样式。
+
+#### 后台排队持久化确认与收尾管理
+
+核对发现 bridge 的 enqueue 原先只等待 queue.ready()，追加后立即返回，从而可能在存储失败前消费草稿和历史。新增 appendPersisted：新条目在写入成功后才发布给可发送队列，失败不发布。与原生同步编辑共用写入串行链，后续写入在执行时读取当前快照，避免覆盖等待期间已确认的新条目；写入成功后合并等待期间的原生编辑。后台入口在确认后才转移图片文件所有权、返回消费成功。原生同步队列入口保持原有行为，尚未统一改造。
+
+恢复队列暂停状态与此次 admission 一起处理；通过暂停操作版本保留等待期间新按下的 Stop，即使此前已暂停、再次 Stop，也不被旧提交解除暂停。失败保留原暂停状态。
+
+52 项队列存储/原生操作/后台事务测试和 40 项桥接/提供者测试通过，涵盖延迟及失败写入、失败后一次重试、并发 admission、保存期间原生编辑、保存期间 Stop；前端/插件类型、架构检查及完整桌面构建通过。真实 --compat --child-continuation --resident-queue 退出 0，验证两条后台持久队列、图片所有权、会话返回后 undo/redo 不复活已入队草稿且两条队列不变，原 Stop/Edit/Delete/Send now 行为继续通过。日志 /tmp/amiba-queue-admission-tests-2.log、/tmp/amiba-queue-admission-provider-tests.log、/tmp/amiba-queue-admission-types.log、/tmp/amiba-queue-admission-plugin-types.log、/tmp/amiba-queue-admission-architecture.log、/tmp/amiba-queue-admission-build.log、/tmp/amiba-queue-admission-smoke-2.log。首轮脚本将新断言放在返回目标会话之前，访问未挂载输入失败；移到正确阶段后复用构建重跑通过，未修改产品以绕过该错误。
+
+普通发送仍调用无接收确认的 client.submit，不能把该调用返回等同于成功确认；其确认边界及全部队列/历史协调仍待完成。根据用户反馈新增 dsh-extension-closeout.zh-CN.md，统一按功能组收尾，减少零散阶段和重复完整构建，不改变原 64 项目标及保留现有能力/样式的要求。

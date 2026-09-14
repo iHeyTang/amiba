@@ -126,3 +126,54 @@ it("keeps an admitted queue when a subscription refresh overlaps its own pending
   expect(source.getSnapshot()).toEqual([row("admitted")]);
   off();
 });
+
+it("publishes an admitted row only after storage succeeds, retaining concurrent native edits", async () => {
+  const { storage, values } = storageFixture();
+  const source = createPendingQueueSource(storage, "a");
+  await source.ready();
+  let finish!: () => void;
+  vi.mocked(storage.set).mockImplementationOnce(patch => new Promise(resolve => { finish = () => { Object.assign(values, patch); resolve(); }; }));
+  const pending = source.appendPersisted(row("official"));
+  await vi.waitFor(() => expect(storage.set).toHaveBeenCalledTimes(1));
+  expect(source.getSnapshot()).toEqual([]);
+  source.update(previous => [...previous, row("native")]);
+  finish();
+  await pending;
+  await source.flush();
+  expect(source.getSnapshot()).toEqual([row("native"), row("official")]);
+  expect(values["pendingQueue:a"]).toEqual(source.getSnapshot());
+});
+
+it("does not publish a failed admission or block a later retry", async () => {
+  const { storage, values } = storageFixture();
+  const source = createPendingQueueSource(storage, "a");
+  vi.mocked(storage.set).mockRejectedValueOnce(new Error("disk full"));
+  await expect(source.appendPersisted(row("failed"))).rejects.toThrow("disk full");
+  expect(source.getSnapshot()).toEqual([]);
+  await source.appendPersisted(row("retry"));
+  expect(source.getSnapshot()).toEqual([row("retry")]);
+  expect(values["pendingQueue:a"]).toEqual(source.getSnapshot());
+});
+
+it("serializes concurrent admissions without losing either row", async () => {
+  const { storage, values } = storageFixture();
+  const source = createPendingQueueSource(storage, "a");
+  await Promise.all([source.appendPersisted(row("one")), source.appendPersisted(row("two"))]);
+  expect(source.getSnapshot()).toEqual([row("one"), row("two")]);
+  expect(values["pendingQueue:a"]).toEqual(source.getSnapshot());
+});
+
+it("preserves Stop pressed while a resume admission is being saved", async () => {
+  const { storage } = storageFixture();
+  const source = createPendingQueueSource(storage, "a");
+  source.setPaused(true);
+  let finish!: () => void;
+  vi.mocked(storage.set).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const pending = source.appendPersisted(row("official"), { resume: true });
+  await vi.waitFor(() => expect(storage.set).toHaveBeenCalled());
+  source.setPaused(true); // Another explicit Stop, even though already paused.
+  finish(); await pending;
+  expect(source.isPaused()).toBe(true);
+  await source.appendPersisted(row("later"), { resume: true });
+  expect(source.isPaused()).toBe(false);
+});
