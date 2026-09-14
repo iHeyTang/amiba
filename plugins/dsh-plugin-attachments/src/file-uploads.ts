@@ -2,6 +2,7 @@
 // HTTP/browser transport is wired separately from this Host authority.
 /** Host file-upload service: streamed intake and Agent-scoped staged receipts. */
 
+import { FILE_UPLOAD_HOST } from './file-upload-remote.js'
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -9,7 +10,7 @@ import type { FileAttachmentRef } from './official-file-storage/types.js'
 import type { createOfficialFileStorage } from './official-file-storage/index.js'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
-import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { Remote, TypertLookupFailure, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 interface EncodedFileUploadRequest { data: string; name?: string }
 export type FileUploadReceiptId = string;
 export interface FileUploadValue { receiptId: FileUploadReceiptId; file: FileAttachmentRef }
@@ -72,6 +73,12 @@ export class FileUploads extends TypertRemoteService {
     super(ctx, 'fileUploads')
     ctx.on('session/event', (session, event) => { this.observeSessionEvent(session, event) })
     ctx.on('session/disposed', (session) => { this.stagedFiles.delete(session) })
+    ctx.inject(['typert'], scope => {
+      const registry = scope.get('typert')
+      if (!registry || !('register' in registry) || typeof registry.register !== 'function') throw new Error('File upload requires the Host Typert registry')
+      const register = registry.register.bind(registry)
+      scope.effect(() => register(FILE_UPLOAD_HOST), 'file upload remote contract')
+    })
     ctx.inject(['commands'], scope => {
       const commands = scope.get('commands') as { registerFileReceiptResolver?: (resolve: (agent: Agent, receiptId: string) => FileAttachmentRef | undefined) => () => void } | undefined
       if (typeof commands?.registerFileReceiptResolver !== 'function') return
@@ -99,6 +106,14 @@ export class FileUploads extends TypertRemoteService {
    * @param signal - caller cancellation before storage begins.
    * @returns the staged receipt and durable file reference.
    */
+  async uploadRemote(agent: Agent, request: EncodedFileUploadRequest, signal: AbortSignal): Promise<FileUploadValue> {
+    try { return await this.upload(agent, request, signal) }
+    catch (error) {
+      if (error instanceof FileUploadError) throw new TypertLookupFailure({code:error.code,message:error.message,details:error.data})
+      throw error
+    }
+  }
+
   @Remote('upload')
   upload(agent: Agent, request: EncodedFileUploadRequest, signal: AbortSignal): Promise<FileUploadValue> {
     signal.throwIfAborted()

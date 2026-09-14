@@ -962,6 +962,18 @@ try {
       assert.equal(newerFileResult.ok,true);
       assert.equal(newerFileResult.value.result.text,'COMPAT_FILE_RECEIPT_OK');
       console.log('Official remote command admitted the uploaded file receipt and rejected an unknown receipt.');
+      await evaluate("window.__probeCtx.inject(['fileUpload'],ctx=>{window.__compatFileUpload=ctx.fileUpload;});true");
+      await wait(()=>evaluate("!!window.__compatFileUpload"));
+      const browserUpload=await evaluate(`window.__compatFileUpload.upload(${JSON.stringify(commandSessionId)},new Blob([new Uint8Array([0,255,42,128,7])]),'command.bin')`);
+      assert.equal(browserUpload.ok,true);
+      assert.notEqual(browserUpload.value.receiptId,commandReceiptId);
+      assert.equal(browserUpload.value.file.attachmentId,fileStorageResult.ref.attachmentId);
+      const browserFileCommand=await evaluate(`window.__probeCtx.remote.commands.execute(${JSON.stringify(commandSessionId)},'/compat-file-receipt',[{type:'file',receiptId:${JSON.stringify(browserUpload.value.receiptId)}}])`);
+      assert.equal(browserFileCommand.ok,true);assert.equal(browserFileCommand.value.result.text,'COMPAT_FILE_RECEIPT_OK');
+      const abortedUpload=await evaluate(`(async()=>{const abort=new AbortController();abort.abort();try{await window.__compatFileUpload.upload(${JSON.stringify(commandSessionId)},new Uint8Array([1]),'cancel.bin',abort.signal);return false;}catch(error){return error.name==='AbortError';}})()`);
+      assert.equal(abortedUpload,true);
+      console.log('Browser Blob upload returned a real session receipt, executed through the official command, and honored cancellation.');
+
 
       // Hot lexicons decorate native text without creating reference objects or history edits.
       await evaluate("window.__officialInputActions.setDraft('/compatlexicon');void 0");

@@ -102,3 +102,9 @@ it('releases a cold-session resolver registered through the Cordis service facad
   const off = scoped.registerAgentResolver(async id => agent(id)); off();
   const next = scoped.registerAgentResolver(async id => agent(id)); next();
 });
+
+it('maps upload failures to the rc.2 typed Remote failure carrier', async () => {
+  const { uploads, agent } = await fixture();
+  await expect(uploads.uploadRemote(agent('root'),{data:'???'},signal())).rejects.toMatchObject({failure:{code:'session/attachment-invalid',details:{reason:'INVALID_FILE_BASE64'}}});
+  await expect(uploads.uploadRemote(agent('child','subagent'),{data:'AQ=='},signal())).rejects.toMatchObject({failure:{code:'subagent/attachment-invalid',details:{reason:'SUBAGENT_FILE_UNSUPPORTED'}}});
+});

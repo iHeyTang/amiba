@@ -62,7 +62,8 @@
       "external": [
         "react",
         "react-dom",
-        "react/jsx-runtime"
+        "react/jsx-runtime",
+        "@deepseek-ai/cordis"
       ],
       "inject": [
         "@deepseek-ai/dsh-client-runtime"

@@ -2250,3 +2250,13 @@ OfficialTriggerPlugin 订阅公开词表，以编辑器所在窗口的 CSS Custo
 - 证据：命令 11 项、附件 17 项测试通过，包含实际浏览器发布包加载和解析；类型、架构、runtime prepare/verify 通过。真实 Desktop --compat --input-state --command-images 验证旧客户端、新版 HTTP 字段传入真实上传文件并执行，未知凭据拒绝，新旧图片命令和混合粘贴等原能力通过。
 - 仍未完成：浏览器文件上传承载、输入器普通文件注册/调用/成功消费、模型文件提交及队列接收绑定；上述命令成功不能替代这些证据。
 - 日志：/tmp/amiba-file-commands-{tests,attachments-tests,adapter-types,types,architecture,build,verify,smoke}.log。
+
+
+### 2026-09-14 浏览器编码文件上传
+
+- 新增 fileUploads/upload 的严格 Host/Client 描述，通过现有 Agent lookup 选择真实会话，携带取消信号；FileUploadError 在远程边界映射为 rc.2 TypertLookupFailure 的 code/message/details。
+- 附件客户端提供 fileUpload 服务，支持 Uint8Array 精确视图及 Blob 的编码上传。调用使用创建时的远程授权上下文，避免消费者作用域替换导致权限丢失；已有 fileUpload 服务保留。
+- 声明共享 Cordis 客户端模块，保持单例，不修改原输入器和样式。
+- 23 项附件/上传测试、类型和架构检查、runtime prepare/verify 通过；真实 Desktop --compat --input-state --command-images 验证浏览器 Blob 上传取得新凭据，再通过官方命令执行，取消生效，新旧图片、混合粘贴和输入历史回归通过。
+- 限制与剩余：available=false 表示尚无后台流式承载，ReadableStream 显式拒绝；原生输入器的普通文件命令调用与成功消费、流式上传、模型文件及队列仍需适配。本地桥接可用不等于整个新版 dsh-client-file-upload 包已迁移。
+- 日志：/tmp/amiba-upload-remote-{tests,types,architecture,build,verify,smoke}.log。

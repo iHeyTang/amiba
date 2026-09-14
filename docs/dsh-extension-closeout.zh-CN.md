@@ -52,3 +52,6 @@
 
 
 命令文件接收进展：通过固定 rc.2 补丁增加 registerFileReceiptResolver，并与 Host fileUploads 的精确会话授权接通；命令可接收文件/图片混合载荷，先验证全部文件权限再写入图片，保持顺序、取消和生命周期。旧 images 声明继续使用；显式 attachments 声明优先。Host 网关兼容 images 与 submittedAttachments 两种字段，禁止同时提供。命令与附件共 28 项测试、类型和架构检查、运行时校验通过；真实桌面旧客户端和新版 HTTP 字段均通过文件命令执行，未知凭据拒绝，新旧图片命令与混合粘贴回归通过。浏览器上传与输入消费仍未完成。
+
+
+浏览器上传进展：已增加带 Agent lookup 的 fileUploads/upload 严格远程描述、rc.2 结构化错误映射，以及客户端 fileUpload 服务。支持 Uint8Array 精确视图和 Blob 的编码上传、取消，保留原附件上传。客户端服务保留自身远程授权，调用插件无需额外依赖 remote.fileUploads；已有 fileUpload 实现不替换。23 项测试、类型和架构检查、运行时校验通过；真实桌面 Blob 上传获得新凭据并通过官方命令执行、取消及原输入能力回归通过。available 当前为 false，明确表示流式后台承载尚未接入；ReadableStream 不会被偷偷读入整块内存。原生输入器的普通文件调用与消费、流式上传、队列仍待完成。
