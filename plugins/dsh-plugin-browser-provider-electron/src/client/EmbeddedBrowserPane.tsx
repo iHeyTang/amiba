@@ -2,7 +2,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ExternalLink,
-  Download,
+  ArrowRightLeft,
   Globe2,
   Plus,
   RotateCw,
@@ -325,7 +325,9 @@ export function EmbeddedBrowserHost({
     if (!frame || typeof requestAnimationFrame !== "function") return;
     let handle = 0;
     let deadline = 0;
-    let last = "";
+    // The first measurement must apply even when the viewport was removed.
+    // Otherwise the previous on-screen position keeps covering import UI.
+    let last: string | null = null;
     const apply = () => {
       const rect = viewport?.getBoundingClientRect();
       const next =
@@ -354,6 +356,7 @@ export function EmbeddedBrowserHost({
       deadline = Date.now() + POSITION_SETTLE_MS;
       if (!handle) handle = requestAnimationFrame(tick);
     };
+    apply();
     schedule();
     const observer =
       typeof ResizeObserver === "function"
@@ -674,7 +677,7 @@ export function EmbeddedBrowserWorkspace({
               aria-label={importT("title")}
               className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/45 hover:text-foreground"
             >
-              <Download className="h-3.5 w-3.5" />
+              <ArrowRightLeft className="h-3.5 w-3.5" />
             </button>
           )}
         </form>
