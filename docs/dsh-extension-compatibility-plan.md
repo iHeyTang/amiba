@@ -2069,3 +2069,10 @@ keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入�
 测试覆盖删除第一条同名引用、前缀移动、重复插入独立 ID、删除后用原结构化文档恢复身份。草稿与原输入触发管线共 51 项测试、UI/插件类型检查通过。完整桌面构建、`--compat --resident-draft` 回归及架构检查均退出 0；真实桌面回归验证交接、恢复及旧版本写入保护，本次精确重复删除/结构化恢复由状态测试证明，不将其冒充真实键盘撤销实测。日志 `/tmp/amiba-resident-duplicate-tests-2.log`、`/tmp/amiba-resident-duplicate-ui-types.log`、`/tmp/amiba-resident-duplicate-plugin-types.log`、`/tmp/amiba-resident-duplicate-build.log`、`/tmp/amiba-resident-duplicate-smoke.log`、`/tmp/amiba-resident-duplicate-architecture.log`。
 
 仍待核对：同文字的纯身份重排、仅凭文本推断重复引用删除位置、真实编辑器撤销与离屏交接组合、跨重启身份及完整粘贴/失效语义。完整兼容目标保持未完成。
+
+
+#### 同文字引用的结构化重排
+
+新增用例复现同名引用交换时被 JSON 去重忽略的问题。草稿源现在对保留引用对象的位置变化单独判定：显示文字不变也发布新文档及 occurrence 顺序、推进公开 draftRev；正常等价序列化回传不更新快照、不额外通知。恢复原结构化顺序恢复原 ID 顺序。沿用原存储格式与界面，没有根据相同标签猜测未知引用的身份。
+
+草稿源、文档、离屏投影及原输入管线 51 项测试、UI 类型检查和完整架构检查通过。日志 `/tmp/amiba-reference-reorder-tests.log`、`/tmp/amiba-reference-reorder-types.log`、`/tmp/amiba-reference-reorder-architecture.log`。本次验证是源状态与输入管线测试，未重新运行完整桌面构建/回归。跨重启、丢失结构后的纯文本歧义、真实键盘撤销与交接组合仍未完成。

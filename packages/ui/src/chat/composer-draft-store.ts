@@ -29,9 +29,15 @@ export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: 
   let writes = Promise.resolve();
   let offStorage: (() => void) | undefined;
   const listeners = new Set<() => void>();
+  const retainedReferencesMoved = (next: ComposerDraftDocument): boolean => {
+    const previous = new Map(document.parts.filter(part => part.kind === "mention")
+      .map((part, index) => [part, index]));
+    return next.parts.filter(part => part.kind === "mention").some((part, index) =>
+      previous.has(part) && previous.get(part) !== index);
+  };
   const publish = (next: ComposerDraftDocument): boolean => {
     const key = JSON.stringify(next);
-    if (key === fingerprint) return false;
+    if (key === fingerprint && !retainedReferencesMoved(next)) return false;
     document = next;
     inputDraft = inputProjection.update(next);
     fingerprint = key;
@@ -61,7 +67,9 @@ export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: 
     readInputDraft: () => inputDraft,
     setParts(parts) {
       const next = composerDraftDocument(parts);
-      if (JSON.stringify(next) === fingerprint) return;
+      // Serialized equality cannot hide a move of a known occurrence. Fresh
+      // equivalent editor/storage echoes still retain the current document.
+      if (JSON.stringify(next) === fingerprint && !retainedReferencesMoved(next)) return;
       revision++;
       publish(next);
       save(next);

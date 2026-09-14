@@ -69,3 +69,26 @@ it("keeps independent duplicate IDs through insertion, removal and structured un
   source.setParts(expanded.parts);
   expect(source.readInputDraft().occurrences.map(item => item.occurrenceId)).toEqual(ids);
 });
+
+
+it("publishes identity-only reorders without treating equivalent serialized echoes as edits", () => {
+  const source = createComposerDraftSource();
+  source.set("@[dsh.reference:files|one|Same|clip] @[dsh.reference:files|one|Same|clip]");
+  const document = source.getDocument();
+  const before = source.readInputDraft();
+  let updates = 0;
+  const off = source.subscribe(() => updates++);
+  source.setParts([document.parts[2], document.parts[1], document.parts[0]]);
+  const swapped = source.readInputDraft();
+  expect(swapped.draft).toBe(before.draft);
+  expect(swapped.occurrences.map(item => item.occurrenceId)).toEqual(before.occurrences.map(item => item.occurrenceId).reverse());
+  expect(swapped.draftRev).toBeGreaterThan(before.draftRev);
+  expect(updates).toBe(1);
+  source.setParts(JSON.parse(JSON.stringify(source.getDocument().parts)));
+  expect(source.readInputDraft()).toBe(swapped);
+  expect(updates).toBe(1);
+  source.setParts(document.parts);
+  expect(source.readInputDraft().occurrences.map(item => item.occurrenceId)).toEqual(before.occurrences.map(item => item.occurrenceId));
+  expect(updates).toBe(2);
+  off();
+});
