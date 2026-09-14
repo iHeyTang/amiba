@@ -2,6 +2,9 @@ import type { WorkspaceDocumentReadRequest, WorkspaceDocumentReadResult } from '
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { randomUUID } from "node:crypto";
 import { getWindowChrome } from "../shared/window-chrome";
+import { installWindowOverlaySync } from "./window-overlay";
+
+window.addEventListener("DOMContentLoaded", installWindowOverlaySync, { once: true });
 
 // Node EventEmitter defaults `maxListeners` to 10. Each Amiba window
 // stacks more than that on a few high-fan-out IPC channels (storage,

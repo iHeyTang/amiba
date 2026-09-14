@@ -3,9 +3,8 @@ import { cn } from "./cn"
 import { logoDarkBg, logoLightBg } from "./amiba-logo-assets"
 
 /**
- * Brand mark for Amiba surfaces. Two PNG variants are inlined as
- * base64 data URIs (see `amiba-logo-assets.ts`, sourced from
- * `amiba-logo-{light,dark}.png`):
+ * Default-pet brand mark for Amiba surfaces. Two SVG variants are inlined
+ * as data URIs in `amiba-logo-assets.ts`, generated alongside the app icon:
  *
  *   - `light-bg` — render the dark-glyph artwork on a light surface
  *   - `dark-bg`  — render the light-glyph artwork on a dark surface

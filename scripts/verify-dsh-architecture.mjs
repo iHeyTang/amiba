@@ -84,6 +84,7 @@ const bundleSpecs = [
       "@amiba/dsh-plugin-commands-adapter",
       "@amiba/dsh-plugin-connector-core",
       "@amiba/dsh-plugin-connector-dingtalk",
+      "@amiba/dsh-plugin-connector-weixin",
       "@amiba/dsh-plugin-connector-lark",
       "@amiba/dsh-plugin-cron",
       "@amiba/dsh-plugin-pets",
@@ -93,6 +94,7 @@ const bundleSpecs = [
       "@amiba/dsh-plugin-memory-memos",
       "@amiba/dsh-plugin-messaging-core",
       "@amiba/dsh-plugin-model-plane",
+      "@amiba/dsh-plugin-onboarding",
       "@amiba/dsh-plugin-notification-hub",
       "@amiba/dsh-plugin-conversation-notifications",
       "@amiba/dsh-plugin-pin",
@@ -2424,7 +2426,7 @@ if (
 if (
   !prepare.includes('const managedPnpmVersion = "9.12.0"') ||
   !prepare.includes("pnpmBinary(root)") ||
-  !prepare.includes("pnpm: managedPnpmVersion")
+  (await json("packages/app-runtime/host-dependencies.json")).dependencies?.pnpm !== "9.12.0"
 ) {
   fail(
     "managed DSH runtime must carry the pnpm used by the official plugin command",

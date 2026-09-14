@@ -1,0 +1,153 @@
+name: Desktop Build
+run-name: >-
+  ${{ inputs.mode == 'verify' && 'Verify' || 'Build' }} · ${{ inputs.target || 'all' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Build or verify target
+        type: choice
+        options: [all, win32-x64, darwin-x64, darwin-arm64]
+        default: all
+      mode:
+        description: Build test installers or verify existing packages
+        type: choice
+        options: [test, verify]
+        default: test
+      run_id:
+        description: Existing artifact run ID for verification
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: desktop-build-${{ github.ref }}-${{ inputs.target || 'all' }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Prepare
+    permissions:
+      contents: read
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.plan.outputs.commit }}
+      version: ${{ steps.plan.outputs.version }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      mode: ${{ steps.plan.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+      - id: plan
+        name: Check configuration and prepare version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AMIBA_UPDATE_URLS: ${{ vars.AMIBA_UPDATE_URLS }}
+        run: node scripts/release/ci-plan.mjs
+
+  build:
+    name: >-
+      ${{ needs.plan.outputs.mode == 'verify' && 'Verify' || needs.plan.outputs.mode == 'release' && 'Release' || 'Build' }} · ${{ matrix.target == 'win32-x64' && 'Windows x64' || matrix.target == 'darwin-x64' && 'macOS Intel' || 'macOS ARM' }}
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      AMIBA_RELEASE_COMMIT: ${{ needs.plan.outputs.commit }}
+      AMIBA_GITHUB_REPOSITORY: ${{ github.repository }}
+      AMIBA_UPDATE_URLS: ${{ vars.AMIBA_UPDATE_URLS }}
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.commit }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          architecture: ${{ matrix.arch }}
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: ${{ matrix.arch }}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Verify release tooling
+        run: node --experimental-strip-types --test scripts/release/*.test.mjs apps/desktop/src/main/__tests__/app-updates.test.mjs packages/app-runtime/scripts/dsh-runtime/process-tools.test.mjs packages/app-runtime/scripts/dsh-runtime/dependency-lock.test.mjs packages/app-runtime/scripts/dsh-runtime/plugin-distribution.test.mjs
+      - name: Verify UI product version and update menu
+        run: pnpm --dir packages/ui exec vitest run src/profile/ProfileMenu.test.tsx
+      - name: Build test installers
+        if: needs.plan.outputs.mode == 'test'
+        run: pnpm release:build ${{ matrix.target }} --local-only
+      - name: Download installer for verification without rebuilding
+        if: needs.plan.outputs.mode == 'verify'
+        env:
+          ARTIFACT_RUN_ID: ${{ inputs.run_id }}
+          ARTIFACT_TARGET: ${{ matrix.target }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release/download-verification.mjs
+      - name: Download direct installer when reusing split artifacts
+        if: needs.plan.outputs.mode == 'verify'
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ matrix.packagePrefix }}.*
+          skip-decompress: true
+          path: apps/desktop/dist/${{ matrix.target }}
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Smoke test packaged runtime and installer
+        run: node scripts/release/smoke-package.mjs ${{ matrix.target }}
+      - name: Save directly downloadable installer
+        id: installer
+        uses: actions/upload-artifact@v7
+        with:
+          path: apps/desktop/dist/${{ matrix.target }}/${{ matrix.installer }}
+          archive: false
+          retention-days: 7
+          if-no-files-found: error
+      - name: Save macOS update ZIP
+        id: update_zip
+        if: startsWith(matrix.target, 'darwin-')
+        uses: actions/upload-artifact@v7
+        with:
+          path: apps/desktop/dist/${{ matrix.target }}/${{ matrix.packagePrefix }}.zip
+          archive: false
+          retention-days: 7
+          if-no-files-found: error
+      - name: Save release metadata
+        id: metadata
+        if: always() && hashFiles('apps/desktop/dist/**/release-manifest.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: metadata-${{ needs.plan.outputs.version }}-${{ matrix.target }}
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            apps/desktop/dist/${{ matrix.target }}/Amiba-*.blockmap
+            apps/desktop/dist/${{ matrix.target }}/latest-*.yml
+            apps/desktop/dist/${{ matrix.target }}/release-manifest.json
+            apps/desktop/dist/${{ matrix.target }}/package-footprint.json
+      - name: Write download summary
+        if: always()
+        env:
+          INSTALLER_URL: ${{ steps.installer.outputs.artifact-url }}
+          UPDATE_ZIP_URL: ${{ steps.update_zip.outputs.artifact-url }}
+          PACKAGE_TARGET: ${{ matrix.target }}
+          PACKAGE_MODE: ${{ needs.plan.outputs.mode }}
+        run: node scripts/release/ci-summary.mjs

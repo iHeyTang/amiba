@@ -2,6 +2,7 @@ import { spawnSync, type SpawnSyncReturns } from "node:child_process"
 import path from "node:path"
 import {
   MANAGED_DSH_RUNTIME,
+  managedDshEnvironment,
   ensureManagedDshProfile,
   resolveAmibaDshHome,
   resolveManagedDshRuntimeDir,
@@ -103,16 +104,7 @@ export async function createDshLaunchSpec(
       ...options.args,
     ],
     cwd: path.resolve(options.cwd ?? process.cwd()),
-    env: {
-      ...env,
-      DSH_HOME: profile.home,
-      DSH_AGENTS_HOME: managed.agentsHome,
-      PATH: [
-        managed.runtimeAppBinDir,
-        managed.runtimeBinDir,
-        env.PATH ?? "",
-      ].join(path.delimiter),
-    },
+    env: managedDshEnvironment(managed, env),
     profile,
   }
 }

@@ -1,4 +1,5 @@
-import { canReuseAddedDependencies, patchSetDigest, canReusePatchSet } from "./reuse-dependencies.mjs";
+import { patchSetDigest, canReusePatchSet } from "./reuse-dependencies.mjs";
+import { packageCommand, applyManagedRuntimePatches } from "./process-tools.mjs";
 import { validateDependencyLock, validatePluginBuildSources } from "./dependency-lock.mjs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -7,7 +8,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { memoryPeerOverrides } from "./npm-overrides.mjs";
+import { pluginInstallManifest, checkHostContract, isolatePluginDependencies, distributionHashes } from "./plugin-distribution.mjs";
 
 const runtimePackageDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -46,7 +47,7 @@ const catalogVersions = await (async () => {
     path.join(workspaceDir, "pnpm-workspace.yaml"),
     "utf8",
   );
-  const block = source.match(/^catalog:\n((?:[ \t]+.*\n?)*)/mu);
+  const block = source.replace(/\r\n/gu, "\n").match(/^catalog:\n((?:[ \t]+.*\n?)*)/mu);
   if (!block) return new Map();
   const entries = new Map();
   for (const line of block[1].split("\n")) {
@@ -151,6 +152,9 @@ const outputDir = process.env.DSH_RUNTIME_OUTPUT
 const managedPnpmVersion = "9.12.0";
 const markerPath = path.join(outputDir, "runtime-manifest.json");
 const args = new Set(process.argv.slice(2));
+const lockTarget = [...args].find(arg => arg.startsWith('--lock-target='))?.slice('--lock-target='.length);
+if (lockTarget && (!(args.has('--update-lock') || args.has('--validate-only')) || lockTarget !== 'darwin-x64')) throw new Error('--lock-target=darwin-x64 requires --update-lock or --validate-only');
+const dependencyTarget = lockTarget || `${process.platform}-${process.arch}`;
 const verifyOnly = args.has("--verify");
 const force = args.has("--force");
 
@@ -253,77 +257,47 @@ async function computeAmibaSourceDigest() {
 await validatePluginBuildSources(workspaceDir, pluginPackages.map((manifest, index) => ({ manifest, directory: pluginSourceDirs[index] })));
 const amibaSourceDigest = await computeAmibaSourceDigest();
 
-/**
- * The exact content of the generated `app/package.json`.
- *
- * Together with runtime-deps/package-lock.json this encodes the DSH
- * version, the pinned pnpm version, and every
- * third-party dependency name + specifier after `resolveCatalogSpecifier`
- * (a `catalog:` entry resolves to a concrete pinned version; anything else
- * passes through as whatever specifier the plugin declared, semver range
- * included). Only runtime:lock resolves ranges; normal builds use npm ci.
- * Computed once here so the string that gets hashed (`appTreeHash`, below)
- * is byte-identical to the string that later gets written to disk.
- */
-const appPackageJsonContent = `${JSON.stringify(
-  {
-    private: true,
-    overrides: memoryPeerOverrides(declaration.version),
-    dependencies: {
-      "@deepseek-ai/dsh": declaration.version,
-      pnpm: managedPnpmVersion,
-      ...Object.fromEntries(
-        pluginPackages.flatMap((manifest) =>
-          Object.entries(manifest.dependencies ?? {})
-            .filter(
-              ([name, version]) =>
-                !name.startsWith("@amiba/") &&
-                typeof version === "string" &&
-                !version.startsWith("workspace:"),
-            )
-            .map(([name, version]) => [
-              name,
-              resolveCatalogSpecifier(name, version),
-            ]),
-        ),
-      ),
-    },
-  },
-  null,
-  2,
-)}\n`;
+/** Host dependencies are explicit; business dependencies belong to plugin locks. */
+const hostManifest = JSON.parse(await fsp.readFile(path.join(runtimePackageDir, 'host-dependencies.json'), 'utf8'));
+const appPackageJsonContent = `${JSON.stringify(hostManifest, null, 2)}\n`;
+const pluginInstalls = pluginPackages.map((manifest, index) => ({
+  manifest: pluginInstallManifest(manifest, hostManifest, resolveCatalogSpecifier, dependencyTarget),
+  directory: path.join(pluginSourceDirs[index], 'distribution', manifest.amiba?.distribution?.targets?.[dependencyTarget] ? dependencyTarget : 'default'),
+}));
 const dependencyDir = path.join(runtimePackageDir, "runtime-deps");
 const dependencyManifest = path.join(dependencyDir, "package.json");
 const dependencyLock = path.join(dependencyDir, "package-lock.json");
 if (args.has("--update-lock")) {
-  await fsp.mkdir(dependencyDir, { recursive: true });
-  await fsp.writeFile(dependencyManifest, appPackageJsonContent);
-  // Resolve from the committed lock instead of starting over with DSH's large peer graph.
-  const npmArgs = ["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund", "--prefer-online"];
-  if (fs.existsSync(npmCli(outputDir))) {
-    run(nodeBinary(outputDir), [npmCli(outputDir), ...npmArgs], { cwd: dependencyDir });
-  } else {
-    run(process.platform === "win32" ? "npm.cmd" : "npm", npmArgs, { cwd: dependencyDir });
+  const selected = [...args].find(arg => arg.startsWith('--plugin='))?.slice('--plugin='.length);
+  const entries = selected ? pluginInstalls.filter(entry => entry.manifest.name === selected || entry.manifest.name === `@amiba/${selected}`) : [{ directory: dependencyDir, manifest: hostManifest }, ...pluginInstalls];
+  if (!entries.length) throw new Error(`Unknown plugin: ${selected}`);
+  for (const entry of entries) {
+    await fsp.mkdir(entry.directory, { recursive: true });
+    await fsp.writeFile(path.join(entry.directory, 'package.json'), `${JSON.stringify(entry.manifest, null, 2)}\n`);
+    const npmArgs = ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline'];
+    run(process.platform === 'win32' ? 'npm.cmd' : 'npm', npmArgs, { cwd: entry.directory });
   }
-  validateDependencyLock(JSON.parse(appPackageJsonContent), JSON.parse(await fsp.readFile(dependencyManifest, "utf8")), JSON.parse(await fsp.readFile(dependencyLock, "utf8")));
-  console.log("[dsh:runtime] updated distributable npm lock; commit both runtime-deps files");
+  console.log('[dsh:runtime] updated host and plugin locks; commit the changed distribution files');
   process.exit(0);
 }
+
 const dependencyLockContent = await fsp.readFile(dependencyLock, "utf8");
 validateDependencyLock(JSON.parse(appPackageJsonContent), JSON.parse(await fsp.readFile(dependencyManifest, "utf8")), JSON.parse(dependencyLockContent));
 const workspaceManifest = JSON.parse(await fsp.readFile(path.join(workspaceDir, "package.json"), "utf8"));
-// The Web frontend embeds ui-primitives; patch its published artifact as well
-// as the pnpm development package. It is installed only in the npm runtime.
-const reviewedPatches = {
-  ...workspaceManifest.pnpm?.patchedDependencies,
-  "@deepseek-ai/dsh-web-frontend@0.1.1-rc.2": "patches/@deepseek-ai__dsh-web-frontend@0.1.1-rc.2.patch",
-};
+const reviewedPatches = { ...workspaceManifest.pnpm?.patchedDependencies, ...workspaceManifest.amiba?.runtimePatches };
 const patchSetHash = await patchSetDigest(reviewedPatches, file => fsp.readFile(path.resolve(workspaceDir, file), "utf8"));
-const dependencyLockHash = createHash("sha256").update(dependencyLockContent).digest("hex");
-const appTreeHash = createHash("sha256")
-  .update(appPackageJsonContent)
-  .update(dependencyLockContent)
-  .digest("hex");
+const hostLock = JSON.parse(dependencyLockContent);
+const pluginLockContents = await Promise.all(pluginInstalls.map(async entry => {
+  checkHostContract(entry.manifest, hostLock);
+  const content = await fsp.readFile(path.join(entry.directory, 'package-lock.json'), 'utf8');
+  validateDependencyLock(entry.manifest, JSON.parse(await fsp.readFile(path.join(entry.directory, 'package.json'), 'utf8')), JSON.parse(content));
+  return content;
+}));
+if (args.has('--validate-only')) {
+  console.log(`Validated distributable plugin sources and runtime lock for ${dependencyTarget}`);
+  process.exit(0);
+}
+const { dependencyLockHash, appTreeHash } = distributionHashes(appPackageJsonContent, dependencyLockContent, pluginLockContents, pluginPackages.map(plugin => plugin.amiba?.distribution ?? {}));
 
 function fail(message) {
   throw new Error(`[dsh:runtime] ${message}`);
@@ -336,7 +310,7 @@ function expectedMarker() {
     nodeVersion: declaration.nodeVersion,
     amibaPluginRevision: declaration.amibaPluginRevision,
     amibaSourceDigest,
-    dependencyInstallMode: "locked-npm-v1",
+    dependencyInstallMode: "isolated-plugins-v2",
     appTreeHash,
     dependencyLockHash,
     patchSetHash,
@@ -426,7 +400,8 @@ function pnpmBinary(root) {
 }
 
 function run(command, commandArgs, options = {}) {
-  const result = spawnSync(command, commandArgs, {
+  const [executable, argv] = packageCommand(command, commandArgs);
+  const result = spawnSync(executable, argv, {
     cwd: options.cwd ?? runtimePackageDir,
     env: options.env ?? process.env,
     encoding: "utf8",
@@ -472,15 +447,8 @@ function verify(root = outputDir) {
     ...pluginPackages.flatMap((manifest, index) => [manifest.dsh?.native, manifest.dsh?.bundle?.patch]
       .filter(Boolean).map(entry => path.join(root, "app/node_modules/@amiba", pluginNames[index], entry))),
     ...bundleNames.map((name) => amibaPatch(root, name)),
-    path.join(
-      root,
-      "app",
-      "node_modules",
-      "pdfjs-dist",
-      "legacy",
-      "build",
-      "pdf.mjs",
-    ),
+    ...pluginPackages.flatMap((manifest, index) => (manifest.amiba?.distribution?.requiredFiles ?? []).map(file =>
+      path.join(root, 'app/node_modules/@amiba', pluginNames[index], file))),
   ]) {
     if (!fs.existsSync(artifact)) fail(`missing runtime artifact: ${artifact}`);
   }
@@ -678,6 +646,7 @@ async function installNode(stage) {
  * full install.
  */
 async function reuseAppDependencyTree(appDir) {
+  if (force) return false;
   const installedMarkerPath = path.join(outputDir, "runtime-manifest.json");
   const installedNodeModules = path.join(outputDir, "app", "node_modules");
   if (
@@ -691,17 +660,11 @@ async function reuseAppDependencyTree(appDir) {
       await fsp.readFile(installedMarkerPath, "utf8"),
     );
     // Only reuse trees created by the registry-only installer, never earlier injected trees.
-    if (installedMarker.dependencyInstallMode !== "locked-npm-v1") return false;
-    // An older or differently patched tree must start from locked registry files.
+    if (installedMarker.dependencyInstallMode !== "isolated-plugins-v2") return false;
     if (!canReusePatchSet(installedMarker, patchSetHash)) return false;
     const sameDependencies = installedMarker.appTreeHash === appTreeHash;
-    const existingPromotions = !sameDependencies && installedMarker.dependencyLockHash === dependencyLockHash && Boolean(installedMarker.appTreeHash) && await canReuseAddedDependencies(
-      JSON.parse(await fsp.readFile(path.join(outputDir, "app", "package.json"), "utf8")),
-      JSON.parse(appPackageJsonContent),
-      async name => JSON.parse(await fsp.readFile(path.join(installedNodeModules, name, "package.json"), "utf8")).version,
-    );
     const reusable =
-      (sameDependencies || existingPromotions) &&
+      sameDependencies && installedMarker.dependencyLockHash === dependencyLockHash &&
       installedMarker.nodeVersion === declaration.nodeVersion &&
       installedMarker.platform === process.platform &&
       installedMarker.arch === process.arch;
@@ -767,40 +730,24 @@ try {
       },
     );
   }
-  // npm does not consume pnpm.patchedDependencies. Apply the same reviewed
-  // patches to the managed tree, including when dependencies were reused.
-  for (const [specifier, patchPath] of Object.entries(reviewedPatches)) {
-    const split = specifier.lastIndexOf("@");
-    const name = specifier.slice(0, split);
-    const version = specifier.slice(split + 1);
-    const packageDir = path.join(appDir, "node_modules", name);
-    // ui-primitives is a compiler-only shell dependency, absent from npm runtime.
-    // Its live singleton is embedded in dsh-web-frontend, patched separately.
-    // Keep all other missing runtime patch targets fatal.
-    if (specifier === "@deepseek-ai/dsh-client-ui-primitives@0.1.1-rc.2") {
-      try {
-        await fsp.access(path.join(packageDir, "package.json"));
-      } catch (error) {
-        if (error.code !== "ENOENT") throw error;
-        console.log(`[dsh:runtime] ${specifier} development patch has a matching Web frontend runtime patch`);
-        continue;
-      }
-    }
-    const installed = JSON.parse(await fsp.readFile(path.join(packageDir, "package.json"), "utf8"));
-    if (installed.version !== version) fail(`Patch version mismatch for ${specifier}`);
-    const args = ["--batch", "-p1", "-i", path.resolve(workspaceDir, patchPath)];
-    const check = spawnSync("patch", ["--dry-run", "--forward", ...args], { cwd: packageDir, encoding: "utf8" });
-    if (check.status === 0) run("patch", ["--forward", ...args], { cwd: packageDir });
-    else {
-      const applied = spawnSync("patch", ["--dry-run", "--reverse", ...args], { cwd: packageDir, encoding: "utf8" });
-      if (applied.status !== 0) fail(`Cannot apply or verify ${specifier}: ${check.stderr || check.stdout}`);
-    }
-  }
+  applyManagedRuntimePatches(appDir, workspaceDir);
   const amibaScope = path.join(appDir, "node_modules", "@amiba");
   await fsp.mkdir(amibaScope, { recursive: true });
   for (const [index, pluginSourceDir] of pluginSourceDirs.entries()) {
     const pluginDestination = path.join(amibaScope, pluginNames[index]);
     await fsp.mkdir(pluginDestination, { recursive: true });
+    // Each plugin owns its dependency graph, lock and installation directory.
+    if (!reusedAppTree) {
+      const install = pluginInstalls[index];
+      await fsp.writeFile(path.join(pluginDestination, 'package.json'), `${JSON.stringify(install.manifest, null, 2)}\n`);
+      await fsp.writeFile(path.join(pluginDestination, 'package-lock.json'), pluginLockContents[index]);
+      run(nodeBinary(stage), [npmCli(stage), 'ci', '--omit=dev', '--no-audit', '--no-fund', '--ignore-scripts=false', '--prefer-offline'], {
+        cwd: pluginDestination,
+        env: { ...process.env, PATH: `${managedNodePath(stage)}${path.delimiter}${process.env.PATH ?? ''}`, npm_config_cache: path.join(runtimePackageDir, '.cache', 'dsh-runtime', 'npm') },
+      });
+      isolatePluginDependencies(pluginDestination, install.manifest, hostLock, pluginPackages[index].amiba?.distribution);
+    }
+
     // On a reused app tree, `pluginDestination/lib` may already exist from
     // the previous build. `fsp.cp` merges into an existing directory rather
     // than replacing it, so without this the copy below would leave a
@@ -818,10 +765,12 @@ try {
           recursive: true,
         },
       ),
-      fsp.copyFile(
-        path.join(pluginSourceDir, "package.json"),
-        path.join(pluginDestination, "package.json"),
-      ),
+      fsp.writeFile(path.join(pluginDestination, 'package.json'), `${JSON.stringify({
+        ...pluginPackages[index],
+        dependencies: pluginInstalls[index].manifest.dependencies,
+        peerDependencies: Object.fromEntries(Object.entries({ ...pluginInstalls[index].manifest.peerDependencies, ...Object.fromEntries(Object.entries({ ...pluginPackages[index].dependencies, ...pluginPackages[index].peerDependencies }).filter(([name]) => name.startsWith('@amiba/dsh-plugin-'))) }).map(([name, version]) => [name, version.startsWith('workspace:') ? '*' : resolveCatalogSpecifier(name, version)])),
+        devDependencies: undefined,
+      }, null, 2)}\n`),
     ]);
     // Packaged skill resources live next to lib, and must also be replaced on
     // cache reuse so removed guides/scripts cannot remain in an installation.

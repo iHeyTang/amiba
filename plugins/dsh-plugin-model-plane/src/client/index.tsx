@@ -1,3 +1,5 @@
+import type {} from "@amiba/dsh-plugin-onboarding/client";
+import { ProviderOnboarding } from "./ProviderOnboarding.js";
 import type { ConnectionHandle } from "@deepseek-ai/dsh-api-remotes/client";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
 import type { PropsRuntime, PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
@@ -126,6 +128,11 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     return () => disposers.forEach((dispose) => dispose());
   };
   const controller = new NativeProviderSettings(api, subscribe);
+  const disposeOnboarding = ctx.slots.inject("amiba.onboarding.step", () => ctx.slots.register({
+    name: "amiba.onboarding.step", id: "models", order: 10,
+    label: () => document.documentElement.lang.startsWith("zh") ? "模型服务" : "Model service",
+    inject: () => ({adapter: controller}),
+  }, ProviderOnboarding));
   const sectionFiber = ctx.inject(
     ["slots", "connection"],
     (injectedCtx) => {
@@ -192,6 +199,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   await sectionFiber;
   await pickerFiber;
   return async () => {
+    disposeOnboarding();
     await pickerFiber.dispose();
     await sectionFiber.dispose();
   };

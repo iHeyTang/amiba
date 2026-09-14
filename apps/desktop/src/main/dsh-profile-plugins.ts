@@ -12,6 +12,7 @@ import {
   stat,
 } from "node:fs/promises";
 import path from "node:path";
+import { managedDshEnvironment } from "@amiba/app-runtime/dsh-runtime";
 
 import type {
   AmibaDshPluginMutationResult,
@@ -251,14 +252,7 @@ export async function runManagedDshPluginCommand(
       cwd: path.dirname(paths.root),
       detached: process.platform !== "win32",
       env: {
-        ...process.env,
-        DSH_HOME: paths.home,
-        DSH_AGENTS_HOME: paths.agentsHome,
-        PATH: [
-          paths.runtimeAppBinDir,
-          paths.runtimeBinDir,
-          process.env.PATH ?? "",
-        ].join(path.delimiter),
+        ...managedDshEnvironment(paths),
         COREPACK_ENABLE_DOWNLOAD_PROMPT: "0",
         PNPM_HOME: paths.runtimeAppBinDir,
       },

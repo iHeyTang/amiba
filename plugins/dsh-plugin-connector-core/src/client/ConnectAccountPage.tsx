@@ -1,3 +1,4 @@
+import { DesktopSyncSettings } from "./DesktopSyncSettings.js";
 import { ArrowLeft, ChevronRight, Loader2, Power, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button, Input, Label, usePluginT } from "@amiba/ui/plugin";
@@ -245,6 +246,9 @@ export function ConnectAccountPage({
         />
       ) : (
         <>
+          {adapter.conversationSettings && details.messaging?.conversations.map(item => (
+            <DesktopSyncSettings key={item.key} adapter={adapter} connectId={connect.id} conversationKey={item.key} target={`${connect.name} · ${item.title || t("options.connect.dsh.account.conversations")}`} />
+          ))}
           {Settings ? (
             <Settings
               host={{

@@ -531,7 +531,13 @@ export class DshChatEngineClient implements ChatEngineClient {
       }
 
       if (!address) {
-        const resolved = (await this.options.resolveSession?.(payload, controller.signal)) ?? {};
+        // Existing IM/plugin sessions own their cwd and preset; desktop defaults
+        // are creation hints only. Children keep their separate continuation path.
+        const existing = (await client.listSessions(controller.signal)).items.find(session => session.sessionId === sessionId);
+        controller.signal.throwIfAborted();
+        const resolved = existing
+          ? { ...(existing.cwd ? { cwd: existing.cwd } : {}), ...(existing.agentPreset ? { agentPreset: existing.agentPreset } : {}) }
+          : (await this.options.resolveSession?.(payload, controller.signal)) ?? {};
         controller.signal.throwIfAborted();
         await client.createSession(
           {

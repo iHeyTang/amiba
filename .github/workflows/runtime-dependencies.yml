@@ -1,0 +1,97 @@
+name: Runtime Dependencies
+
+on:
+  pull_request:
+    branches: [main]
+
+  push:
+    branches: [main]
+
+concurrency:
+  group: runtime-dependencies-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  development-windows:
+    name: Development · Windows x64
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --dir packages/app-runtime build:dsh-runtime
+      - name: Install locked host for development smoke
+        shell: pwsh
+        run: |
+          $runtime = Join-Path $env:RUNNER_TEMP 'hmr-runtime'
+          New-Item -ItemType Directory -Force "$runtime/app", "$runtime/node" | Out-Null
+          Copy-Item packages/app-runtime/runtime-deps/package*.json "$runtime/app/"
+          npm ci --prefix "$runtime/app" --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item (Get-Command node).Source "$runtime/node/node.exe"
+          "AMIBA_DSH_RUNTIME_DIR=$runtime" >> $env:GITHUB_ENV
+      - name: Apply reviewed host patches
+        run: node --input-type=module -e "import { applyManagedRuntimePatches } from './packages/app-runtime/scripts/dsh-runtime/process-tools.mjs'; import path from 'node:path'; applyManagedRuntimePatches(path.join(process.env.AMIBA_DSH_RUNTIME_DIR, 'app'), process.cwd());"
+      - name: Smoke test linked development plugins
+        run: node apps/desktop/scripts/smoke-plugin-development.mjs
+  dependencies:
+    name: Dependencies · ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macOS ARM
+            runner: macos-15
+          - target: macOS Intel
+            runner: macos-15-intel
+          - target: Windows x64
+            runner: windows-2022
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Check distributable sources and target runtime lock
+        run: node packages/app-runtime/scripts/dsh-runtime/prepare.mjs --validate-only
+      - name: Test runtime dependency validation
+        run: node --test packages/app-runtime/scripts/dsh-runtime/dependency-lock.test.mjs packages/app-runtime/scripts/dsh-runtime/plugin-distribution.test.mjs packages/app-runtime/scripts/dsh-runtime/process-tools.test.mjs
+      - name: Build isolated runtime
+        run: pnpm runtime:prepare
+      - name: Build CLI for development connection tests
+        run: pnpm --dir apps/cli build
+      - name: Test profile resolution and launch environments
+        run: pnpm --dir packages/app-runtime exec vitest run src/dsh-runtime
+      - name: Test tool catalog
+        run: pnpm --dir plugins/dsh-plugin-catalog test
+      - name: Test desktop plugin integration
+        run: node --experimental-strip-types --test apps/desktop/src/main/__tests__/desktop-extensions.test.mjs apps/desktop/src/main/__tests__/dsh-profile-plugins.test.mjs apps/desktop/src/main/__tests__/plugin-development.test.mjs
+      - name: Smoke test linked development plugins
+        run: node apps/desktop/scripts/smoke-plugin-development.mjs
+      - name: Smoke test plugin composition
+        run: pnpm runtime:smoke
+      - name: Test private memory native dependencies
+        run: node scripts/release/smoke-memory.cjs packages/app-runtime/resources/dsh-runtime
+      - name: Test packaged Studio assets
+        run: node scripts/release/smoke-pets.mjs packages/app-runtime/resources/dsh-runtime

@@ -9,6 +9,10 @@ import type { MessageConversationSettingsInput, MessageConversationView } from "
 export type { MessageConversationSettingsInput, MessageConversationView } from "@amiba/dsh-plugin-messaging-core";
 
 const conversationViewSchema = z.object({
+  desktopSync: z.object({ enabled: z.boolean(), messages: z.array(z.object({
+    id: z.string(), sourceMessageId: z.string(), sessionId: z.string(), author: z.enum(["user", "assistant"]), text: z.string(),
+    state: z.enum(["queued", "sent", "cancelled", "failed"]), error: z.string().optional(),
+  })) }).optional(),
   access: z.enum(["owner", "shared"]),
   policy: z.object({ cadence: z.enum(["daily", "weekly", "manual"]), timeZone: z.string() }),
   currentSessionId: z.string().optional(),
@@ -157,6 +161,7 @@ const onboardingStateSchema = z.enum([
 // once completed, which itself carries no secret material either (see
 // connectViewSchema above). This schema must never grow one.
 const onboardingViewSchema = z.object({
+  input: z.object({ id: z.string(), label: z.string() }).optional(),
   sessionId: z.string(),
   state: onboardingStateSchema,
   qrUrl: z.string().optional(),
@@ -215,6 +220,7 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
       beginOnboarding(
         input: BeginOnboardingInput,
       ): Promise<RemoteResult<OnboardingView>>;
+      submitOnboardingInput(sessionId: string, inputId: string, value: string): Promise<RemoteResult<OnboardingView>>;
       pollOnboarding(sessionId: string): Promise<RemoteResult<OnboardingView>>;
       cancelOnboarding(
         sessionId: string,
@@ -259,6 +265,7 @@ declare module "@deepseek-ai/dsh-typert-protocol" {
     "amibaConnectors/beginOnboarding": (
       input: BeginOnboardingInput,
     ) => Promise<RemoteResult<OnboardingView>>;
+    "amibaConnectors/submitOnboardingInput": (sessionId: string, inputId: string, value: string) => Promise<RemoteResult<OnboardingView>>;
     "amibaConnectors/pollOnboarding": (
       sessionId: string,
     ) => Promise<RemoteResult<OnboardingView>>;
@@ -314,7 +321,7 @@ export const AMIBA_CONNECTORS_REMOTE: TypertRemoteContribution = {
     descriptor("conversationSettings", [
       { name: "id", wire: "id", source: "json", codec: stringCodec },
       { name: "conversationKey", wire: "conversationKey", source: "json", codec: stringCodec },
-      { name: "input", wire: "input", source: "json", codec: codec(z.object({ action: z.enum(["status", "configure", "new"]), cadence: z.enum(["daily", "weekly", "manual"]).optional() }).strict(), "@amiba/connectors#conversation-settings-input") },
+      { name: "input", wire: "input", source: "json", codec: codec(z.object({ action: z.enum(["status", "configure", "new", "retry-sync"]), cadence: z.enum(["daily", "weekly", "manual"]).optional(), desktopSync: z.boolean().optional() }).strict(), "@amiba/connectors#conversation-settings-input") },
     ], codec(conversationViewSchema, "@amiba/connectors#conversation-view")),
     descriptor(
       "getConnectDetails",
@@ -405,6 +412,15 @@ export const AMIBA_CONNECTORS_REMOTE: TypertRemoteContribution = {
             "@amiba/connectors#begin-onboarding-input",
           ),
         },
+      ],
+      codec(onboardingViewSchema, "@amiba/connectors#onboarding"),
+    ),
+    descriptor(
+      "submitOnboardingInput",
+      [
+        { name: "sessionId", wire: "sessionId", source: "json", codec: stringCodec },
+        { name: "inputId", wire: "inputId", source: "json", codec: stringCodec },
+        { name: "value", wire: "value", source: "json", codec: stringCodec },
       ],
       codec(onboardingViewSchema, "@amiba/connectors#onboarding"),
     ),

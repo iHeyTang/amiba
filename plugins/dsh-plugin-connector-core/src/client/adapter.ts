@@ -38,6 +38,7 @@ export interface ConnectAdapter {
   remove(id: string): Promise<{ id: string; deleted: boolean }>;
   setOwners(id: string, owners: string[]): Promise<ConnectView>;
   beginOnboarding(input: BeginOnboardingInput): Promise<OnboardingView>;
+  submitOnboardingInput?(sessionId: string, inputId: string, value: string): Promise<OnboardingView>;
   pollOnboarding(sessionId: string): Promise<OnboardingView>;
   cancelOnboarding(sessionId: string): Promise<OnboardingView>;
 }
@@ -80,6 +81,7 @@ export function buildConnectAdapter(remote: ConnectorsRemote): ConnectAdapter {
     remove: (id) => valueOf(remote.removeConnect(id)),
     setOwners: (id, owners) => valueOf(remote.setOwners(id, owners)),
     beginOnboarding: (input) => valueOf(remote.beginOnboarding(input)),
+    submitOnboardingInput: (sessionId, inputId, value) => valueOf(remote.submitOnboardingInput(sessionId, inputId, value)),
     pollOnboarding: (sessionId) => valueOf(remote.pollOnboarding(sessionId)),
     cancelOnboarding: (sessionId) =>
       valueOf(remote.cancelOnboarding(sessionId)),

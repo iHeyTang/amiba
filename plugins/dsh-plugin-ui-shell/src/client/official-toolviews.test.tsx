@@ -283,13 +283,12 @@ describe("tool views", () => {
       ["steward/src/tools.ts", steward, /name: "(steward_[^"]+)"/g],
       ["resources/src/index.ts", resources, /name: "(amiba_resource_[^"]+)"/g],
     ] as const) {
-      const source = readFileSync(
-        resolve(
-          dirname(fileURLToPath(import.meta.url)),
-          "../../../dsh-plugin-" + path,
-        ),
+      const sources = path === "steward/src/tools.ts"
+        ? [path, "steward/src/registry-extension.ts"] : [path];
+      const source = sources.map(file => readFileSync(
+        resolve(dirname(fileURLToPath(import.meta.url)), "../../../dsh-plugin-" + file),
         "utf8",
-      );
+      )).join("\n");
       const names = [...source.matchAll(pattern)].map((m) => m[1]);
       expect(names.length).toBeGreaterThan(0);
       expect(views.map((e) => e.key).sort()).toEqual(

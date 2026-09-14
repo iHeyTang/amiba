@@ -1792,3 +1792,32 @@ describe("sender display names", () => {
     await expect(api.userDisplayName("ou_1")).rejects.toThrow("no permission");
   });
 });
+
+it("sends desktop mirrors as labelled cards with a stable id, without text fallback", async () => {
+  const api = fakeApi();
+  const runtime = await createLarkProvider(fakeDeps({ api })).start(fakeHandle());
+  const id = `sync-${"a".repeat(64)}`;
+  const envelope = { id, channelId: "channel", sessionId: "session", inReplyTo: "", text: "用户 · 来自桌面端\n\nhello", createdAt: "", sync: { scope: "scope", sourceMessageId: "desktop", author: "user" as const, source: "desktop" as const } };
+  await runtime.deliver!({ key: "chat", kind: "p2p" }, envelope);
+  expect(api.sendCard).toHaveBeenCalledWith("chat", envelope.text, { author: "user", requestId: "a".repeat(32) });
+  expect(api.sendText).not.toHaveBeenCalled();
+  vi.mocked(api.sendCard).mockRejectedValueOnce(new Error("timeout"));
+  await expect(runtime.deliver!({ key: "chat", kind: "p2p" }, envelope)).rejects.toThrow("timeout");
+  expect(api.sendText).not.toHaveBeenCalled();
+  await runtime.stop();
+});
+
+
+it("sends a desktop assistant card through the SDK with markdown and the retry UUID", async () => {
+  const create = vi.fn(async (_request: unknown) => ({ code: 0, data: {} }));
+  (Client as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({ im: { message: { create } } }));
+  const api = realLarkDeps.createApiClient(validConfig);
+  await api.sendCard("chat", "助手 · 来自桌面端\n\n**你好**\n- 项目", { author: "assistant", requestId: "stable-id" });
+  const request = create.mock.calls[0]![0] as any;
+  expect(request.data.msg_type).toBe("interactive");
+  expect(request.data.uuid).toBe("stable-id");
+  expect(JSON.parse(request.data.content)).toMatchObject({
+    header: { title: { content: "💻 桌面同步 · 助手回复" } },
+    body: { elements: [{ tag: "markdown", content: "**你好**\n- 项目" }] },
+  });
+});

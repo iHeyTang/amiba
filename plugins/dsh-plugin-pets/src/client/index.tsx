@@ -1,3 +1,5 @@
+import type {} from "@amiba/dsh-plugin-onboarding/client";
+import { GuideCompanion } from "./GuideCompanion.js";
 import type {} from "@amiba/dsh-plugin-notification-hub/client";
 import { DesktopPet } from "./desktop.js";
 import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
@@ -57,6 +59,9 @@ export async function apply(ctx: ClientContext) {
     (c) => {
       const library = createPetLibrary(c.remote.amibaPets);
       const off = [
+        c.slots.inject("amiba.onboarding.companion", () => c.slots.register({
+          name: "amiba.onboarding.companion", inject: () => ({library}),
+        }, GuideCompanion)),
         c.slots.inject("amiba.workspace.view", () =>
           c.slots.register(
             {

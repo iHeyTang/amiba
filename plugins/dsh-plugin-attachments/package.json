@@ -34,7 +34,6 @@
     "zod": "^4.4.3",
     "@amiba/ui": "workspace:*",
     "@amiba/extension-sdk": "workspace:*",
-    "lucide-react": "^0.460.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "@deepseek-ai/dsh-agent": "catalog:",
@@ -56,6 +55,7 @@
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
     "vite": "^5.4.11",
+    "lucide-react": "^0.460.0",
     "@deepseek-ai/dsh-fs-local": "0.1.1-rc.2",
     "@deepseek-ai/dsh-llm": "0.1.1-rc.2",
     "@deepseek-ai/dsh-compaction-basic": "0.1.1-rc.2"
@@ -72,6 +72,13 @@
         "@deepseek-ai/dsh-client-runtime"
       ],
       "platform": "web"
+    }
+  },
+  "amiba": {
+    "distribution": {
+      "requiredFiles": [
+        "node_modules/pdfjs-dist/legacy/build/pdf.mjs"
+      ]
     }
   }
 }

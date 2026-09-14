@@ -60,7 +60,6 @@
     "@amiba/app-runtime": "workspace:*",
     "@amiba/i18n": "workspace:*",
     "@amiba/ui": "workspace:*",
-    "lucide-react": "^0.460.0",
     "@amiba/markdown": "workspace:*",
     "zod": "^4.1.5",
     "streamdown": "^2.5.0",

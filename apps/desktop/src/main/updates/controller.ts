@@ -25,6 +25,7 @@ export function createUpdateController({ updater, sources, currentVersion, notif
 }) {
   let state: UpdateState = { status: sources.length ? "idle" : "disabled", currentVersion };
   let active: Promise<UpdateState> | undefined;
+  let installRequested = false;
   updater.autoDownload = false;
   // Installation is explicit so runtime shutdown can finish before replacing files.
   updater.autoInstallOnAppQuit = false;
@@ -67,7 +68,9 @@ export function createUpdateController({ updater, sources, currentVersion, notif
     },
     install() {
       if (state.status !== "downloaded") throw new Error("No verified update is ready to install");
-      quit();
+      if (installRequested) return;
+      installRequested = true;
+      try { quit(); } catch (error) { installRequested = false; throw error; }
     },
   };
 }

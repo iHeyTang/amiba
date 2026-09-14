@@ -15,6 +15,7 @@ function fixture() {
   const prompt = vi.fn(() => reply.promise);
   const close = vi.fn(async () => ({ done: true as const, value: undefined }));
   const client = {
+    listSessions: vi.fn(async () => ({ items: [] })),
     createSession: vi.fn(async () => ({ sessionId: "session" })), prompt,
     cancel: vi.fn(async () => ({ accepted: true })),
     events(signal: AbortSignal) {

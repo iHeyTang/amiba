@@ -3,8 +3,9 @@ import { isDeepStrictEqual } from "node:util";
 /** Validate the distributable npm tree, independently of the workspace pnpm tree. */
 export function validateDependencyLock(manifest, recordedManifest, lock) {
   if (!isDeepStrictEqual(manifest, recordedManifest) ||
-      !isDeepStrictEqual(manifest.dependencies, lock.packages?.[""]?.dependencies)) {
-    throw new Error("Runtime dependencies changed. Run pnpm runtime:lock and commit runtime-deps/package.json and package-lock.json.");
+      !isDeepStrictEqual(manifest.dependencies ?? {}, lock.packages?.[""]?.dependencies ?? {}) ||
+      !isDeepStrictEqual(manifest.peerDependencies ?? {}, lock.packages?.[""]?.peerDependencies ?? {})) {
+    throw new Error("Distribution dependencies changed. Run pnpm runtime:lock and commit the host and plugin distribution manifests and locks.");
   }
   if (lock.lockfileVersion !== 3) throw new Error("Runtime requires an npm v3 lockfile");
   for (const [location, entry] of Object.entries(lock.packages)) {

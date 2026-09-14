@@ -132,7 +132,8 @@ describe("DshChatEngineClient", () => {
       command: { kind: "success" as const, text: "runtime healthy" },
     }));
     const client = {
-      createSession,
+      listSessions: vi.fn(async () => ({ items: [] })),
+    createSession,
       prompt,
       selectModel: vi.fn(),
       cancel: vi.fn(async () => ({ accepted: true as const })),
@@ -167,7 +168,8 @@ describe("DshChatEngineClient", () => {
       command: { kind: "success" as const, text: "seen" },
     }));
     const client = {
-      createSession,
+      listSessions: vi.fn(async () => ({ items: [] })),
+    createSession,
       prompt,
       selectModel: vi.fn(),
       cancel: vi.fn(async () => ({ accepted: true as const })),
@@ -319,6 +321,7 @@ const TURN_END = sessionFrame("turn/end", { reason: { kind: "completed" } }, 4);
  */
 function scriptedClient(script: DshMuxEnvelope[]): DshApiClient {
   return {
+    listSessions: vi.fn(async () => ({ items: [] })),
     createSession: vi.fn(async () => ({ sessionId: "session-1" })),
     prompt: vi.fn(async () => ({})),
     selectModel: vi.fn(),
@@ -598,7 +601,7 @@ describe("official running baseline", () => {
   });
   it("does not let a delayed idle baseline override a locally pending submission", () => {
     const activity=source(true),frames:SnapshotFrame[]=[];
-    const client=Object.assign(quietClient(),{createSession:async()=>({sessionId:"session-1"}),openEvents:()=>new Promise(()=>{})});
+    const client=Object.assign(quietClient(),{listSessions:async()=>({items:[]}),createSession:async()=>({sessionId:"session-1"}),openEvents:()=>new Promise(()=>{})});
     const engine=new DshChatEngineClient({client,sessionActivity:()=>activity});
     engine.onSnapshot(frame=>frames.push(frame));engine.subscribe("session-1");engine.submit(payload());
     activity.set(false);
@@ -610,7 +613,7 @@ describe("official running baseline", () => {
 
 it("stages native files for an ordinary model prompt, preserving metadata and mixed order", async () => {
   const prompt = vi.fn(async () => ({ accepted: true, command: { text: "ok" } }));
-  const client = { createSession: vi.fn(), prompt, async *events() { yield { rpcId: "s", payload: { type: "session/subscribed", sessionId: "session-1", lastSeq: 0 } }; } } as unknown as DshApiClient;
+  const client = { listSessions: vi.fn(async () => ({ items: [] })), createSession: vi.fn(), prompt, async *events() { yield { rpcId: "s", payload: { type: "session/subscribed", sessionId: "session-1", lastSeq: 0 } }; } } as unknown as DshApiClient;
   const attachments = [
     { attachmentId: "native-file", name: "notes.txt", mime: "text/plain", size: 3, kind: "text" as const },
     { attachmentId: "native-image", name: "image.png", mime: "image/png", size: 3, kind: "image" as const },
@@ -630,7 +633,7 @@ it("stages native files for an ordinary model prompt, preserving metadata and mi
 it("does not dispatch after file preparation fails or is cancelled", async () => {
   for (const cancel of [false, true]) {
     const prompt = vi.fn();
-    const client = { createSession: vi.fn(), prompt, cancel: vi.fn(async () => ({ accepted: true as const })), async *events() { yield { rpcId: "s", payload: { type: "session/subscribed", sessionId: "session-1", lastSeq: 0 } }; } } as unknown as DshApiClient;
+    const client = { listSessions: vi.fn(async () => ({ items: [] })), createSession: vi.fn(), prompt, cancel: vi.fn(async () => ({ accepted: true as const })), async *events() { yield { rpcId: "s", payload: { type: "session/subscribed", sessionId: "session-1", lastSeq: 0 } }; } } as unknown as DshApiClient;
     const file = { attachmentId: "native-file", name: "notes.txt", mime: "text/plain", size: 3, kind: "text" as const };
     const engine = new DshChatEngineClient({ client, attachments: { put: vi.fn(), remove: vi.fn(), readForPrompt: async () => ({ ...file, dataBase64: "AQID" }) }, uploadFile: async () => {
       if (cancel) { engine.abort("session-1"); return "late-receipt"; }
@@ -640,4 +643,78 @@ it("does not dispatch after file preparation fails or is cancelled", async () =>
     expect(receipt.kind).not.toBe("accepted");
     expect(prompt).not.toHaveBeenCalled();
   }
+});
+
+it("resumes an IM session with its persisted cwd and preset instead of desktop defaults", async () => {
+  const createSession = vi.fn(async () => ({ sessionId: "session-1" }));
+  const prompt = vi.fn(async () => ({
+    command: { kind: "success", text: "sent" },
+  }));
+  const resolveSession = vi.fn(async () => ({
+    cwd: "/desktop/home",
+    workspaceId: "desktop-worktree",
+    agentPreset: "code",
+  }));
+  const client = {
+    listSessions: vi.fn(async () => ({
+      items: [
+        {
+          sessionId: "session-1",
+          cwd: "/im/runtime",
+          agentPreset: "restricted",
+        },
+      ],
+    })),
+    createSession,
+    prompt,
+    async *events() {
+      yield {
+        rpcId: "subscription",
+        payload: {
+          type: "session/subscribed",
+          sessionId: "session-1",
+          lastSeq: 0,
+        },
+      };
+    },
+  } as unknown as DshApiClient;
+  const engine = new DshChatEngineClient({ client, resolveSession });
+  engine.submit(payload({ agent: { profileId: "code" } as never }));
+  await eventually(() => expect(prompt).toHaveBeenCalledOnce());
+  expect(createSession).toHaveBeenCalledWith(
+    { sessionId: "session-1", cwd: "/im/runtime", agentPreset: "restricted" },
+    expect.any(AbortSignal),
+  );
+  expect(resolveSession).not.toHaveBeenCalled();
+  engine.dispose();
+});
+it("keeps desktop workspace creation for a genuinely new session", async () => {
+  const createSession = vi.fn(async () => ({ sessionId: "session-1" }));
+  const client = {
+    listSessions: vi.fn(async () => ({ items: [] })),
+    createSession,
+    prompt: vi.fn(async () => ({ command: { kind: "success", text: "ok" } })),
+    async *events() {
+      yield {
+        rpcId: "s",
+        payload: {
+          type: "session/subscribed",
+          sessionId: "session-1",
+          lastSeq: 0,
+        },
+      };
+    },
+  } as unknown as DshApiClient;
+  const engine = new DshChatEngineClient({
+    client,
+    resolveSession: async () => ({ workspaceId: "chosen-workspace" }),
+  });
+  engine.submit(payload());
+  await eventually(() =>
+    expect(createSession).toHaveBeenCalledWith(
+      { sessionId: "session-1", workspaceId: "chosen-workspace" },
+      expect.any(AbortSignal),
+    ),
+  );
+  engine.dispose();
 });

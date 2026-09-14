@@ -447,6 +447,16 @@ function createWindow() {
   });
 
   mainWindow = win;
+  const syncCaptionOverlay = (event: Electron.IpcMainEvent, colors: { color?: unknown; symbolColor?: unknown } | null) => {
+    if (process.platform !== "win32" || win.isDestroyed() || event.sender !== win.webContents ||
+        event.senderFrame !== win.webContents.mainFrame) return;
+    const valid = (value: unknown): value is string => typeof value === "string" &&
+      /^rgb\(\d{1,3}, \d{1,3}, \d{1,3}\)$/.test(value);
+    if (!valid(colors?.color) || !valid(colors?.symbolColor)) return;
+    win.setTitleBarOverlay({ color: colors.color, symbolColor: colors.symbolColor });
+  };
+  ipcMain.on("window-chrome:overlay", syncCaptionOverlay);
+  win.once("closed", () => ipcMain.removeListener("window-chrome:overlay", syncCaptionOverlay));
   installRendererDiagnostics(win);
   win.webContents.on("will-attach-webview", (event, webPreferences, params) => {
     if (!nativeExtensions.allowsPartition(params.partition)) {

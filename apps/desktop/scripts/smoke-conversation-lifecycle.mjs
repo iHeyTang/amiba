@@ -126,14 +126,18 @@ try {
   const openSetting = async pattern => {
     await evaluate(`[...document.querySelectorAll('[data-testid=settings-sidebar] button')].find(b => new RegExp(${JSON.stringify(pattern)}).test(b.textContent.trim())).click()`);
   };
-  await openSetting('^(大管家|Steward)$');
+  await openSetting('^(管家|Stewards)$');
+  await wait(() => evaluate('!!document.querySelector("[data-steward-row=main]")'));
+  await evaluate('document.querySelector("[data-steward-row=main] button[aria-label^=编辑], [data-steward-row=main] button[aria-label^=Edit]").click()');
   await wait(() => evaluate('!!document.querySelector("[data-steward-settings] select")'));
   await evaluate('const select=document.querySelector("[data-steward-settings] select");select.value="manual";select.dispatchEvent(new Event("change",{bubbles:true}))');
   await wait(() => evaluate('document.querySelector("[data-steward-settings] select")?.value === "manual" && !document.querySelector("[data-steward-settings] select").disabled'));
   await openSetting('^(宠物|Pets)$');
   await wait(() => evaluate('!!document.querySelector("[data-testid=pets-page]")'));
   console.log('Pet management opens from its registered settings section');
-  await openSetting('^(大管家|Steward)$');
+  await openSetting('^(管家|Stewards)$');
+  await wait(() => evaluate('!!document.querySelector("[data-steward-row=main]")'));
+  await evaluate('document.querySelector("[data-steward-row=main] button[aria-label^=编辑], [data-steward-row=main] button[aria-label^=Edit]").click()');
   await wait(() => evaluate('document.querySelector("[data-steward-settings] select")?.value === "manual"'));
   await evaluate('[...document.querySelectorAll("[data-steward-settings] button")].find(b=>/^(下条消息开始新对话|Start fresh with the next message)$/.test(b.textContent.trim())).click()');
   await wait(() => evaluate('/下次发送消息时将开启新对话|Your next message will start a new conversation/.test(document.body.innerText)'));
@@ -142,7 +146,7 @@ try {
   // assertions below still run; visual QA also has separate Electron previews.
   try {
     const screenshot = await call('Page.captureScreenshot', {format:'png', captureBeyondViewport:false});
-    await writeFile('/tmp/amiba-live-steward-settings.png', Buffer.from(screenshot.data,'base64'));
+    await writeFile(path.join(profile, 'steward-settings.png'), Buffer.from(screenshot.data,'base64'));
   } catch (error) { console.warn(String(error)); }
   console.log('Steward live remote: cadence persisted across reopen; new conversation deferred until next message');
   async function remote(endpoint, args) {
@@ -166,12 +170,20 @@ try {
   const memory = await remote('amibaMemory/status', {});
   if (!memory.state) throw new Error('Memory remote unavailable');
   console.log('Plugin host remotes: pet library, Studio HTTP host, memory status — passed');
-  const before = await remote('amibaSteward/ensureStewardSession', {});
+  const before = await remote('amibaSteward/ensureStewardSession', {stewardId:'main'});
   const targets = await Promise.all([remote('amibaConversationEntry/prepareSubmit', {sessionId:before.sessionId}), remote('amibaConversationEntry/prepareSubmit', {sessionId:before.sessionId})]);
   if (targets[0] === before.sessionId || targets[0] !== targets[1]) throw new Error('Conversation did not advance exactly once');
-  const after = await remote('amibaSteward/conversationSettings', {input:{action:'status'}});
+  const after = await remote('amibaSteward/conversationSettings', {input:{stewardId:'main',action:'status'}});
   if (after.currentSessionId !== targets[0] || after.history.length !== 2 || after.pendingNewConversation) throw new Error('Incorrect persisted lifecycle after prepare');
   console.log('Live prepare-submit: concurrent calls advanced exactly once, retained previous history and cleared pending rollover');
+  const second = await remote('amibaSteward/saveInstance', {input:{name:'Second steward',responsibilities:'Independent test tasks',background:'Separate background',context:''}});
+  const secondSession = await remote('amibaSteward/ensureStewardSession', {stewardId:second.id});
+  if (secondSession.sessionId === targets[0]) throw new Error('Steward instances share a session');
+  await remote('amibaSteward/deleteInstance', {id:second.id});
+  await remote('amibaSteward/deleteInstance', {id:'main'});
+  if ((await remote('amibaSteward/instances', {})).length !== 0) throw new Error('Deleting all stewards did not preserve zero state');
+  console.log('Steward registry: independent entry creation and zero-instance deletion — passed');
+
 
 
 } finally {

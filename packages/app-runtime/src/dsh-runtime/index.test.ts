@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import path from "node:path"
 import { test } from "vitest"
 import {
   MANAGED_DSH_RUNTIME,
@@ -86,11 +87,12 @@ test("composes independent Core, Web, and Desktop bundles", () => {
 })
 
 test("resolves shared, configured, and packaged runtime roots", () => {
+  const configured = path.resolve("amiba-test-runtime")
   assert.equal(
     resolveManagedDshRuntimeDir({
-      env: { AMIBA_DSH_RUNTIME_DIR: "/opt/amiba/runtime" },
+      env: { AMIBA_DSH_RUNTIME_DIR: configured },
     }),
-    "/opt/amiba/runtime",
+    configured,
   )
   assert.equal(
     resolvePackagedManagedDshRuntimeDir(

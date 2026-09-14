@@ -47,11 +47,10 @@
     "@amiba/ui": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "catalog:",
     "@deepseek-ai/schemastery": "catalog:",
-    "lucide-react": "^0.460.0",
     "zod": "^4.4.3",
-    "@mofli/core": "0.1.1",
-    "@mofli/grove": "0.1.1",
-    "@mofli/studio": "0.1.1",
+    "@mofli/core": "0.2.0",
+    "@mofli/grove": "0.2.0",
+    "@mofli/studio": "0.2.0",
     "@amiba/dsh-plugin-notification-hub": "workspace:*"
   },
   "peerDependencies": {
@@ -62,7 +61,8 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "@deepseek-ai/dsh-tools": "catalog:",
-    "@amiba/extension-sdk": "^0.1.0"
+    "@amiba/extension-sdk": "^0.1.0",
+    "@amiba/dsh-plugin-onboarding": "workspace:*"
   },
   "devDependencies": {
     "@amiba/app-runtime": "workspace:*",
@@ -83,6 +83,23 @@
     "vite": "^5.4.11",
     "vitest": "^2.1.4",
     "@deepseek-ai/dsh-tools": "catalog:",
-    "@amiba/extension-sdk": "workspace:*"
+    "@amiba/extension-sdk": "workspace:*",
+    "@amiba/dsh-plugin-onboarding": "workspace:*",
+    "lucide-react": "^0.460.0"
+  },
+  "peerDependenciesMeta": {
+    "@amiba/dsh-plugin-onboarding": {
+      "optional": true
+    }
+  },
+  "amiba": {
+    "distribution": {
+      "assetDependencies": [
+        "@mofli/studio"
+      ],
+      "requiredFiles": [
+        "node_modules/@mofli/studio/dist/index.html"
+      ]
+    }
   }
 }

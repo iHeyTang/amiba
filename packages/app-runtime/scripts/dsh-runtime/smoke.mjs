@@ -1,3 +1,4 @@
+import { stopChildProcess } from "./process-tools.mjs";
 /**
  * BUNDLE-COMPOSITION integration check (documented ruling).
  *
@@ -32,7 +33,9 @@ const runtimePackageDir = path.resolve(
   "../..",
 );
 const workspaceDir = path.resolve(runtimePackageDir, "../..");
-const runtimeDir = path.join(runtimePackageDir, "resources", "dsh-runtime");
+const runtimeDir = process.env.AMIBA_DSH_SMOKE_RUNTIME_DIR
+  ? path.resolve(process.env.AMIBA_DSH_SMOKE_RUNTIME_DIR)
+  : path.join(runtimePackageDir, "resources", "dsh-runtime");
 const runtimeNode =
   process.platform === "win32"
     ? path.join(runtimeDir, "node", "node.exe")
@@ -224,15 +227,7 @@ async function waitForReady() {
 }
 
 async function stopChild() {
-  if (!child || child.exitCode !== null) return;
-  await new Promise((resolve) => {
-    const force = setTimeout(() => child.kill("SIGKILL"), 5_000);
-    child.once("exit", () => {
-      clearTimeout(force);
-      resolve();
-    });
-    child.kill("SIGTERM");
-  });
+  await stopChildProcess(child);
 }
 
 async function rpc(baseUrl, method, payload = {}) {
@@ -602,7 +597,7 @@ export function apply(ctx) {
   await new Promise((resolve) => portProbe.close(resolve));
   const startServer = () => spawn(
     runtimeNode,
-    [entrypoint, "--profile", profileName, "--host", "127.0.0.1", "--port", "0"],
+    [entrypoint, "--profile", profileName, "--host", "127.0.0.1", "--port", "0", "--no-open"],
     {
       cwd: temporaryRoot,
       env: {
@@ -613,6 +608,7 @@ export function apply(ctx) {
         MEMOS_CONFIG_FILE: path.join(dshHome, "amiba-memos", "config.yaml"),
         AMIBA_MEMOS_VIEWER_PORT: String(memoryViewerPort),
         AMIBA_DSH_API_TOKEN: pluginToken,
+        AMIBA_BROWSER_CDP_URL: "",
         AMIBA_RUNTIME_GATEWAY_URL: "http://127.0.0.1:9",
         AMIBA_RUNTIME_GATEWAY_TOKEN: pluginToken,
       },
@@ -631,7 +627,7 @@ export function apply(ctx) {
     assert.ok(tools.every(tool => ["builtin", "user"].includes(tool.source.distribution)));
     const origin = name => tools.filter(tool => tool.name === name).map(tool => tool.source.distribution);
     assert.deepEqual(origin("amiba_smoke_download"), ["user"]);
-    for (const name of ["amiba_connect_add", "cron_create", "attachment_read_text", "memos_search", "bash"]) {
+    for (const name of ["amiba_connect_add", "cron_create", "attachment_read_text", "memos_search", process.platform === "win32" ? "pwsh" : "bash"]) {
       assert.ok(origin(name).length > 0, `missing ${name}`);
       assert.ok(origin(name).every(value => value === "builtin"), `${name} is not builtin`);
     }
@@ -859,6 +855,7 @@ export function apply(ctx) {
             "@deepseek-ai/dsh-client-runtime",
             "@deepseek-ai/dsh-api-remotes",
             "@amiba/dsh-plugin-ui-shell",
+            "@amiba/dsh-plugin-notification-hub",
           ],
         ],
         [
@@ -1038,10 +1035,13 @@ export function apply(ctx) {
       sessionId,
     });
     assert.ok(moved.workspace.sessionIds.includes(sessionId));
-    const searched = await rpc(baseUrl, "session.search", {
-      query: "DSH smoke",
+    // The async producer is still appending events. Search requires a stable
+    // persistence observation, which can briefly lag the live session on CI.
+    await waitFor("persisted session search", async () => {
+      const searched = await rpc(baseUrl, "session.search", { query: "DSH smoke" });
+      assert.ok(Array.isArray(searched.items));
+      return true;
     });
-    assert.ok(Array.isArray(searched.items));
     const history = await rpc(baseUrl, "session.history", {
       sessionId,
       maxMessages: 20,
@@ -1135,11 +1135,12 @@ export function apply(ctx) {
       ].sort();
       for (const packageName of [
         "@amiba/dsh-plugin-attachments",
-        "@amiba/dsh-plugin-browser-core",
         "@amiba/dsh-plugin-memory-memos",
         "@amiba/dsh-plugin-resources",
         "@amiba/dsh-plugin-pets",
       ]) assert.ok(amibaToolPackages.includes(packageName), `tool catalog omitted ${packageName}`);
+      // This standalone Web test has neither a CDP endpoint nor an Electron provider.
+      assert.ok(!amibaToolPackages.includes("@amiba/dsh-plugin-browser-core"), "browser tools require an available provider");
       assert.ok(
         scopedTools.value.tools.every((tool) =>
           ["dsh-core", "dsh-plugin", "mcp-server"].includes(tool.source.kind),

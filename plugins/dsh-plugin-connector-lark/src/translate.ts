@@ -186,11 +186,13 @@ export function translateReceiveEvent(
     let sender: string | undefined;
     if (typeof senderObj === "object" && senderObj !== null) {
       const senderRecord = senderObj as Record<string, unknown>;
+      if (senderRecord.sender_type === "app") return null;
       const senderIdObj = senderRecord.sender_id;
       if (typeof senderIdObj === "object" && senderIdObj !== null) {
         const senderIdRecord = senderIdObj as Record<string, unknown>;
         const openId = senderIdRecord.open_id;
         if (typeof openId === "string") {
+          if (openId === botOpenId) return null;
           sender = openId;
         }
       }

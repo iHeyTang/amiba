@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { resolveInstalledPackageDirectory } from "@amiba/app-runtime/dsh-runtime";
 import type {
   DesktopExtension,
   DesktopExtensionContext,
@@ -39,22 +40,10 @@ export function resolveDesktopExtension(
     }
     for (const name of Object.keys(manifest.dependencies ?? {})) {
       if (!PACKAGE_NAME.test(name)) continue;
-      const candidate = path.join(
-        path.dirname(filename),
-        "node_modules",
-        ...name.split("/"),
-        "package.json",
-      );
       try {
-        queue.push(
-          realpathSync(createRequire(filename).resolve(`${name}/package.json`)),
-        );
+        queue.push(path.join(resolveInstalledPackageDirectory(filename, name), "package.json"));
       } catch {
-        try {
-          queue.push(realpathSync(candidate));
-        } catch {
-          /* Not installed or not exported. */
-        }
+        /* Dependency is not installed. */
       }
     }
   }

@@ -1,7 +1,7 @@
 import type { NotificationClient } from "@amiba/dsh-plugin-notification-hub/client";
 import { petMessages } from "./desktop-message.js";
 import { useEffect, useState, useSyncExternalStore, useMemo } from "react";
-import { getPlatform } from "@amiba/app-runtime/platform";
+import { getPlatform } from "@amiba/dsh-plugin-ui-shell/client";
 import type {
   DesktopPetActivity,
   DesktopPetLayout,

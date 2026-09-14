@@ -1,3 +1,8 @@
+import { vi } from "vitest";
+// The host supplies this module factory in DSH; unit tests supply its public seam.
+vi.mock("@amiba/dsh-plugin-ui-shell/client", async () => ({
+  getPlatform: (await import("@amiba/app-runtime/platform")).getPlatform,
+}));
 import "@testing-library/jest-dom/vitest";
 import {
   hasPlatform,

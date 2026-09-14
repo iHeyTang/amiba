@@ -1,0 +1,18 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { gh } from './release-policy.mjs';
+import { targets } from './config.mjs';
+import { productVersion } from './version.mjs';
+const { GITHUB_REPOSITORY: repo, ARTIFACT_RUN_ID: runId } = process.env;
+if (!/^\d+$/.test(runId || '')) throw new Error('Invalid artifact run ID');
+const target = process.env.ARTIFACT_TARGET || 'win32-x64';
+if (!targets.includes(target)) throw new Error('Invalid verification target');
+const version = productVersion();
+const pages = JSON.parse(gh(['api', '--paginate', '--slurp', `repos/${repo}/actions/runs/${runId}/artifacts?per_page=100`]));
+const candidates = pages.flatMap(page => page.artifacts).filter(a => !a.expired && (a.name === `metadata-${version}-${target}` || a.name.startsWith(`amiba-${version}-${target}-`) || a.name === `amiba-${target}`));
+if (candidates.length !== 1) throw new Error('Expected exactly one matching target artifact; choose an unambiguous run');
+const dir = path.resolve('apps/desktop/dist', target);
+fs.mkdirSync(dir, { recursive: true });
+gh(['run', 'download', runId, '--repo', repo, '--name', candidates[0].name, '--dir', dir]);
+const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'release-manifest.json')));
+if (manifest.version !== version || manifest.target !== target) throw new Error('Downloaded installer version/target mismatch');

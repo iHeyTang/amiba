@@ -397,3 +397,22 @@ export async function ensureManagedDshProfile(
 export { AMIBA_DSH_BUNDLES }
 
 export * from "./plugin-development.js"
+export * from "./package-resolution.js"
+
+/** Keep desktop, CLI and plugin commands on the managed Node/toolchain. */
+export function managedDshEnvironment(paths: Pick<ManagedDshPaths, "home" | "agentsHome" | "runtimeAppBinDir" | "runtimeBinDir">, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  // Windows environment keys are case-insensitive; duplicate Path/PATH keys
+  // can cause spawn to pass the inherited path instead of our managed one.
+  const result = { ...env }
+  const pathKey = Object.keys(env).find(key => key.toUpperCase() === "PATH")
+  const inheritedPath = env.PATH ?? (pathKey ? env[pathKey] : undefined) ?? ""
+  if (process.platform === "win32") {
+    for (const key of Object.keys(result)) if (key.toUpperCase() === "PATH") delete result[key]
+  }
+  return {
+    ...result,
+    DSH_HOME: paths.home,
+    DSH_AGENTS_HOME: paths.agentsHome,
+    PATH: [paths.runtimeAppBinDir, paths.runtimeBinDir, inheritedPath].join(path.delimiter),
+  }
+}

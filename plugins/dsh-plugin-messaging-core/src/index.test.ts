@@ -1311,3 +1311,95 @@ it("keeps each sender's nickname on the relayed message and the durable retry re
   expect(followup.mock.calls.map(call => call[0].source.senderName)).toEqual(["张三", "李四"]);
   expect((await center.store.listPending("session-a")).map(row => row.metadata?.senderName)).toEqual(["张三", "李四"]);
 });
+
+describe("desktop transport sync", () => {
+  it.each(["connector-lark", "connector-dingtalk", "connector-weixin"])("routes %s desktop inputs without rerunning the agent; deduplicates mixed IM replies", async provider => {
+    const { center, live, followup } = await harness();
+    const deliver = vi.fn(async () => undefined);
+    center.registerProvider({ id: provider, name: provider, description: "sync", supportsInbound: true, supportsOutbound: true, deliver });
+    const { channel, secret } = await center.createChannel({ provider, name: "sync", sessionId: "session-a" });
+    const binding = await center.store.bindConversation({ channelId: channel.id, conversationKey: "chat", kind: "p2p", sessionId: "session-a" });
+    const { syncScope } = await import("./desktop-sync.js");
+    await center.store.configureSync(syncScope(binding), { enabled: true, since: 0, floors: {} });
+    await center.acceptInbound(channel.id, secret, { id: "im-input", text: "also this" });
+    const [pending] = await center.store.listPending("session-a");
+    const agent = live.get("session-a") as { session: { id: string; events: unknown[] } };
+    agent.session.events = [
+      { seq: 0, time: 1, type: "turn/start", data: { turn: 1 } },
+      { seq: 1, time: 2, type: "user/message", data: { id: "desktop", source: { kind: "user" }, content: "Budget 50k" } },
+      { seq: 2, time: 3, type: "user/message", data: { id: pending.dshMessageId, source: { kind: "plugin", form: "relay" }, content: "also this" } },
+      { seq: 3, time: 4, type: "assistant/message", data: { turn: 1, message: { id: "reply", content: "Updated" } } },
+      { seq: 4, time: 5, type: "turn/end", data: { turn: 1, reason: "completed" } },
+    ];
+    const reconcile = (center as unknown as { reconcileSession(session: unknown): Promise<void> }).reconcileSession.bind(center);
+    await reconcile(agent.session);
+    await reconcile(agent.session);
+    await (center as unknown as { pumpDeliveries(): Promise<void> }).pumpDeliveries();
+    expect(deliver.mock.calls.map(call => (call as unknown as [unknown, { sync: { author: string } }])[1].sync.author)).toEqual(["user", "assistant"]);
+    expect(followup).toHaveBeenCalledTimes(1); // Only the actual IM inbound.
+    expect(await center.store.listPending()).toEqual([]);
+  });
+
+  it("blocks later mirrored replies when transport is unavailable, then retries in order", async () => {
+    const { center } = await harness();
+    const deliver = vi.fn(async () => { throw new Error("session_webhook_unavailable"); });
+    center.registerProvider({ id: "sync-test", name: "sync", description: "", supportsInbound: true, supportsOutbound: true, deliver });
+    const { channel } = await center.createChannel({ provider: "sync-test", name: "sync", sessionId: "session-a" });
+    const binding = await center.store.bindConversation({ channelId: channel.id, conversationKey: "chat", kind: "p2p", sessionId: "session-a" });
+    const { projectDesktopSync, syncScope } = await import("./desktop-sync.js");
+    const policy = { enabled: true, since: 0, floors: {} };
+    await center.store.configureSync(syncScope(binding), policy);
+    const events = [
+      { seq: 0, time: 1, type: "turn/start", data: { turn: 1 } },
+      { seq: 1, time: 2, type: "user/message", data: { id: "desktop", source: { kind: "user" }, content: "hello" } },
+      { seq: 2, time: 3, type: "assistant/message", data: { turn: 1, message: { content: "reply" } } },
+      { seq: 3, time: 4, type: "turn/end", data: { turn: 1 } },
+    ];
+    for (const row of projectDesktopSync("session-a", events as never, binding, policy)) await center.store.queueOutbound(row);
+    const pump = () => (center as unknown as { pumpDeliveries(): Promise<void> }).pumpDeliveries();
+    await pump();
+    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(await center.store.listOutbox()).toHaveLength(2);
+    deliver.mockImplementation(async () => undefined as never);
+    await center.store.retryDeliveries(channel.id, (await center.store.listOutbox()).map(row => row.id));
+    await pump();
+    expect(deliver).toHaveBeenCalledTimes(3);
+    expect(await center.store.listOutbox()).toEqual([]);
+  });
+});
+
+it("opts in from current position, survives rotation, recovers a cold log without waking an agent, and cancels pending mirrors", async () => {
+  const { center, reflectServices, live, ctx, followup } = await harness();
+  const root = await mkdtemp(join(tmpdir(), "amiba-sync-lifecycle-"));
+  roots.push(root);
+  reflectServices.set("amibaConversations", new ConversationLifecycle(root));
+  center.registerProvider({ id: "sync-cold", name: "sync", description: "", supportsInbound: true, supportsOutbound: true,
+    deliver: async () => { throw new Error("session_webhook_unavailable"); } });
+  const { channel, secret } = await center.createChannel({ provider: "sync-cold", name: "sync", agentPreset: "standard" });
+  const conversation = { key: "owner", kind: "p2p" as const };
+  const first = await center.acceptInbound(channel.id, secret, { id: "im-first", text: "hi", conversation });
+  const agent = live.get(first.sessionId) as { session: { events: unknown[] } };
+  const now = Date.now();
+  agent.session.events = [{ seq: 0, time: now, type: "user/message", data: { id: "old", source: { kind: "user" }, content: "do not backfill" } }];
+  const initial = await center.conversationSettings(channel.id, "owner", { action: "status" });
+  expect(initial.desktopSync?.enabled).toBe(false);
+  await center.conversationSettings(channel.id, "owner", { action: "configure", desktopSync: true });
+  const events = [...agent.session.events, { seq: 1, time: Date.now() + 1, type: "user/message", data: { id: "new", source: { kind: "user" }, content: "sync me" } }];
+  live.delete(first.sessionId);
+  ctx.sessionPersistence.inspect.mockImplementation(async id => {
+    if (id !== first.sessionId) throw new Error("session_not_found");
+    return { meta: { id, agentPreset: "standard" }, events } as never;
+  });
+  await (center as unknown as { recoverSync(): Promise<void> }).recoverSync();
+  await (center as unknown as { pumpDeliveries(): Promise<void> }).pumpDeliveries();
+  const synced = await center.conversationSettings(channel.id, "owner", { action: "status" });
+  expect(synced.desktopSync?.messages.map(row => row.sourceMessageId)).toEqual(["new"]);
+  expect(followup).toHaveBeenCalledTimes(1);
+  await center.conversationSettings(channel.id, "owner", { action: "new" });
+  await center.acceptInbound(channel.id, secret, { id: "im-next", text: "next", conversation });
+  expect((await center.conversationSettings(channel.id, "owner", { action: "status" })).desktopSync?.enabled).toBe(true);
+  await center.conversationSettings(channel.id, "owner", { action: "configure", desktopSync: false });
+  expect((await center.conversationSettings(channel.id, "owner", { action: "status" })).desktopSync?.messages[0].state).toBe("cancelled");
+  await (center as unknown as { pumpDeliveries(): Promise<void> }).pumpDeliveries();
+  expect((await center.store.listOutbox()).filter(row => row.envelope.sync)).toEqual([]);
+});
