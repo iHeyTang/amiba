@@ -95,3 +95,10 @@ it('resolves cold sessions through one registered authority and removes that aut
   off();
   await expect(uploads.uploadStream({ sessionId: 'missing' as never, data: (async function* () {})() })).rejects.toMatchObject({ code: 'session/not-found' });
 });
+
+it('releases a cold-session resolver registered through the Cordis service facade', async () => {
+  const { ctx, agent } = await fixture();
+  const scoped = await new Promise<FileUploads>(resolve => { ctx.inject(['fileUploads'], scope => { resolve(scope.fileUploads); }); });
+  const off = scoped.registerAgentResolver(async id => agent(id)); off();
+  const next = scoped.registerAgentResolver(async id => agent(id)); next();
+});

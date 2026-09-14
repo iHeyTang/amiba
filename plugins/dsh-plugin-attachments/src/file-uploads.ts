@@ -1,5 +1,5 @@
 // Adapted from deepseek-harness c291e796, MIT; see ../LICENSE.deepseek.
-// Receipt authority only: HTTP transport and command resolver registration are wired separately.
+// HTTP/browser transport is wired separately from this Host authority.
 /** Host file-upload service: streamed intake and Agent-scoped staged receipts. */
 
 import { randomUUID } from 'node:crypto'
@@ -65,13 +65,18 @@ export class FileUploads extends TypertRemoteService {
   static inject = ['agents', 'attachments']
 
   private readonly stagedFiles = new WeakMap<Session, Map<FileUploadReceiptId, StagedFileUpload>>()
-  private agentResolver: AgentResolver | undefined
+  private readonly agentResolution: { resolver: AgentResolver | undefined } = { resolver: undefined }
 
   /** @param ctx - Host context carrying Agent and attachment services. */
   constructor(ctx: Context, private readonly storage: ReturnType<typeof createOfficialFileStorage>) {
     super(ctx, 'fileUploads')
     ctx.on('session/event', (session, event) => { this.observeSessionEvent(session, event) })
     ctx.on('session/disposed', (session) => { this.stagedFiles.delete(session) })
+    ctx.inject(['commands'], scope => {
+      const commands = scope.get('commands') as { registerFileReceiptResolver?: (resolve: (agent: Agent, receiptId: string) => FileAttachmentRef | undefined) => () => void } | undefined
+      if (typeof commands?.registerFileReceiptResolver !== 'function') return
+      scope.effect(() => commands.registerFileReceiptResolver!((agent, receiptId) => this.resolve(agent, receiptId)), 'file upload command receipt resolver')
+    })
   }
 
   /**
@@ -80,10 +85,10 @@ export class FileUploads extends TypertRemoteService {
    * @returns disposer removing this resolver.
    */
   registerAgentResolver(resolve: AgentResolver): () => void {
-    if (this.agentResolver !== undefined) throw new Error('file-upload: Agent resolver is already registered')
-    this.agentResolver = resolve
+    if (this.agentResolution.resolver !== undefined) throw new Error('file-upload: Agent resolver is already registered')
+    this.agentResolution.resolver = resolve
     return () => {
-      if (this.agentResolver === resolve) this.agentResolver = undefined
+      if (this.agentResolution.resolver === resolve) this.agentResolution.resolver = undefined
     }
   }
 
@@ -208,7 +213,7 @@ export class FileUploads extends TypertRemoteService {
   private async resolveAgent(sessionId: SessionId): Promise<Agent> {
     const live = this.ctx.agents.get(sessionId)
     if (live !== undefined) return live
-    const resolver = this.agentResolver
+    const resolver = this.agentResolution.resolver
     if (resolver === undefined) {
       throw new FileUploadError('session/not-found', `session "${sessionId}" is not attached`, { sessionId })
     }

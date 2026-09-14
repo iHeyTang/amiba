@@ -1,0 +1,34 @@
+diff --git a/lib/client.js b/lib/client.js
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -4276,16 +4276,10 @@
+ 		//#region ../../interaction/commands/lib/typert.remote-client.js
+ 		const _deepseek_ai_dsh_commands_commands_execute_parameter_0$schema = intersection(string(), unknown());
+ 		const _deepseek_ai_dsh_commands_commands_execute_parameter_1$schema = string();
+-		const _deepseek_ai_dsh_commands_commands_execute_parameter_2$schema = array(object({
+-			"mediaType": union([
+-				literal("image/png"),
+-				literal("image/jpeg"),
+-				literal("image/webp"),
+-				literal("image/gif")
+-			]),
+-			"data": string(),
+-			"name": string().optional()
+-		}));
++		const _deepseek_ai_dsh_commands_commands_execute_parameter_2$schema = array(union([
++            object({ type: literal("file"), receiptId: string() }),
++            object({ type: literal("image").optional(), mediaType: union([literal("image/png"),literal("image/jpeg"),literal("image/webp"),literal("image/gif")]),data:string(),name:string().optional() })
++        ]));
+ 		const _deepseek_ai_dsh_commands_commands_execute_result$schema = union([_undefined(), object({
+ 			"commandId": intersection(string(), unknown()).readonly(),
+ 			"result": union([object({
+@@ -4303,7 +4297,8 @@
+ 			"description": string().readonly(),
+ 			"input": object({
+ 				"hint": string().readonly(),
+-				"images": boolean().readonly().optional()
++				"images": boolean().readonly().optional(),
++                "attachments": boolean().readonly().optional()
+ 			}).readonly().optional()
+ 		}));
+ 		const TYPERT_REMOTE$6 = {

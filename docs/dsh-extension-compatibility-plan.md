@@ -2240,3 +2240,13 @@ OfficialTriggerPlugin 订阅公开词表，以编辑器所在窗口的 CSS Custo
 - rc.2 没有新版 RemoteError，使用 Host FileUploadError 明确保留 code/data；远程通道与错误映射、命令 resolver 和接收调用方仍待接通。
 - 验证：16 项附件测试（含 5 项授权测试），插件 typecheck、verify:architecture、runtime:prepare 和 runtime:verify 通过；真实 Desktop --compat --input-state --command-images 通过，覆盖安装后的 Host 文件凭据解析、回滚保留与成功回收，以及旧图片能力。
 - 日志：/tmp/amiba-receipts-{tests,types,architecture,build,verify,smoke}.log。首次桌面失败为探针遗漏 agents 注入，修复探针后同一生产构建通过。
+
+
+### 2026-09-14 文件凭据命令接收
+
+- 固定 rc.2 的 dsh-commands 补丁新增 registerFileReceiptResolver 与有顺序的图片/文件接收；所有文件授权先于图片写入。原 images 声明与旧图片载荷保留，显式 attachments 声明优先，取消和命令生命周期保留。
+- Host 网关通过 executeWire 接受 images 或 submittedAttachments，保持公开 execute 四参数签名；可选字段显式 acceptsUndefined，拒绝同时提供两份载荷。修正官方 dsh-api-remotes 浏览器包内嵌的旧参数校验和列表投影。
+- fileUploads 自动注册并按 Cordis scope 卸载命令解析器。解析器状态使用对象保存，修复 Cordis 函数包装导致注销身份比较失效；Agent 恢复解析器同样处理。
+- 证据：命令 11 项、附件 17 项测试通过，包含实际浏览器发布包加载和解析；类型、架构、runtime prepare/verify 通过。真实 Desktop --compat --input-state --command-images 验证旧客户端、新版 HTTP 字段传入真实上传文件并执行，未知凭据拒绝，新旧图片命令和混合粘贴等原能力通过。
+- 仍未完成：浏览器文件上传承载、输入器普通文件注册/调用/成功消费、模型文件提交及队列接收绑定；上述命令成功不能替代这些证据。
+- 日志：/tmp/amiba-file-commands-{tests,attachments-tests,adapter-types,types,architecture,build,verify,smoke}.log。

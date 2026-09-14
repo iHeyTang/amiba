@@ -21,7 +21,14 @@ if (!fileStorageChecked) {
     const accepted = uploads.bindPrompt(agent,[upload.receiptId],'file-fixture-accepted'); accepted.commit(); accepted[Symbol.dispose]();
     uploads.retirePrompt(agent,'file-fixture-accepted');
     const committedRetired = uploads.resolve(agent,upload.receiptId)===undefined;
+    const commandUpload = await uploads.upload(agent,{data:bytes.toString('base64'),name:'command.bin'},new AbortController().signal);
+    ctx.commands.register({name:'compat-file-receipt',description:'File receipt fixture',input:{hint:'file',attachments:true},handler:({attachments})=>{
+      const file = attachments[0];
+      if (attachments.length!==1||file.type!=='file'||file.attachment.attachmentId!==ref.attachmentId||file.attachment.name!=='command.bin') return {kind:'error',text:'Unexpected file block'};
+      return {kind:'success',text:'COMPAT_FILE_RECEIPT_OK'};
+    }});
     console.log('AMIBA_PROBE_FILE_STORAGE '+JSON.stringify({
+      commandReceiptId:commandUpload.receiptId, commandSessionId:agent.id,
       receiptResolved, rollbackPreserved, committedRetired,
       ref, sameDigest:ref.attachmentId===second.attachmentId,
       data:Buffer.concat(chunks).toString('base64'),
