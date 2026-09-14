@@ -146,16 +146,17 @@
 
 2026-09-14 对当前受管 Node 加载的 rc.2 包与固定 c291e796（包版本 0.1.5-rc.2）核对后，普通文件不是仅修改输入参数即可接入。
 
-| 层次 | 当前实际状态 | 完整接入必须完成的工作 |
+| 层次 | 当前实际状态 | 仍需完成的工作 |
 | --- | --- | --- |
-| 附件存储 | rc.2 原包类型仍只有图片；现已由 Amiba Host 插件为旧服务实例补齐 saveFile、saveFileStream、readFileStream、fileHostPath、admitEncodedFile 和错误分类，真实 Host 验证通过 | 存储层已接入，使用独立 official-files/v1；仍需连接 receipt 授权、命令解析与浏览器输入，不代表完整文件上传已完成 |
-| 命令接收 | 已为 rc.2 补齐 registerFileReceiptResolver、混合文件/图片接收与 Host/浏览器发布包参数校验；真实旧客户端及新版 HTTP 字段执行均通过 | 命令接收已验证；浏览器上传和输入器的普通文件消费仍需接通，不能把 Host 接收等同完整输入支持 |
-| 上传与授权 | Host 编码/二进制流式上传及桌面 Blob/ReadableStream 后台通道已接通；真实桌面上传、进度、途中取消和官方文件命令通过 | 按真实 Agent/Session 签发凭据；独立 Web 部署、离屏/队列文件及新版模块依赖仍待适配，不能用原生 att_* ID 替代 |
-| 接收及回收 | 新版 FileUploads.bindPrompt 具有提交/回滚，队列移除和带 rpcId 的 user/message 会退休 receipt | 与真实接收确认、队列和历史观察接通，失败保留重试权限，不能提前释放 |
-| 浏览器输入 | 新版 conversation 通过 fileUpload.upload 保存 receipt，serializeDraftAttachments 只接受 ready 文件并按原顺序输出 | 接入上传状态、取消、原顺序和非图片注册对象；保留现有原生文字/PDF/图片功能和样式 |
-| 新版子会话文件上传 | 固定 c291e796 的 commit 先调用 assertOrdinaryAgent；origin=subagent 时明确抛 SUBAGENT_FILE_UNSUPPORTED | 此官方路径不能支持子会话文件上传。属于固定新版的明确限制，不意味着 Amiba 原有子会话附件能力应被删除 |
+| 附件存储 | Host 普通文件持久化、流式读写、完整性校验、只读路径及 FileAttachmentRef 类型已补齐，真实 Host 验证通过 | 存储层已接入；文件在队列、跨窗口与历史中的完整生命周期仍需收口 |
+| 命令接收 | 官方命令接收文件/图片混合载荷，原生前台文件选择到执行、拒绝保留、重试成功清理已通过桌面验证 | 离屏普通文件注册、后台文件命令和队列生命周期 |
+| 上传与授权 | Host 编码/二进制流式上传及桌面 Blob/ReadableStream 后台通道已接通；真实上传、进度、途中取消及会话凭据执行通过 | 独立 Web 部署验证、冷会话恢复及离屏/队列文件接入 |
+| 模型请求转换 | 按固定新版契约将结构化文件转换为文件名、大小、只读路径文本；递归覆盖工具结果，原历史不变，与原图片策略兼容；真实 LLM 调度及 Host 路径验证通过 | 模型提交入口的 receipt 接收、队列、token 统计、完整历史展示/恢复仍待接通；此行不表示文件模型提交已完成 |
+| 接收及回收 | Host fileUploads 已实现按会话授权、绑定提交/回滚及按请求回收；命令路径和失败保留通过验证 | 模型接收确认、队列移除、历史和跨窗口所有权的完整联动 |
+| 浏览器输入 | 原生前台文件命令及 fileUpload 后台服务已接入，保留原文字/PDF/图片能力与样式 | 新版非图片注册对象、离屏提交及混合附件持久化尚需适配 |
+| 新版子会话文件上传 | 固定 c291e796 的 commit 在 origin=subagent 时明确抛 SUBAGENT_FILE_UNSUPPORTED | 此官方路径存在确定限制；保留 Amiba 原有子会话附件能力 |
 
-下一步应按存储→命令解析→上传授权→输入生命周期成组迁移。这是可实施但尚未完成的服务迁移，不是“普通文件永远不能支持”。本次没有安装新版依赖或替换当前运行时。
+下一步集中完成模型提交、离屏输入和队列生命周期，再验收独立 Web 与文件历史。继续以 rc.2 为运行基线，已完成的存储、前台命令和桌面上传不再列为缺失。
 
 证据定位：当前受管 app/node_modules 下 dsh-attachment/lib/types/index.d.ts、dsh-commands/lib/types/index.d.ts 和实际模块导出；固定源码 packages/client/file-upload/src/index.ts（commit/assertOrdinaryAgent/bindPrompt/observeSessionEvent）、packages/client/ui-conversation/src/client/service.ts（beginFileUpload/serializeDraftAttachments）、packages/interaction/commands/src/index.ts（registerFileReceiptResolver）。注意抽象 saveImage 不出现在基类运行时 prototype，不能用该现象推断图片不受支持。
 
@@ -165,3 +166,6 @@
 
 
 2026-09-14 后台客户端上传进展：fileUpload 服务新增 Blob/ReadableStream 后台承载，保留 Uint8Array 编码 Remote 回退。网页端适配官方 Worker 的 Blob XHR 与流式 fetch；桌面通过预启动 __DSH_FILE_UPLOAD__ hook 使用窗口隔离的 IPC，每块最多 64 KiB，等待写入确认再读取，Host 地址和路径固定校验。窗口关闭/导航、调用取消及提供服务的插件卸载会取消对应上传，回收 IPC 状态；进度和结构化结果已接通。实际桌面 Blob 与分块 ReadableStream 上传均获得有效凭据并执行官方文件命令；多块传输中取消触发 AbortError 并取消源读取，原文件/图片命令、粘贴和历史回归通过。28 项附件测试、9 项运输/分块测试、插件与桌面类型检查、架构检查、完整构建及运行时/桌面包验证通过。桌面客户端 available 为 true；网页 Worker 有逻辑测试，独立 Web 实际部署、浏览器网络协议条件仍待验收，不能把桌面结果外推到所有 Web 环境。普通文件模型输入、离屏注册、队列及跨窗口文件语义仍未完成。
+
+
+2026-09-14 模型文件表示进展：核对固定 c291e796 后确认，官方普通文件从不以原生文件块发送给模型提供方，而是在最终 adapter 调度前转换为只读文件路径文本。已给 rc.2 LLM 补齐 contentHasFile、fileHandleText、projectFilesToText 和 fileRequestText，递归覆盖工具结果，保留不可变原消息及不相关消息身份；先转换文件，再按原策略处理不支持图片的模型。补齐 FileAttachmentRef/FileBlock 类型，以及 FS 的保守默认路径映射和 Local FS 的绝对路径映射；未知执行环境或坏引用明确返回无法读取路径的说明，未扩大文件写权限。4 项新增真实 LLM/存储测试及全部 32 项附件测试、类型/架构、运行时构建/校验通过；真实桌面 Host 的 fileRequestText 返回实际存储文件路径，同轮流式上传、命令及原输入能力回归通过。新增开发测试依赖不改变受管运行时的 DSH 版本。模型提交入口、token 统计、队列和完整文件历史仍待接通，不能将请求转换层完成等同端到端文件模型提交完成。

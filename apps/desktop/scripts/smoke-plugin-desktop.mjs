@@ -949,7 +949,9 @@ try {
       const fileStorageEntry = fileStorageLogs.entries.find(entry=>entry.message.includes('AMIBA_PROBE_FILE_STORAGE '));
       const fileStorageResult = JSON.parse(fileStorageEntry.message.split('AMIBA_PROBE_FILE_STORAGE ')[1]);
       assert.match(fileStorageResult.ref.attachmentId,/^sha256:[a-f0-9]{64}$/);
-      const {commandReceiptId,commandSessionId,...fileStorageSummary}=fileStorageResult;
+      const {commandReceiptId,commandSessionId,modelHandle,...fileStorageSummary}=fileStorageResult;
+      assert.ok(modelHandle.includes('verbatim read-only copy saved at'));
+      assert.ok(modelHandle.includes('compat-host-file.bin'));
       assert.deepEqual({...fileStorageSummary,ref:{...fileStorageResult.ref,attachmentId:'digest'}},{receiptResolved:true,rollbackPreserved:true,committedRetired:true,ref:{attachmentId:'digest',name:'compat-host-file.bin',bytes:5},sameDigest:true,data:'AP8qgAc=',imagePreserved:true,pathHasName:true});
       console.log("Installed Host attachment service persisted and streamed exact files while retaining its existing image backend");
       const fileCommandResult=await evaluate(`window.__probeCtx.remote.commands.execute(${JSON.stringify(commandSessionId)},'/compat-file-receipt',[{type:'file',receiptId:${JSON.stringify(commandReceiptId)}}])`);

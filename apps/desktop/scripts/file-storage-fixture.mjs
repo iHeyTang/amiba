@@ -36,7 +36,11 @@ if (!fileStorageChecked) {
       console.log('AMIBA_PROBE_NATIVE_FILE '+JSON.stringify({attempt:nativeFileAttempts,name:attachments[0].attachment.name,content:Buffer.concat(chunks).toString('utf8'),result}));
       return result;
     }});
+    const modelHandle = await new Promise((resolve,reject)=>ctx.inject(['llm','fs','attachments'],scope=>{
+      try { resolve(scope.llm.fileRequestText(ref)); } catch(error) { reject(error); }
+    }));
     console.log('AMIBA_PROBE_FILE_STORAGE '+JSON.stringify({
+      modelHandle,
       commandReceiptId:commandUpload.receiptId, commandSessionId:agent.id,
       receiptResolved, rollbackPreserved, committedRetired,
       ref, sameDigest:ref.attachmentId===second.attachmentId,

@@ -1,0 +1,21 @@
+--- a/lib/types/types.d.ts
++++ b/lib/types/types.d.ts
+@@ -84,4 +84,6 @@
+     /** Whether the encoded request version retains an alpha channel. */
+     hasAlpha: boolean;
+ }
+-//# sourceMappingURL=types.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=types.d.ts.map
++/** Verbatim immutable file reference. */
++export interface FileAttachmentRef { attachmentId: AttachmentId; name: string; bytes: number }
+--- a/lib/types/index.d.ts
++++ b/lib/types/index.d.ts
+@@ -65,4 +65,5 @@
+     readImageRequest(ref: ImageAttachmentRef, policy: ImageRequestPolicy, signal?: AbortSignal): Promise<RequestImageAttachment>;
+ }
+ export default AttachmentStore;
+-//# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=index.d.ts.map
++export type { FileAttachmentRef } from "./types.ts";
