@@ -1226,7 +1226,7 @@ function ContentHeader({
       leading={
         <div
           data-content-header-leading
-          className="flex min-w-0 items-center gap-2.5"
+          className="flex w-full min-w-0 items-center gap-2.5"
           style={{ height: heightPx }}
         >
           <HeaderIconBox
@@ -1352,7 +1352,7 @@ function EditableContentHeaderTitle({
           ref={editorRef}
           data-content-header-title-editor
           aria-label={t("chat.rename")}
-          className="app-no-drag -my-1 -ml-1 min-w-[8ch] max-w-[min(32rem,50vw)] rounded-md bg-foreground/[0.045] px-1 py-1 text-[13px] font-medium tracking-tight text-foreground outline-none [field-sizing:content] selection:bg-primary/20 focus-visible:ring-1 focus-visible:ring-ring/40"
+          className="app-no-drag -my-1 -ml-1 min-w-0 max-w-[min(32rem,50vw,100%)] rounded-md bg-foreground/[0.045] px-1 py-1 text-[13px] font-medium tracking-tight text-foreground outline-none [field-sizing:content] selection:bg-primary/20 focus-visible:ring-1 focus-visible:ring-ring/40"
           value={draft}
           onBlur={commit}
           onChange={(event) => setDraft(event.target.value)}
@@ -1363,7 +1363,7 @@ function EditableContentHeaderTitle({
           type="button"
           aria-label={t("chat.rename")}
           title={t("chat.rename")}
-          className="app-no-drag -my-1 -ml-1.5 min-w-0 cursor-default truncate rounded-xl px-1.5 py-1 text-left text-[13px] font-medium tracking-tight transition-colors hover:bg-foreground/[0.045] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
+          className="app-no-drag -my-1 block min-w-0 max-w-full cursor-default truncate rounded-xl px-1.5 py-1 text-left text-[13px] font-medium tracking-tight transition-colors hover:bg-foreground/[0.045] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
           onClick={() => {
             setDraft(title);
             setEditing(true);
@@ -1373,7 +1373,7 @@ function EditableContentHeaderTitle({
           {title}
         </button>
       ) : (
-        <span className="pointer-events-none truncate text-[13px] font-medium tracking-tight">
+        <span className="pointer-events-none block truncate text-[13px] font-medium tracking-tight">
           {title}
         </span>
       )}
