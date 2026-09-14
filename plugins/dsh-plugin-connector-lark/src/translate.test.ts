@@ -378,3 +378,10 @@ describe("translateCardAction", () => {
     expect(translateCardAction({} as LarkCardActionEvent)).toBeNull();
   });
 });
+
+it.each([
+  { sender_id: { open_id: "bot" } },
+  { sender_type: "app", sender_id: { open_id: "another-bot" } },
+])("does not feed bot mirrors back into the agent: %j", sender => {
+  expect(translateReceiveEvent({ sender, message: { message_id: "echo", chat_id: "chat", chat_type: "p2p", message_type: "text", content: '{"text":"用户 · 来自桌面端"}' } }, "bot")).toBeNull();
+});

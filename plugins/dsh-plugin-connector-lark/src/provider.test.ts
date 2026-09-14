@@ -1792,3 +1792,14 @@ describe("sender display names", () => {
     await expect(api.userDisplayName("ou_1")).rejects.toThrow("no permission");
   });
 });
+
+it("sends desktop mirrors as literal bot text with a stable id, without card fallback", async () => {
+  const api = fakeApi();
+  const runtime = await createLarkProvider(fakeDeps({ api })).start(fakeHandle());
+  const id = `sync-${"a".repeat(64)}`;
+  const envelope = { id, channelId: "channel", sessionId: "session", inReplyTo: "", text: "用户 · 来自桌面端\n\nhello", createdAt: "", sync: { scope: "scope", sourceMessageId: "desktop", author: "user" as const, source: "desktop" as const } };
+  await runtime.deliver!({ key: "chat", kind: "p2p" }, envelope);
+  expect(api.sendText).toHaveBeenCalledWith("chat", envelope.text, "a".repeat(32));
+  expect(api.sendCard).not.toHaveBeenCalled();
+  await runtime.stop();
+});

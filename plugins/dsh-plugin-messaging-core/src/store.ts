@@ -1,3 +1,4 @@
+import type { DesktopSyncPolicy, DesktopSyncDelivery } from "./desktop-sync.js";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -78,6 +79,7 @@ export interface StoredOutboundEnvelope {
   channelId: string;
   sessionId: string;
   inReplyTo: string;
+  sync?: DesktopSyncDelivery["sync"];
   text: string;
   createdAt: string;
 }
@@ -114,6 +116,33 @@ interface MessageCenterDocument {
   pending: StoredPendingInbound[];
   outbox: StoredOutboundDelivery[];
   conversations: StoredConversationBinding[];
+  syncPolicies: Record<string, DesktopSyncPolicy>;
+  syncLedger: Record<string, { envelope: StoredOutboundEnvelope; state: "queued" | "sent" | "cancelled" }>;
+}
+
+function normalizeSyncPolicies(value: unknown): Record<string, DesktopSyncPolicy> {
+  if (value === undefined) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_sync_policies");
+  const result: Record<string, DesktopSyncPolicy> = {};
+  for (const [scope, policy] of Object.entries(value)) {
+    if (!policy || typeof policy !== "object" || typeof policy.enabled !== "boolean" ||
+      !Number.isFinite(policy.since) || !policy.floors || typeof policy.floors !== "object" || Array.isArray(policy.floors) ||
+      Object.values(policy.floors).some(seq => !Number.isSafeInteger(seq))) throw new Error("invalid_sync_policy");
+    result[scope] = policy;
+  }
+  return result;
+}
+
+function normalizeSyncLedger(value: unknown): MessageCenterDocument["syncLedger"] {
+  if (value === undefined) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_sync_ledger");
+  const result: MessageCenterDocument["syncLedger"] = {};
+  for (const [id, row] of Object.entries(value)) {
+    const envelope = row && normalizeOutboundEnvelope(row.envelope);
+    if (!envelope?.sync || envelope.id !== id || !["queued", "sent", "cancelled"].includes(row.state)) throw new Error("invalid_sync_receipt");
+    result[id] = { envelope, state: row.state };
+  }
+  return result;
 }
 
 function emptyDocument(): MessageCenterDocument {
@@ -124,6 +153,8 @@ function emptyDocument(): MessageCenterDocument {
     pending: [],
     outbox: [],
     conversations: [],
+    syncPolicies: {},
+    syncLedger: {},
   };
 }
 
@@ -239,6 +270,12 @@ function normalizeOutboundEnvelope(value: unknown): StoredOutboundEnvelope | nul
     typeof row.text !== "string" ||
     typeof row.createdAt !== "string"
   ) return null;
+  if (row.sync !== undefined) {
+    const sync = row.sync as Record<string, unknown>;
+    if (!sync || typeof sync !== "object" || typeof sync.scope !== "string" ||
+      typeof sync.sourceMessageId !== "string" || !["user", "assistant"].includes(String(sync.author)) || sync.source !== "desktop" ||
+      (sync.policySince !== undefined && !Number.isFinite(sync.policySince))) throw new Error("invalid_sync_envelope");
+  }
   return row as unknown as StoredOutboundEnvelope;
 }
 
@@ -278,7 +315,12 @@ function pushOutbound(
   document: MessageCenterDocument,
   envelope: StoredOutboundEnvelope,
 ): void {
-  if (document.outbox.some((item) => item.id === envelope.id)) return;
+  if (document.outbox.some((item) => item.id === envelope.id) || document.syncLedger[envelope.id]) return;
+  if (envelope.sync) {
+    const policy = document.syncPolicies[envelope.sync.scope];
+    if (!policy?.enabled || (envelope.sync.policySince !== undefined && policy.since !== envelope.sync.policySince)) return;
+    document.syncLedger[envelope.id] = { envelope, state: "queued" };
+  }
   const now = new Date().toISOString();
   document.outbox.push({
     id: envelope.id,
@@ -305,6 +347,8 @@ export class MessageCenterStore {
       if (parsed.version !== STATE_VERSION) throw new Error("unsupported message-center state");
       return {
         version: STATE_VERSION,
+        syncPolicies: normalizeSyncPolicies(parsed.syncPolicies),
+        syncLedger: normalizeSyncLedger(parsed.syncLedger),
         channels: Array.isArray(parsed.channels)
           ? parsed.channels.map(normalizeChannel).filter((item): item is StoredMessageChannel => Boolean(item))
           : [],
@@ -520,12 +564,53 @@ export class MessageCenterStore {
     });
   }
 
+  syncPolicies(): Promise<Record<string, DesktopSyncPolicy>> {
+    return this.chain.then(async () => (await this.readDocument()).syncPolicies);
+  }
+
+  configureSync(scope: string, policy: DesktopSyncPolicy): Promise<void> {
+    return this.mutate(document => {
+      document.syncPolicies[scope] = policy;
+      if (!policy.enabled) {
+        const cancelled = document.outbox.filter(item => item.envelope.sync?.scope === scope);
+        for (const item of cancelled) if (document.syncLedger[item.id]) document.syncLedger[item.id].state = "cancelled";
+        document.outbox = document.outbox.filter(item => item.envelope.sync?.scope !== scope);
+      }
+    });
+  }
+
+  syncStatus(scope: string) {
+    return this.chain.then(async () => {
+      const doc = await this.readDocument();
+      return { enabled: doc.syncPolicies[scope]?.enabled === true,
+        messages: Object.values(doc.syncLedger).filter(row => row.envelope.sync?.scope === scope).slice(-50).map(row => {
+          const pending = doc.outbox.find(item => item.id === row.envelope.id);
+          return { id: row.envelope.id, sourceMessageId: row.envelope.sync!.sourceMessageId,
+            sessionId: row.envelope.sessionId, author: row.envelope.sync!.author, text: row.envelope.text,
+            state: row.state === "queued" && pending?.lastError ? "failed" as const : row.state,
+            ...(pending?.lastError ? { error: pending.lastError } : {}) };
+        }) };
+    });
+  }
+
   listOutbox(): Promise<StoredOutboundDelivery[]> {
     return this.chain.then(async () => (await this.readDocument()).outbox);
   }
 
+  markSyncSending(id: string): Promise<boolean> {
+    return this.mutate(document => {
+      const delivery = document.outbox.find(item => item.id === id);
+      if (!delivery?.envelope.sync || !document.syncPolicies[delivery.envelope.sync.scope]?.enabled) return false;
+      // A crash after the platform accepts a request must not silently resend it.
+      delivery.lastError = "sync_delivery_unconfirmed";
+      delivery.nextAttemptAt = undefined;
+      return true;
+    });
+  }
+
   markDelivered(id: string): Promise<void> {
     return this.mutate((document) => {
+      if (document.syncLedger[id]) document.syncLedger[id].state = "sent";
       document.outbox = document.outbox.filter((item) => item.id !== id);
     });
   }
