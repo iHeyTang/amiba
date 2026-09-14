@@ -536,14 +536,22 @@
   font-style: italic;
 }
 
-/* Links */
-.chat-md.chat-md [data-streamdown="link"] {
+/* Match custom Markdown anchors as well as Streamdown's default links. */
+.chat-md.chat-md a[href] {
   color: hsl(var(--primary));
-  text-decoration-color: hsl(var(--primary) / 0.4);
-  text-underline-offset: 2px;
+  text-decoration-line: underline;
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
-.chat-md.chat-md [data-streamdown="link"]:hover {
-  text-decoration-color: hsl(var(--primary));
+.chat-md.chat-md a[href]:hover {
+  text-decoration-thickness: 2px;
+}
+.chat-md.chat-md a[href]:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
 /* Tables — tighter padding, subtle header band, sane row dividers. */
