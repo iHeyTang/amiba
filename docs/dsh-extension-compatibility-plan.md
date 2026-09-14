@@ -2185,3 +2185,14 @@ keyed 插槽白名单补入已实现的 main、命令视图和 Cordis 业务入�
 核对实际 rc.2 发布包 lib/client.js：InputMachine 初始化 log=[]、redoStack=[]（约 450 行），InputFacade 每次新建该机器（约 978 行）；ConversationSession 恢复 storedDraft 并绑定字符串镜像（约 7404 行），没有导入历史栈。固定 c291e796 的 input/facade.ts 构造器明确 registerHistory(editor, createEmptyHistoryState(), ...)，bindMirror 只写 draft 字符串。两条已核对的官方初始化/持久化路径均不承诺重启后恢复整套 undo/redo。
 
 因此此前将“历史跨重启”列为兼容必做项是不准确的，移出必做清单；这是纠正超出官方支持范围的额外增强，不是省略原审计的扩展契约。草稿、队列、附件的真实持久化和恢复要求仍保留；同一渲染器的会话历史兼容和上述已实现能力也不回退。早期记录中笼统把跨重启撤销列为未完成的文字，以本条纠正为准。
+
+
+## 2026-09-14 — 公开词表驱动原生文本装饰
+
+核对实际 rc.2 controller.lexicon 和 InputBar scanTextRefs：词表只驱动普通文本装饰，并非粘贴生成 occurrence 的入口。useLexicon 属于 composer.bar 的 registrant hooks，本次没有向 sessions.provide 添加错误的会话 hook。
+
+OfficialTriggerPlugin 订阅公开词表，以编辑器所在窗口的 CSS Custom Highlight 绘制真实文本范围；更新、根节点替换和卸载均处理订阅与范围释放。沿用原 muted/foreground 颜色，不修改 Lexical 节点、正文、选择、历史和布局。不支持 Highlight API 的浏览器保留原输入行为，独立 Web 待验证。当前遵循 rc.2 的 /plan.md 前缀匹配；新版词边界、点击、claim 优先级及其他输入协议仍需成组核对，不能将本次视为整套引用兼容完成。
+
+27 项词表及 RichComposerEditor 测试、UI typecheck、架构检查和完整 Desktop 构建通过。真实 Desktop --compat --input-state --command-images 通过：注册后高亮出现，空词表移除，更新恢复，卸载移除；draftRev、occurrences 和输入框 DOMRect 保持一致。已查看 amiba-lexicon-native.png 截图；同轮图片命令、混合粘贴和输入区回归通过。日志为 /tmp/amiba-lexicon-{tests,types,architecture,build,smoke}.log。
+
+详细表同步纠正后台自动出队和后台入队落盘的两条过时描述。

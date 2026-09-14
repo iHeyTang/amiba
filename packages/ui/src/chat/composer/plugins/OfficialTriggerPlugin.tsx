@@ -1,3 +1,4 @@
+import { subscribeTextReferenceHighlights } from "../triggers/text-reference-highlights";
 import { $readComposerParts } from "../composer-parts";
 /**
  * THE DRIVER. Everything upstream's ui-conversation InputBar supplies to the
@@ -42,6 +43,10 @@ export function OfficialTriggerPlugin({
 }) {
   const [editor] = useLexicalComposerContext();
   const { controller, runtime, sessionId, claims, revision } = trigger;
+
+  useEffect(() => controller?.lexicon
+    ? subscribeTextReferenceHighlights(editor, controller.lexicon)
+    : undefined, [editor, controller]);
 
   // The four scoped bail listeners, for as long as this editor is mounted.
   useEffect(() => {

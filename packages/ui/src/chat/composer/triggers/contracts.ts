@@ -69,6 +69,8 @@ export type ConsumeTokenGuard = ConsumeTokenRequest["guard"];
 export interface ComposerTriggerController {
   /** Menu state store — the ONE menu model both mount paths render from. */
   readonly menu: ObservableSnapshot<MenuState>;
+  /** Public hot plain-text names; optional for older/custom controllers. */
+  readonly lexicon?: ObservableSnapshot<ReadonlyMap<"/" | "@", readonly string[]>>;
   /** Feed one draft/caret change through detection and candidate fetch. */
   track(
     draft: string,

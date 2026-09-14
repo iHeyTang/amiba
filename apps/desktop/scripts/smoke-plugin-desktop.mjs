@@ -943,6 +943,25 @@ try {
       await wait(() => evaluate("window.__inputSource.getSnapshot().draft===''") );
       assert.ok(await evaluate("window.__inputObserved.some(s=>s?.draft==='COMPAT_INPUT_读取😀')"));
       console.log("Real editor input snapshot, subscription, public write and stale revision rejection verified");
+      // Hot lexicons decorate native text without creating reference objects or history edits.
+      await evaluate("window.__officialInputActions.setDraft('/compatlexicon');void 0");
+      await wait(() => evaluate("window.__inputSource.getSnapshot().draft==='/compatlexicon'"));
+      await evaluate("window.__lexiconBefore=window.__inputSource.getSnapshot();window.__lexiconGeometry=window.__regionEditor.getBoundingClientRect().toJSON();window.__lexiconRoll=['compatlexicon'];window.__lexiconListeners=new Set();window.__lexiconOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-hot-lexicon',trigger:'/',candidates:async()=>[],onPick:()=>({}),lexicon:()=>window.__lexiconRoll,subscribeLexicon:(_s,fn)=>{window.__lexiconListeners.add(fn);return ()=>window.__lexiconListeners.delete(fn)}});window.__lexiconText=()=>Array.from(CSS.highlights).filter(([name])=>name.startsWith('amiba-text-reference-')).flatMap(([,highlight])=>Array.from(highlight,range=>range.toString())).join('');void 0");
+      await wait(() => evaluate("window.__lexiconText()==='/compatlexicon'"));
+      await writeFile(path.join(tmpdir(), "amiba-lexicon-native.png"), Buffer.from((await call("Page.captureScreenshot", {format:"png"})).data, "base64"));
+      assert.equal(await evaluate("window.__inputSource.getSnapshot().draftRev"), await evaluate("window.__lexiconBefore.draftRev"));
+      assert.deepEqual(await evaluate("window.__inputSource.getSnapshot().occurrences"), []);
+      assert.deepEqual(await evaluate("window.__regionEditor.getBoundingClientRect().toJSON()"), await evaluate("window.__lexiconGeometry"));
+      await evaluate("window.__lexiconRoll=[];window.__lexiconListeners.forEach(fn=>fn());void 0");
+      await wait(() => evaluate("window.__lexiconText()===''"));
+      await evaluate("window.__lexiconRoll=['compatlexicon'];window.__lexiconListeners.forEach(fn=>fn());void 0");
+      await wait(() => evaluate("window.__lexiconText()==='/compatlexicon'"));
+      await evaluate("window.__lexiconOff();void 0");
+      await wait(() => evaluate("window.__lexiconText()===''"));
+      assert.equal(await evaluate("window.__inputSource.getSnapshot().draft"), '/compatlexicon');
+      await evaluate("window.__officialInputActions.setDraft('');void 0");
+      console.log("Official hot lexicon registration, refresh and removal paint native text without occurrences, draft revision or geometry changes");
+
       // Exercise the public submit binding in the real editor, including a
       // synchronous write before React has committed updated Composer props.
       await evaluate(`window.__inputSubmissions=[];window.__submitClaim={token:'/compat-submit ',submit:async(args)=>{window.__inputSubmissions.push(args);await new Promise(resolve=>{window.__finishInputSubmit=resolve});return {kind:'success',text:'COMPAT_INPUT_SUBMIT_OK'}}};window.__submitSourceOff=window.__probeCtx.inputTriggers.registerSource({name:'compat-submit-source',trigger:'/',order:-100,candidates:async()=>[],onPick:()=>({claim:window.__submitClaim}),matchEnter:async(_session,line)=>line.startsWith('/compat-submit ')?{claim:window.__submitClaim}:undefined});void 0`);
