@@ -22,7 +22,7 @@ export function harness(options: { presetAvailable?: boolean; askNoticeDelayMs?:
   const reflectServices = new Map<string, unknown>();
   const setupCtxs = new Map<string, FakeAgentCtx>();
 
-  type FakeAgentCtx = { systemPrompt: { section: ReturnType<typeof vi.fn> }; tools: { guard: ReturnType<typeof vi.fn>; register: ReturnType<typeof vi.fn> }; effect: ReturnType<typeof vi.fn> };
+  type FakeAgentCtx = { on: ReturnType<typeof vi.fn>; systemPrompt: { section: ReturnType<typeof vi.fn> }; tools: { guard: ReturnType<typeof vi.fn>; register: ReturnType<typeof vi.fn> }; effect: ReturnType<typeof vi.fn> };
   type FakeAgent = {
     id: string;
     followup: ReturnType<typeof vi.fn>;
@@ -33,6 +33,7 @@ export function harness(options: { presetAvailable?: boolean; askNoticeDelayMs?:
   };
 
   const makeAgentCtx = (): FakeAgentCtx => ({
+    on: vi.fn(() => () => undefined),
     systemPrompt: { section: vi.fn(() => () => undefined) },
     tools: { guard: vi.fn(() => () => undefined), register: vi.fn(() => () => undefined) },
     effect: vi.fn((run: () => unknown) => { run(); return () => undefined; }),

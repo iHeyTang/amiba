@@ -10,7 +10,7 @@ import { harness } from "./test/service-harness.js";
 
 describe("amiba-steward host entry", () => {
   it("declares the remote contract and the preset id", () => {
-    expect(AMIBA_STEWARD_REMOTE.descriptors.map((d) => d.method)).toEqual(["conversationSettings", "ensureStewardSession", "listTasks", "adopt", "closeTask"]);
+    expect(AMIBA_STEWARD_REMOTE.descriptors.map((d) => d.method)).toEqual(["instances", "saveInstance", "deleteInstance", "conversationSettings", "ensureStewardSession", "listTasks", "adopt", "closeTask"]);
   });
 
   it("does not seed presets, starts the service, and registers the steward tools into the steward scope", async () => {
@@ -19,6 +19,7 @@ describe("amiba-steward host entry", () => {
     const provided: string[] = [];
     const hostCtx = {
       ...ctx,
+      tools: { register: vi.fn(() => () => undefined), guard: vi.fn(() => () => undefined) },
       amibaConversations: new ConversationLifecycle(root),
       effect: ctx.effect,
       provide: vi.fn((name: string) => provided.push(name)),
@@ -27,7 +28,7 @@ describe("amiba-steward host entry", () => {
     await apply(hostCtx as never, { root });
     await vi.waitFor(() => expect(setupCtxs.size).toBe(1));
     const [agentCtx] = [...setupCtxs.values()];
-    expect(agentCtx!.tools.register).toHaveBeenCalledTimes(5);
+    expect(agentCtx!.tools.register).toHaveBeenCalledTimes(6);
     expect(agentCtx!.systemPrompt.section).toHaveBeenCalled();
   });
 });
