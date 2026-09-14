@@ -1,3 +1,5 @@
+import { createPortal } from "react-dom";
+import { fitWorkspaceWidth, preferredWorkspaceWidth, workspaceWidthBounds } from "./workspace-pane-layout";
 import { useDirectoryChooser } from "../directory-chooser";
 import { EmptyStateVisual } from "../primitives/empty-state-visual";
 import {
@@ -126,8 +128,6 @@ export { workspaceFileTargets } from "./workspace-review";
 const PANE_WIDTH_KEY = "settings.chat.workspacePaneWidth";
 const TERMINAL_HEIGHT_KEY = "settings.chat.workspaceTerminalHeight";
 const DEFAULT_PANE_WIDTH = 520;
-const MIN_PANE_WIDTH = 360;
-const MAX_PANE_WIDTH = 880;
 const DEFAULT_TERMINAL_HEIGHT = 280;
 const MIN_TERMINAL_HEIGHT = 160;
 const MAX_TERMINAL_HEIGHT = 640;
@@ -661,7 +661,7 @@ function languageLabel(language: string): string {
 }
 
 function clampPaneWidth(value: number): number {
-  return Math.min(MAX_PANE_WIDTH, Math.max(MIN_PANE_WIDTH, Math.round(value)));
+  return preferredWorkspaceWidth(value);
 }
 
 function clampTerminalHeight(value: number): number {
@@ -4144,17 +4144,37 @@ export function WorkspacePane({
   const previewRef = useRef<HTMLElement>(null);
   const tabRailRef = useHorizontalWheelScroll<HTMLDivElement>();
   const resizeCleanupRef = useRef<(() => void) | null>(null);
-  widthRef.current = pane.width;
+  const [availableWidth, setAvailableWidth] = useState(() =>
+    typeof window === "undefined" ? 1024 : window.innerWidth,
+  );
+  const [resizing, setResizing] = useState(false);
+  const renderedWidth = fitWorkspaceWidth(pane.width, availableWidth);
+  widthRef.current = renderedWidth;
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const row = container.closest("[data-workspace-main-row]") ?? container.parentElement;
+    const measure = () => setAvailableWidth(row?.getBoundingClientRect().width || window.innerWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (row) observer.observe(row);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [visible, pane.enabled]);
 
   useEffect(
     () => () => {
       resizeCleanupRef.current?.();
     },
-    [],
+    [visible, pane.enabled, pane.open, availableWidth],
   );
 
   const onResizeStart = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== undefined && event.button !== 0) return;
       event.preventDefault();
       const handle = event.currentTarget;
       const container = containerRef.current;
@@ -4163,6 +4183,7 @@ export function WorkspacePane({
 
       resizeCleanupRef.current?.();
       handle.setPointerCapture(event.pointerId);
+      setResizing(true);
       const startX = event.clientX;
       const startWidth = widthRef.current;
       const previousCursor = document.documentElement.style.cursor;
@@ -4176,7 +4197,7 @@ export function WorkspacePane({
 
       const onMove = (moveEvent: PointerEvent) => {
         moveEvent.preventDefault();
-        nextWidth = clampPaneWidth(startWidth - (moveEvent.clientX - startX));
+        nextWidth = fitWorkspaceWidth(startWidth - (moveEvent.clientX - startX), availableWidth);
         container.style.width = `${nextWidth}px`;
         preview.style.width = `${nextWidth}px`;
       };
@@ -4187,7 +4208,13 @@ export function WorkspacePane({
         finished = true;
         handle.removeEventListener("pointermove", onMove);
         handle.removeEventListener("pointerup", onUp);
-        handle.removeEventListener("pointercancel", onUp);
+        handle.removeEventListener("pointercancel", onCancel);
+        handle.removeEventListener("lostpointercapture", onCancel);
+        window.removeEventListener("blur", onCancel);
+        if (handle.hasPointerCapture?.(event.pointerId)) {
+          handle.releasePointerCapture(event.pointerId);
+        }
+        setResizing(false);
         document.documentElement.style.cursor = previousCursor;
         document.documentElement.style.userSelect = previousUserSelect;
         resizeCleanupRef.current = null;
@@ -4202,6 +4229,8 @@ export function WorkspacePane({
             preview.style.removeProperty("transition");
           });
         } else {
+          container.style.width = `${startWidth}px`;
+          preview.style.width = `${startWidth}px`;
           container.style.removeProperty("transition");
           preview.style.removeProperty("transition");
         }
@@ -4210,12 +4239,15 @@ export function WorkspacePane({
         finish(true);
       };
 
-      resizeCleanupRef.current = () => finish(false);
+      const onCancel = () => finish(false);
+      resizeCleanupRef.current = onCancel;
       handle.addEventListener("pointermove", onMove);
       handle.addEventListener("pointerup", onUp);
-      handle.addEventListener("pointercancel", onUp);
+      handle.addEventListener("pointercancel", onCancel);
+      handle.addEventListener("lostpointercapture", onCancel);
+      window.addEventListener("blur", onCancel);
     },
-    [pane.setWidth],
+    [pane.setWidth, availableWidth],
   );
 
   if (!visible || !pane.enabled) return null;
@@ -4224,40 +4256,64 @@ export function WorkspacePane({
       ref={containerRef}
       className={cn(
         "relative min-h-0 shrink-0 self-stretch transition-[width] duration-200 ease-out motion-reduce:transition-none",
-        pane.open ? "max-[1100px]:!w-1/2" : "max-[1100px]:!w-0",
         !pane.open && "pointer-events-none",
       )}
-      style={{ width: pane.open ? pane.width : 0 }}
+      style={{ width: pane.open ? renderedWidth : 0 }}
+      data-workspace-container
     >
       <div
         role="separator"
         aria-orientation="vertical"
         aria-label={t("workspacePane.resize")}
+        tabIndex={pane.open ? 0 : -1}
+        aria-valuemin={Math.round(workspaceWidthBounds(availableWidth).min)}
+        aria-valuemax={Math.round(workspaceWidthBounds(availableWidth).max)}
+        aria-valuenow={Math.round(renderedWidth)}
+        onKeyDown={(event) => {
+          const bounds = workspaceWidthBounds(availableWidth);
+          const widths: Record<string, number> = {
+            ArrowLeft: renderedWidth + 24,
+            ArrowRight: renderedWidth - 24,
+            Home: bounds.min,
+            End: bounds.max,
+          };
+          const next = widths[event.key];
+          if (next === undefined) return;
+          event.preventDefault();
+          const width = fitWorkspaceWidth(next, availableWidth);
+          pane.setWidth(width);
+          void getPlatform().storage.set({ [PANE_WIDTH_KEY]: width });
+        }}
         onPointerDown={onResizeStart}
         className={cn(
-          "group absolute inset-y-0 left-0 z-40 w-1 -translate-x-1/2 cursor-col-resize touch-none transition-opacity duration-150 motion-reduce:transition-none max-[1100px]:hidden",
+          "app-no-drag group absolute inset-y-0 left-0 z-[calc(var(--z-workbench,50)+1)] w-3 -translate-x-1/2 cursor-col-resize touch-none outline-none",
           pane.open ? "opacity-100" : "opacity-0",
         )}
       >
-        <div className="absolute inset-y-0 left-1/2 w-px bg-border/60 transition-colors group-hover:bg-foreground/12 group-active:bg-foreground/20" />
+        <div className="absolute inset-y-0 left-1/2 w-px bg-border transition-colors group-hover:bg-primary/60 group-focus-visible:bg-primary/60 group-active:bg-primary/80" />
       </div>
+      {resizing && createPortal(
+        <div
+          data-workspace-resize-shield
+          className="app-no-drag fixed inset-0 z-[calc(var(--z-workbench,50)+2)] cursor-col-resize"
+        />,
+        document.body,
+      )}
       <aside
         ref={previewRef}
         aria-label={t("workspacePane.title")}
         aria-hidden={!pane.open}
         className={cn(
           "absolute inset-y-0 right-0 flex h-full min-h-0 flex-col overflow-hidden bg-background transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none",
-          "max-[1100px]:!w-full max-[1100px]:!max-w-none",
           pane.open ? "translate-x-0 opacity-100" : "translate-x-4 opacity-0",
         )}
         style={{
-          width: pane.width,
-          maxWidth: "calc(100vw - 52px)",
+          width: renderedWidth,
         }}
       >
         <div
           data-workspace-tabbar
-          className="flex h-11 shrink-0 items-center bg-background pl-2"
+          className="app-drag-region flex h-11 shrink-0 items-center bg-background pl-2"
           // The edge-control row floats over this strip at z-50 and its width
           // is not fixed (it also hosts an open plugin seat), so it publishes
           // its measured width and the tabs reserve exactly that.

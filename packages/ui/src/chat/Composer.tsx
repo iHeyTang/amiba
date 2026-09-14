@@ -1108,6 +1108,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             </div>
           </div>
           <div
+            data-composer-toolbar
             className={cn(
               "flex items-center justify-between gap-2",
               frameVariant === "hero"
@@ -1118,11 +1119,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             )}
           >
             <div
+              data-composer-toolbar-start
               className={cn(
                 "flex min-w-0 flex-1 items-center text-muted-foreground",
                 frameVariant === "hero"
                   ? "gap-1.5"
-                  : "flex-wrap gap-x-1.5 gap-y-1 text-[11px]",
+                  : "gap-1.5 text-[11px]",
               )}
             >
               {/*

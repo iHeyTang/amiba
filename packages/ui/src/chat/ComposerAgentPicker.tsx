@@ -141,7 +141,7 @@ export function ComposerAgentPicker({
         ) : (
           <Fingerprint className="h-3.5 w-3.5 shrink-0" />
         )}
-        <span className="truncate">{selectedProfileName}</span>
+        <span data-composer-secondary-label className="truncate">{selectedProfileName}</span>
       </button>
   );
 

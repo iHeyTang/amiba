@@ -758,3 +758,26 @@
 .chat-md.chat-md .amiba-markdown-code[data-wrap="true"] pre code > span { display: block; }
 .chat-md.chat-md .amiba-markdown-code[data-wrap="true"] pre code[class*="counter"] > span { position: relative; padding-left: 2.5rem; }
 .chat-md.chat-md .amiba-markdown-code[data-wrap="true"] pre code[class*="counter"] > span::before { position: absolute; left: 0; margin-right: 0; }
+
+/* Fit controls to the conversation column, including beside a wide preview. */
+[data-composer-card] {
+  container: composer / inline-size;
+}
+[data-composer-card] [data-composer-model-picker] {
+  flex: 0 1 auto;
+}
+[data-composer-card] [data-composer-effort-trigger] {
+  flex-shrink: 0;
+}
+@container composer (max-width: 560px) {
+  [data-composer-secondary-label] { display: none; }
+  [data-composer-card] [data-composer-toolbar-start] { flex: 1 0 auto; }
+  [data-composer-card] [data-composer-toolbar-start] > button { flex-shrink: 0; }
+  [data-composer-card] [data-composer-model-trigger] { max-width: clamp(4rem, 32cqw, 11rem); }
+}
+@container composer (max-width: 360px) {
+  [data-composer-card] [data-composer-toolbar], [data-composer-card] [data-composer-toolbar-start] { gap: 2px; }
+  [data-composer-card] [data-composer-effort-trigger] > span { display: none; }
+  [data-composer-card] [data-composer-toolbar-start] > button,
+  [data-composer-card] [data-composer-model-trigger], [data-composer-card] [data-composer-effort-trigger] { padding-inline: 6px; }
+}
