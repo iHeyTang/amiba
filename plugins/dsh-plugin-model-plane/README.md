@@ -40,3 +40,19 @@ visibility choices are migrated. The old file remains for recovery. `src/plane` 
 `src/plane-dsh` contain historical decoding/conversion helpers used by that migration,
 not an active provider layer. The old provider service, drivers, discovery and
 projection implementations have been removed.
+
+## Provider configuration UI
+
+The shared editor constrains the modal height and gives its body a flex-sized scroll
+viewport; the header, save actions and error messages stay outside that viewport.
+Connection fields appear first without a redundant section introduction. Available
+models remain visible with an inline refresh action. Custom model definitions have
+an independent editor; provider-level advanced parameters sit behind a small,
+collapsed text toggle after the model section.
+
+`provider-field-presentation.ts` owns common field labels, aliases and explanations
+in English and Chinese. For example, `maxTokens` and `defaultMaxTokens` share the
+reply-length label, while context capacity has its own label and unit explanation.
+Third-party schema descriptions remain the fallback for unrecognized fields.
+Presentation groups preserve original field paths, hidden values and revisioned
+configuration diffs; credentials still use the official write-only service.
