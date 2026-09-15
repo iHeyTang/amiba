@@ -2,6 +2,23 @@ import { createServer, type Server } from "node:http";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve, sep, extname } from "node:path";
+import { studioIconSvg } from "./studio-icon.generated.js";
+
+/** Upstream Studio declares no favicon; this plugin-owned tile fills the gap. */
+const ICON_PATH = "/amiba-icon.svg";
+const ICON_LINK = `<link rel="icon" href="${ICON_PATH}" type="image/svg+xml">`;
+
+/**
+ * Give a served page the fallback tab icon when it declares none of its own —
+ * a browser otherwise draws its blank document glyph. Pages that already ship
+ * a favicon, and anything without a head, are returned untouched.
+ */
+export function withFallbackIcon(html: string): string {
+  if (/<link[^>]*rel=["']?[^"'>]*icon/i.test(html)) return html;
+  const head = html.indexOf("</head>");
+  return head === -1 ? html : `${html.slice(0, head)}${ICON_LINK}${html.slice(head)}`;
+}
+
 /** Serve the npm package's built application, with its own bundled React. */
 export class StudioHost {
   private server: Server | undefined;
@@ -40,6 +57,13 @@ export class StudioHost {
         const pathname = decodeURIComponent(
           new URL(req.url ?? "/", "http://localhost").pathname,
         );
+        if (pathname === ICON_PATH) {
+          res.setHeader("Content-Type", "image/svg+xml");
+          res.setHeader("X-Content-Type-Options", "nosniff");
+          res.setHeader("Cache-Control", "no-store");
+          res.end(req.method === "HEAD" ? undefined : studioIconSvg);
+          return;
+        }
         const file = resolve(
           root,
           "." + (pathname === "/" ? "/index.html" : pathname),
@@ -56,7 +80,13 @@ export class StudioHost {
         );
         res.setHeader("X-Content-Type-Options", "nosniff");
         res.setHeader("Cache-Control", "no-store");
-        res.end(req.method === "HEAD" ? undefined : data);
+        res.end(
+          req.method === "HEAD"
+            ? undefined
+            : extname(target) === ".html"
+              ? withFallbackIcon(data.toString("utf8"))
+              : data,
+        );
       } catch {
         res.writeHead(404).end("Not found");
       }

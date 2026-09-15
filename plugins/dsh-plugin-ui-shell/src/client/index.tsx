@@ -53,6 +53,7 @@ import {
 } from "@amiba/app-runtime/dsh-client";
 import { getPlatform, hasPlatform, setPlatform, resolveSessionCreationWorkspace } from "@amiba/app-runtime/platform";
 import { seedDocumentLanguage } from "@amiba/i18n";
+import { installDocumentIcon } from "./document-icon.js";
 /** Read shell-owned geometry without embedding a second platform singleton in consumers. */
 export function settingsChromeHeightPx(): number | undefined {
   return getPlatform().kind === "desktop" ? (getPlatform().windowChrome?.topBarHeightPx ?? 40) : undefined;
@@ -497,6 +498,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // resolves — the same runtime-less path Quick-Ask takes.
   const disposeMessageCatalog = installAmibaMessageCatalog();
   document.title = "Amiba";
+  installDocumentIcon();
   const navigation = new LayoutNavigation();
   let mainPanels: MainPanelNavigation | undefined;
   ctx.effect(() => () => navigation.dispose());

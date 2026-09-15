@@ -3,6 +3,9 @@
 // on this layer.
 export * from "./cn";
 export * from "./AmibaLogo";
+// The raw generated marks, for callers that need the artwork itself
+// (a favicon href, a canvas) rather than the <AmibaLogo> element.
+export * from "./amiba-logo-assets";
 export * from "./badge";
 export * from "./button";
 export * from "./card";
