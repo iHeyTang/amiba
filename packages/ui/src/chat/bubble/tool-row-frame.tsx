@@ -1,3 +1,4 @@
+import { useT } from "@amiba/i18n";
 import { ChevronRight, type LucideIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
@@ -17,6 +18,8 @@ export interface ToolRowFrameProps {
   icon: LucideIcon;
   /** The semantic action label (调用工具 / 读取文件 / …). */
   action: string;
+  /** Opt in for tool actions; reasoning and interaction labels already own their tense. */
+  actionStatus?: "running" | "completed" | "failed";
   /** Optional target/summary shown after the action; string or custom node. */
   target?: ReactNode;
   /** Milliseconds shown as the trailing duration; omit to hide. */
@@ -45,7 +48,8 @@ export interface ToolRowFrameProps {
 export function ToolRowFrame({
   presentation = "row",
   icon: Icon,
-  action,
+  action: baseAction,
+  actionStatus,
   target,
   durationMs,
   running = false,
@@ -59,6 +63,10 @@ export function ToolRowFrame({
   expanded: controlledExpanded,
   onExpandedChange,
 }: ToolRowFrameProps) {
+  const { t } = useT();
+  const statusPrefix = actionStatus ? t(`sidepanel.trace.actionStatus.${actionStatus}`) : "";
+  const action = statusPrefix + baseAction;
+  const accessibleLabel = ariaLabel ? statusPrefix + ariaLabel : undefined;
   const [localExpanded, setLocalExpanded] = useState(false);
   const expanded = controlledExpanded ?? localExpanded;
   const hasDetail = detail != null;
@@ -87,7 +95,7 @@ export function ToolRowFrame({
           }
         }}
         aria-expanded={!opensExternally && hasDetail ? expanded : undefined}
-        aria-label={ariaLabel}
+        aria-label={accessibleLabel}
         title={
           opensExternally
             ? title

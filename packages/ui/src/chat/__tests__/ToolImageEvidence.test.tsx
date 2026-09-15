@@ -26,26 +26,26 @@ describe("tool image evidence within the native fold", () => {
     baseline.unmount();
     const actual = render(<ToolImageEvidenceProvider callId={owner.callId}>{row()}</ToolImageEvidenceProvider>);
     expect(actual.container.innerHTML).toBe(html);
-    expect(screen.getByRole("button", { name: "inspect" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /inspect$/ })).toBeDisabled();
   });
   it("renders on expansion only and removes the added affordance on unload", () => {
     const gallery = vi.fn(images => <div data-testid="gallery">{images[0].attachment.attachmentId}</div>);
     const view = render(<ToolImageEvidenceProvider callId={owner.callId} render={gallery}>{row()}</ToolImageEvidenceProvider>);
     expect(gallery).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "inspect" }));
+    fireEvent.click(screen.getByRole("button", { name: /inspect$/ }));
     expect(screen.getByTestId("gallery")).toHaveTextContent("host-image");
     expect(gallery).toHaveBeenCalledWith([{ attachment }]);
     view.rerender(<ToolImageEvidenceProvider callId={owner.callId}>{row()}</ToolImageEvidenceProvider>);
     expect(screen.queryByTestId("gallery")).toBeNull();
-    expect(screen.getByRole("button", { name: "inspect" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "inspect" })).not.toHaveAttribute("aria-expanded");
+    expect(screen.getByRole("button", { name: /inspect$/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /inspect$/ })).not.toHaveAttribute("aria-expanded");
   });
   it("does not offer a gallery for a different call or a text-only result", () => {
     const gallery = vi.fn(() => <div>unexpected</div>);
     const view = render(<ToolImageEvidenceProvider callId="parent" render={gallery}>{row()}</ToolImageEvidenceProvider>);
-    expect(screen.getByRole("button", { name: "inspect" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /inspect$/ })).toBeDisabled();
     view.rerender(<ToolImageEvidenceProvider callId={owner.callId} render={gallery}>{row({ ...owner, block: { ...owner.block, kind: "tool-result", content: [] } as ToolCallOwnerProps["block"] })}</ToolImageEvidenceProvider>);
-    expect(screen.getByRole("button", { name: "inspect" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /inspect$/ })).toBeDisabled();
     expect(gallery).not.toHaveBeenCalled();
   });
   it("keeps original evidence and controls when the gallery throws", () => {
@@ -54,10 +54,10 @@ describe("tool image evidence within the native fold", () => {
       render(<ToolImageEvidenceProvider callId={owner.callId} render={() => { throw new Error("gallery unavailable"); }}>
         <SemanticToolRow spec={{ icon: Eye, action: "inspect", evidence: () => <div>original evidence</div> }} tag="image" owner={owner} t={key => key} />
       </ToolImageEvidenceProvider>);
-      fireEvent.click(screen.getByRole("button", { name: "inspect" }));
+      fireEvent.click(screen.getByRole("button", { name: /inspect$/ }));
       expect(screen.getByText("original evidence")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "inspect" })).toHaveAttribute("aria-expanded", "true");
-      fireEvent.click(screen.getByRole("button", { name: "inspect" }));
+      expect(screen.getByRole("button", { name: /inspect$/ })).toHaveAttribute("aria-expanded", "true");
+      fireEvent.click(screen.getByRole("button", { name: /inspect$/ }));
       expect(screen.queryByText("original evidence")).toBeNull();
     } finally { errors.mockRestore(); }
   });
@@ -67,7 +67,7 @@ describe("tool image evidence within the native fold", () => {
       const failing = () => { throw new Error("gallery unavailable"); };
       const native = <SemanticToolRow spec={{ icon: Eye, action: "inspect", evidence: () => <input aria-label="native evidence" defaultValue="original" /> }} tag="image" owner={owner} t={key => key} />;
       const view = render(<ToolImageEvidenceProvider callId={owner.callId} render={failing}>{native}</ToolImageEvidenceProvider>);
-      fireEvent.click(screen.getByRole("button", { name: "inspect" }));
+      fireEvent.click(screen.getByRole("button", { name: /inspect$/ }));
       const input = screen.getByRole("textbox", { name: "native evidence" });
       fireEvent.change(input, { target: { value: "retained edit" } });
       const replacement = vi.fn(images => <div data-testid="recovered-gallery">{images[0].attachment.attachmentId}</div>);
@@ -75,7 +75,7 @@ describe("tool image evidence within the native fold", () => {
       expect(screen.getByTestId("recovered-gallery")).toHaveTextContent("host-image");
       expect(screen.getByRole("textbox", { name: "native evidence" })).toBe(input);
       expect(input).toHaveValue("retained edit");
-      expect(screen.getByRole("button", { name: "inspect" })).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByRole("button", { name: /inspect$/ })).toHaveAttribute("aria-expanded", "true");
       view.rerender(<ToolImageEvidenceProvider callId={owner.callId}>{native}</ToolImageEvidenceProvider>);
       expect(screen.queryByTestId("recovered-gallery")).toBeNull();
       expect(input).toHaveValue("retained edit");

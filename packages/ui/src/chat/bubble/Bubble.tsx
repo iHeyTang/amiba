@@ -378,23 +378,17 @@ export function Bubble({
       hasBody || traceVisible || hasFinalDestination || hasReasoningFold;
     const isEmptyStreaming = !!m.streaming && !hasVisibleContent;
     if (isEmptyStreaming) {
+      if (awaitingUserInput) return null;
       return (
         <div className="px-1 py-1 text-sm" aria-live="polite">
           <div className="inline-flex max-w-full items-center text-muted-foreground">
             <span className="agent-thinking-text truncate">
-              {t("sidepanel.trace.thinking")}
+              {t("sidepanel.trace.working")}
             </span>
           </div>
         </div>
       );
     }
-
-    const awaitingAnswerOnly =
-      !!m.streaming &&
-      !hasBody &&
-      trace.toolProgress.length > 0 &&
-      !trace.hasRunningTool &&
-      trace.reasoningText.length === 0;
 
     // Body text that is still streaming ends in Streamdown's caret, but
     // once the prose settles and the model moves on to its next call there
@@ -432,7 +426,7 @@ export function Bubble({
                 ...(traceVisible ? trace.items : []),
               ]}
               tools={traceVisible ? trace.toolProgress : []}
-              streaming={!!m.streaming && !hasBody}
+              streaming={!!m.streaming && !hasBody && !awaitingUserInput}
               latestProgress={
                 m.streaming && hasReasoningFold
                   ? compactProgressNote(trace.reasoningText)
@@ -441,16 +435,6 @@ export function Bubble({
               liveReasoning={m.streaming ? trace.reasoningText : ""}
               processMs={m.processMs}
             />
-            {awaitingAnswerOnly && (
-              <div
-                className="inline-flex min-h-7 items-center px-1.5 text-[11px] text-muted-foreground"
-                aria-live="polite"
-              >
-                <span className="agent-thinking-text">
-                  {t("sidepanel.trace.generating")}
-                </span>
-              </div>
-            )}
           </div>
         )}
         {hasBody && (
@@ -853,12 +837,6 @@ function ExecutionDisclosure({
   const runningTool = [...tools]
     .reverse()
     .find((event) => event.status === "running");
-  // A tool's `running` record is replaced by its `completed` record before
-  // the overall assistant stream ends. Keep that latest meaningful activity
-  // in the collapsed summary instead of briefly falling back to a generic
-  // "generating" label between consecutive tool calls.
-  const summaryTool =
-    runningTool ?? (streaming ? tools[tools.length - 1] : undefined);
   const hasDetails = details.length > 0;
   const thought = details.find(
     (detail): detail is Extract<TurnTraceDetail, { kind: "reasoning" }> =>
@@ -874,15 +852,28 @@ function ExecutionDisclosure({
         : tools.length > 0
           ? t("sidepanel.trace.toolCount", { count: tools.length })
           : latestProgress || t("sidepanel.trace.executionDetails");
-  const showLiveReasoning = streaming && !expanded && liveReasoning.length > 0;
+  const reasoningOwnsActivity =
+    details.at(-1)?.kind === "reasoning" ||
+    (tools.length === 0 && (liveReasoning.length > 0 || latestProgress.length > 0));
+  // Keep the latest completed action visible, with its own completed tense.
+  // Only a genuinely live activity may suppress the separate turn fallback.
+  const summaryTool = streaming && runningTool
+    ? runningTool
+    : streaming && !reasoningOwnsActivity
+      ? tools.at(-1)
+      : undefined;
+  const showWaiting = streaming && Boolean(summaryTool) && !runningTool;
+  const summaryActive = streaming && !showWaiting;
+  const showLiveReasoning =
+    streaming && reasoningOwnsActivity && !expanded && liveReasoning.length > 0;
   const summaryLabel = summaryTool
     ? <ToolChip event={summaryTool} mode="summary" />
     : streaming
-      ? // With the live pane open the full text is already on screen; a
-        // one-line ticker above it would just repeat its last fragment.
-        showLiveReasoning
-        ? t("sidepanel.trace.thinking")
-        : latestProgress || t("sidepanel.trace.thinking")
+      ? reasoningOwnsActivity
+        ? showLiveReasoning
+          ? t("sidepanel.trace.thinking")
+          : latestProgress || t("sidepanel.trace.thinking")
+        : t("sidepanel.trace.working")
       : completedLabel;
 
   return (
@@ -909,7 +900,7 @@ function ExecutionDisclosure({
         <span
           className={cn(
             "min-w-0 truncate",
-            streaming && "agent-thinking-text",
+            summaryActive && "agent-thinking-text",
 
           )}
         >
@@ -993,12 +984,14 @@ function ExecutionDisclosure({
           })}
         </div>
       )}
+      {showWaiting && <div className="mt-2"><TurnRunningIndicator /></div>}
     </div>
   );
 }
 
 /** Collapses adjacent execution-only messages that lack per-tool details. */
 function TurnExecutionDisclosure({ messages }: { messages: UiMessage[] }) {
+  const awaitingUserInput = useContext(AwaitingUserInputContext);
   const notices = useContext(ExecutionNoticesContext);
   const details: TurnTraceDetail[] = [];
   const tools: ToolProgress[] = [];
@@ -1052,7 +1045,7 @@ function TurnExecutionDisclosure({ messages }: { messages: UiMessage[] }) {
       <ExecutionDisclosure
         details={details}
         tools={tools}
-        streaming={messages.some((message) => message.streaming)}
+        streaming={!awaitingUserInput && messages.some((message) => message.streaming)}
         latestProgress={latestProgress}
         liveReasoning={liveReasoning}
         processMs={messages.reduce(
@@ -1351,7 +1344,10 @@ function InterleavedAssistantFlow({
   const processStreaming = resultStreaming && resultText.length === 0;
   const hasCompactions = flow.some(segment => segment.kind === "compaction");
   const compacting = flow.some(segment => segment.kind === "compaction" && segment.compaction.status === "running");
-  const showRunning = resultStreaming && !awaitingUserInput && !compacting;
+  // The execution tail owns its live label or its completed row + fallback.
+  // Historical disclosures above subsequent prose must not suppress it.
+  const tailOwnsActivity = flow.at(-1)?.kind === "execution";
+  const showRunning = resultStreaming && !awaitingUserInput && !compacting && !tailOwnsActivity;
 
   const flowRef = useRef<HTMLDivElement>(null);
   const liveHeight = useRef(0);
@@ -1444,7 +1440,7 @@ function InterleavedAssistantFlow({
                     (detail) => detail.kind === "reasoning",
                   )}
                   tools={[]}
-                  streaming={resultStreaming && !awaitingUserInput}
+                  streaming={resultStreaming && flow.length === 0 && !awaitingUserInput}
                   latestProgress={clusterProgress}
                 />
               )}

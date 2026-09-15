@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@amiba/i18n", () => ({
@@ -72,5 +72,67 @@ describe("turn running indicator", () => {
       { uiId: "a1", role: "assistant", content: PROSE, streaming: true } as UiMessage,
     ]);
     expect(screen.getByText(WORKING)).toBeInTheDocument();
+  });
+});
+
+
+describe("one activity owner", () => {
+  const thought: UiMessage = {
+    uiId: "a1", role: "assistant", content: "", streaming: true,
+    assistantTimeline: [{ kind: "reasoning", id: "r1", text: "Inspecting the request" }],
+  };
+  const view = (message: UiMessage, awaiting = false) => (
+    <AwaitingUserInputContext.Provider value={awaiting}>
+      <MessageTurns messages={[message]} />
+    </AwaitingUserInputContext.Provider>
+  );
+
+  it("hands the same disclosure from reasoning to a tool and then a quiet wait", () => {
+    const { rerender, container } = render(view(thought));
+    expect(screen.getAllByText("sidepanel.trace.thinking")).toHaveLength(1);
+    expect(screen.queryByText(WORKING)).not.toBeInTheDocument();
+    const disclosure = container.querySelector("[data-execution-summary]");
+    const running: UiMessage = {
+      ...thought,
+      assistantTimeline: [...thought.assistantTimeline!, { kind: "tool", id: "t1", toolCallId: "call-1" }],
+      toolProgress: [{ tool: "read_file", toolCallId: "call-1", status: "running" }],
+    };
+    rerender(view(running));
+    expect(container.querySelector("[data-execution-summary]")).toBe(disclosure);
+    expect(screen.queryByText(WORKING)).not.toBeInTheDocument();
+    const waiting: UiMessage = {
+      ...running, toolProgress: [{ ...running.toolProgress![0]!, status: "completed" }],
+    };
+    rerender(view(waiting));
+    expect(container.querySelector("[data-execution-summary]")).toBe(disclosure);
+    expect(screen.getAllByText(WORKING)).toHaveLength(1);
+    expect(screen.getByTestId("turn-running")).toBeInTheDocument();
+    const summaryButton = disclosure!.querySelector("button")!;
+    expect(summaryButton).toHaveTextContent("sidepanel.trace.actionStatus.completed");
+    expect(summaryButton.querySelector(".agent-thinking-text")).toBeNull();
+    fireEvent.click(disclosure!.querySelector("button")!);
+    expect(screen.getByText("Inspecting the request")).toBeInTheDocument();
+    expect(screen.getAllByText(WORKING)).toHaveLength(1);
+    rerender(view(waiting, true));
+    expect(screen.queryByText(WORKING)).not.toBeInTheDocument();
+    rerender(view({ ...waiting, streaming: false }));
+    expect(screen.queryByText(WORKING)).not.toBeInTheDocument();
+  });
+
+  it("uses the generic fallback before any model content arrives", () => {
+    const { rerender } = render(view({ uiId: "empty", role: "assistant", content: "", streaming: true }));
+    expect(screen.getAllByText(WORKING)).toHaveLength(1);
+    expect(screen.queryByText("sidepanel.trace.thinking")).not.toBeInTheDocument();
+    rerender(view({ uiId: "empty", role: "assistant", content: "", streaming: true }, true));
+    expect(screen.queryByText(WORKING)).not.toBeInTheDocument();
+  });
+
+  it("does not suppress a later wait just because historical reasoning exists", () => {
+    render(view({ ...thought, content: PROSE, assistantTimeline: [
+      ...thought.assistantTimeline!, { kind: "text", id: "prose", text: PROSE },
+    ] }));
+    expect(screen.getByText(PROSE)).toBeInTheDocument();
+    expect(screen.getAllByText(WORKING)).toHaveLength(1);
+    expect(screen.queryByText("sidepanel.trace.thinking")).not.toBeInTheDocument();
   });
 });

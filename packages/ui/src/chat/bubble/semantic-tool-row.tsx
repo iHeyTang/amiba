@@ -84,6 +84,7 @@ export function SemanticToolRow<Key extends string>({
 
   return (
     <ToolRowFrame
+      actionStatus={failed ? "failed" : running ? "running" : "completed"}
       {...expansion}
       presentation={owner.presentation}
       icon={spec.icon}
