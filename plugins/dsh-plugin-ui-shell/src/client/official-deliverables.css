@@ -1,9 +1,28 @@
-/* Pinned rc.2 produced-file row only. Keep the original component geometry
- * and map its colors to the existing Amiba palette. */
-.P4kPIW_root {
-  --dsw-alias-label-primary: hsl(var(--foreground));
-  --dsw-alias-label-secondary: hsl(var(--foreground) / 0.85);
-  --dsw-alias-label-tertiary: hsl(var(--muted-foreground));
-  --dsw-alias-interactive-bg-hover: hsl(var(--muted));
-  --dsw-alias-border-l3: hsl(var(--border));
+/* DSH 0.1.5-rc.1 Deliverables: override its fixed neutral palette locally.
+ * Higher specificity also wins over lazily injected plugin CSS in dark mode. */
+:root body .nyYjTG_root {
+  --deliverable-fill: hsl(var(--card));
+  --deliverable-hover: hsl(var(--accent));
+}
+
+/* Keep official interactions, with Amiba's compact file-row proportions. */
+:root body .nyYjTG_file {
+  border-radius: 10px;
+  height: 64px;
+  padding: 10px;
+}
+:root body .nyYjTG_fileIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+}
+:root body .nyYjTG_fileName {
+  font-size: 13px;
+  line-height: 20px;
+}
+:root body .nyYjTG_split {
+  border-radius: 6px;
+}
+:root body .nyYjTG_open {
+  font-size: 12px;
 }

@@ -86,7 +86,14 @@ export function TurnText({source,runtimeTurn,openFile,fileMentions,children,time
   const owner=runtimeTurn===undefined?null:turnTailOwner(snapshot,runtimeTurn,openFile);
   const mentions=owner && snapshot ? fileMentions(owner, snapshot.sessionId) : undefined;
   const interruptedStep = matchingInterruptedStep(owner, timeline);
-  return <WorkspaceTextMentionsContext.Provider value={(seq,value,step)=>owner && (seq!==undefined ? owner.seq===seq : step!==undefined && step===interruptedStep) ? mentions?.resolve(value):undefined}>{children}</WorkspaceTextMentionsContext.Provider>;
+  return <WorkspaceTextMentionsContext.Provider value={(seq,value,step)=>{
+    if (!owner || !(seq!==undefined ? owner.seq===seq : step!==undefined && step===interruptedStep)) return undefined;
+    const mention = mentions?.resolve(value);
+    // DSH resolves an unambiguous basename to its recorded path in title.
+    // Its default present-file callback launches a native app. Use the same
+    // Amiba opener as the turn-tail cards, preserving official path matching.
+    return mention ? { ...mention, open: () => openFile(mention.title) } : undefined;
+  }}>{children}</WorkspaceTextMentionsContext.Provider>;
 }
 
 /** Authorize pending text only against the official synthetic final's complete text. */

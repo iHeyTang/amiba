@@ -118,6 +118,20 @@ it("reports rejected open requests and ignores outcomes after the session change
 });
 
 
+it("opens resolved delivery paths internally without invoking the native-app callback", () => {
+  const f=fixture(),open=vi.fn(),external=vi.fn();
+  let resolve:React.ContextType<typeof WorkspaceTextMentionsContext>;
+  function Consumer(){resolve=React.useContext(WorkspaceTextMentionsContext);return null;}
+  const source={getSnapshot:()=>f.snapshot,subscribe:()=>()=>{}};
+  const provider=()=>({resolve:(value:string)=>value === "pelican.svg" ? {label:"Open file",title:"/Users/test/output/pelican.svg",open:external}:undefined});
+  render(<TurnText source={source} runtimeTurn={7} openFile={open} fileMentions={provider}><Consumer/></TurnText>);
+  resolve?.(12,"pelican.svg")?.open();
+  expect(open).toHaveBeenCalledWith("/Users/test/output/pelican.svg");
+  expect(external).not.toHaveBeenCalled();
+  expect(resolve?.(12,"unknown.svg")).toBeUndefined();
+  expect(resolve?.(11,"pelican.svg")).toBeUndefined();
+});
+
 it("resolves prose only for the closing sequence and drops the resolver without a source", () => {
   const f=fixture(),open=vi.fn();
   let resolve:React.ContextType<typeof WorkspaceTextMentionsContext>;

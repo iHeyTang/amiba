@@ -9,7 +9,7 @@ afterEach(() => uninstall?.());
 
 describe("tool action tense", () => {
   it.each([
-    ["zh", "运行命令", "正在运行命令", "已运行命令", "失败 · 运行命令"],
+    ["zh", "执行", "正在执行", "已执行", "失败 · 执行"],
     ["en", "Run command", "In progress · Run command", "Completed · Run command", "Failed · Run command"],
   ])("keeps the action and target while changing its %s status", (locale, action, running, completed, failed) => {
     uninstall = installOfficialLocale({ getSnapshot: () => ({ active: locale }), subscribe: () => () => {} });
