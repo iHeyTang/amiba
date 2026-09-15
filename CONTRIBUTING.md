@@ -26,6 +26,8 @@ Run `pnpm release:version patch` (or minor/major) in a feature worktree and subm
 
 ## CI and test installers
 
+The `jsdom>nwsapi` override pins the selector engine to 2.2.23. Version 2.2.27 recursively delegates `:modal` / `:fullscreen` matching back to jsdom, making Floating UI menu tests time out. Re-run `ProfileMenu.test.tsx` and `Sidebar.test.tsx` before changing this pin; keep their normal timeout and interaction assertions.
+
 `ci.yml` runs lightweight validation on PRs and main pushes, retaining the required `PR checks` job name. `runtime-dependencies.yml` runs the existing three-platform runtime integration checks on PRs and main pushes. Neither workflow creates installers or publishes releases.
 
 For test installers, manually run Desktop Build (`desktop-build.yml`) on main with `mode=test` and the desired target. Use `mode=verify` with an existing `run_id` to recheck installers without rebuilding. Test artifacts expire after 7 days; no scheduled packaging is enabled.
