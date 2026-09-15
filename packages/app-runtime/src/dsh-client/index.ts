@@ -192,11 +192,21 @@ interface DshResponseEnvelope<T> {
     | { ok: false; error: DshRpcErrorShape }
 }
 
+/**
+ * DSH Remote endpoints are raw URL path segments (namespace/method). The
+ * connection layer parses the undecoded pathname and only accepts segments
+ * matching `[A-Za-z0-9_$.-]+` — in particular `$` (e.g. `$events/result`)
+ * must stay literal. Percent-encoding here (`$` → `%24`) makes the server
+ * reject the request with HTTP 404 "not found".
+ */
+const RPC_ENDPOINT_SEGMENT = /^[A-Za-z0-9_$.-]+$/
+
 function rpcMethodPath(method: string): string {
-  return method
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/")
+  const segments = method.split("/")
+  if (segments.some((segment) => !RPC_ENDPOINT_SEGMENT.test(segment))) {
+    throw new Error(`DSH RPC method ${JSON.stringify(method)} is not a valid endpoint path`)
+  }
+  return segments.join("/")
 }
 
 export class DshApiClient {
