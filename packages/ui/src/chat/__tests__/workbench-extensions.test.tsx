@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import type { WorkbenchViewExtension } from "@amiba/extension-sdk";
@@ -103,4 +104,45 @@ it("opens custom resources without filesystem access and preserves per-session t
   expect(screen.getByRole("status")).toHaveTextContent("0:false:");
   view.rerender(<App sessionId="a" />);
   expect(screen.getByRole("status")).toHaveTextContent("1:true:extension");
+});
+
+it("reuses an opted-in view within a session and keeps other views resource-scoped", () => {
+  function View() {
+    const [count, setCount] = useState(0);
+    return <button onClick={() => setCount(count + 1)}>count {count}</button>;
+  }
+  const shared = ["file", "files"].map((type) => ({
+    id: type,
+    resourceType: type,
+    order: 0,
+    component: View,
+    instanceKey: "explorer",
+  }));
+  const ordinary = {
+    id: "chart",
+    resourceType: "chart",
+    order: 0,
+    component: View,
+  };
+  const tree = (type: string, id: string, sessionId = "s1") => (
+    <WorkbenchExtensionsProvider extensions={[...shared, ordinary]}>
+      <WorkbenchResourceView
+        {...props}
+        sessionId={sessionId}
+        resource={{ type, id, title: id }}
+      />
+    </WorkbenchExtensionsProvider>
+  );
+  const view = render(tree("files", "files"));
+  fireEvent.click(screen.getByText("count 0"));
+  view.rerender(tree("file", "a"));
+  expect(screen.getByText("count 1")).toBeInTheDocument();
+  view.rerender(tree("file", "b"));
+  expect(screen.getByText("count 1")).toBeInTheDocument();
+  view.rerender(tree("file", "b", "s2"));
+  expect(screen.getByText("count 0")).toBeInTheDocument();
+  view.rerender(tree("chart", "a"));
+  fireEvent.click(screen.getByText("count 0"));
+  view.rerender(tree("chart", "b"));
+  expect(screen.getByText("count 0")).toBeInTheDocument();
 });

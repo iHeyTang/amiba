@@ -2617,19 +2617,23 @@ function WorkspaceProjectStrip({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const refreshRequest = useRef(0);
   const refresh = useCallback(async () => {
+    const request = ++refreshRequest.current;
     if (!development) return;
     try {
       const ensured = await development.ensureProject(sessionId);
-      setProject(ensured);
       const [allProjects, activePath] = await Promise.all([
         development.listProjects(),
         workspaces?.getCurrent(sessionId) ?? Promise.resolve(null),
       ]);
+      if (request !== refreshRequest.current) return;
+      setProject(ensured);
       setProjects(allProjects);
       setCurrentPath(activePath);
       setError(null);
     } catch (cause) {
+      if (request !== refreshRequest.current) return;
       setProject(null);
       setProjects([]);
       setCurrentPath(null);
@@ -2686,6 +2690,7 @@ function WorkspaceProjectStrip({
 
   useEffect(() => {
     void refresh();
+    return () => { refreshRequest.current++; };
   }, [refresh]);
   useEffect(
     () =>
@@ -2719,9 +2724,10 @@ function WorkspaceProjectStrip({
               className="flex min-w-0 flex-1 items-center gap-1 rounded-md text-left text-xs font-medium outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/35"
               aria-label={t("workspacePane.switchProject")}
               aria-haspopup="menu"
+              title={currentPath ?? project?.folders[0]}
             >
               <span className="truncate">
-                {project?.name ?? t("workspacePane.project")}
+                {currentPath ? locationLabel(currentPath) : project?.name ?? t("workspacePane.project")}
               </span>
               <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
             </button>
@@ -2841,12 +2847,23 @@ function WorkspaceProjectStrip({
   );
 }
 
+function normalizeTreePath(path: string, root?: string | null): string {
+  const normalize = (value: string) =>
+    value.replaceAll("\\", "/").replace(/\/+$/, "").replace(/^\.\//, "");
+  const target = normalize(path);
+  const base = root ? normalize(root) : "";
+  return root && target.startsWith(`${base}/`)
+    ? target.slice(base.length + 1)
+    : target;
+}
+
 function WorkspaceTreeRows({
   entries,
   sessionId,
   files,
   openFile,
   selectedPath,
+  rootPath,
   level = 0,
 }: {
   entries: WorkspaceTreeEntry[];
@@ -2854,6 +2871,7 @@ function WorkspaceTreeRows({
   files: WorkspaceFilesAdapter;
   openFile(path: string): void;
   selectedPath?: string;
+  rootPath?: string | null;
   level?: number;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -2861,12 +2879,52 @@ function WorkspaceTreeRows({
     Record<string, WorkspaceTreeEntry[]>
   >({});
 
+  const normalizedSelection = selectedPath
+    ? normalizeTreePath(selectedPath, rootPath)
+    : undefined;
+  useEffect(() => {
+    if (!normalizedSelection) return;
+    const parent = entries.find(
+      (entry) =>
+        entry.isDirectory &&
+        normalizedSelection.startsWith(
+          `${normalizeTreePath(entry.path, rootPath)}/`,
+        ),
+    );
+    if (!parent) return;
+    setExpanded((current) =>
+      current[parent.path] ? current : { ...current, [parent.path]: true },
+    );
+    let cancelled = false;
+    if (!children[parent.path]) {
+      void files
+        .list(sessionId, parent.path)
+        .then((items) => {
+          if (!cancelled)
+            setChildren((current) => ({ ...current, [parent.path]: items }));
+        })
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [entries, normalizedSelection, rootPath, files, sessionId, children]);
+
   return (
     <ul>
       {entries.map((entry) => (
         <li key={entry.path}>
           <button
             type="button"
+            aria-current={
+              !entry.isDirectory &&
+              normalizedSelection === normalizeTreePath(entry.path, rootPath)
+                ? "page"
+                : undefined
+            }
+            aria-expanded={
+              entry.isDirectory ? Boolean(expanded[entry.path]) : undefined
+            }
             onClick={() => {
               if (!entry.isDirectory) {
                 openFile(entry.path);
@@ -2888,8 +2946,8 @@ function WorkspaceTreeRows({
             }}
             className={cn(
               "group flex h-7 w-full items-center gap-1.5 rounded-md pr-2 text-left text-[11px] transition-colors",
-              selectedPath === entry.path
-                ? "bg-muted/65 text-foreground"
+              normalizedSelection === normalizeTreePath(entry.path, rootPath)
+                ? "bg-muted/65 font-medium text-foreground"
                 : "text-foreground/78 hover:bg-muted/45 hover:text-foreground",
             )}
             style={{ paddingLeft: `${8 + level * 14}px` }}
@@ -2910,15 +2968,18 @@ function WorkspaceTreeRows({
             )}
             <span className="min-w-0 flex-1 truncate">{entry.name}</span>
           </button>
-          {entry.isDirectory && expanded[entry.path] && children[entry.path] ? (
-            <WorkspaceTreeRows
-              entries={children[entry.path]!}
-              sessionId={sessionId}
-              files={files}
-              openFile={openFile}
-              selectedPath={selectedPath}
-              level={level + 1}
-            />
+          {entry.isDirectory && children[entry.path] ? (
+            <div hidden={!expanded[entry.path]}>
+              <WorkspaceTreeRows
+                entries={children[entry.path]!}
+                sessionId={sessionId}
+                files={files}
+                openFile={openFile}
+                selectedPath={selectedPath}
+                rootPath={rootPath}
+                level={level + 1}
+              />
+            </div>
           ) : null}
         </li>
       ))}
@@ -2943,32 +3004,42 @@ function WorkspaceFilesBrowser({
 }) {
   const { t } = useT();
   const [query, setQuery] = useState("");
+  const [rootPath, setRootPath] = useState<string | null>(null);
+  const requestRef = useRef(0);
   const [entries, setEntries] = useState<WorkspaceTreeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
+    const request = ++requestRef.current;
     setLoading(true);
     try {
-      setEntries(
-        query.trim()
-          ? await files.search(sessionId, query)
-          : await files.list(sessionId),
-      );
+      const [items, root] = await Promise.all([
+        query.trim() ? files.search(sessionId, query) : files.list(sessionId),
+        workspaces?.getCurrent(sessionId) ?? Promise.resolve(null),
+      ]);
+      if (request !== requestRef.current) return;
+      setEntries(items);
+      setRootPath(root);
     } catch {
-      setEntries([]);
+      if (request === requestRef.current) setEntries([]);
     } finally {
-      setLoading(false);
+      if (request === requestRef.current) setLoading(false);
     }
-  }, [files, query, sessionId]);
+  }, [files, query, sessionId, workspaces]);
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), query ? 160 : 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      requestRef.current++;
+    };
   }, [load, query]);
   useEffect(
     () =>
-      getPlatform().workspaces?.onChange((change) => {
-        if (change.sessionId === sessionId) void load();
+      workspaces?.onChange((change) => {
+        if (change.sessionId !== sessionId) return;
+        if (query) setQuery("");
+        else void load();
       }),
-    [load, sessionId],
+    [load, query, sessionId, workspaces],
   );
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -2993,11 +3064,13 @@ function WorkspaceFilesBrowser({
           </p>
         ) : entries.length ? (
           <WorkspaceTreeRows
+            key={rootPath}
             entries={entries}
             sessionId={sessionId}
             files={files}
             openFile={openFile}
             selectedPath={selectedPath}
+            rootPath={rootPath}
           />
         ) : (
           <p className="px-3 py-4 text-xs text-muted-foreground">
@@ -3032,6 +3105,8 @@ export function WorkspaceFileWorkspace({
 }) {
   const { t } = useT();
   const path = resource?.path ?? "/";
+  const [treeMounted, setTreeMounted] = useState(treeOpen);
+  useEffect(() => { if (treeOpen) setTreeMounted(true); }, [treeOpen]);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col bg-background">
@@ -3113,8 +3188,9 @@ export function WorkspaceFileWorkspace({
             </div>
           )}
         </main>
-        {treeOpen ? (
+        {treeOpen || treeMounted ? (
           <aside
+            hidden={!treeOpen}
             data-workspace-file-tree
             aria-label={t("workspacePane.files")}
             className="min-h-0 min-w-[190px] w-[clamp(190px,36%,260px)] shrink-0 border-l border-border/45 bg-background"
