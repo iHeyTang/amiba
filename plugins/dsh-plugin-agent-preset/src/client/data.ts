@@ -1,19 +1,22 @@
 /**
  * Plugin-local data plane over the engine-native agent-preset wire face.
  *
- * The official `@deepseek-ai/dsh-client-ui-agent-preset` reference consumes
- * `ctx.get("connection").api.agentPresets.{list,select,read,copy,openDocument,
- * remove}` (the connection service's `ClientRemote`) plus the `agent-presets`
- * settings namespace for default-preset writes. This module mirrors that
- * exactly — zero host platform-adapter crossing — while keeping the response
- * semantics of the retired host helpers
+ * The official `@deepseek-ai/dsh-client-ui-agent-preset` reference consumes the
+ * `agentPresets` face (`{list,copy,read,deletePreset}`) plus the `settings`
+ * face for default-preset writes. Since DSH 0.1.5-rc.1 those faces are reached
+ * through `ctx.remote.<namespace>` — the gateway installs every selected wire
+ * namespace as its own `remote.<namespace>` service — so the consuming
+ * plugin's `inject` must list each face it touches (`remote.agentPresets`,
+ * `remote.settings`); `remote` alone only resolves the gateway itself. This
+ * module mirrors the official client exactly — zero host platform-adapter
+ * crossing — while keeping the response semantics of the retired host helpers
  * (`packages/app-runtime/src/core/agent-presets.ts`) so the moved page code
  * stays unchanged.
  */
 
 import type { ClientRemote } from "@deepseek-ai/dsh-api-remotes/client";
 
-/** Wire api face this adapter consumes (`ctx.get("connection").api`). */
+/** Wire api faces this adapter consumes (`ctx.remote.<namespace>`). */
 export type AgentPresetsApi = Pick<
   ClientRemote,
   "agentPresets" | "settings"

@@ -17,7 +17,18 @@ import {
 } from "./DshAgentPresetsPage.js";
 
 export const name = "amiba-agent-preset-ui";
-export const inject = ["slots", "remote"];
+// `remote` alone only resolves the gateway service: every wire namespace is
+// installed as its own `remote.<namespace>` service, so an undeclared face
+// access throws `cannot get property "remote.agentPresets" without inject`
+// before any optional chaining can short-circuit it. This page consumes the
+// `agentPresets` face (roster + copy/read/deletePreset) and the `settings`
+// face (`api.settings.update`/`openAgentPresetDirectory`).
+export const inject = [
+  "slots",
+  "remote",
+  "remote.agentPresets",
+  "remote.settings",
+];
 
 /**
  * Keeps the retired registry id so `#agents` deep links resolve through
