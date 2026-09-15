@@ -178,8 +178,6 @@ describe("tool.call.toolview seat", () => {
       callTime: 1_000,
       content: [{ type: "text", text: "ok" }],
       isError: false,
-      callView: null,
-      resultView: null,
       subCalls: [],
     });
   });
