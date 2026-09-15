@@ -21,7 +21,8 @@ import {
 } from "./ModelProviderConfigTab.js";
 
 export const name = "amiba-model-plane-client";
-export const inject = ["slots", "remote", "connection", "remote.session", "remote.settings", "remote.llm", "remote.credentials"];
+// The session picker reads modelSelection from ctx.sessions; draft pickers only need the catalog.
+export const inject = ["slots", "sessions", "remote", "connection", "remote.session", "remote.settings", "remote.llm", "remote.credentials"];
 
 const SECTION_ID = "models";
 
