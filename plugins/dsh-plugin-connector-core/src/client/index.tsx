@@ -100,7 +100,7 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const registry = createConnectorUIRegistry();
   const disposeRegistry = ctx.reflect.provide("amibaConnectorUI", registry);
   const sectionFiber = ctx.inject(
-    ["slots", "remote.amibaConnectors"],
+    ["slots", "remote.amibaConnectors", "remote.agentPresets"],
     (injectedCtx) => {
       const messageSource = createConnectorMessageSource(async () => {
         const result = await injectedCtx.remote.amibaConnectors.messageSources();
@@ -132,15 +132,16 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
       const disposeSync = injectedCtx.slots.inject("conversation.session.header.actions", () =>
         injectedCtx.slots.register({ name: "conversation.session.header.actions", id: "connector-desktop-sync", inject: () => ({ adapter }) }, DesktopSyncHeader),
       );
-      // `connection` is a client-root service present regardless of this
-      // plugin's own `inject` declaration above (mirrors how
-      // dsh-plugin-agent-preset's client/data.ts consumes it) — read via
-      // `ctx.get` at call time instead of adding it to `export const inject`.
+      // The wizard's preset picker reads the `agentPresets` wire face, so this
+      // fiber declares `remote.agentPresets` and hands its own `remote` to the
+      // loader: reading the face through the root plugin ctx would throw
+      // `cannot get property "remote.agentPresets" without inject`, which
+      // `loadAgentPresets` folds into an empty option list.
       // Hoisted to ONE stable const so both seats hand their occupant the
       // same function identity: `ConnectQuestionScreen` keys its loader
       // effect off it, and a fresh closure per render would re-fetch forever.
       const loadPresets = () =>
-        loadAgentPresets(ctx.remote);
+        loadAgentPresets(injectedCtx.remote);
       const disposeSection = injectedCtx.slots.inject("settings.section", () =>
         injectedCtx.slots.register(
           {

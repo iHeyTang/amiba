@@ -15,12 +15,15 @@ type RosterEntry = {
   broken?: string;
 };
 
+// The wire result envelope as of DSH 0.1.5-rc.1: a `remote.<namespace>` method
+// resolves straight to `{ ok, value }` (the retired `{ rpcId, result }`
+// carrier is gone) and the adapter reads these fields at the top level.
 function ok<T>(value: T) {
-  return { result: { ok: true as const, value } };
+  return { ok: true as const, value };
 }
 
 function refused(message: string) {
-  return { result: { ok: false as const, error: { message } } };
+  return { ok: false as const, error: { message } };
 }
 
 function makeApi(presets: RosterEntry[]) {
@@ -29,7 +32,6 @@ function makeApi(presets: RosterEntry[]) {
       list: vi.fn(async () =>
         ok({ presets, authorable: true, hasDocument: true }),
       ),
-      select: vi.fn(),
       read: vi.fn(async () =>
         ok({
           agentPreset: "researcher",
@@ -38,11 +40,11 @@ function makeApi(presets: RosterEntry[]) {
         }),
       ),
       copy: vi.fn(async () => ok({ agentPreset: "copied" })),
-      openDocument: vi.fn(async () => ok({ opened: true as const })),
-      remove: vi.fn(async () => ok({})),
+      deletePreset: vi.fn(async () => ok({})),
     },
     settings: {
       update: vi.fn(async () => ok({ ns: "agent-presets" })),
+      openAgentPresetDirectory: vi.fn(async () => ok({ opened: true as const })),
     },
   };
   return { api, adapter: createAgentPresetsAdapter(api as unknown as AgentPresetsApi) };
@@ -98,21 +100,22 @@ describe("createAgentPresetsAdapter", () => {
       displayName: "Writer",
     });
     expect(result.ok).toBe(true);
-    expect(api.agentPresets.copy).toHaveBeenCalledWith({
-      from: "researcher",
-      agentPreset: "my-writer",
-      name: "Writer",
-    });
+    expect(api.agentPresets.copy).toHaveBeenCalledWith(
+      "researcher",
+      "my-writer",
+      "Writer",
+    );
   });
 
   it("writes the default through the agent-presets settings namespace", async () => {
     const { api, adapter } = makeApi(roster);
     const result = await adapter.setDefaultAgentPreset("writer");
     expect(result.ok).toBe(true);
-    expect(api.settings.update).toHaveBeenCalledWith({
-      ns: "agent-presets",
-      patch: { default: "writer" },
-    });
+    expect(api.settings.update).toHaveBeenCalledWith(
+      "agent-presets",
+      { default: "writer" },
+      undefined,
+    );
   });
 
   it("rename of the default preset re-points the default and rolls back on a settings refusal", async () => {
@@ -123,26 +126,35 @@ describe("createAgentPresetsAdapter", () => {
     const result = await adapter.renameAgentPreset("researcher", "writer");
     expect(result).toMatchObject({ ok: false, error: "settings locked" });
     // The freshly copied id is rolled back; the source stays.
-    expect(api.agentPresets.remove).toHaveBeenCalledTimes(1);
-    expect(api.agentPresets.remove).toHaveBeenCalledWith({
-      agentPreset: "writer",
-    });
+    expect(api.agentPresets.deletePreset).toHaveBeenCalledTimes(1);
+    expect(api.agentPresets.deletePreset).toHaveBeenCalledWith("writer");
   });
 
   it("refuses to delete the default preset before another default is chosen", async () => {
     const { api, adapter } = makeApi(roster);
     const result = await adapter.deleteAgentPreset("researcher");
     expect(result.ok).toBe(false);
-    expect(api.agentPresets.remove).not.toHaveBeenCalled();
+    expect(api.agentPresets.deletePreset).not.toHaveBeenCalled();
+  });
+
+  it("reads a preset's composition through the agentPresets face", async () => {
+    const { api, adapter } = makeApi(roster);
+    await expect(
+      adapter.readAgentPresetComposition("researcher"),
+    ).resolves.toEqual({ ok: true, content: "# soul" });
+    expect(api.agentPresets.read).toHaveBeenCalledWith("researcher");
   });
 
   it("surfaces the resolved path when the host has no native opener", async () => {
     const { api, adapter } = makeApi(roster);
-    api.agentPresets.openDocument.mockResolvedValueOnce(
+    api.settings.openAgentPresetDirectory.mockResolvedValueOnce(
       ok({ opened: false as const, path: "/presets/researcher" }) as never,
     );
     await expect(adapter.openAgentPresetDocument("researcher")).resolves.toEqual(
       { ok: true, path: "/presets/researcher" },
+    );
+    expect(api.settings.openAgentPresetDirectory).toHaveBeenCalledWith(
+      "researcher",
     );
   });
 });
