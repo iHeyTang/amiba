@@ -15,7 +15,9 @@ export interface PendingPromptAttachment {
   mime: string;
   size: number;
   kind: "image" | "text" | "pdf" | "binary";
-  attachmentId: string;
+  attachmentId?: string;
+  /** Native file-picker/screenshot handoff, consumed into the official browser draft registry. */
+  dataBase64?: string;
   thumbDataUrl?: string;
   textPreview?: string;
 }

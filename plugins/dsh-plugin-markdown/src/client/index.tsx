@@ -1,4 +1,4 @@
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type {} from "@amiba/extension-sdk";
 import { defaultMarkdown } from "./defaults.js";
 export const name = "amiba-markdown-ui";

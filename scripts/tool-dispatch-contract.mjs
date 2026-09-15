@@ -68,6 +68,12 @@ export function verifyToolDispatchContract(source) {
   require(additions.length ===
     expected.size, "only the reviewed image loader and call inspector may extend the row");
   for (const addition of additions) {
+    if (ts.isPropertyAssignment(addition) && addition.name.getText(file) === "loadImage") {
+      require(compact(addition.initializer) === "loadMessageImage", "forward the actual image loader");
+      require(nodes(callback, node => ts.isIfStatement(node) && compact(node.expression) === "!loadMessageImage" && compact(node.thenStatement) === "returnrequest.fallback;").length === 1, "missing required-loader fallback guard");
+      expected.delete("loadImage");
+      continue;
+    }
     require(ts.isSpreadAssignment(
       addition,
     ), "do not overwrite row identity with direct properties");

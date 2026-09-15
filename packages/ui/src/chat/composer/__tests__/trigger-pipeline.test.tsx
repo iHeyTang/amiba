@@ -25,7 +25,7 @@ import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 const imageStore = vi.hoisted(() => ({
-  readForPrompt: vi.fn(async () => ({attachmentId:"stored",name:"photo.png",mime:"image/png",size:3,kind:"image",dataBase64:"AQID"})),
+  serialize: vi.fn(async () => [{type:"image",mediaType:"image/png",data:"AQID",name:"photo.png"}]),
   remove: vi.fn(async () => {}),
 }));
 vi.mock("@amiba/app-runtime/platform", () => ({getPlatform:()=>({agentAttachments:imageStore})}));
@@ -486,7 +486,7 @@ describe("claimed commands with staged images", () => {
     let settle!:()=>void;
     const submitClaim=vi.fn(()=>new Promise<{kind:"success"}>(resolve=>{settle=()=>resolve({kind:"success"});}));
     const runtime:ComposerTriggerRuntime={...runtimeFor(controller),submitClaim};
-    const claim:CommandClaim={token:"/image ",images:true,submit:async()=>({kind:"success"})};
+    const claim:CommandClaim={token:"/image ",attachments:true,submit:async()=>({kind:"success"})};
     const valueRef={current:""};
     const attachmentsRef: {current: import("../../useComposerAttachments").UseComposerAttachmentsResult|undefined}={current:undefined};
     const editDraft={current: (_text:string)=>{}};
@@ -510,7 +510,7 @@ describe("claimed commands with staged images", () => {
     let settle!:()=>void;
     const submitClaim=vi.fn(()=>new Promise<{kind:"success"}>(resolve=>{settle=()=>resolve({kind:"success"});}));
     const runtime:ComposerTriggerRuntime={...runtimeFor(controller),submitClaim};
-    const claim:CommandClaim={token:"/image ",images:true,submit:async()=>({kind:"success"})};
+    const claim:CommandClaim={token:"/image ",attachments:true,submit:async()=>({kind:"success"})};
     const valueRef={current:""};
     const editDraft={current:(_text:string)=>{}};
     const props={initial:"/image describe",runtime,controller,onSubmit:()=>{},valueRef,editDraft};
@@ -530,7 +530,7 @@ describe("claimed commands with staged images", () => {
     let settle!: (result: {kind:"success"|"error";text?:string}) => void;
     const submitted = vi.fn(() => new Promise<{kind:"success"|"error";text?:string}>(resolve => {settle=resolve;}));
     const runtime: ComposerTriggerRuntime = {...runtimeFor(controller),submitClaim:submitted};
-    const claim: CommandClaim = {token:"/image ",images:outcomeKind!=="unsupported",submit:async()=>({kind:"success"})};
+    const claim: CommandClaim = {token:"/image ",attachments:outcomeKind!=="unsupported",submit:async()=>({kind:"success"})};
     const valueRef={current:""};
     const attachmentsRef: {current: import("../../useComposerAttachments").UseComposerAttachmentsResult|undefined}={current:undefined};
     render(<ControlledComposer initial="/image describe" sessionId="s1" runtime={runtime} controller={controller} onSubmit={()=>{throw new Error("ordinary send must not run");}} valueRef={valueRef} attachmentsRef={attachmentsRef} initialAttachments={[{uiId:"photo",attachmentId:"stored",name:"photo.png",mime:"image/png",size:3,kind:"image"}]}/>);
@@ -543,9 +543,9 @@ describe("claimed commands with staged images", () => {
       expect(submitted).not.toHaveBeenCalled();
     } else {
       await waitFor(()=>expect(submitted).toHaveBeenCalledTimes(1));
-      expect(submitted).toHaveBeenCalledWith("s1",claim,"describe",[{mediaType:"image/png",data:"AQID",name:"photo.png"}]);
+      expect(submitted).toHaveBeenCalledWith("s1",claim,"describe",[{type:"image",mediaType:"image/png",data:"AQID",name:"photo.png"}]);
       expect(attachmentsRef.current!.attachments).toHaveLength(1);
-      expect(controller.ops!.readInputDraft!()).toMatchObject({phase:"submitting",claim:{token:"/image ",images:true}});
+      expect(controller.ops!.readInputDraft!()).toMatchObject({phase:"submitting",claim:{token:"/image ",attachments:true}});
       await act(async()=>settle({kind:outcomeKind,text:outcomeKind==="error"?"command rejected":undefined}));
     }
     await waitFor(()=>expect(valueRef.current).toBe(outcomeKind==="success"?"":"/image describe"));

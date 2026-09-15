@@ -2,7 +2,7 @@
 import { act, render } from "@testing-library/react";
 import { expect, it } from "vitest";
 import { CordisBusiness, cordisBusinessOwner, type CordisBusinessOwner } from "./cordis-business.js";
-import type { ToolResultNode } from "@deepseek-ai/dsh-client-runtime/client";
+import type { ToolResultNode } from "@deepseek-ai/dsh-client-ui-conversation/client";
 
 const owner = { pluginId: "plugin", packageId: "package", pluginRunId: "run" } as CordisBusinessOwner;
 function block(seq: number, callId = `call-${seq}`, meta = owner): ToolResultNode {

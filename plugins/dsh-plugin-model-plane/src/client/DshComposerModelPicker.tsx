@@ -1,6 +1,6 @@
 import { reasoningLabel } from "./reasoning-labels.js";
 import type { ModelSelection as AgentModelSelection, ModelProviderGroup, ModelReasoningEffort } from "@deepseek-ai/dsh-api-remotes/client";
-import type { IApiClient } from "@deepseek-ai/dsh-api-remotes/client";
+import type { ClientRemote } from "@deepseek-ai/dsh-api-remotes/client";
 import {
   ModelIcon,
   ModelPickerDialog,
@@ -52,13 +52,11 @@ export interface ComposerPickerEngine {
 
 /** The two official session wire faces this picker consumes. */
 export type SessionModelWire = Pick<
-  IApiClient["sessions"],
-  "models" | "selectModel"
->;
+  ClientRemote["session"],
+  "modelCatalog" | "selectModel"
+> & { modelSelection(sessionId: WireSessionId): AgentModelSelection | undefined };
 
-type WireSessionId = Parameters<
-  SessionModelWire["models"]
->[0]["sessionId"];
+type WireSessionId = Parameters<ClientRemote["session"]["selectModel"]>[0]["sessionId"];
 
 function wireError(face: string, error: { code: string; message: string }): Error {
   return new Error(`${face} failed: ${error.code}: ${error.message}`);
@@ -75,13 +73,14 @@ export function makeSessionModelEngine(
 ): ComposerPickerEngine {
   return {
     directory: async () => {
-      const { result } = await wire.models({ sessionId });
+      const result = await wire.modelCatalog();
       if (!result.ok) throw wireError("session.models", result.error);
-      const { current, routable } = result.value;
+      const current = wire.modelSelection(sessionId) ?? result.value.default;
+      const routable = result.value.routableProviders.includes(current.provider);
       return { current, routable };
     },
     select: async (selection) => {
-      const { result } = await wire.selectModel({
+      const result = await wire.selectModel({
         sessionId,
         provider: selection.provider,
         model: selection.model,

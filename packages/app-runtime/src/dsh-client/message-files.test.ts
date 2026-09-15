@@ -15,12 +15,14 @@ it("preserves file-only plugin messages and duplicate occurrences live and after
   expect(live).toMatchObject({ attachmentBadges: badges });
   expect(history[0]).toMatchObject({ attachmentBadges: badges });
 });
-it("does not duplicate native metadata badges or discard extra file occurrences", () => {
+it("uses official file references without generating custom metadata", () => {
   const native = { uiId: "n", attachmentId: "native-id", name: "notes.txt", size: 3, kind: "text" as const, mime: "text/plain" };
   const text = formatFileAttachmentsForPrompt([native]);
   const badges = userMessageText([{ type: "text", text }, file, file]).badges;
   expect(badges).toHaveLength(2);
-  expect(badges[0]).toMatchObject({ attachmentId: "native-id", kind: "text" });
+  expect(text).toBe("");
+  expect(badges[0]).toMatchObject({ name: "notes.txt", kind: "binary" });
+  expect(badges[0].attachmentId).toBeUndefined();
 });
 it("ignores malformed references without hiding readable text", () => {
   for (const bad of [{ bytes: -1 }, { bytes: NaN }, { bytes: 1.5 }, { name: null }, { attachmentId: "" }]) {

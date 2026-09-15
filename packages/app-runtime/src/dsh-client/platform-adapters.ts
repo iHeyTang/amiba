@@ -1,3 +1,4 @@
+import { officialAttachments } from "./official-attachments.js";
 import type {
   AgentCommandEntry,
   AgentPermissionOption,
@@ -186,52 +187,7 @@ async function renameWhenReady(
 export function createDshPlatformAdapters(
   client: DshApiClient,
 ): DshPlatformAdapters {
-  const attachments = {
-    async put(input: {
-      sessionId: string;
-      name: string;
-      mime: string;
-      bytes: Uint8Array;
-    }) {
-      let binary = "";
-      const chunkSize = 0x8000;
-      for (let offset = 0; offset < input.bytes.length; offset += chunkSize) {
-        binary += String.fromCharCode(
-          ...input.bytes.subarray(offset, offset + chunkSize),
-        );
-      }
-      return client.call<{ attachmentId: string }>("amibaAttachments/put", {
-        args: {
-          name: input.name,
-          mime: input.mime,
-          kind:
-            input.mime === "application/pdf"
-              ? "pdf"
-              : input.mime.startsWith("image/")
-                ? "image"
-                : "text",
-          dataBase64: btoa(binary),
-        },
-      });
-    },
-    async retainForSession(attachmentId: string, sessionId: string) {
-      await client.call("amibaAttachments/retainForSession", { args: { attachmentId, sessionId } });
-    },
-    readForPrompt: (attachmentId: string) =>
-      client.call<{
-        attachmentId: string;
-        name: string;
-        mime: string;
-        size: number;
-        kind: "image" | "text" | "pdf";
-        dataBase64: string;
-      }>("amibaAttachments/readForPrompt", { args: { attachmentId } }),
-    async remove(attachmentId: string) {
-      await client.call("amibaAttachments/removeAttachment", {
-        args: { attachmentId },
-      });
-    },
-  };
+  const attachments = officialAttachments;
 
   // Engine-native only: the composer's `/`-skill mention provider is the
   // sole remaining consumer of `platform.agentSkills`. The full

@@ -1,4 +1,4 @@
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import { Sparkles } from "lucide-react";
@@ -71,13 +71,13 @@ function SkillsPresetSection({
     const current = sessionState.current
       ? sessionState.byId[sessionState.current]
       : undefined;
-    if (current && !current.origin && current.agentPreset === profileId) {
+    if (current && !current.origin && current.projectionValues?.agentPreset === profileId) {
       return sessionState.current;
     }
     return sessionState.ids
       .map((id) => sessionState.byId[id])
       .filter(
-        (item) => item && !item.origin && item.agentPreset === profileId,
+        (item) => item && !item.origin && item.projectionValues?.agentPreset === profileId,
       )
       .sort((left, right) => right.updatedAt - left.updatedAt)[0]?.id;
   }, [sessionState, profileId]);

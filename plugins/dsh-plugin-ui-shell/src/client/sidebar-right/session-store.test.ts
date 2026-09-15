@@ -60,5 +60,3 @@ describe('framework session store adoption', () => {
     expect(resource.signal.aborted).toBe(true)
   })
 })
-
-vi.mock('@deepseek-ai/dsh-client-runtime/client', async () => await import('../../dev/runtime-store.js'))

@@ -1,6 +1,6 @@
+import type {} from "@deepseek-ai/dsh-settings";
 import type { Context } from "@deepseek-ai/cordis";
 import z from "@deepseek-ai/schemastery";
-import { settingsNamespace } from "@deepseek-ai/dsh-settings";
 import { migrateLegacySettings } from "./migrate-legacy.js";
 import { DshModelPlaneStore } from "./store.js";
 
@@ -21,7 +21,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     ctx,
     new DshModelPlaneStore(config.root),
   );
-  const ns = settingsNamespace("amiba-model-ui");
+  const ns = "amiba-model-ui";
   ctx.settings.register(ns, UiPreferences, {
     base: { hiddenProviders: [], hiddenModels: {} },
   });

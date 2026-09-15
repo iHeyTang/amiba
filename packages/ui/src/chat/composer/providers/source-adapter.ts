@@ -64,6 +64,7 @@ export function sourceToProvider(
         localSessionContext(deps.sessionId ?? ""),
         {
           query,
+          drilled: false,
           position: hit?.position ?? "leading",
           signal: hit?.signal ?? controller.signal,
         },
@@ -88,6 +89,7 @@ export function sourceToProvider(
         session: localSessionContext(deps.sessionId ?? ""),
         position: hit.position,
         via: "menu",
+        action: "pick",
         span: hit.span,
       });
       applyPickOutcome(

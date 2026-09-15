@@ -26,7 +26,7 @@ for (const [page, transport, origin, nativeOutcome] of [
     fetch: async (url, options) => { requested = String(url); assert.equal(options.method, "HEAD"); return { ok: true }; },
     document: { querySelector: () => ({}), createElement: () => ({ click() { saved = this.href; } }) },
     window: { __ModuleLoader__: { load: ({ factory }) => {
-      plugin = factory(name => name === "@deepseek-ai/dsh-client-runtime/client" ? {
+      plugin = factory(name => name === "@deepseek-ai/dsh-client-store" ? {
         createSnapshotStore: initial => { let state = structuredClone(initial); return {
           getSnapshot: () => state, update: fn => { fn(state); },
         }; },

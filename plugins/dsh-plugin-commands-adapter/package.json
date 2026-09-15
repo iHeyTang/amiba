@@ -6,24 +6,37 @@
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
-  "exports": { ".": { "types": "./lib/index.d.ts", "default": "./lib/index.js" } },
-  "files": ["lib"],
-  "scripts": { "build": "tsc -p tsconfig.build.json", "typecheck": "tsc --noEmit", "test": "vitest run" },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
   "dependencies": {
     "@deepseek-ai/dsh-typert-protocol": "catalog:",
     "@deepseek-ai/schemastery": "catalog:"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
-    "@deepseek-ai/dsh-agent": "catalog:",
-    "@deepseek-ai/dsh-commands": "catalog:"
+    "@deepseek-ai/dsh-agent": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-commands": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-api-remotes": "0.1.5-rc.1"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "catalog:",
-    "@deepseek-ai/dsh-agent": "catalog:",
-    "@deepseek-ai/dsh-commands": "catalog:",
+    "@deepseek-ai/dsh-agent": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-commands": "0.1.5-rc.1",
     "@types/node": "22.9.0",
     "typescript": "5.6.3",
-    "vitest": "^2.1.4"
+    "vitest": "^2.1.4",
+    "@deepseek-ai/dsh-api-remotes": "0.1.5-rc.1"
   }
 }

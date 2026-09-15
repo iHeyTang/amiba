@@ -1,5 +1,5 @@
 import { WeixinMark } from "./brand-mark.js";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type {} from "@amiba/dsh-plugin-connector-core/client";
 import type { ConnectWizardHost } from "@amiba/dsh-plugin-connector-core/client";
 import { useEffect, useRef, useState } from "react";

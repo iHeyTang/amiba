@@ -47,6 +47,9 @@
 - id: ui-conversation
   disabled: true
 
+- id: ui-chat
+  disabled: true
+
 - id: ui-tool
   disabled: true
 
@@ -59,8 +62,8 @@
 # ui-deliverables stays enabled: UI Shell supplies the official turn data and
 # turn-tail chain while preserving the native conversation presentation.
 
-- id: ui-workspace
-  disabled: true
+# Keep the official workspace service for directory-picker flows. Amiba owns
+# the surrounding layout; the official visual entries only mount in their slots.
 
 # ENABLED in Phase 4.3 (completion). Full record:
 # docs/2026-08-15-dsh-native-architecture.md §4.1.
@@ -168,3 +171,13 @@
     # Webhook is a WebServer-backed channel provider, not part of Core.
     - id: amiba-connector-webhook
       name: "@amiba/dsh-plugin-connector-webhook"
+
+# Amiba's workspace owns these services and document seats.
+- id: resources
+  disabled: true
+- id: ui-sidebar-right
+  disabled: true
+- id: ui-sidebar-documentpreview
+  disabled: true
+- id: ui-sidebar-files
+  disabled: true

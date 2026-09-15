@@ -1,4 +1,3 @@
-vi.mock('@deepseek-ai/dsh-client-runtime/client', async () => await import('../../dev/runtime-store.js'))
 // Adapted from DeepSeek c291e796, MIT. See LICENSE.deepseek.
 /**
  * The face's contract with the store: a read in flight is visible, its outcome
@@ -8,7 +7,7 @@ vi.mock('@deepseek-ai/dsh-client-runtime/client', async () => await import('../.
  * runs under the session the file names, not the one the face was injected for.
  */
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
-import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import type { ResourceResult as RemoteResult } from '../resources/result.js'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { sessionFileAddress } from '../resources/file-address.js'
 import type { WorkspaceFileBytes, WorkspaceFileText } from './wire.js'

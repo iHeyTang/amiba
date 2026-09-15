@@ -67,8 +67,6 @@ export function toolCallBlockFromProgress(
       ...(result.error ? { error: result.error } : {}),
       ...(result.meta === undefined ? {} : { meta: result.meta }),
       // The settled node carries the CALL's render intent forward.
-      callView: wireValue<ToolResultNode["callView"]>(call?.callView ?? null),
-      resultView: wireValue<ToolResultNode["resultView"]>(result.resultView),
       subCalls: wireValue<readonly ToolCallBlock[]>(event.wire?.subCalls ?? []),
     };
   }
@@ -80,7 +78,6 @@ export function toolCallBlockFromProgress(
     turn: call.turn,
     step: call.step,
     time: call.time,
-    callView: wireValue<RunningToolCall["callView"]>(call.callView),
     subCalls: wireValue<readonly ToolCallBlock[]>(event.wire?.subCalls ?? []),
   };
 }

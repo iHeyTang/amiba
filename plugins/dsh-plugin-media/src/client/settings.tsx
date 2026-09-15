@@ -2,7 +2,7 @@ import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
 import { useEffect, useState } from 'react';
 import { usePluginT, ModelPickerDialog, ModelIcon, ModelIdentityName, type ModelPickerGroup } from '@amiba/ui/plugin';
 import { ChevronDown } from 'lucide-react';
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client';
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { MediaDescription, MediaOperation } from '../contracts.js';
 import type { MediaDefaults, MediaSelection } from '../preferences.js';
 import type {} from '../remote.js';

@@ -1,4 +1,4 @@
-import type { SessionListState } from "@deepseek-ai/dsh-client-runtime/client";
+import type { SessionListState } from "@deepseek-ai/dsh-api-session-controller/client";
 import type { SnapshotSelectorHook } from "@deepseek-ai/dsh-client-ui-slots";
 import {
   useOnboardingCoordinator,

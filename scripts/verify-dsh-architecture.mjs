@@ -77,7 +77,6 @@ const bundleSpecs = [
     directory: "dsh-bundle-amiba-core",
     name: "@amiba/dsh-bundle-amiba-core",
     plugins: [
-      "@amiba/dsh-plugin-attachments",
       "@amiba/dsh-plugin-browser-core",
       "@amiba/dsh-plugin-browser-provider-cdp",
       "@amiba/dsh-plugin-catalog",
@@ -306,7 +305,6 @@ function before(left, right) {
   }
 }
 before("@amiba/dsh-plugin-catalog", "@amiba/dsh-plugin-memory-memos");
-before("@amiba/dsh-plugin-catalog", "@amiba/dsh-plugin-attachments");
 before("@amiba/dsh-plugin-catalog", "@amiba/dsh-plugin-mcp-manager");
 before(
   "@amiba/dsh-plugin-catalog",
@@ -346,7 +344,7 @@ before(
 const uiShellManifest = await json("plugins/dsh-plugin-ui-shell/package.json");
 if (
   JSON.stringify(uiShellManifest.dsh?.client?.inject) !==
-  JSON.stringify(["@deepseek-ai/dsh-client-runtime", "@deepseek-ai/dsh-api-remotes"])
+  JSON.stringify(["@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-api-remotes"])
 ) {
   fail(
     "UI shell client graph must declare the official runtime and remote API services used by its Markdown bridge",
@@ -1474,7 +1472,7 @@ if (memoryManifest.exports?.["./package.json"] !== "./package.json") {
 if (
   JSON.stringify(memoryManifest.dsh?.client?.inject) !==
   JSON.stringify([
-    "@deepseek-ai/dsh-client-runtime",
+    "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
     "@deepseek-ai/dsh-api-remotes",
     "@amiba/dsh-plugin-ui-shell",
   ])
@@ -1555,7 +1553,7 @@ const connectorManifest = await json(
 if (
   JSON.stringify(connectorManifest.dsh?.client?.inject) !==
   JSON.stringify([
-    "@deepseek-ai/dsh-client-runtime",
+    "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
     "@deepseek-ai/dsh-api-remotes",
     "@amiba/dsh-plugin-ui-shell",
   ])
@@ -1712,7 +1710,7 @@ const skillsManifest = await json("plugins/dsh-plugin-skills/package.json");
 if (
   JSON.stringify(skillsManifest.dsh?.client?.inject) !==
   JSON.stringify([
-    "@deepseek-ai/dsh-client-runtime",
+    "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
     "@deepseek-ai/dsh-api-remotes",
     "@amiba/dsh-plugin-ui-shell",
   ])
@@ -1750,7 +1748,7 @@ const agentPresetManifest = await json(
 if (
   JSON.stringify(agentPresetManifest.dsh?.client?.inject) !==
   JSON.stringify([
-    "@deepseek-ai/dsh-client-runtime",
+    "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
     "@deepseek-ai/dsh-api-remotes",
     "@amiba/dsh-plugin-ui-shell",
   ])
@@ -1766,7 +1764,7 @@ for (const required of [
   // Engine-native data plane: the connection service's IApiClient face —
   // the exact surface the official dsh-client-ui-agent-preset consumed —
   // not a bespoke Amiba remote and not the host platform adapter.
-  'ctx.get("connection")',
+  "const api = ctx.remote",
   "ctx.remote.$on(",
   '"settings/document-updated"',
   '"settings.section"',
@@ -1815,7 +1813,7 @@ const mcpManifest = await json("plugins/dsh-plugin-mcp-manager/package.json");
 if (
   JSON.stringify(mcpManifest.dsh?.client?.inject) !==
   JSON.stringify([
-    "@deepseek-ai/dsh-client-runtime",
+    "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
     "@deepseek-ai/dsh-api-remotes",
     "@amiba/dsh-plugin-ui-shell",
   ])
@@ -1859,7 +1857,7 @@ const cronManifest = await json("plugins/dsh-plugin-cron/package.json");
 if (
   JSON.stringify(cronManifest.dsh?.client?.inject) !==
   JSON.stringify([
-    "@deepseek-ai/dsh-client-runtime",
+    "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-api-session-controller", "@deepseek-ai/dsh-api-workspace-controller", "@deepseek-ai/dsh-client-ui-settings",
     "@deepseek-ai/dsh-api-remotes",
     "@amiba/dsh-plugin-ui-shell",
   ])
@@ -1933,8 +1931,8 @@ const modelPlaneHost = await text(
 );
 const modelUiNative = await text("plugins/dsh-plugin-model-plane/src/client/native-settings.ts");
 if (modelPlaneHost.includes("applyModelPlaneRemote") ||
-    !modelUiNative.includes("this.api.llm.providers") ||
-    !modelUiNative.includes("this.api.llm.models") ||
+    !modelUiNative.includes("this.api.llm.listConfigurableProviders") ||
+    !modelUiNative.includes("this.api.session.modelCatalog") ||
     !modelUiNative.includes("this.api.settings.mutate") ||
     !modelUiNative.includes("this.api.credentials")) {
   fail("Model UI must directly consume native DSH APIs without an Amiba provider RPC");
@@ -2115,7 +2113,7 @@ for (const file of await sourceFiles("plugins/dsh-plugin-model-plane/src/plane")
 // Model-plane client picker contract (R5): the plugin occupies BOTH model
 // seats — the official session-scoped conversation.input.model (sessionId
 // from the standard kit, locked from the owner, engine data over the
-// official session.models/session.selectModel wire via ctx.get("connection"))
+// official session.modelCatalog/session.selectModel wire via ctx.get("connection"))
 // and the vendor session-less hero seat (draft plumbing on the owner). The
 // former owner-props agentModels pass-through must stay gone.
 const modelPlaneClient = await text(
@@ -2130,17 +2128,17 @@ if (!/slots\.inject\(\s*"conversation\.input\.model"/u.test(modelPlaneClient)) {
 if (!/slots\.inject\(\s*"amiba\.composer\.modelPicker"/u.test(modelPlaneClient)) {
   fail("model-plane client must keep the vendor session-less hero seat");
 }
-if (!modelPlaneClient.includes('ctx.get("connection")')) {
+if (!modelPlaneClient.includes("const api = ctx.remote")) {
   fail(
     "model-plane client must reach engine data over the official connection wire",
   );
 }
 if (
-  !modelPlanePicker.includes("wire.models({ sessionId })") ||
+  !modelPlanePicker.includes("wire.modelCatalog()") ||
   !modelPlanePicker.includes("wire.selectModel({")
 ) {
   fail(
-    "model-plane picker must use the official session.models/session.selectModel wire faces",
+    "model-plane picker must use the official session.modelCatalog/session.selectModel wire faces",
   );
 }
 for (const body of [modelPlaneClient, modelPlanePicker]) {
@@ -2254,7 +2252,6 @@ const dshPlatformAdapters = await text(
 // remain in this layer.
 for (const remote of [
   "amibaCommands",
-  "amibaAttachments",
 ]) {
   if (!dshPlatformAdapters.includes(`\"${remote}/`)) {
     fail(`shared UI platform does not consume DSH Remote ${remote}`);

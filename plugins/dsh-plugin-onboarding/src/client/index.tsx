@@ -1,5 +1,5 @@
 import { createLauncher, type Launcher } from "./launcher.js";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { ConnectionHandle } from "@deepseek-ai/dsh-api-remotes/client";
 import type {
   PropsRenderSlots,
@@ -13,7 +13,7 @@ import { FirstRun } from "./FirstRun.js";
 import { guideI18n } from "./i18n.js";
 export type { GuideMood, GuideStepOwner } from "./contracts.js";
 export const name = "amiba-onboarding-client";
-export const inject = ["slots", "connection", "layout"];
+export const inject = ["slots", "connection", "layout", "remote", "remote.llm", "remote.settings"];
 const children = {
   "amiba.onboarding.step": { kind: "list", scope: "root" },
   "amiba.onboarding.companion": { kind: "single", scope: "root" },
@@ -52,12 +52,12 @@ function Revisit({ launcher }: { launcher: Launcher }) {
 }
 export function apply(ctx: ClientContext) {
   const launcher = createLauncher();
-  const api = (ctx.get("connection") as ConnectionHandle).api;
+  const api = ctx.remote;
   const store = createProgressStore(api);
   const hasConfiguredProvider = async () => {
-    const { result } = await api.llm.providers({});
+    const result = await api.llm.listProviders();
     if (!result.ok) throw new Error(result.error.message);
-    return result.value.providers.some(provider => provider.active || provider.declared === true);
+    return result.value.length > 0;
   };
   let version = -1;
   let language = "";

@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { SurfaceVisualOwner } from "@amiba/extension-sdk";
 import { usePresentationCoordinator } from "@amiba/ui/plugin";
 

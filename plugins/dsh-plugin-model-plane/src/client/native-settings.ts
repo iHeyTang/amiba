@@ -1,5 +1,5 @@
 import type {
-  IApiClient,
+  ClientRemote,
   SettingsNamespaceView,
   SettingsPathOpView,
 } from "@deepseek-ai/dsh-api-remotes/client";
@@ -17,11 +17,9 @@ import { object } from "./schema-object.js";
 /** UI-only enhancement. Providers do not know or implement this namespace. */
 export const UI_NS = "amiba-model-ui";
 export async function responseValue<T>(
-  response: Promise<{
-    result: { ok: true; value: T } | { ok: false; error: { message: string } };
-  }>,
+  response: Promise<{ ok: true; value: T } | { ok: false; error: { message: string } }>,
 ): Promise<T> {
-  const { result } = await response;
+  const result = await response;
   if (!result.ok) throw new Error(result.error.message);
   return result.value;
 }
@@ -30,7 +28,7 @@ export async function responseValue<T>(
  * There is no custom provider service, registry, RPC, or protocol translation. */
 export class NativeProviderSettings implements ProviderSettingsController {
   constructor(
-    private readonly api: IApiClient,
+    private readonly api: ClientRemote,
     readonly subscribe: (listener: () => void) => () => void,
   ) {}
   private namespaces: SettingsNamespaceView[] = [];
@@ -55,14 +53,15 @@ export class NativeProviderSettings implements ProviderSettingsController {
   ) {
     if (!this.writable) throw new Error("Settings are read-only");
     return responseValue(
-      this.api.settings.mutate({ ns, ops, expectedRevision: revision }),
+      this.api.settings.mutate(ns, ops, revision),
     );
   }
   async snapshot(): Promise<ModelPlaneSnapshotShape> {
-    const [directory, catalog, settings] = await Promise.all([
-      responseValue(this.api.llm.providers({})),
-      responseValue(this.api.llm.models({})),
-      responseValue(this.api.settings.describe({})),
+    const [directory, catalog, settings, activeProviders] = await Promise.all([
+      responseValue(this.api.llm.listConfigurableProviders()),
+      responseValue(this.api.session.modelCatalog()),
+      responseValue(this.api.settings.describe()),
+      responseValue(this.api.llm.listProviders()),
     ]);
     this.namespaces = settings.namespaces;
     this.writable = settings.writable;
@@ -73,7 +72,7 @@ export class NativeProviderSettings implements ProviderSettingsController {
       ? prefs.hiddenProviders
       : [];
     const hiddenModels = object(prefs.hiddenModels);
-    const providers: ModelProviderProfileShape[] = directory.providers.map(
+    const providers: ModelProviderProfileShape[] = directory.map(official => ({ ...official, active: activeProviders.some(provider => provider.id === official.provider) })).map(
       (official) => {
         const ns = settings.namespaces.find(
           (n) => n.ns === official.settingsNs,
@@ -141,8 +140,8 @@ export class NativeProviderSettings implements ProviderSettingsController {
         ),
       ),
     ];
-    const { credentials } = await responseValue(
-      this.api.credentials.describe({ refs }),
+    const credentials = await responseValue(
+      this.api.credentials.describe(refs),
     );
     // Listing models and possessing the required credentials are separate facts.
     // Keep catalog rows for configuration, but never advertise known unusable
@@ -260,10 +259,10 @@ export class NativeProviderSettings implements ProviderSettingsController {
         if (!fields.some((field) => field.ref === edit.ref))
           throw new Error("Credential is not declared by this provider");
         if (edit.value === undefined)
-          await responseValue(this.api.credentials.unset({ ref: edit.ref }));
+          await responseValue(this.api.credentials.unset(edit.ref));
         else
           await responseValue(
-            this.api.credentials.set({ ref: edit.ref, value: edit.value }),
+            this.api.credentials.set(edit.ref, edit.value),
           );
       }
       return this.snapshot();
@@ -347,7 +346,7 @@ export class NativeProviderSettings implements ProviderSettingsController {
             value: {
               displayName: p.displayName,
               api: p.protocol,
-              baseURL: p.baseURL,
+              ...(p.baseURL ? { baseURL: p.baseURL } : {}),
               apiKeyEnv: ref,
               models: p.models.map((m) => ({ id: m.id, name: m.name })),
             },
@@ -355,7 +354,7 @@ export class NativeProviderSettings implements ProviderSettingsController {
         ]);
         if (input.apiKey?.trim())
           await responseValue(
-            this.api.credentials.set({ ref, value: input.apiKey.trim() }),
+            this.api.credentials.set(ref, input.apiKey.trim()),
           );
       }
       return this.snapshot();
@@ -372,7 +371,7 @@ export class NativeProviderSettings implements ProviderSettingsController {
         );
       await this.mutate(
         config.namespace,
-        [{ op: "unset", path: config.path }],
+        [{ op: "unset", path: [...config.path] }],
         config.revision,
       );
       return this.snapshot();
@@ -383,9 +382,8 @@ export class NativeProviderSettings implements ProviderSettingsController {
     apiKey?: string;
   }) {
     const p = input.provider;
-    const { models } = await responseValue(
-      this.api.llm.discoverModels({
-        settingsNs: p.official?.settingsNs || "llm-pi-ai",
+    const models = await responseValue(
+      this.api.llm.discoverModels(p.official?.settingsNs || "llm-pi-ai", {
         ...(p.official ? { provider: p.official.provider } : {}),
         ...(p.baseURL ? { baseURL: p.baseURL } : {}),
         ...(p.protocol !== "provider-native" ? { api: p.protocol } : {}),
@@ -400,7 +398,7 @@ export class NativeProviderSettings implements ProviderSettingsController {
       this.check(snapshot, revision);
       for (const field of snapshot.providers.find((p) => p.id === id)
         ?.configuration?.credentialFields ?? [])
-        await responseValue(this.api.credentials.unset({ ref: field.ref }));
+        await responseValue(this.api.credentials.unset(field.ref));
       return this.snapshot();
     });
   }

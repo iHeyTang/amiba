@@ -12,7 +12,7 @@ export class SubagentJobs {
   constructor(ctx: Context, presentation: BackgroundJobs) {
     ctx.on("subagent/start", info => {
       const child = ctx.agents.get(info.id);
-      if (!child || foldSubagentDescriptor(child.session.events)?.mode !== "continuable") return;
+      if (!child || foldSubagentDescriptor(child.session.snapshotEvents())?.mode !== "continuable") return;
       const parentId = child.session.header.parentSession;
       const owner = parentId ? ctx.agents.get(parentId) : undefined;
       if (!owner || this.active.has(info.runId)) return;

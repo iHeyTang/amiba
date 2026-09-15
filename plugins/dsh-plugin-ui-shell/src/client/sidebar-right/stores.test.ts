@@ -452,5 +452,3 @@ describe('createSidebarRightStore — page uniqueness', () => {
     expect(Object.values(layout().tabs).filter(tab => tab.kind === 'guide')).toHaveLength(1)
   })
 })
-
-vi.mock('@deepseek-ai/dsh-client-runtime/client', async () => await import('../../dev/runtime-store.js'));

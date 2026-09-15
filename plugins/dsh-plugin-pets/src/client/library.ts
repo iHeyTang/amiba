@@ -1,4 +1,4 @@
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { PetLibrary, PetInput } from "../model.js";
 import type {} from "../remote.js";
 export function createPetLibrary(remote: ClientContext["remote"]["amibaPets"]) {

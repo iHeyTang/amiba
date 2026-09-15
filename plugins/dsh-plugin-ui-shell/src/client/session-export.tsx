@@ -1,7 +1,5 @@
-import type {
-  ClientContext,
-  SessionId,
-} from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
+import type { SessionId } from "@deepseek-ai/dsh-session/types";
 import type {} from "@deepseek-ai/dsh-session-log-export/client";
 import { useSyncExternalStore } from "react";
 import { usePluginT } from "@amiba/i18n/plugin";

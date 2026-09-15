@@ -157,7 +157,7 @@ function installCorsBypass() {
  */
 function installDshClientWebSocketHeaders(): void {
   session.defaultSession.webRequest.onBeforeSendHeaders(
-    { urls: ["ws://127.0.0.1:*/*"] },
+    { urls: ["ws://127.0.0.1:*/*", "http://127.0.0.1:*/*"] },
     (details, callback) => {
       const baseUrl = dshRuntime.current?.baseUrl;
       if (!baseUrl) {
@@ -175,6 +175,7 @@ function installDshClientWebSocketHeaders(): void {
         if (name.toLowerCase() === "origin") delete headers[name];
       }
       headers.Origin = runtimeUrl.origin;
+      if (dshRuntime.current?.browserCookie) headers.Cookie = dshRuntime.current.browserCookie;
       callback({ requestHeaders: headers });
     },
   );

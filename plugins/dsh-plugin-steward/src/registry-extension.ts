@@ -1,6 +1,6 @@
 import type { Context } from "@deepseek-ai/cordis";
 import type { ToolDefinition } from "@deepseek-ai/dsh-tools";
-import { PERSONA_ORDER, PERSONA_SECTION } from "@deepseek-ai/dsh-system-prompt";
+import { PERSONA_PREFIX_SECTION } from "@deepseek-ai/dsh-system-prompt";
 import type { StewardRegistryService } from "./registry.js";
 import { STEWARD_PERSONA } from "./session-extension.js";
 import { stewardToolDefinitions } from "./tools.js";
@@ -167,7 +167,7 @@ export function installRegistryExtension(
       return {
         ...assembly,
         sections: assembly.sections.map((section) =>
-          section.name === PERSONA_SECTION
+          section.name === PERSONA_PREFIX_SECTION
             ? { ...section, text: persona }
             : section,
         ),
@@ -176,8 +176,8 @@ export function installRegistryExtension(
   );
   disposers.push(
     ctx.systemPrompt.section({
-      name: PERSONA_SECTION,
-      order: PERSONA_ORDER,
+      name: PERSONA_PREFIX_SECTION,
+      order: ctx.systemPrompt.getSectionOrder("DEPLOYMENT_PERSONA_PREFIX"),
       text: STEWARD_PERSONA,
     }),
   );

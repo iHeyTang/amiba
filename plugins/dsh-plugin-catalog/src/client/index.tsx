@@ -1,4 +1,4 @@
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
 import { settingsChromeHeightPx } from "@amiba/dsh-plugin-ui-shell/client";
 import { Wrench } from "lucide-react";

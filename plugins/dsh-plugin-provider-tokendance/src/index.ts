@@ -1,3 +1,4 @@
+import type {} from "@deepseek-ai/dsh-settings";
 import { TokenDanceAdapter } from "./adapter.js";
 import type {} from "@amiba/dsh-plugin-media";
 import type { Context } from "@deepseek-ai/cordis";
@@ -13,10 +14,6 @@ import {
   type ResolvedPiAiProviderProfile,
 } from "@deepseek-ai/dsh-llm-pi-ai";
 import {
-  installSettingsSection,
-  settingsNamespace,
-} from "@deepseek-ai/dsh-settings";
-import {
   createProvider,
   InMemoryCredentialStore,
   defaultProviderAuthContext,
@@ -31,9 +28,9 @@ import seed from "./catalog-seed.json";
 import { reasoningContract } from "./reasoning.js";
 
 export const name = "llm-tokendance";
-export const inject = ["llm", "credentials"];
+export const inject = ["llm", "credentials", "settings"];
 export const PROVIDER = "tokendance";
-export const NS = settingsNamespace("llm-tokendance");
+export const NS = "llm-tokendance";
 export interface ModelConfig {
   id: string;
   name?: string;
@@ -223,6 +220,7 @@ export function resolveProfile(
     displayName: "TokenDance",
     apiKeyEnv: credentialRef(config.apiKeyEnv),
     piProvider,
+    modelErrors: new Map(),
     configuredMaxTokens: new Map(
       config.models.flatMap((m) =>
         m.maxTokens ? [[m.id, m.maxTokens] as const] : [],
@@ -318,15 +316,15 @@ export function apply(ctx: Context, config: Config): void {
     rebuild();
     return next;
   }
-  ctx.llm.registerModelDiscovery(NS, async (request) =>
-    (await refresh(request.signal)).map((m) => ({
+  ctx.llm.registerModelDiscovery(NS, async (_request, signal) =>
+    (await refresh(signal)).map((m) => ({
       id: m.id,
       name: m.name,
       contextWindow: m.contextWindow,
       maxTokens: m.maxTokens,
     })),
   );
-  installSettingsSection(ctx, NS, Config, config, {
+  ctx.settings.installSection(ctx, NS, Config, config, {
     setSource: (source) => {
       current = source;
     },

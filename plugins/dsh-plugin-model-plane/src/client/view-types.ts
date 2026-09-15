@@ -1,8 +1,8 @@
 /** Private React presentation state. These are not provider/plugin or RPC contracts.
  * The original official objects are retained; plugins register only with DSH. */
 import type {
-  ConfigurableProviderView,
-  CredentialView,
+  LlmConfigurableProvider,
+
   ModelProviderGroup,
   ModelSelection,
   SettingsNamespaceView,
@@ -22,7 +22,7 @@ export type ModelDefinitionShape = ModelProviderGroup["models"][number] & {
 };
 export interface ProviderConfiguration {
   namespace: string;
-  path: string[];
+  path: readonly string[];
   revision: number;
   schema: unknown;
   value: Record<string, unknown>;
@@ -30,7 +30,7 @@ export interface ProviderConfiguration {
   removable: boolean;
 }
 export interface ModelProviderProfileShape {
-  official?: ConfigurableProviderView;
+  official?: LlmConfigurableProvider & { active: boolean };
   providerCard?: import("@amiba/extension-sdk").ProviderCardExtrasOwnerProps;
   id: string;
   displayName: string;
@@ -56,8 +56,8 @@ export interface ModelPlaneSnapshotShape {
   providers: ModelProviderProfileShape[];
   groups: ModelProviderGroup[];
   defaultSelection?: ModelSelection;
-  credentials: Record<string, CredentialView>;
-  failures: Array<{ id: string; name: string; message: string }>;
+  credentials: Record<string, import("@deepseek-ai/dsh-credentials/types").CredentialInfo>;
+  failures: ReadonlyArray<{ id: string; name: string; message: string }>;
 }
 export interface ConfigureProviderInput {
   expectedRevision: SettingsNamespaceView["revision"];

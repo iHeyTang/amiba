@@ -1,3 +1,4 @@
+import { readSessionHistory } from "./session-history.js";
 import type { Context } from "@deepseek-ai/cordis";
 import type { ToolDefinition } from "@deepseek-ai/dsh-tools";
 import type { ConversationLifecycle } from "./conversations.js";
@@ -19,14 +20,12 @@ export function conversationHistoryTool(ctx: Context, lifecycle: ConversationLif
       const sessionId = execution.agent?.session.id;
       if (!sessionId) throw new Error("conversation_history_unavailable");
       const input = args as { query: string; limit?: number; cursor?: number };
-      const persistence = ctx.reflect.get("sessionPersistence") as {
-        inspect(id: string): Promise<{ events: Array<{ type: string; data: unknown; time?: number }> }>;
-      } | undefined;
+      const persistence = ctx.reflect.get("sessionPersistence") as import("@deepseek-ai/dsh-session-persistence").SessionPersistence | undefined;
       if (!persistence) throw new Error("conversation_history_unavailable");
       const result = await searchConversationHistory(lifecycle, sessionId, input.query, {
         read: async (id) => {
           execution.signal.throwIfAborted();
-          return (await persistence.inspect(id)).events;
+          return (await readSessionHistory(persistence, id)).events;
         },
         isClosed: (id) => {
           const registry = ctx.reflect.get("workspaceRegistry") as { archivedSessionIds: readonly string[] } | undefined;

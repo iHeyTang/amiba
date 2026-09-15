@@ -5,7 +5,7 @@ export type CommandAttachments = ReadonlyArray<Parameters<CommandClaim["submit"]
 /** c291e796 declares attachments; rc.2 declares images. Keep the claim and
  * callback identity intact, selecting the payload only at the call boundary. */
 export function commandAcceptsImages(claim: CommandClaim): boolean {
-  return "attachments" in claim ? claim.attachments === true : claim.images === true;
+  return claim.attachments === true;
 }
 
 export function commandImagePayload(claim: CommandClaim, images: CommandAttachments) {

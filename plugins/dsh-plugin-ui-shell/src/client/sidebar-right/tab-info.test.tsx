@@ -144,5 +144,3 @@ describe('tabInfoFactory committed-record relation', () => {
     expectUncommitted(useTabInfo, tabId)
   })
 })
-
-vi.mock('@deepseek-ai/dsh-client-runtime/client', async () => await import('../../dev/runtime-store.js'));

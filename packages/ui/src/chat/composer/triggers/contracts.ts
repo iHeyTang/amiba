@@ -115,7 +115,7 @@ export interface ComposerTriggerController {
 /** The text/reference portion of official InputState, read from the live editor. */
 export interface ComposerInputStatus {
   readonly phase: "plain" | "claimed" | "adjudicating" | "submitting";
-  readonly claim?: Readonly<Pick<CommandClaim, "token" | "hint" | "images"> & { name?: string; attachments?: boolean }>;
+  readonly claim?: Readonly<Pick<CommandClaim, "token" | "hint" | "attachments"> & { name?: string; attachments?: boolean }>;
 }
 
 export interface ComposerInputDraft extends ComposerInputStatus {

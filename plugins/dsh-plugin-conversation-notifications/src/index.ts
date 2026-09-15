@@ -8,7 +8,7 @@ type Event = { type: string; data: unknown; seq?: number; timestamp?: number };
 type Session = {
   id: string;
   header: { title?: string; parentSession?: string };
-  events: readonly Event[];
+  snapshotEvents(): readonly Event[];
 };
 const source = "conversation";
 export function conversationNotificationListener(hub: AmibaNotificationHub) {
@@ -16,7 +16,7 @@ export function conversationNotificationListener(hub: AmibaNotificationHub) {
   return (session: Session, event: Event) => {
     const data = (event.data ?? {}) as Record<string, unknown>;
     let title = session.header.title ?? "";
-    for (const item of session.events) {
+    for (const item of session.snapshotEvents()) {
       if (item.type === "session/title")
         title = String((item.data as { title?: string }).title ?? title);
     }
@@ -84,7 +84,7 @@ export function conversationNotificationListener(hub: AmibaNotificationHub) {
       title: headline,
       source,
       sessionId: session.id,
-      key: `${session.id}:turn:${data.turn ?? event.seq ?? session.events.length}`,
+      key: `${session.id}:turn:${data.turn ?? event.seq ?? session.snapshotEvents().length}`,
       kind:
         status === "failed"
           ? "error"
@@ -105,7 +105,7 @@ export function apply(ctx: Context) {
   ctx.on("tools/execute", async (exec, next) => {
     if (exec.name !== "ask_user_question" || !exec.agent) return next();
     const session = exec.agent.session;
-    const titleEvent = [...(session.events as readonly Event[])]
+    const titleEvent = [...(session.snapshotEvents() as readonly Event[])]
       .reverse()
       .find((e) => e.type === "session/title");
     const title = titleEvent

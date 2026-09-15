@@ -6,9 +6,7 @@ import type { PresetOption } from "./connector-ui-registry.js";
  * `dsh-plugin-agent-preset`'s client/data.ts consumes. Kept structural so the
  * client half never has to import a DSH connection type here.
  */
-export interface PresetConnection {
-  api: { agentPresets: { list(input: object): Promise<unknown> } };
-}
+export type PresetConnection = Pick<import("@deepseek-ai/dsh-api-remotes/client").ClientRemote, "agentPresets">;
 
 interface RawEntry {
   id?: unknown;
@@ -30,12 +28,12 @@ export async function loadAgentPresets(
 ): Promise<PresetOption[]> {
   let response: unknown;
   try {
-    response = await connection.api.agentPresets.list({});
+    response = await connection.agentPresets.list();
   } catch {
     return [];
   }
   if (!response || typeof response !== "object") return [];
-  const result = (response as { result?: unknown }).result;
+  const result = response;
   if (!result || typeof result !== "object") return [];
   const { ok, value } = result as { ok?: unknown; value?: unknown };
   if (ok !== true || !value || typeof value !== "object") return [];

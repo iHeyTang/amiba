@@ -27,7 +27,7 @@
  * into the pane's own — the arriving tab closes and the pane's own is focused.
  * The kit plans none of this; it is decided here before its planners run.
  */
-import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
+import { defineStore, type EngineStoreHandle } from "@deepseek-ai/dsh-client-store";
 import type {
   DockMode, DockZone, FloatRect, History, LayoutOp, LayoutState, Mint, PaneId, SplitId, TabId, TabRecord,
 } from './dockkit/index.js'

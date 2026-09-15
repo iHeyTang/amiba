@@ -32,7 +32,10 @@
         "@amiba/dsh-plugin-ui-shell/client"
       ],
       "inject": [
-        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-api-workspace-controller",
+        "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-api-remotes",
         "@amiba/dsh-plugin-ui-shell"
       ],
@@ -47,7 +50,6 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
     "@deepseek-ai/dsh-api-remotes": "catalog:",
-    "@deepseek-ai/dsh-client-runtime": "catalog:",
     "@deepseek-ai/dsh-client-ui-slots": "catalog:",
     "react": "18.3.1",
     "react-dom": "18.3.1"
@@ -55,7 +57,6 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "catalog:",
     "@deepseek-ai/dsh-api-remotes": "catalog:",
-    "@deepseek-ai/dsh-client-runtime": "catalog:",
     "@deepseek-ai/dsh-client-ui-slots": "catalog:",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.0.1",

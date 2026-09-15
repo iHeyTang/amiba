@@ -1,4 +1,5 @@
-import type { ToolCallBlock, ToolCallOwnerProps } from "@amiba/extension-sdk";
+import type { ToolCallBlock, ToolCallOwnerProps as OfficialToolCallOwnerProps } from "@amiba/extension-sdk";
+type ToolCallOwnerProps = Omit<OfficialToolCallOwnerProps, "loadImage">;
 import { useT } from "@amiba/i18n";
 import { Wrench } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";

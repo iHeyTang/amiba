@@ -94,7 +94,9 @@ export function installDshClientTransport(
   const baseUrl = new URL(baseUrlValue);
   // The reviewed connection patch uses the actual authority only for file:
   // renderers. A remote authority remains remote; this is not an auth bypass.
-  const transportGlobal = globalThis as typeof globalThis & { __AMIBA_DSH_TRANSPORT_URL__?: string };
+  const transportGlobal = globalThis as typeof globalThis & { __AMIBA_DSH_TRANSPORT_URL__?: string; __DSH_TRANSPORT__?: { ownsHost?: boolean } };
+  const previousOfficialTransport = transportGlobal.__DSH_TRANSPORT__;
+  transportGlobal.__DSH_TRANSPORT__ = { ownsHost: window.location.protocol === "file:" && ["127.0.0.1", "[::1]", "localhost"].includes(baseUrl.hostname) };
   const previousTransportUrl = transportGlobal.__AMIBA_DSH_TRANSPORT_URL__;
   transportGlobal.__AMIBA_DSH_TRANSPORT_URL__ = baseUrl.origin;
   const uploadGlobal = globalThis as typeof globalThis & { __DSH_FILE_UPLOAD__?: { fetch(input: URL, init: RequestInit): Promise<Response> } };
@@ -150,6 +152,8 @@ export function installDshClientTransport(
   return {
     baseUrl: baseUrl.origin,
     dispose() {
+      if (previousOfficialTransport === undefined) delete transportGlobal.__DSH_TRANSPORT__;
+      else transportGlobal.__DSH_TRANSPORT__ = previousOfficialTransport;
       if (previousUpload === undefined) delete uploadGlobal.__DSH_FILE_UPLOAD__;
       else uploadGlobal.__DSH_FILE_UPLOAD__ = previousUpload;
       if (previousTransportUrl === undefined) delete transportGlobal.__AMIBA_DSH_TRANSPORT_URL__;

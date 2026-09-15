@@ -1,6 +1,6 @@
 // Adapted from DeepSeek c291e796, MIT. See LICENSE.deepseek.
 /** Restorable PDF viewing preferences; document objects and canvases remain component-local. */
-import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
+import { defineStore, type EngineStoreHandle } from "@deepseek-ai/dsh-client-store";
 import type { TabId } from '../../sidebar-right/dockkit/index.js'
 
 /** One tab's last visible page. */

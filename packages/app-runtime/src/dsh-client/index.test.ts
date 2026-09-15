@@ -1,453 +1,114 @@
 import { describe, expect, it, vi } from "vitest"
-import { DshApiClient, DshRpcError, type DshWebSocketLike } from "./index"
-
-function jsonResponse(value: unknown): Response {
-  return new Response(JSON.stringify(value), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  })
-}
-
-describe("DshApiClient", () => {
-  it("establishes an empty mux on socket open and closes an unread stream", async () => {
-    const socket = new FakeWebSocket();
-    const client = new DshApiClient({ baseUrl: "http://dsh.test", createWebSocket: () => socket });
-    const opening = client.openEvents();
-    socket.emit("open");
-    const stream = await opening;
-    await stream.return!();
-    expect(socket.closes).toHaveLength(1);
-  });
-
-  it("retains the first frame received alongside socket readiness", async () => {
-    const socket = new FakeWebSocket();
-    const client = new DshApiClient({ baseUrl: "http://dsh.test", createWebSocket: () => socket });
-    const opening = client.openEvents();
-    socket.emit("open");
-    const frame = { type: "server-request", method: "session/subscribed", rpcId: "child-frame", payload: { type: "session/subscribed", sessionId: "child", lastSeq: 0 } };
-    socket.message(frame);
-    const stream = await opening;
-    expect(await stream.next()).toEqual({ done: false, value: { rpcId: frame.rpcId, payload: frame.payload } });
-    await stream.return!();
-    expect(socket.closes).toHaveLength(1);
-  });
-
-  it("rejects socket failure before readiness and releases the connection", async () => {
-    const socket = new FakeWebSocket();
-    const client = new DshApiClient({ baseUrl: "http://dsh.test", createWebSocket: () => socket });
-    const opening = client.openEvents();
-    socket.emit("error");
-    await expect(opening).rejects.toThrow("WebSocket failed");
-    expect(socket.closes).toHaveLength(1);
-  });
-
-  it("cancels while waiting for socket readiness", async () => {
-    const socket = new FakeWebSocket();
-    const client = new DshApiClient({ baseUrl: "http://dsh.test", createWebSocket: () => socket });
-    const controller = new AbortController();
-    const opening = client.openEvents(controller.signal);
-    controller.abort();
-    await expect(opening).rejects.toThrow("closed before opening");
-    expect(socket.closes).toHaveLength(1);
-  });
-
-  it("routes child continuation and interruption through the exact direct-parent address", async () => {
-    const calls: Array<{ method: string; payload: unknown }> = [];
-    const client = new DshApiClient({
-      baseUrl: "http://dsh.test",
-      fetch: (async (_url, init) => {
-        const body = JSON.parse(String(init?.body));
-        calls.push({ method: body.method, payload: body.payload });
-        return jsonResponse({ type: "server-response", rpcId: body.rpcId, result: {
-          ok: true, value: body.method === "subagent.prompt" ? { messageId: "message-child" } : { accepted: true },
-        } });
-      }) as typeof fetch,
-    });
-    const address = { parentSessionId: "parent", childSessionId: "child", mode: "continuable" as const };
-    const content = [{ type: "text" as const, text: "Continue" }];
-    await expect(client.subagentPrompt(address, content, { clientTimeZone: "Asia/Shanghai" })).resolves.toEqual({ messageId: "message-child" });
-    await expect(client.subagentInterrupt(address)).resolves.toEqual({ accepted: true });
-    expect(calls).toEqual([
-      { method: "subagent.prompt", payload: { ...address, content, clientTimeZone: "Asia/Shanghai" } },
-      { method: "subagent.interrupt", payload: address },
-    ]);
-  });
-
-  it("does not send continuation RPCs for one-shot children even from untyped callers", async () => {
-    const fetch = vi.fn();
-    const client = new DshApiClient({ baseUrl: "http://dsh.test", fetch });
-    const address = { parentSessionId: "parent", childSessionId: "child", mode: "one-shot" };
-    await expect(client.subagentPrompt(address as never, [])).rejects.toThrow("One-shot");
-    await expect(client.subagentInterrupt(address as never)).rejects.toThrow("One-shot");
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it("matches the pinned official client's rejection of child image prompts", async () => {
-    const fetch = vi.fn();
-    const client = new DshApiClient({ baseUrl: "http://dsh.test", fetch });
-    await expect(client.subagentPrompt({ parentSessionId: "parent", childSessionId: "child", mode: "continuable" }, [
-      { type: "image", mediaType: "image/png", data: "aW1hZ2U=", name: "image.png" },
-    ])).rejects.toThrow("Image input is unavailable");
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it("uses native DSH RPC envelopes", async () => {
-    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body)) as { rpcId: string; method: string; payload: unknown }
-      expect(body).toEqual({
-        type: "client-request",
-        rpcId: "rpc-1",
-        method: "session.create",
-        payload: { sessionId: "s-1" },
-      })
-      return jsonResponse({
-        type: "server-response",
-        rpcId: body.rpcId,
-        result: { ok: true, value: { sessionId: "s-1" } },
-      })
-    })
-    const client = new DshApiClient({
-      baseUrl: "http://127.0.0.1:1234/",
-      fetch: fetchMock as typeof fetch,
-      makeRpcId: () => "rpc-1",
-    })
-    await expect(client.createSession({ sessionId: "s-1" })).resolves.toEqual({ sessionId: "s-1" })
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:1234/api/session.create",
-      expect.objectContaining({ method: "POST" }),
-    )
-  })
-
-  it("preserves Typert Remote namespace separators in DSH API routes", async () => {
-    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body)) as { rpcId: string }
-      return jsonResponse({
-        type: "server-response",
-        rpcId: body.rpcId,
-        result: { ok: true, value: { records: [], failures: [] } },
-      })
-    })
-    const client = new DshApiClient({
-      baseUrl: "http://127.0.0.1:1234",
-      fetch: fetchMock as typeof fetch,
-      makeRpcId: () => "rpc-remote",
-    })
-
-    await client.call("amibaAttachments/list", { args: {} })
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:1234/api/amibaAttachments/list",
-      expect.objectContaining({ method: "POST" }),
-    )
-  })
-
-  it("sends native image content parts without flattening them into text", async () => {
-    let seenPayload: unknown
-    const client = new DshApiClient({
-      baseUrl: "http://dsh.test",
-      makeRpcId: () => "image-rpc",
-      fetch: (async (_url, init) => {
-        const body = JSON.parse(String(init?.body)) as {
-          rpcId: string
-          payload: unknown
-        }
-        seenPayload = body.payload
-        return jsonResponse({
-          type: "server-response",
-          rpcId: body.rpcId,
-          result: { ok: true, value: { accepted: true } },
-        })
-      }) as typeof fetch,
-    })
-
-    await client.prompt("s-image", [
-      { type: "text", text: "What is shown?" },
-      {
-        type: "image",
-        mediaType: "image/png",
-        data: "iVBORw0KGgo=",
-        name: "screen.png",
-      },
-    ])
-
-    expect(seenPayload).toEqual({
-      sessionId: "s-image",
-      mode: "queue",
-      content: [
-        { type: "text", text: "What is shown?" },
-        {
-          type: "image",
-          mediaType: "image/png",
-          data: "iVBORw0KGgo=",
-          name: "screen.png",
-        },
-      ],
-    })
-  })
-
-  it("surfaces business errors with their DSH code", async () => {
-    const client = new DshApiClient({
-      baseUrl: "http://dsh.test",
-      fetch: (async () => jsonResponse({
-        type: "server-response",
-        rpcId: "rpc-2",
-        result: { ok: false, error: { code: "session-not-found", message: "missing" } },
-      })) as typeof fetch,
-      makeRpcId: () => "rpc-2",
-    })
-    await expect(client.cancel("missing")).rejects.toMatchObject({
-      name: "DshRpcError",
-      code: "session-not-found",
-      message: "missing",
-    })
-  })
-
-  it("exposes the native list, search, rename, and fork session methods", async () => {
-    const seen: Array<{ method: string; payload: unknown }> = []
-    let rpc = 0
-    const client = new DshApiClient({
-      baseUrl: "http://dsh.test",
-      makeRpcId: () => `rpc-${++rpc}`,
-      fetch: (async (_url, init) => {
-        const body = JSON.parse(String(init?.body)) as {
-          rpcId: string
-          method: string
-          payload: unknown
-        }
-        seen.push({ method: body.method, payload: body.payload })
-        const values: Record<string, unknown> = {
-          "session.list": { items: [] },
-          "session.search": { items: [], hasMore: false },
-          "session.rename": { title: "Renamed", seq: 4 },
-          "session.fork": { sessionId: "child" },
-        }
-        return jsonResponse({
-          type: "server-response",
-          rpcId: body.rpcId,
-          result: { ok: true, value: values[body.method] },
-        })
-      }) as typeof fetch,
-    })
-
-    await client.listSessions()
-    await client.searchSessions("needle")
-    await client.renameSession("parent", "Renamed")
-    await client.forkSession("parent", 12)
-
-    expect(seen).toEqual([
-      { method: "session.list", payload: {} },
-      { method: "session.search", payload: { query: "needle" } },
-      {
-        method: "session.rename",
-        payload: { sessionId: "parent", title: "Renamed" },
-      },
-      {
-        method: "session.fork",
-        payload: { sessionId: "parent", atSeq: 12 },
-      },
-    ])
-  })
-
-  it("uses DSH workspace registry methods without inventing product state", async () => {
-    const seen: Array<{ method: string; payload: unknown }> = []
-    let rpc = 0
-    const workspace = {
-      workspaceId: "w-1",
-      path: "/repo",
-      title: "repo",
-      sessionIds: [],
-      createdAt: "2026-08-15T00:00:00.000Z",
-      updatedAt: "2026-08-15T00:00:00.000Z",
-    }
-    const client = new DshApiClient({
-      baseUrl: "http://dsh.test",
-      makeRpcId: () => `workspace-${++rpc}`,
-      fetch: (async (_url, init) => {
-        const body = JSON.parse(String(init?.body)) as {
-          rpcId: string
-          method: string
-          payload: unknown
-        }
-        seen.push({ method: body.method, payload: body.payload })
-        const values: Record<string, unknown> = {
-          "workspace.list": { items: [workspace], archivedSessionIds: [] },
-          "workspace.create": { workspace, created: true },
-          "workspace.rename": { workspace: { ...workspace, title: "Project" } },
-          "workspace.delete": { deleted: true },
-          "workspace.insertBefore": { workspaceIds: ["w-1"] },
-          "workspace.insertSessionBefore": {
-            workspace: { ...workspace, sessionIds: ["s-1"] },
-          },
-          "workspace.archiveSession": { archivedSessionIds: ["s-1"] },
-        }
-        return jsonResponse({
-          type: "server-response",
-          rpcId: body.rpcId,
-          result: { ok: true, value: values[body.method] },
-        })
-      }) as typeof fetch,
-    })
-
-    await client.listWorkspaces()
-    await client.createWorkspace("/repo")
-    await client.renameWorkspace("w-1", "Project")
-    await client.reorderWorkspace("w-1")
-    await client.reorderWorkspaceSession("w-1", "s-1")
-    await client.archiveSession("s-1")
-    await client.deleteWorkspace("w-1")
-
-    expect(seen).toEqual([
-      { method: "workspace.list", payload: {} },
-      { method: "workspace.create", payload: { path: "/repo" } },
-      {
-        method: "workspace.rename",
-        payload: { workspaceId: "w-1", title: "Project" },
-      },
-      { method: "workspace.insertBefore", payload: { workspaceId: "w-1" } },
-      {
-        method: "workspace.insertSessionBefore",
-        payload: { workspaceId: "w-1", sessionId: "s-1" },
-      },
-      { method: "workspace.archiveSession", payload: { sessionId: "s-1" } },
-      { method: "workspace.delete", payload: { workspaceId: "w-1" } },
-    ])
-  })
-
-  it("uses the native DSH WebSocket downlink and unwraps server-request frames", async () => {
-    const fetchMock = vi.fn()
-    const socket = new FakeWebSocket()
-    let webSocketUrl = ""
-    const client = new DshApiClient({
-      baseUrl: "http://127.0.0.1:4321/base",
-      fetch: fetchMock as typeof fetch,
-      createWebSocket: (url) => {
-        webSocketUrl = url
-        return socket
-      },
-    })
-    const iterator = client.events()[Symbol.asyncIterator]()
-    const pending = iterator.next()
-    socket.message({
-      type: "server-request",
-      rpcId: "mux-1",
-      method: "mux.event",
-      payload: { type: "session/subscribed", sessionId: "s-1", lastSeq: 7 },
-    })
-
-    await expect(pending).resolves.toEqual({
-      done: false,
-      value: {
-        rpcId: "mux-1",
-        payload: { type: "session/subscribed", sessionId: "s-1", lastSeq: 7 },
-      },
-    })
-    expect(webSocketUrl).toBe("ws://127.0.0.1:4321/api/events.mux")
-    expect(fetchMock).not.toHaveBeenCalled()
-    await iterator.return?.(undefined)
-    expect(socket.closes).toEqual([{ code: 1000, reason: "iterator closed" }])
-  })
-
-  it("surfaces native stream errors from the WebSocket downlink", async () => {
-    const socket = new FakeWebSocket()
-    const client = new DshApiClient({
-      baseUrl: "https://dsh.test",
-      createWebSocket: () => socket,
-    })
-    const iterator = client.events()[Symbol.asyncIterator]()
-    const pending = iterator.next()
-    socket.message({
-      type: "server-request",
-      rpcId: "mux-error",
-      method: "mux.event",
-      payload: {
-        type: "stream/error",
-        error: { code: "stream-failed", message: "downlink failed" },
-      },
-    })
-
-    await expect(pending).rejects.toMatchObject({
-      name: "DshRpcError",
-      code: "stream-failed",
-      message: "downlink failed",
-    })
-  })
-
-  it("closes the WebSocket when the event stream is aborted", async () => {
-    const socket = new FakeWebSocket()
-    const controller = new AbortController()
-    const client = new DshApiClient({
-      baseUrl: "http://dsh.test",
-      createWebSocket: () => socket,
-    })
-    const pending = client.events(controller.signal).next()
-    controller.abort()
-
-    await expect(pending).resolves.toEqual({ done: true, value: undefined })
-    expect(socket.closes).toEqual([{ code: 1000, reason: "aborted" }])
-  })
-
-  it("does not miss an abort that races WebSocket listener registration", async () => {
-    const socket = new FakeWebSocket()
-    const controller = new AbortController()
-    const client = new DshApiClient({
-      baseUrl: "http://dsh.test",
-      createWebSocket: () => {
-        controller.abort()
-        return socket
-      },
-    })
-
-    await expect(client.events(controller.signal).next()).resolves.toEqual({
-      done: true,
-      value: undefined,
-    })
-    expect(socket.closes).toEqual([{ code: 1000, reason: "aborted" }])
-  })
-
-  it("rejects malformed native stream errors before constructing DshRpcError", async () => {
-    const socket = new FakeWebSocket()
-    const client = new DshApiClient({
-      baseUrl: "http://dsh.test",
-      createWebSocket: () => socket,
-    })
-    const pending = client.events().next()
-    socket.message({
-      type: "server-request",
-      rpcId: "mux-invalid-error",
-      method: "mux.event",
-      payload: { type: "stream/error", error: { message: "missing code" } },
-    })
-
-    await expect(pending).rejects.toThrow("invalid stream error")
-  })
-})
+import { DshApiClient, type DshWebSocketLike } from "./index"
 
 class FakeWebSocket implements DshWebSocketLike {
-  readyState = 1
+  readyState = 0
+  readonly sent: Array<{ type: string; streamId: string; endpoint?: string; payload?: unknown }> = []
   readonly closes: Array<{ code?: number; reason?: string }> = []
   private readonly listeners = new Map<string, Set<(event: Event) => void>>()
-
-  addEventListener(type: string, listener: (event: Event) => void): void {
-    const listeners = this.listeners.get(type) ?? new Set()
-    listeners.add(listener)
-    this.listeners.set(type, listeners)
+  addEventListener(type: string, listener: (event: Event) => void) {
+    const entries = this.listeners.get(type) ?? new Set(); entries.add(listener); this.listeners.set(type, entries)
   }
-
-  removeEventListener(type: string, listener: (event: Event) => void): void {
-    this.listeners.get(type)?.delete(listener)
-  }
-
-  close(code?: number, reason?: string): void {
-    this.readyState = 2
-    this.closes.push({ code, reason })
-  }
-
-  emit(type: string): void {
-    for (const listener of this.listeners.get(type) ?? []) listener(new Event(type))
-  }
-
-  message(value: unknown): void {
-    const event = new MessageEvent("message", { data: JSON.stringify(value) })
-    for (const listener of this.listeners.get("message") ?? []) listener(event)
-  }
+  removeEventListener(type: string, listener: (event: Event) => void) { this.listeners.get(type)?.delete(listener) }
+  send(data: string) { this.sent.push(JSON.parse(data)) }
+  close(code?: number, reason?: string) { this.readyState = 3; this.closes.push({ code, reason }) }
+  emit(type: string) { if (type === "open") this.readyState = 1; for (const listener of this.listeners.get(type) ?? []) listener(new Event(type)) }
+  message(frame: unknown) { for (const listener of this.listeners.get("message") ?? []) listener(new MessageEvent("message", { data: JSON.stringify(frame) })) }
+  item(value: unknown) { this.message({ type: "item", streamId: this.sent[0]!.streamId, value }) }
 }
+
+function harness() {
+  const calls: Array<{ method: string; payload: unknown }> = []
+  const sockets: FakeWebSocket[] = []
+  const urls: string[] = []
+  const client = new DshApiClient({
+    baseUrl: "http://dsh.test", makeRpcId: () => "request-id",
+    fetch: vi.fn(async (_url, init) => {
+      const body = JSON.parse(String(init?.body)); calls.push({ method: body.method, payload: body.payload })
+      return Response.json({ type: "server-response", rpcId: body.rpcId, result: { ok: true, value: { accepted: true } } })
+    }),
+    createWebSocket: url => { urls.push(url); const socket = new FakeWebSocket(); sockets.push(socket); return socket },
+  })
+  return { client, calls, sockets, urls }
+}
+const address = { kind: "session" as const, sessionId: "s-1" }
+const snapshot = { type: "snapshot", cursor: 7, records: [], hasMore: false, projections: { asOfSeq: 7, values: {} } }
+
+describe("DSH 0.1.5 Remote transport", () => {
+  it("uses generated named request parameters and preserves custom namespaces", async () => {
+    const { client, calls } = harness()
+    await client.createSession({ sessionId: "s-1" }); await client.listSessions()
+    await client.searchSessions("needle"); await client.renameSession("s-1", "Name"); await client.forkSession("s-1", 4)
+    await client.call("amibaExample/list", { args: {} })
+    expect(calls).toEqual([
+      { method: "session/create", payload: { args: { request: { sessionId: "s-1" } } } },
+      { method: "session/list", payload: { args: { _request: {} } } },
+      { method: "session/search", payload: { args: { request: { query: "needle" } } } },
+      { method: "session/rename", payload: { args: { request: { sessionId: "s-1", title: "Name" } } } },
+      { method: "session/fork", payload: { args: { request: { sessionId: "s-1", atSeq: 4 } } } },
+      { method: "amibaExample/list", payload: { args: {} } },
+    ])
+  })
+  it("sends a prompt identity and retains image content", async () => {
+    const { client, calls } = harness()
+    const content = [{ type: "image" as const, mediaType: "image/png" as const, data: "YWJj" }]
+    await client.prompt("s-1", content)
+    expect(calls[0]).toEqual({ method: "session/prompt", payload: { args: { request: { requestId: "request-id", sessionId: "s-1", mode: "queue", content } } } })
+  })
+  it("keeps the direct-parent address on child continuation and rejects one-shot writes", async () => {
+    const { client, calls } = harness()
+    const child = { parentSessionId: "parent", childSessionId: "child", mode: "continuable" as const }
+    await client.subagentPrompt(child, [{ type: "text", text: "Continue" }]); await client.subagentInterrupt(child)
+    expect(calls).toEqual([
+      { method: "subagents/prompt", payload: { args: { request: { ...child, content: [{ type: "text", text: "Continue" }] } } } },
+      { method: "subagents/interruptByParent", payload: { args: child } },
+    ])
+    await expect(client.subagentPrompt({ ...child, mode: "one-shot" } as never, [])).rejects.toThrow("One-shot")
+    await expect(client.subagentInterrupt({ ...child, mode: "one-shot" } as never)).rejects.toThrow("One-shot")
+    expect(calls).toHaveLength(2)
+  })
+  it("waits for the authoritative follow snapshot and retains that first frame", async () => {
+    const { client, sockets, urls } = harness()
+    const opening = client.openEvents(undefined, address)
+    const socket = sockets[0]!; socket.emit("open")
+    expect(urls).toEqual(["ws://dsh.test/api/remote.mux"])
+    expect(socket.sent[0]).toEqual({ type: "open", streamId: "request-id", endpoint: "session/follow", payload: { args: { request: { address, assistantStream: true } } } })
+    socket.item(snapshot)
+    const stream = await opening
+    expect((await stream.next()).value.payload).toEqual({ type: "session/subscribed", sessionId: "s-1", lastSeq: 7 })
+    await stream.return!(); expect(socket.sent.at(-1)?.type).toBe("cancel"); expect(socket.closes).toHaveLength(1)
+  })
+  it("adapts live assistant chunks without inventing durable events", async () => {
+    const { client, sockets } = harness()
+    const stream = client.events(undefined, undefined, address); const first = stream.next()
+    const socket = sockets[0]!; socket.emit("open"); socket.item(snapshot); await first
+    const next = stream.next()
+    socket.item({ type: "assistant-stream", frame: { type: "start", step: 3, startedAfterSeq: 7 } })
+    socket.item({ type: "assistant-stream", frame: { type: "chunk", time: 10, chunk: { type: "text-delta", text: "Hello" } } })
+    expect((await next).value?.payload).toMatchObject({ type: "session/event", event: { type: "assistant/chunk", data: { step: 3, chunk: { text: "Hello" } } } })
+    await stream.return(undefined)
+  })
+  it("reads history from the follow opening and releases its carrier", async () => {
+    const { client, sockets } = harness(); const history = client.history("s-1")
+    sockets[0]!.emit("open"); sockets[0]!.item(snapshot)
+    expect(await history).toEqual({ events: [], hasMore: false, projections: snapshot.projections })
+    expect(sockets[0]!.closes).toHaveLength(1)
+  })
+  it.each(["error", "close"])("releases a carrier when %s occurs before readiness", async type => {
+    const { client, sockets } = harness(); const opening = client.openEvents(undefined, address)
+    sockets[0]!.emit(type); await expect(opening).rejects.toThrow("WebSocket"); expect(sockets[0]!.closes).toHaveLength(1)
+  })
+  it("cancels an opening and does not lose a registration-time abort", async () => {
+    const controller = new AbortController(); const socket = new FakeWebSocket()
+    const client = new DshApiClient({ baseUrl: "http://dsh.test", createWebSocket: () => { controller.abort(); return socket } })
+    await expect(client.openEvents(controller.signal, address)).rejects.toThrow("opening snapshot")
+    expect(socket.closes).toHaveLength(1)
+  })
+  it("surfaces host errors and rejects mismatched stream identities", async () => {
+    const { client, sockets } = harness(); const stream = client.stream("session/control", {}); const first = stream.next()
+    sockets[0]!.emit("open"); sockets[0]!.message({ type: "item", streamId: "wrong", value: {} })
+    await expect(first).rejects.toThrow("identity")
+    const other = new DshApiClient({ baseUrl: "http://dsh.test", makeRpcId: () => "id", fetch: async () => Response.json({ type: "server-response", rpcId: "id", result: { ok: false, error: { code: "session/missing", message: "missing" } } }) })
+    await expect(other.cancel("missing")).rejects.toMatchObject({ name: "DshRpcError", code: "session/missing" })
+  })
+})

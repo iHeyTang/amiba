@@ -1,0 +1,40 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -2602,8 +2602,15 @@
+ 	* transport is stateless beyond its closures over `this`.
+ 	*/
+ 	ptcTransport;
++	registrationContexts = new WeakMap();
++	registrationOwner;
++	registrationContext(name, scope) {
++		const definition = this.get(name, scope);
++		return definition && (definition === this.ptcTransport ? this.registrationOwner : this.registrationContexts.get(definition));
++	}
+ 	constructor(ctx, config = {}) {
+ 		super(ctx, "tools");
++		this.registrationOwner = ctx;
+ 		this.defaultMode = config.mode ?? "native";
+ 		this.maxParallelSubCalls = resolveMaxParallelSubCalls(config.maxParallelSubCalls);
+ 		ctx.systemPrompt.tools((context) => this.wireSchemas(context.scope));
+@@ -2778,7 +2785,9 @@
+ 		const timeoutMs = definition.timeoutMs;
+ 		if (timeoutMs !== void 0 && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) throw new TypeError(`tool "${name}" timeoutMs must be a positive finite number`);
+ 		if (name === "run_code") throw new Error(`tool name "${RUN_CODE_NAME}" is reserved for the PTC mode presentation transport and cannot be registered or shadowed`);
+-		return this.layers.effect(this.ctx, (layer) => layer.tools.insert(name, definition), { label: "tools.register()" });
++		const registered = { ...definition };
++		this.registrationContexts.set(registered, this.ctx);
++		return this.layers.effect(this.ctx, (layer) => layer.tools.insert(name, registered), { label: "tools.register()" });
+ 	}
+ 	/**
+ 	* Restrict global tools for the calling agent scope. Empty filters, unknown
+--- a/lib/types/index.d.ts
++++ b/lib/types/index.d.ts
+@@ -653,6 +653,8 @@
+      * @returns the definition the scope resolves, or undefined when none is visible.
+      */
+     get(name: string, scope?: ScopeKey): ToolDefinition | undefined;
++    /** Context of the exact visible registration, including scoped shadows. */
++    registrationContext(name: string, scope?: ScopeKey): Context | undefined;
+     /**
+      * Resolve the definition that MAY EXECUTE for a call, applying the mode
+      * collapse at the operation boundary that owns it. The registry view

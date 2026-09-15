@@ -1,6 +1,6 @@
 // Adapted from DeepSeek c291e796, MIT. See LICENSE.deepseek.
 /** Adapt a Remote relative read without changing its Session or Host path authority. */
-import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import type { ResourceResult as RemoteResult } from '../../resources/result.js'
 import type { WorkspaceFileBytes } from '../wire.js'
 import { documentFileBytes } from '../rpc.js'
 import type { ReadHtmlRelative } from './pack.js'

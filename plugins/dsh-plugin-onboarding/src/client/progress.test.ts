@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Context } from "@deepseek-ai/cordis";
 import SettingsProvider, { settingsNamespace } from "@deepseek-ai/dsh-settings";
-import type { IApiClient } from "@deepseek-ai/dsh-api-remotes/client";
+import type { ClientRemote } from "@deepseek-ai/dsh-api-remotes/client";
 import * as plugin from "../index.js";
 import { createProgressStore } from "./progress.js";
 class MemorySettings extends SettingsProvider {
@@ -30,14 +30,14 @@ describe("DSH-backed progress", () => {
           result: {
             ok: true,
             value: await ctx.settings.mutate(
-              settingsNamespace(input.ns),
+              input.ns,
               input.ops,
               input.expectedRevision,
             ),
           },
         }),
       },
-    } as unknown as IApiClient;
+    } as unknown as ClientRemote;
     const store = createProgressStore(api);
     try {
       expect(await store.read()).toEqual({

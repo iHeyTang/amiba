@@ -1,3 +1,4 @@
+import { jsonValue } from "./schema-object.js";
 import { Check, ArrowUpRight, ChevronDown } from "lucide-react";
 import { providerOnboardingI18n } from "./i18n-onboarding.js";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -134,7 +135,7 @@ export function ProviderOnboarding({
             await adapter.configure(selected, {
               expectedRevision: current.configuration.revision,
               ops: [
-                { op: "set", path: [], value: current.configuration.value },
+                { op: "set", path: [], value: jsonValue(current.configuration.value) },
               ],
               credentials: [],
             }),

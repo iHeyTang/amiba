@@ -1,5 +1,5 @@
 import { projectDesktopSync, syncScope, inputTurn } from "./desktop-sync.js";
-import { sharedConversationSeed, type ConversationCadence, type ConversationLifecycle, type ConversationView } from "@amiba/dsh-plugin-session-features";
+import { readSessionHistory, sharedConversationSeed, type ConversationCadence, type ConversationLifecycle, type ConversationView } from "@amiba/dsh-plugin-session-features";
 import type { Agent } from "@deepseek-ai/dsh-agent";
 import {
   createUserMessage,
@@ -189,12 +189,7 @@ interface MessageRuntimeContext extends Context {
   agentPresets: {
     mount(agentCtx: Context, id?: string): Promise<unknown>;
   };
-  sessionPersistence: {
-    inspect(id: string): Promise<{
-      meta: { agentPreset?: string };
-      events: readonly SessionEvent[];
-    }>;
-  };
+  sessionPersistence: import("@deepseek-ai/dsh-session-persistence").SessionPersistence;
 }
 
 /** Shape of the `agentDefaultModel` service published by dsh-host-apiproxy
@@ -775,7 +770,7 @@ export class MessageChannelCenter {
           isClosed: async (id) => {
             if (this.isSessionArchived(id)) return true;
             if (this.ctx.agents.get(id as never)) return false;
-            try { await (this.ctx as MessageRuntimeContext).sessionPersistence.inspect(id); return false; }
+            try { await readSessionHistory((this.ctx as MessageRuntimeContext).sessionPersistence, id); return false; }
             catch (error) {
               if ((error as NodeJS.ErrnoException).code === "ENOENT" || (error instanceof Error && error.message === "session_not_found")) return true;
               throw error;
@@ -968,7 +963,7 @@ export class MessageChannelCenter {
     if (existing) return existing;
     const runtime = this.ctx as MessageRuntimeContext;
     const resume = (async () => {
-      const inspected = await runtime.sessionPersistence.inspect(sessionId);
+      const inspected = await readSessionHistory(runtime.sessionPersistence, sessionId);
       const preset = presetForSession(inspected);
       const agentOptions = this.defaultAgentOptions();
       const handle = await this.ctx.agents.resume({
@@ -996,9 +991,9 @@ export class MessageChannelCenter {
 
   private async sessionEvents(sessionId: string): Promise<SessionEvent[]> {
     const live = this.ctx.agents.get(sessionId as never) as Agent | undefined;
-    if (live) return [...live.session.events];
+    if (live) return [...live.session.snapshotEvents()];
     const runtime = this.ctx as MessageRuntimeContext;
-    return [...(await runtime.sessionPersistence.inspect(sessionId)).events];
+    return [...(await readSessionHistory(runtime.sessionPersistence, sessionId)).events];
   }
 
   private syncRecovery?: Promise<void>;
@@ -1010,7 +1005,7 @@ export class MessageChannelCenter {
         if (!policies[syncScope(binding)]?.enabled || this.isSessionArchived(binding.sessionId)) continue;
         try {
           const events = await this.sessionEvents(binding.sessionId);
-          await this.reconcileSession({ id: binding.sessionId as Session["id"], events });
+          await this.reconcileSession({ id: binding.sessionId as Session["id"], snapshotEvents: () => events });
         } catch (error) {
           this.ctx.logger("amiba-messaging-core").warn(`Sync recovery failed for ${binding.sessionId}: ${String(error)}`);
         }
@@ -1019,16 +1014,16 @@ export class MessageChannelCenter {
     return this.syncRecovery;
   }
 
-  private async reconcileSession(session: Pick<Session, "id" | "events">): Promise<void> {
+  private async reconcileSession(session: Pick<Session, "id" | "snapshotEvents">): Promise<void> {
     const binding = await this.store.findConversationBySession(session.id);
     const policy = binding ? (await this.store.syncPolicies())[syncScope(binding)] : undefined;
-    const mirrors = binding && policy ? projectDesktopSync(session.id, session.events, binding, policy) : [];
+    const mirrors = binding && policy ? projectDesktopSync(session.id, session.snapshotEvents(), binding, policy) : [];
     for (const envelope of mirrors) await this.store.queueOutbound(envelope);
     const pending = await this.store.listPending(session.id);
     for (const item of pending) {
-      const reply = completedTurnReply(session.events, item);
+      const reply = completedTurnReply(session.snapshotEvents(), item);
       if (!reply) continue;
-      const turn = inputTurn(session.events, item.dshMessageId);
+      const turn = inputTurn(session.snapshotEvents(), item.dshMessageId);
       const mirrored = mirrors.find(envelope => envelope.sync.author === "assistant" && envelope.sync.turn === turn);
       await this.store.queueReply(item.key, mirrored ?? {
         id: `${reply.messageId}:${item.channelId}:${item.messageId}`,
@@ -1053,7 +1048,7 @@ export class MessageChannelCenter {
           await this.reconcileSession(agent.session);
           const remaining = await this.store.listPending(sessionId);
           const persistedMessageIds = new Set(
-            agent.session.events.flatMap((event) => {
+            agent.session.snapshotEvents().flatMap((event) => {
               const id = eventMessageId(event);
               return id ? [id] : [];
             }),

@@ -55,7 +55,7 @@ export class CommandClaimStore {
       phase,
       ...(claim ? { claim: Object.freeze({ token: claim.token,
         ...(claim.hint !== undefined ? { hint: claim.hint } : {}),
-        ...(claim.images !== undefined || "attachments" in claim ? { images: commandAcceptsImages(claim) } : {}),
+
         ...("attachments" in claim && typeof claim.attachments === "boolean" ? { attachments: claim.attachments } : {}),
         ...("name" in claim && typeof claim.name === "string" ? { name: claim.name } : {}),
       }) } : {}),
