@@ -267,3 +267,27 @@ it("isolates a throwing card renderer and footer while native configuration rema
     expect(await screen.findByRole("dialog")).toBeVisible();
   } finally { error.mockRestore(); }
 });
+
+
+it("shares the merged model inventory with the official editor and keeps it after refresh", async () => {
+  snapshot.mockClear();
+  snapshot.mockResolvedValue(modelPlaneSnapshot);
+  const discover = vi.fn(async () => ({ models: modelPlaneSnapshot.providers[0]!.models }));
+  const user = userEvent.setup();
+  render(<ModelProviderConfigTab adapter={{ ...adapter, configure: vi.fn(), discover }} inventory={[{
+    id: "deepseek-official", name: "DeepSeek", available: true,
+    models: [{ id: "image-model", name: "Image Model", supported: true, enabled: true, outputModalities: ["image"] }],
+  }]} />);
+  await user.click(await screen.findByRole("button", { name: "options.models.display.configureProvider" }));
+  const dialog = screen.getByRole("dialog");
+  expect(within(dialog).getAllByRole("listitem")).toHaveLength(3);
+  expect(within(dialog).getByText("Image Model")).toBeVisible();
+  snapshot.mockResolvedValue({ ...modelPlaneSnapshot, providers: [{
+    ...modelPlaneSnapshot.providers[0]!,
+    models: [...modelPlaneSnapshot.providers[0]!.models, { id: "new-chat", name: "New Chat" }],
+  }] });
+  await user.click(within(dialog).getByRole("button", { name: "provider.refresh" }));
+  await waitFor(() => expect(discover).toHaveBeenCalledOnce());
+  await waitFor(() => expect(snapshot).toHaveBeenCalledTimes(2));
+  expect(within(dialog).getAllByRole("listitem")).toHaveLength(4);
+});

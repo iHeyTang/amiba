@@ -9,7 +9,7 @@ import {
   ProviderCardExtension,
   type ProviderCardRenderer,
 } from "./model-settings-extensions.js";
-import { useId, useState, type ReactNode } from "react";
+import { useId, useState } from "react";
 import {
   Button,
   Dialog,
@@ -405,9 +405,7 @@ const connectionFields = new Set([
   "projectId",
   "organization",
 ]);
-function ProviderConfiguration(
-  props: Parameters<typeof SchemaField>[0] & { modelList: ReactNode },
-) {
+function ProviderConfiguration(props: Parameters<typeof SchemaField>[0]) {
   const { t } = usePluginT(modelPlaneI18n);
   const schema = object(props.schema);
   if (schema.type !== "object") return <SchemaField {...props} />;
@@ -418,12 +416,7 @@ function ProviderConfiguration(
       containsSecret(field) ||
       object(object(field).meta).role === "credential-ref",
   );
-  const models = fields.filter(
-    ([key]) => key === "models" || key === "modelOverrides",
-  );
-  const advanced = fields.filter(
-    (entry) => !connection.includes(entry) && !models.includes(entry),
-  );
+  const advanced = fields.filter((entry) => !connection.includes(entry));
   const render = ([key, child]: [string, unknown]) => (
     <SchemaField
       {...props}
@@ -444,28 +437,22 @@ function ProviderConfiguration(
       {connection.length > 0 && (
         <div className="space-y-5">{connection.map(render)}</div>
       )}
-      <section
-        className="space-y-3 border-t border-border/50 pt-5"
-        aria-label={t("options.models.provider.models")}
-      >
-        {props.modelList}
-        {models.map(([key, child]) => (
-          <details key={key} className="group/model">
-            <summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
-              <ChevronDown className="h-3 w-3 transition-transform group-open/model:rotate-180" />
-              {t(`provider.field.${key}`)}
-            </summary>
-            <div className="pt-3">{render([key, child])}</div>
-          </details>
-        ))}
-      </section>
       {advanced.length > 0 && (
-        <details className="group" data-provider-advanced>
+        <details
+          className="group border-t border-border/50 pt-5"
+          data-provider-advanced
+        >
           <summary className="flex w-fit cursor-pointer list-none items-center gap-1 rounded py-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
             <ChevronDown className="h-3 w-3 shrink-0 transition-transform group-open:rotate-180" />
             {t("provider.options")}
           </summary>
-          <div className="space-y-5 pt-5">{advanced.map(render)}</div>
+          <div className="space-y-5 pt-5">
+            {advanced.map((entry) => (
+              <section key={entry[0]} className="min-w-0">
+                {render(entry)}
+              </section>
+            ))}
+          </div>
         </details>
       )}
     </>
@@ -478,8 +465,12 @@ export function OfficialProviderEditor({
   onClose,
   onSaved,
   renderProviderCard,
+  displayModels,
+  onRefreshed,
 }: {
   provider: ModelProviderProfileShape;
+  displayModels?: ModelProviderProfileShape["models"];
+  onRefreshed?: (snapshot: ModelPlaneSnapshotShape) => void;
   snapshot: ModelPlaneSnapshotShape;
   adapter: ProviderSettingsController;
   renderProviderCard?: ProviderCardRenderer;
@@ -489,7 +480,7 @@ export function OfficialProviderEditor({
   const { t } = usePluginT(modelPlaneI18n);
   const formId = useId();
   const [config, setConfig] = useState(provider.configuration);
-  const [models, setModels] = useState(provider.models);
+  const models = displayModels ?? provider.models;
   const [draft, setDraft] = useState<unknown>(
     provider.configuration?.value ?? {},
   );
@@ -504,10 +495,11 @@ export function OfficialProviderEditor({
     setError(undefined);
     setNotice(undefined);
     try {
-      const result = await adapter.discover({ provider });
-      setModels(result.models);
-      setNotice(`${t("official.refreshed")} (${result.models.length})`);
-      const next = (await adapter.snapshot()).providers.find(
+      await adapter.discover({ provider });
+      const latest = await adapter.snapshot();
+      onRefreshed?.(latest);
+      setNotice(t("official.refreshed"));
+      const next = latest.providers.find(
         (p) => p.id === provider.id,
       )?.configuration;
       if (next && config && equal(config.value, draft)) {
@@ -570,8 +562,8 @@ export function OfficialProviderEditor({
       }}
     >
       <DialogContent
-        size="wide"
-        className="!flex h-[min(85dvh,40rem)] flex-col gap-0 overflow-hidden p-0"
+        size="full"
+        className="!flex h-[min(90dvh,52rem)] flex-col gap-0 overflow-hidden p-0"
         data-provider-config-dialog
       >
         <DialogHeader className="shrink-0 border-b border-border/50 px-6 py-5 pr-12 text-left">
@@ -591,95 +583,106 @@ export function OfficialProviderEditor({
               : t("official.noConfiguration")}
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="h-0 min-h-0 flex-1" data-provider-config-scroll>
-          <div className="space-y-6 px-6 py-5">
-            <form
-              id={formId}
-              onInvalidCapture={(event) => {
-                let parent = event.target as HTMLElement | null;
-                while (parent) {
-                  if (parent instanceof HTMLDetailsElement) parent.open = true;
-                  parent = parent.parentElement;
-                }
-              }}
-              onSubmit={(e) => {
-                e.preventDefault();
-                void save();
-              }}
-            >
-              <fieldset
-                disabled={pending || !provider.editable}
-                className="min-w-0 space-y-6"
-              >
-                <ProviderConfiguration
-                  modelList={
-                    <>
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-sm font-semibold">
-                          {t("options.models.provider.models")}{" "}
-                          <span className="ml-1 font-normal text-muted-foreground">
-                            {models.length}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+          <section
+            className="flex h-48 min-h-0 shrink-0 flex-col border-b border-border/50 md:h-auto md:w-[36%] md:border-b-0 md:border-r"
+            aria-label={t("options.models.provider.models")}
+          >
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="space-y-3 px-6 py-5">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold">
+                    {t("options.models.provider.models")}{" "}
+                    <span className="ml-1 font-normal text-muted-foreground">
+                      {models.length}
+                    </span>
+                  </h3>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground"
+                    disabled={pending}
+                    onClick={() => void refreshModels()}
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    {t("provider.refresh")}
+                  </Button>
+                </div>
+                {models.length > 0 ? (
+                  <ul className="divide-y divide-border/40">
+                    {models.map((model) => (
+                      <li
+                        key={model.id}
+                        className="flex min-w-0 flex-col gap-0.5 py-2.5"
+                      >
+                        <span className="text-sm">
+                          {model.name || model.id}
+                        </span>
+                        {model.name && model.name !== model.id && (
+                          <span className="truncate text-xs text-muted-foreground">
+                            {model.id}
                           </span>
-                        </h3>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground"
-                          disabled={pending}
-                          onClick={() => void refreshModels()}
-                        >
-                          <RefreshCw className="h-3 w-3" />
-                          {t("provider.refresh")}
-                        </Button>
-                      </div>
-                      {models.length > 0 ? (
-                        <ul className="divide-y divide-border/40">
-                          {models.map((model) => (
-                            <li
-                              key={model.id}
-                              className="flex min-w-0 flex-col gap-0.5 py-2.5"
-                            >
-                              <span className="text-sm">
-                                {model.name || model.id}
-                              </span>
-                              {model.name && model.name !== model.id && (
-                                <span className="truncate text-xs text-muted-foreground">
-                                  {model.id}
-                                </span>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          {t("options.models.provider.noModels")}
-                        </p>
-                      )}
-                    </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {t("options.models.provider.noModels")}
+                  </p>
+                )}
+              </div>
+            </ScrollArea>
+          </section>
+          <ScrollArea
+            className="min-h-0 min-w-0 flex-1"
+            data-provider-config-scroll
+          >
+            <div className="space-y-6 px-6 py-5">
+              <form
+                id={formId}
+                onInvalidCapture={(event) => {
+                  let parent = event.target as HTMLElement | null;
+                  while (parent) {
+                    if (parent instanceof HTMLDetailsElement)
+                      parent.open = true;
+                    parent = parent.parentElement;
                   }
-                  schema={config?.schema ?? { type: "object", dict: {} }}
-                  value={draft}
-                  onChange={setDraft}
-                  path={[]}
-                  providerId={provider.id}
-                  credentials={credentials}
-                  onCredential={(ref, value) =>
-                    setCredentials((previous) => ({
-                      ...previous,
-                      [ref]: value,
-                    }))
-                  }
-                  credentialState={snapshot.credentials}
-                />
-              </fieldset>
-            </form>
-            <ProviderCardExtension
-              owner={provider.providerCard}
-              render={renderProviderCard}
-            />
-          </div>
-        </ScrollArea>
+                }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void save();
+                }}
+              >
+                <fieldset
+                  disabled={pending || !provider.editable}
+                  className="min-w-0 space-y-6"
+                >
+                  <ProviderConfiguration
+                    schema={config?.schema ?? { type: "object", dict: {} }}
+                    value={draft}
+                    onChange={setDraft}
+                    path={[]}
+                    providerId={provider.id}
+                    credentials={credentials}
+                    onCredential={(ref, value) =>
+                      setCredentials((previous) => ({
+                        ...previous,
+                        [ref]: value,
+                      }))
+                    }
+                    credentialState={snapshot.credentials}
+                  />
+                </fieldset>
+              </form>
+              <ProviderCardExtension
+                owner={provider.providerCard}
+                render={renderProviderCard}
+              />
+            </div>
+          </ScrollArea>
+        </div>
         {(notice || error) && (
           <div
             className="max-h-24 shrink-0 overflow-y-auto px-6 py-2"
