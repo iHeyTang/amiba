@@ -545,7 +545,10 @@ export const en = {
   "sidepanel.empty.newChat": "New task",
   "sidepanel.empty.openHistory": "Open from History",
   // Session drawer
-  "sidepanel.sessions.title": "Recent tasks",
+  "sidepanel.sessions.title": "Workspaces",
+  "sidepanel.sessions.tasks": "Tasks",
+  "sidepanel.sessions.tasks.empty": "No tasks yet. Start a new task.",
+  "sidepanel.sessions.newInWorkspace": "New task in {name}",
   "sidepanel.sessions.empty": "No sessions yet. Send a message to start one.",
   "sidepanel.sessions.dialogAria": "Session history",
   "sidepanel.sessions.close": "Close",
@@ -573,7 +576,7 @@ export const en = {
   "sidepanel.sessions.group.channelChats": "{name} chats",
 
   // Session history and DSH scheduled runs
-  "sidepanel.sessions.history.empty": "No chats or scheduled runs yet.",
+  "sidepanel.sessions.history.empty": "Choose a folder to start working. Its tasks will appear here.",
   "sidepanel.sessions.layout.menu": "Display mode",
   "sidepanel.sessions.layout.timeline": "All by time",
   "sidepanel.sessions.layout.grouped": "Group chats by workspace",

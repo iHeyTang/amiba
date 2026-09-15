@@ -2,20 +2,14 @@
  * Single-level sidebar — replaces the old icon `ActivityBar` rail AND the
  * `w-72` session-list aside. Three vertical regions:
  *   • top (fixed):   new-chat, then DSH workspace slot contributions.
- *   • middle (flex): chat history, switchable between a time-ordered stream
- *                    and workspace-directory groups.
+ *   • middle (flex): default tasks, manually selected workspaces, and plugin groups.
  *   • bottom (fixed): the personal menu.
  * Carries `bg-muted/40` so it reads as one chrome surface with the top bar.
  */
 import {
   Archive,
   CheckSquare,
-  ChevronDown,
-  ChevronRight,
   Folder,
-  List,
-  ListTodo,
-  ListTree,
   MessageSquare,
   MoreHorizontal,
   Plus,
@@ -40,10 +34,8 @@ import { useWorkspaceBindings } from "./internal/useWorkspaceBindings";
 
 /** Workspace plugin ids are intentionally open-ended. */
 export type ActivityViewId = string;
-export type HistoryLayout = "timeline" | "grouped";
 
 const HISTORY_ALL_GROUP = "__history_all__";
-const HISTORY_UNBOUND_GROUP = "__history_unbound__";
 const HISTORY_WORKSPACE_PREFIX = "__history_workspace__:";
 
 function workspaceGroupKey(path: string): string {
@@ -66,6 +58,7 @@ export interface SidebarProps {
   workspaceNavigation?: ReactNode;
   navigationAfter?: ReactNode;
   onNewChat: () => void;
+  onNewWorkspaceChat?: (path: string) => void;
   sessions: SessionMeta[];
   runningSessionIds?: ReadonlySet<string>;
   failedSessionIds?: ReadonlySet<string>;
@@ -84,8 +77,6 @@ export interface SidebarProps {
   /** Batch form of `onArchiveSession`, for the list's selection mode. */
   onArchiveSessions?: (ids: string[]) => void | Promise<void>;
   onRefreshSessions: () => void | Promise<void>;
-  historyLayout: HistoryLayout;
-  onHistoryLayoutChange: (layout: HistoryLayout) => void;
   onOpenSettings: (tab?: string) => void;
   /**
    * Host dispatch of the official `settings.trigger` seat, displayed as
@@ -107,7 +98,7 @@ export interface SidebarProps {
    * `amiba.sessions.list.group` contributions, in registration order. The
    * sidebar itself partitions `sessions` with these (see
    * `partitionSessionGroups`) and renders one top-level section per
-   * NON-EMPTY group — sibling to, and after, the built-in "最近任务"
+   * NON-EMPTY group — sibling to, and after, the built-in "工作空间"
    * section —
    * rather than nesting them inside `SessionsListView`'s own channel
    * sections. `SessionsListView` never sees a claimed session twice: it
@@ -121,6 +112,7 @@ export function Sidebar({
   workspaceNavigation,
   navigationAfter,
   onNewChat,
+  onNewWorkspaceChat,
   sessions,
   runningSessionIds,
   failedSessionIds,
@@ -133,8 +125,6 @@ export function Sidebar({
   onExportSession,
   onArchiveSessions,
   onRefreshSessions,
-  historyLayout,
-  onHistoryLayoutChange,
   onOpenSettings,
   settingsTrigger,
   sidebarFooterActions,
@@ -145,8 +135,9 @@ export function Sidebar({
   groups,
 }: SidebarProps) {
   const { t } = useT();
-  const workspaceBindings = useWorkspaceBindings(sessions);
+  const workspaceBindings = useWorkspaceBindings();
   const [selectingSessions, setSelectingSessions] = useState(false);
+  const [tasksCollapsed, setTasksCollapsed] = useState(false);
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(
     () => new Set(),
@@ -186,16 +177,10 @@ export function Sidebar({
     leaveSessionSelection();
   };
   const groupedSectionOrder = useMemo(() => {
-    if (historyLayout !== "grouped") return [];
-
     const workspaceRecency = new Map<string, number>();
-    let hasUnbound = false;
-    for (const session of sessions) {
+    for (const session of historySessions) {
       const path = workspaceBindings.bySessionId[session.id];
-      if (!path) {
-        hasUnbound = true;
-        continue;
-      }
+      if (!path) continue;
       workspaceRecency.set(
         path,
         Math.max(
@@ -208,9 +193,8 @@ export function Sidebar({
     const ordered = Array.from(workspaceRecency.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([path]) => workspaceGroupKey(path));
-    if (hasUnbound) ordered.push(HISTORY_UNBOUND_GROUP);
     return ordered;
-  }, [historyLayout, sessions, workspaceBindings.bySessionId]);
+  }, [historySessions, workspaceBindings.bySessionId]);
 
   // `SessionsListView` has no search box of its own (below, it always gets
   // `query=""` too — search lives in the top bar / command palette); kept as
@@ -222,7 +206,7 @@ export function Sidebar({
   /**
    * `amiba.sessions.list.group` contributions applied once, here — never
    * inside `SessionsListView`. A claimed session renders under its own
-   * top-level section after "最近任务", never inside
+   * top-level section after "工作空间", never inside
    * `SessionsListView`'s channel/workspace sections too. `historySessions`
    * already excludes archived rows, so there is nothing archived left to
    * fold back into `rest`.
@@ -233,7 +217,8 @@ export function Sidebar({
     );
     return partitionSessionGroups(claimable, groups ?? []);
   }, [historySessions, groups, historyQuery, untitledLabel]);
-  const restSessions = groupPartition.rest;
+  const taskSessions = groupPartition.rest.filter(session => !workspaceBindings.bySessionId[session.id]);
+  const workspaceSessions = groupPartition.rest.filter(session => !!workspaceBindings.bySessionId[session.id]);
   // Collapse state for the plugin-group sections, keyed by group id —
   // separate from `SessionsListView`'s own per-channel collapse state,
   // since these sections now render outside it entirely.
@@ -242,8 +227,7 @@ export function Sidebar({
   >({});
   const toggleGroupCollapsed = (id: string) =>
     setGroupCollapsed((previous) => ({ ...previous, [id]: !previous[id] }));
-  const historyRowIconFor = () =>
-    historyLayout === "timeline" ? <MessageSquare /> : undefined;
+  const historyRowIconFor = () => <MessageSquare />;
 
   return (
     <nav
@@ -265,71 +249,69 @@ export function Sidebar({
 
       {/* History groups share one scroll area and follow their content height. */}
       <ScrollArea className="min-h-0 flex-1 px-2">
-        <section className="[--session-group-sticky-top:2rem]">
-          <div
-            data-testid="sessions-header"
-            style={{ backgroundColor: "color-mix(in srgb, hsl(var(--muted)) 30%, hsl(var(--background)))" }}
-            className="sticky top-0 z-30 flex h-8 shrink-0 items-center gap-0.5 pb-0 pl-2.5 pr-1.5 pt-1"
-          >
-            {selectingSessions ? (
-              <>
-                <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground">
-                  {t("sidepanel.sessions.selected", {
-                    count: selectedSessionIds.size,
-                  })}
-                </span>
-                <SessionBulkButton
-                  label={t("sidepanel.sessions.archive")}
-                  icon={<Archive />}
-                  disabled={!selectedSessionIds.size}
-                  onClick={() => void runBulkArchive()}
-                />
-                <SessionBulkButton
-                  label={t("common.cancel")}
-                  icon={<X />}
-                  onClick={leaveSessionSelection}
-                />
-              </>
-            ) : (
-              <>
-                <HistoryCollapseButton
-                  fullRow
-                  collapsed={historyCollapsed}
-                  label={t("sidepanel.sessions.title")}
-                  onClick={() => setHistoryCollapsed((collapsed) => !collapsed)}
-                />
-                <div className="absolute right-8 z-10 flex items-center">
-                <HistoryMoreMenu
-                  layout={historyLayout}
-                  onLayoutChange={onHistoryLayoutChange}
-                  onStartSelection={
-                    onArchiveSessions
-                      ? () => {
-                          setSelectedSessionIds(new Set());
-                          setSelectingSessions(true);
-                        }
-                      : undefined
-                  }
-                />
-                </div>
-              </>
-            )}
-            {selectingSessions ? <HistoryCollapseButton
-              collapsed={historyCollapsed}
-              label={t("sidepanel.sessions.title")}
-              onClick={() => setHistoryCollapsed((collapsed) => !collapsed)}
-            /> : null}
-          </div>
-          {!historyCollapsed ? (
+        <TopSection
+          label={t("sidepanel.sessions.tasks")}
+          collapsed={tasksCollapsed}
+          onToggle={() => setTasksCollapsed(value => !value)}
+          variant="rail"
+        >
+          <SessionsListView
+            sessions={taskSessions}
+            runningSessionIds={runningSessionIds}
+            failedSessionIds={failedSessionIds}
+            activeId={activeSessionId}
+            ready={sessionsReady && workspaceBindings.ready}
+            query={historyQuery}
+            onOpen={onOpenSession}
+            onRename={onRenameSession}
+            onArchive={onArchiveSession}
+            onBranch={onBranchSession}
+            onExport={onExportSession}
+            selecting={selectingSessions}
+            selectedIds={selectedSessionIds}
+            onToggleSelected={toggleSelectedSession}
+            showSectionHeaders={false}
+            groupKeyFor={() => HISTORY_ALL_GROUP}
+            rowIconFor={() => <MessageSquare />}
+            itemMenuItems={itemMenuItems}
+            emptyLabel={t("sidepanel.sessions.tasks.empty")}
+          />
+        </TopSection>
+        <TopSection
+          headerTestId="sessions-header"
+          label={selectingSessions
+            ? t("sidepanel.sessions.selected", { count: selectedSessionIds.size })
+            : t("sidepanel.sessions.title")}
+          collapsed={historyCollapsed}
+          onToggle={() => setHistoryCollapsed(value => !value)}
+          variant="rail"
+          actionsAlwaysVisible
+          actions={selectingSessions ? <>
+            <SessionBulkButton
+              label={t("sidepanel.sessions.archive")}
+              icon={<Archive />}
+              disabled={!selectedSessionIds.size}
+              onClick={() => void runBulkArchive()}
+            />
+            <SessionBulkButton
+              label={t("common.cancel")}
+              icon={<X />}
+              onClick={leaveSessionSelection}
+            />
+          </> : onArchiveSessions ? (
+            <HistoryMoreMenu onStartSelection={() => {
+              setSelectedSessionIds(new Set());
+              setSelectingSessions(true);
+            }} />
+          ) : undefined}
+        >
+          <div className="[--session-group-sticky-top:1.75rem]">
             <SessionsListView
-              sessions={restSessions}
+              sessions={workspaceSessions}
               runningSessionIds={runningSessionIds}
               failedSessionIds={failedSessionIds}
               activeId={activeSessionId}
-              ready={
-                sessionsReady &&
-                (historyLayout !== "grouped" || workspaceBindings.ready)
-              }
+              ready={sessionsReady && workspaceBindings.ready}
               query={historyQuery}
               onOpen={onOpenSession}
               onRename={onRenameSession}
@@ -341,37 +323,35 @@ export function Sidebar({
               onToggleSelected={toggleSelectedSession}
               onRefresh={() => void onRefreshSessions()}
               emptyLabel={t("sidepanel.sessions.history.empty")}
-              groupKeyFor={(session) =>
-                historyLayout === "timeline"
-                  ? HISTORY_ALL_GROUP
-                  : workspaceBindings.bySessionId[session.id]
-                    ? workspaceGroupKey(workspaceBindings.bySessionId[session.id])
-                    : HISTORY_UNBOUND_GROUP
-              }
+              groupKeyFor={(session) => workspaceGroupKey(workspaceBindings.bySessionId[session.id])}
               sectionOrder={groupedSectionOrder}
-              sectionLabelFor={(source) =>
-                source === HISTORY_UNBOUND_GROUP
-                  ? t("sidepanel.sessions.group.unbound")
-                  : workspaceName(workspacePathFromGroup(source) ?? source)
-              }
-              sectionIconFor={(source) =>
-                source === HISTORY_UNBOUND_GROUP ? <ListTodo /> : <Folder />
-              }
+              sectionLabelFor={(source) => workspaceName(workspacePathFromGroup(source) ?? source)}
+              sectionIconFor={() => <Folder />}
               sectionTitleFor={(source) =>
                 workspacePathFromGroup(source) ?? undefined
               }
+              sectionActionsFor={(source) => {
+                const path = workspacePathFromGroup(source);
+                return path && onNewWorkspaceChat ? (
+                  <SessionBulkButton
+                    label={t("sidepanel.sessions.newInWorkspace", { name: workspaceName(path) })}
+                    icon={<Plus />}
+                    onClick={() => onNewWorkspaceChat(path)}
+                  />
+                ) : null;
+              }}
+              sectionActionReplacesChevron
               sectionLabelClassName="normal-case tracking-normal text-[12px] text-foreground/75"
-              showSectionHeaders={historyLayout === "grouped"}
-              rowIconFor={historyRowIconFor}
-              indentRows={historyLayout === "grouped"}
+              showSectionHeaders={workspaceSessions.length > 0}
+              indentRows
               itemMenuItems={itemMenuItems}
             />
-          ) : null}
-        </section>
+          </div>
+        </TopSection>
         {/*
           Plugin-group sections (`amiba.sessions.list.group`) — one
           top-level, always-header'd section per NON-EMPTY group, after the
-          built-in "最近任务" section and in plugin registration order.
+          built-in "工作空间" section and in plugin registration order.
           They use the same rail header chrome as other collapsible sections.
         */}
         {groupPartition.groups.map(({ group, items }) => (
@@ -396,7 +376,7 @@ export function Sidebar({
               selectedIds={selectedSessionIds}
               onToggleSelected={toggleSelectedSession}
               rowIconFor={historyRowIconFor}
-              indentRows={historyLayout === "grouped"}
+              indentRows
               itemMenuItems={itemMenuItems}
             />
           </TopSection>
@@ -441,89 +421,19 @@ function SessionBulkButton({
   );
 }
 
-function HistoryCollapseButton({
-  fullRow = false,
-  collapsed,
-  label,
-  onClick,
-}: {
-  fullRow?: boolean;
-  collapsed: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-expanded={!collapsed}
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className={cn(
-        "inline-flex items-center rounded-md text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40",
-        fullRow ? "absolute inset-0 w-full justify-between pl-2.5 pr-2.5 text-left" : "h-6 w-6 shrink-0 justify-center",
-      )}
-    >
-      {fullRow ? <span className="min-w-0 flex-1 truncate pr-8 text-[11px] font-medium uppercase tracking-[0.08em]">{label}</span> : null}
-      <span
-        aria-hidden="true"
-        className="inline-flex h-4 w-4 shrink-0 items-center justify-center"
-      >
-        {collapsed ? (
-          <ChevronRight className="h-3 w-3" />
-        ) : (
-          <ChevronDown className="h-3 w-3" />
-        )}
-      </span>
-    </button>
-  );
-}
-
 function HistoryMoreMenu({
-  layout,
-  onLayoutChange,
   onStartSelection,
 }: {
-  layout: HistoryLayout;
-  onLayoutChange: (layout: HistoryLayout) => void;
   onStartSelection?: () => void;
 }) {
   const { t } = useT();
-  const menuItems: CascadeMenuItem[] = [
-    ...(onStartSelection
-      ? [
-          {
-            id: "select",
-            label: t("sidepanel.sessions.select"),
-            icon: <CheckSquare />,
-            onSelect: onStartSelection,
-          },
-        ]
-      : []),
-    {
-      id: "layout",
-      label: t("sidepanel.sessions.layout.menu"),
-      icon: layout === "timeline" ? <List /> : <ListTree />,
-      separatorBefore: Boolean(onStartSelection),
-      children: [
-        {
-          id: "timeline",
-          label: t("sidepanel.sessions.layout.timeline"),
-          icon: <List />,
-          checked: layout === "timeline",
-          onSelect: () => onLayoutChange("timeline"),
-        },
-        {
-          id: "grouped",
-          label: t("sidepanel.sessions.layout.grouped"),
-          icon: <ListTree />,
-          checked: layout === "grouped",
-          onSelect: () => onLayoutChange("grouped"),
-        },
-      ],
-    },
-  ];
-
+  if (!onStartSelection) return null;
+  const menuItems: CascadeMenuItem[] = [{
+    id: "select",
+    label: t("sidepanel.sessions.select"),
+    icon: <CheckSquare />,
+    onSelect: onStartSelection,
+  }];
   return (
     <CascadeMenu
       align="start"

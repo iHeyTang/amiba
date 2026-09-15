@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 
-import type { SessionMeta } from "@amiba/app-runtime/core";
 import { getPlatform, type WorkspaceChange } from "@amiba/app-runtime/platform";
 
 export interface WorkspaceBindingsState {
@@ -8,7 +7,7 @@ export interface WorkspaceBindingsState {
   supported: boolean;
   /** Becomes true after the initial binding snapshot has resolved. */
   ready: boolean;
-  /** Canonical absolute workspace path keyed by conversation id. */
+  /** Manually bound workspace paths; the implicit task workspace is excluded. */
   bySessionId: Record<string, string>;
 }
 
@@ -21,9 +20,7 @@ export interface WorkspaceBindingsState {
  * replayed over it so a newly-created conversation cannot briefly disappear
  * into the unbound group.
  */
-export function useWorkspaceBindings(
-  sessions: SessionMeta[] = [],
-): WorkspaceBindingsState {
+export function useWorkspaceBindings(): WorkspaceBindingsState {
   const platform = getPlatform();
   const workspaces = platform.workspaces;
   const [explicitBindings, setExplicitBindings] = useState<
@@ -89,14 +86,10 @@ export function useWorkspaceBindings(
   }, [workspaces]);
 
   const bySessionId = useMemo(() => {
-    const resolved = { ...explicitBindings };
-    if (defaultRoot) {
-      for (const session of sessions) {
-        if (!resolved[session.id]) resolved[session.id] = defaultRoot;
-      }
-    }
-    return resolved;
-  }, [defaultRoot, explicitBindings, sessions]);
+    return Object.fromEntries(
+      Object.entries(explicitBindings).filter(([, path]) => path !== defaultRoot),
+    );
+  }, [defaultRoot, explicitBindings]);
 
   return {
     supported: !!workspaces,

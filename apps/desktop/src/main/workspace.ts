@@ -22,7 +22,7 @@ import chokidar from "chokidar"
 import type { WorkspaceChange } from "@amiba/app-runtime/platform"
 
 import { mainStore } from "./storage"
-import { getDefaultWorkspaceRoot } from "./workspace-root"
+import { getDefaultWorkspaceRoot, ensureDefaultWorkspaceRoot } from "./workspace-root"
 
 const STORE_KEY = "workspace.bindings"
 
@@ -174,8 +174,8 @@ class WorkspaceManager extends EventEmitter {
     return local === host ? hostCwd : root
   }
 
-  getDefaultRoot(): string {
-    return getDefaultWorkspaceRoot()
+  getDefaultRoot(): Promise<string> {
+    return ensureDefaultWorkspaceRoot()
   }
 
   listBindings(): Record<string, string> {
@@ -250,9 +250,7 @@ class WorkspaceManager extends EventEmitter {
 
   private async bindNow(sessionId: string, target: string): Promise<void> {
     if (!sessionId) throw new Error("workspace.bind: sessionId required")
-    // $HOME is the implicit default, not a persisted exceptional binding.
-    // Treat selecting it as "use the default" and, importantly, do not attach
-    // a recursive chokidar watcher to the whole home directory.
+    // The product workspace is implicit, not a manually bound project.
     if (path.resolve(target) === getDefaultWorkspaceRoot()) {
       if (!this.bindings.has(sessionId)) return
       await this.stopBinding(sessionId)

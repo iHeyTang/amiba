@@ -322,6 +322,9 @@ importers:
       '@amiba/app-runtime':
         specifier: workspace:*
         version: link:../../packages/app-runtime
+      '@amiba/dsh-plugin-session-features':
+        specifier: workspace:*
+        version: link:../../plugins/dsh-plugin-session-features
       '@amiba/extension-sdk':
         specifier: workspace:*
         version: link:../../packages/extension-sdk
@@ -1796,6 +1799,9 @@ importers:
       '@amiba/dsh-plugin-notification-hub':
         specifier: workspace:*
         version: link:../dsh-plugin-notification-hub
+      '@amiba/dsh-plugin-session-features':
+        specifier: workspace:*
+        version: link:../dsh-plugin-session-features
       '@amiba/dsh-plugin-ui-shell':
         specifier: workspace:*
         version: link:../dsh-plugin-ui-shell

@@ -831,7 +831,7 @@ export async function ensureSessionWorkspace(sessionId: string, platform = getPl
   if (existing?.cwd && workspaces.bindIfUnbound) {
     return (await workspaces.bindIfUnbound(sessionId, existing.cwd)) ?? undefined;
   }
-  return (await workspaces.getCurrent(sessionId)) ?? undefined;
+  return await workspaces.getDefaultRoot();
 }
 
 

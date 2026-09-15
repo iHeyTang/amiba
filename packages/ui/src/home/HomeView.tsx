@@ -1,3 +1,4 @@
+import { useNewChatWorkspace } from "../chat/new-chat-workspace";
 import { useDirectoryChooser } from "../directory-chooser";
 import { InteractionRegion } from "../primitives/interaction-region";
 import { EmptyStateVisual } from "../primitives/empty-state-visual";
@@ -144,7 +145,8 @@ function Home({
   const [draftModelSelection, setDraftModelSelection] =
     useState<AgentModelSelection>();
   const [busy, setBusy] = useState(false);
-  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+  const newChatWorkspace = useNewChatWorkspace();
+  const [workspacePath, setWorkspacePath] = useState<string | null>(newChatWorkspace?.path ?? null);
   const [defaultWorkspaceRoot, setDefaultWorkspaceRoot] = useState<
     string | null
   >(null);
@@ -152,6 +154,17 @@ function Home({
   const inputRef = useRef<ComposerHandle | null>(null);
   const chooseDirectory = useDirectoryChooser("home");
   const canChooseWorkspace = Boolean(chooseDirectory);
+
+  // Sidebar shortcuts select a draft directory without creating an empty session.
+  useEffect(() => {
+    if (!newChatWorkspace) return;
+    setWorkspacePath(newChatWorkspace.path ?? defaultWorkspaceRoot);
+    setWorkspaceError(null);
+    inputRef.current?.focus();
+    // Only navigation requests reset a manual selection. Default-root loading
+    // below fills a still-empty selection without overwriting a chosen folder.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newChatWorkspace]);
 
   // On mount: focus the composer textarea.
   useEffect(() => {
@@ -200,7 +213,7 @@ function Home({
   }, []);
 
   // Desktop tasks always have a workspace. Until the user picks a project
-  // directory, make the product-level $HOME fallback visible in the composer
+  // directory, make the product-level task workspace visible in the composer
   // instead of representing it as an ambiguous "no directory" state.
   useEffect(() => {
     const workspaces = getPlatform().workspaces;

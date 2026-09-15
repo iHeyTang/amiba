@@ -22,6 +22,7 @@ describe("useWorkspaceBindings", () => {
         listBindings: vi.fn(async () => ({
           "session-a": "/workspaces/alpha",
           "session-b": "/workspaces/beta",
+          "default": "/Users/test",
         })),
         onChange: (listener: (change: WorkspaceChange) => void) => {
           emit = listener;
@@ -31,18 +32,14 @@ describe("useWorkspaceBindings", () => {
     } as unknown as PlatformAdapter);
   });
 
-  it("maps unbound DSH sessions to the product default workspace", async () => {
+  it("keeps implicit task sessions out of the explicit workspace index", async () => {
     const { result } = renderHook(() =>
-      useWorkspaceBindings([
-        { id: "session-a", title: "Explicit", createdAt: 1, updatedAt: 1 },
-        { id: "session-c", title: "Default", createdAt: 2, updatedAt: 2 },
-      ]),
+      useWorkspaceBindings(),
     );
     await waitFor(() => expect(result.current.ready).toBe(true));
     expect(result.current.bySessionId).toEqual({
       "session-a": "/workspaces/alpha",
       "session-b": "/workspaces/beta",
-      "session-c": "/Users/test",
     });
   });
 
