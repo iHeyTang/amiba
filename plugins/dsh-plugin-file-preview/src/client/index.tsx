@@ -1,6 +1,6 @@
 import type { PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
 import { FolderTree } from "lucide-react";
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { WorkbenchViewProps } from "@amiba/extension-sdk";
 import {
@@ -42,6 +42,9 @@ export function apply(ctx: ClientContext) {
       openFile,
     }: WorkbenchViewProps) {
       const pane = useWorkspacePane();
+      useEffect(() => {
+        if (resource.type === "files") pane.setFileTreeOpen(true);
+      }, [resource.type, pane.setFileTreeOpen]);
       const renderers = useSyncExternalStore(
         source.subscribe,
         source.getSnapshot,

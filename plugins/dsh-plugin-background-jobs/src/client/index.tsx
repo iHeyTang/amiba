@@ -137,9 +137,7 @@ function WorkbenchTab({ sessionId, useSessions, api, relations, openPanel, activ
     void refresh();
     return () => { active = false; clearTimeout(timer); };
   }, [sessionId, jobs, api, relations]);
-  return <button type="button" role="tab" aria-selected={activePanel === "background-jobs"} onClick={() => openPanel("background-jobs")} className="amiba-jobs-tab">
-    后台任务{live.length > 0 && <span className="amiba-jobs-live" aria-label={`${live.length} 个任务进行中`}>{live.length}</span>}
-  </button>;
+  return null;
 }
 export function WorkbenchActivity(props: WorkbenchProps) {
   return props.placement === "tab" ? <WorkbenchTab {...props}/> : props.activePanel === "background-jobs" ? <Activity {...props}/> : null;

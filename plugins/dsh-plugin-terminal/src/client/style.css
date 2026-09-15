@@ -1,0 +1,10 @@
+/* The workspace terminal is a native pane surface, not an embedded black
+ * console card. xterm still owns cursor/input/rendering; these rules only
+ * align its viewport and scrollbar with Amiba's surrounding workbench. */
+.amiba-terminal .xterm {
+  height: 100%;
+}
+
+.amiba-terminal .xterm-helper-textarea:focus {
+  outline: none;
+}

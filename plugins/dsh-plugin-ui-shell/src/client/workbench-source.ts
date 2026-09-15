@@ -1,4 +1,7 @@
-import type { WorkbenchViewExtension } from "@amiba/extension-sdk";
+import type {
+  WorkbenchShellExtension,
+  WorkbenchViewExtension,
+} from "@amiba/extension-sdk";
 import {
   createSlotContributionsSource,
   type SlotContributionsCtx,
@@ -22,6 +25,19 @@ export function createWorkbenchSource(ctx: SlotContributionsCtx) {
         ...extension,
         order: entry.options.order ?? extension.order ?? 0,
       };
+    },
+  );
+}
+
+export function createWorkbenchShellSource(ctx: SlotContributionsCtx) {
+  return createSlotContributionsSource<WorkbenchShellExtension>(
+    ctx,
+    "amiba.workbench.shell",
+    (entry, face) => {
+      const extension = face?.extension as WorkbenchShellExtension | undefined;
+      return extension?.id && extension.component && extension.toggle
+        ? { ...extension, order: entry.options.order ?? extension.order ?? 0 }
+        : null;
     },
   );
 }

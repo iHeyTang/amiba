@@ -1,19 +1,35 @@
 import { Component, createContext, useContext, type ReactNode } from "react";
 import type {
+  WorkbenchShellExtension,
   WorkbenchViewExtension,
   WorkbenchViewProps,
 } from "@amiba/extension-sdk";
 import { useT } from "@amiba/i18n";
 const Extensions = createContext<readonly WorkbenchViewExtension[]>([]);
+const Shell = createContext<WorkbenchShellExtension | undefined>(undefined);
+export function useWorkbenchShell() {
+  return useContext(Shell);
+}
+
 export function WorkbenchExtensionsProvider({
+  shells = [],
   extensions,
   children,
 }: {
+  shells?: readonly WorkbenchShellExtension[];
   extensions: readonly WorkbenchViewExtension[];
   children: ReactNode;
 }) {
   return (
-    <Extensions.Provider value={extensions}>{children}</Extensions.Provider>
+    <Shell.Provider
+      value={
+        [...shells].sort(
+          (a, b) => a.order - b.order || a.id.localeCompare(b.id),
+        )[0]
+      }
+    >
+      <Extensions.Provider value={extensions}>{children}</Extensions.Provider>
+    </Shell.Provider>
   );
 }
 export function useWorkbenchExtensions() {

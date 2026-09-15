@@ -1,4 +1,3 @@
-@import "@xterm/xterm/css/xterm.css";
 
 /*
  * Shared desktop chat surface styles — used by the main conversation,
@@ -729,17 +728,6 @@
   [data-streamdown="table-row"]:not(:last-child)
   [data-streamdown="table-cell"] {
   border-bottom-color: hsl(var(--border) / 0.4);
-}
-
-/* The workspace terminal is a native pane surface, not an embedded black
- * console card. xterm still owns cursor/input/rendering; these rules only
- * align its viewport and scrollbar with Amiba's surrounding workbench. */
-.amiba-terminal .xterm {
-  height: 100%;
-}
-
-.amiba-terminal .xterm-helper-textarea:focus {
-  outline: none;
 }
 
 /* The default pre wrapper decorates only native code blocks; special renderers

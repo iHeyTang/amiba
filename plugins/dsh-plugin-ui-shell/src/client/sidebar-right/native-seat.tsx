@@ -177,7 +177,7 @@ function SessionSidebarSeat(props: NativeSidebarSeatProps): ReactNode {
 
 
   useEffect(() => {
-    if (conversationVisible && placement === 'tab' && surface === undefined) actions.open(sessionId)
+    if (conversationVisible && placement === 'tab' && surface === undefined) { actions.open(sessionId); actions.setExpanded(sessionId, false) }
   }, [conversationVisible, placement, surface, actions, sessionId])
   useLayoutEffect(() => {
     if (!conversationVisible || placement !== 'tab') return
@@ -201,9 +201,7 @@ function SessionSidebarSeat(props: NativeSidebarSeatProps): ReactNode {
     return () => { queueMicrotask(() => { if (placement === 'tab' && lifetime.current === token) closeRef.current?.(SIDEBAR_PANEL) }) }
   }, [placement, sessionId])
   if (!conversationVisible) return null
-  const tabButton = <button type="button" role="tab" aria-selected={active}
-    className="shrink-0 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted/45 hover:text-foreground aria-selected:bg-muted aria-selected:text-foreground"
-    onClick={() => { actions.setExpanded(sessionId, true); openPanel(SIDEBAR_PANEL) }}>{t('chrome.expand')}</button>
+  const tabButton = null
   if (surface === undefined) return placement === 'tab' ? tabButton : null
   const panel: PanelProps = { sessionId, surface, actions, t, renderSlot, openTab, useTabTypes, useTabNavigation, useStore, occurrence, fullscreen, autoFullscreen, reportRoom }
   const intents = intentsFor(sessionId, actions, openTab)
