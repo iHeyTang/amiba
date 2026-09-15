@@ -226,7 +226,8 @@ export class SessionsStore {
       next.sessions === this.state.sessions &&
       next.openTabIds === this.state.openTabIds &&
       next.activeId === this.state.activeId &&
-      next.activeMessages === this.state.activeMessages
+      next.activeMessages === this.state.activeMessages &&
+      next.sessionLoad === this.state.sessionLoad
     ) {
       // Nothing actually changed (reference-equal).
       return;
@@ -412,20 +413,27 @@ export class SessionsStore {
       // cancellation/flush can be slow, but it must never leave the
       // composer visually attached to the conversation the user just left.
       const flush = this.flushActiveBeforeSwitch();
-      this.commit({ activeId: "", activeMessages: [] });
+      this.commit({ activeId: "", activeMessages: [], sessionLoad: undefined });
       await flush;
       return;
     }
     if (id === this.state.activeId && !reload) {
+      this.commit({ sessionLoad: undefined });
       await this.markRead(id);
       return;
     }
-    await this.flushActiveBeforeSwitch();
-    if (token !== this.switchToken) return;
-    const next = await loadMessages(id, this.state.sessions.find((session) => session.id === id)?.subagentAddress);
-    if (token !== this.switchToken) return;
-    this.commit({ activeId: id, activeMessages: next });
-    await this.markRead(id);
+    this.commit({ sessionLoad: { sessionId: id, status: "loading" } });
+    try {
+      await this.flushActiveBeforeSwitch();
+      if (token !== this.switchToken) return;
+      const next = await loadMessages(id, this.state.sessions.find((session) => session.id === id)?.subagentAddress);
+      if (token !== this.switchToken) return;
+      this.commit({ activeId: id, activeMessages: next, sessionLoad: undefined });
+      await this.markRead(id);
+    } catch (error) {
+      if (token === this.switchToken) this.commit({ sessionLoad: { sessionId: id, status: "error", message: error instanceof Error ? error.message : String(error) } });
+      throw error;
+    }
   }
 
   /**
@@ -462,25 +470,31 @@ export class SessionsStore {
   openTab = async (id: string, subagent?: SessionMeta["subagentAddress"]): Promise<void> => {
     if (!id) return;
     const token = ++this.switchToken;
-    const previousAddress = this.state.sessions.find((session) => session.id === id)?.subagentAddress;
-    if (subagent || !this.state.sessions.some((session) => session.id === id)) {
-      // Open-by-id may target a session the history index dropped (a host-
-      // or plugin-created session with no user turn yet). Surface its real
-      // identity — the agent preset it already runs, its title — before it
-      // becomes active, or the composer would treat it as a fresh draft.
-      const meta = await loadSessionMeta(id, subagent);
-      if (token !== this.switchToken) return;
-      if (meta) this.commit({ sessions: this.state.sessions.some((session) => session.id === id)
-        ? this.state.sessions.map((session) => session.id === id ? { ...session, subagentAddress: meta.subagentAddress, parentSessionId: meta.parentSessionId } : session)
-        : [meta, ...this.state.sessions] });
+    this.commit({ sessionLoad: { sessionId: id, status: "loading" } });
+    try {
+      const previousAddress = this.state.sessions.find((session) => session.id === id)?.subagentAddress;
+      if (subagent || !this.state.sessions.some((session) => session.id === id)) {
+        // Open-by-id may target a session the history index dropped (a host-
+        // or plugin-created session with no user turn yet). Surface its real
+        // identity — the agent preset it already runs, its title — before it
+        // becomes active, or the composer would treat it as a fresh draft.
+        const meta = await loadSessionMeta(id, subagent);
+        if (token !== this.switchToken) return;
+        if (meta) this.commit({ sessions: this.state.sessions.some((session) => session.id === id)
+          ? this.state.sessions.map((session) => session.id === id ? { ...session, subagentAddress: meta.subagentAddress, parentSessionId: meta.parentSessionId } : session)
+          : [meta, ...this.state.sessions] });
+      }
+      if (!this.state.openTabIds.includes(id)) {
+        // Append at the end so existing tabs keep their relative order.
+        const nextTabs = [...this.state.openTabIds, id];
+        this.commit({ openTabIds: nextTabs });
+      }
+      const address = this.state.sessions.find((session) => session.id === id)?.subagentAddress;
+      await this.activateOpen(id, token, JSON.stringify(previousAddress) !== JSON.stringify(address));
+    } catch (error) {
+      if (token === this.switchToken) this.commit({ sessionLoad: { sessionId: id, status: "error", message: error instanceof Error ? error.message : String(error) } });
+      throw error;
     }
-    if (!this.state.openTabIds.includes(id)) {
-      // Append at the end so existing tabs keep their relative order.
-      const nextTabs = [...this.state.openTabIds, id];
-      this.commit({ openTabIds: nextTabs });
-    }
-    const address = this.state.sessions.find((session) => session.id === id)?.subagentAddress;
-    await this.activateOpen(id, token, JSON.stringify(previousAddress) !== JSON.stringify(address));
   };
 
   closeTab = async (id: string): Promise<void> => {

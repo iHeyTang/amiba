@@ -290,6 +290,20 @@ describe("FullScreenChatView new-chat home", () => {
     },
   );
 
+  it("shows the failed destination with retry and home actions instead of the previous chat", async () => {
+    const sessions = { ...makeSessions(), sessionLoad: { sessionId: "session-1", status: "error" as const, message: "unsupported historical event" } };
+    sessions.openTab.mockRejectedValue(new Error("unsupported historical event"));
+    mocks.useSessions.mockReturnValue(sessions);
+    render(<FullScreenChatView client={makeClient() as never} openSettings={() => {}} openAgentDestination={() => {}} restoreSidebarViewOnMount={false} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("unsupported historical event");
+    expect(screen.queryByText("chat-surface")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Retry|重试/ }));
+    expect(sessions.openTab).toHaveBeenCalledWith("session-1");
+    expect(sessions.deselect).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: /New task|返回新任务/ }));
+    expect(sessions.deselect).toHaveBeenCalledOnce();
+  });
+
   it("returns to the id-less home instead of creating a conversation", async () => {
     const sessions = makeSessions();
     mocks.useSessions.mockReturnValue(sessions);

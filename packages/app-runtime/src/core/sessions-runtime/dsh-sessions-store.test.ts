@@ -247,6 +247,36 @@ describe("SessionsStore with DSH sessions", () => {
     store.teardown();
   });
 
+  it("publishes a failed destination and clears it after retry succeeds", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    mocks.history.mockRejectedValueOnce(new Error("unsupported session format"));
+    await expect(store.openTab("dsh-1")).rejects.toThrow("unsupported session format");
+    expect(store.getSnapshot().sessionLoad).toEqual({ sessionId: "dsh-1", status: "error", message: "unsupported session format" });
+    expect(store.getSnapshot().activeId).toBe("");
+    await store.openTab("dsh-1");
+    expect(store.getSnapshot().sessionLoad).toBeUndefined();
+    expect(store.getSnapshot().activeId).toBe("dsh-1");
+    store.teardown();
+  });
+
+  it("does not restore a stale failure after returning Home", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    let reject!: (error: Error) => void;
+    mocks.history.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    const opening = store.openTab("dsh-1");
+    const failure = expect(opening).rejects.toThrow("late failure");
+    await vi.waitFor(() => expect(reject).toBeTypeOf("function"));
+    expect(store.getSnapshot().sessionLoad).toEqual({ sessionId: "dsh-1", status: "loading" });
+    await store.deselect();
+    reject(new Error("late failure"));
+    await failure;
+    expect(store.getSnapshot().sessionLoad).toBeUndefined();
+    expect(store.getSnapshot().activeId).toBe("");
+    store.teardown();
+  });
+
   it("does not acknowledge a conversation whose history failed to open", async () => {
     const store = new SessionsStore();
     await store.initialize();

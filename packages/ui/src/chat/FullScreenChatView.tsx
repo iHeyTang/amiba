@@ -767,6 +767,13 @@ function FullScreenChatViewInner({
     void getPlatform().storage.set({ [SIDEBAR_VIEW_KEY]: next });
   }, []);
 
+  // Every session entry point (including plugin navigation) reveals its
+  // loading/failure destination even when history cannot be restored.
+  const loadingDestination = sessions.sessionLoad?.sessionId;
+  useEffect(() => {
+    if (loadingDestination) onSidebarViewChange("chats");
+  }, [loadingDestination, onSidebarViewChange]);
+
   const onHistoryLayoutChange = useCallback((next: HistoryLayout) => {
     setHistoryLayout(next);
     void getPlatform().storage.set({ [HISTORY_LAYOUT_KEY]: next });
@@ -794,12 +801,13 @@ function FullScreenChatViewInner({
   const onOpenSession = useCallback(
     async (id: string) => {
       if (!sessions.ready) return;
-      if (id === sessions.activeId && sidebarView === "chats" && !slots?.mainPanel) {
+      if (id === sessions.activeId && sidebarView === "chats" && !slots?.mainPanel && !sessions.sessionLoad) {
         await sessions.deselect();
         return;
       }
-      await sessions.openTab(id);
       onSidebarViewChange("chats");
+      // The runtime publishes loading/error state for the destination.
+      await sessions.openTab(id).catch(() => {});
     },
     [sessions, onSidebarViewChange, sidebarView, slots?.mainPanel],
   );
@@ -816,7 +824,7 @@ function FullScreenChatViewInner({
   // the whole workbench — pane, terminal drawer and edge controls alike —
   // stays off there.
   const workbenchVisible =
-    (sidebarView === "chats" && !slots?.mainPanel) && Boolean(sessions.activeId);
+    (sidebarView === "chats" && !slots?.mainPanel) && Boolean(sessions.activeId) && !sessions.sessionLoad;
 
   // Measure the edge-control row so the workbench tab strip can reserve its
   // width. The row floats over the pane at `z-50`; without this the tabs
@@ -978,12 +986,12 @@ function FullScreenChatViewInner({
               testId="chats-view"
             >
               <ContentHeader
-                title={chatTopBarPlaceholder}
+                title={sessions.sessionLoad ? (sessions.sessions.find(item => item.id === sessions.sessionLoad?.sessionId)?.title ?? "") : chatTopBarPlaceholder}
                 icon={<Folder className="h-4 w-4" />}
-                actions={slots?.headerActions}
-                lineage={slots?.headerLineage}
+                actions={sessions.sessionLoad ? undefined : slots?.headerActions}
+                lineage={sessions.sessionLoad ? undefined : slots?.headerLineage}
                 onRenameTitle={
-                  canRenameActiveChatTitle ? renameActiveChatTitle : undefined
+                  canRenameActiveChatTitle && !sessions.sessionLoad ? renameActiveChatTitle : undefined
                 }
                 sidebarCollapsed={sidebarCollapsed}
                 showExpandControl={showSidebarExpandControl}
@@ -997,7 +1005,25 @@ function FullScreenChatViewInner({
                 )}
                 seamless
               />
-              <ConversationViewRegion selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
+              {sessions.sessionLoad ? (
+                <div className="flex min-h-0 flex-1 items-center justify-center p-8" role={sessions.sessionLoad.status === "error" ? "alert" : "status"}>
+                  <div className="w-full max-w-lg space-y-4">
+                    <h2 className="text-base font-medium">{sessions.sessionLoad.status === "loading"
+                      ? (language === "zh-CN" ? "正在打开会话…" : "Opening conversation…")
+                      : (language === "zh-CN" ? "无法打开此会话" : "Unable to open this conversation")}</h2>
+                    <p className="text-sm text-muted-foreground">{sessions.sessions.find(item => item.id === sessions.sessionLoad?.sessionId)?.title}</p>
+                    {sessions.sessionLoad.status === "error" && <>
+                      <p className="text-sm text-muted-foreground">{language === "zh-CN" ? "会话加载失败，可能是历史格式不兼容或服务暂不可用。你可以重试，或打开其他会话。" : "The conversation could not be loaded. Its format may be incompatible or the service unavailable. Retry or open another conversation."}</p>
+                      <details className="text-sm text-muted-foreground">
+                        <summary className="cursor-pointer">{language === "zh-CN" ? "错误详情" : "Error details"}</summary>
+                        <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all">{sessions.sessionLoad.message}</pre>
+                      </details>
+                      <button className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accent" onClick={() => void onOpenSession(sessions.sessionLoad!.sessionId)}>{language === "zh-CN" ? "重试" : "Retry"}</button>
+                    </>}
+                    <button className="ml-3 text-sm text-muted-foreground hover:text-foreground" onClick={() => void onNewChatAndShow()}>{language === "zh-CN" ? "返回新任务" : "New task"}</button>
+                  </div>
+                </div>
+              ) : <ConversationViewRegion selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
                 <ChatSurface
                   messagesMaxWidth={messagesWidth}
                   client={client}
@@ -1009,7 +1035,7 @@ function FullScreenChatViewInner({
                   triggerRuntime={triggerRuntime}
                   messageSourceLabel={messageSourceLabel}
                 />
-              </ConversationViewRegion>
+              </ConversationViewRegion>}
             </PrimaryWorkspaceView>
             {slots?.mainPanel && (
               <PrimaryWorkspaceView active testId="official-main-panel">
