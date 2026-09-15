@@ -506,6 +506,64 @@ describe('DockSurface', () => {
     }
   })
 
+  it('pans the chip box with the wheel from a chip and from the slot between two', () => {
+    let scrollLeft = 0
+    /** Overflow of the chip box: `scrollWidth` (200 + this) against its 200px box. */
+    let overflow = 200
+    const descriptors = ['scrollLeft', 'scrollWidth', 'clientWidth'].map(name =>
+      [name, Object.getOwnPropertyDescriptor(Element.prototype, name)] as const)
+    const strip = (element: Element): boolean => element.hasAttribute('data-dockkit-strip-tabs')
+    Object.defineProperty(Element.prototype, 'scrollLeft', {
+      configurable: true,
+      get(this: Element) { return strip(this) ? scrollLeft : 0 },
+      // Clamp like a real scroll container, so the end-of-row case is real.
+      set(this: Element, value: number) { if (strip(this)) scrollLeft = Math.max(0, Math.min(value, overflow)) },
+    })
+    Object.defineProperty(Element.prototype, 'scrollWidth', { configurable: true, get(this: Element) { return strip(this) ? 200 + overflow : 0 } })
+    Object.defineProperty(Element.prototype, 'clientWidth', { configurable: true, get(this: Element) { return strip(this) ? 200 : 0 } })
+    const wheel = (node: Element, init: WheelEventInit): WheelEvent => {
+      const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, ...init })
+      node.dispatchEvent(event)
+      return event
+    }
+    try {
+      const controller = seededController()
+      controller.openContent({ contentId: 'dsh-resource://file/session/s/b.txt', title: 'b.txt', kind: 'file' })
+      renderSurface(controller, spyIntents())
+      const box = document.querySelector<HTMLElement>('[data-dockkit-strip-tabs]')
+      if (box === null) throw new Error('expected the chip box')
+      const chips = [...box.querySelectorAll<HTMLElement>('[data-dockkit-tab]')]
+      expect(chips).toHaveLength(2)
+      const first = chips[0]
+      const slot = chips[1]?.previousElementSibling
+      if (first === undefined || slot === null || slot === undefined) throw new Error('expected two chips with a slot between them')
+      // The hairline between two chips is its own element, and it carries the row too.
+      expect(slot.hasAttribute('data-dockkit-tab')).toBe(false)
+      expect(wheel(slot, { deltaY: 40 }).defaultPrevented).toBe(true)
+      expect(scrollLeft).toBe(40)
+      // As does a chip itself.
+      expect(wheel(first, { deltaY: 40 }).defaultPrevented).toBe(true)
+      expect(scrollLeft).toBe(80)
+      // A horizontal gesture is the browser's own, and moves nothing here.
+      expect(wheel(slot, { deltaX: 40 }).defaultPrevented).toBe(false)
+      expect(scrollLeft).toBe(80)
+      // At the row's end there is nothing left to pan: the wheel passes through.
+      scrollLeft = 200
+      expect(wheel(slot, { deltaY: 40 }).defaultPrevented).toBe(false)
+      expect(scrollLeft).toBe(200)
+      // A row that fits swallows nothing either.
+      overflow = 0
+      scrollLeft = 0
+      expect(wheel(slot, { deltaY: 40 }).defaultPrevented).toBe(false)
+      expect(scrollLeft).toBe(0)
+    } finally {
+      for (const [name, descriptor] of descriptors) {
+        if (descriptor === undefined) Reflect.deleteProperty(Element.prototype, name)
+        else Object.defineProperty(Element.prototype, name, descriptor)
+      }
+    }
+  })
+
   it('scrolls the chip box to the active chip when it lies past either edge, clearing the fade band', () => {
     let scrollLeft = 0
     const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollLeft')
