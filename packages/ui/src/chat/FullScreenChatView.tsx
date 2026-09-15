@@ -788,20 +788,20 @@ function FullScreenChatViewInner({
     onSidebarViewChange("chats");
   }, [sessions, onSidebarViewChange]);
 
-  // Conversation-list row click: toggle. Picking the active row deselects it
-  // (lands on the home / empty-state surface); picking a different row opens +
-  // activates it and brings the chat surface forward.
+  // Only toggle a conversation that is actually visible. A plugin panel or
+  // workspace retains the active session underneath; clicking that session
+  // should bring it forward instead of deselecting it behind the panel.
   const onOpenSession = useCallback(
     async (id: string) => {
       if (!sessions.ready) return;
-      if (id === sessions.activeId) {
+      if (id === sessions.activeId && sidebarView === "chats" && !slots?.mainPanel) {
         await sessions.deselect();
         return;
       }
       await sessions.openTab(id);
       onSidebarViewChange("chats");
     },
-    [sessions, onSidebarViewChange],
+    [sessions, onSidebarViewChange, sidebarView, slots?.mainPanel],
   );
 
   const pluginWorkspaceActive = sidebarView !== "chats" && !slots?.mainPanel;
