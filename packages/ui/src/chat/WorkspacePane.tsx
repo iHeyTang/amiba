@@ -3783,7 +3783,12 @@ export function WorkspacePane({
       >
         <div
           data-workspace-tabbar
-          className="app-drag-region flex h-11 shrink-0 items-center bg-background pl-2"
+          // Electron drag regions remain active even inside transparent,
+          // pointer-events-none elements. A closed pane must release the header.
+          className={cn(
+            "flex h-11 shrink-0 items-center bg-background pl-2",
+            pane.open ? "app-drag-region" : "app-no-drag",
+          )}
           // The edge-control row floats over this strip at z-50 and its width
           // is not fixed (it also hosts an open plugin seat), so it publishes
           // its measured width and the tabs reserve exactly that.
