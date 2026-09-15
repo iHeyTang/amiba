@@ -20,7 +20,12 @@ import type { AgentExecutionContext } from "../agent-context";
  * immutable handling at the call site — mutations always flow through
  * the store's action methods, which produce a fresh snapshot.
  */
+export type SessionLoadState =
+  | { sessionId: string; status: "loading" }
+  | { sessionId: string; status: "error"; message: string };
+
 export interface SessionsState {
+  readonly sessionLoad?: SessionLoadState;
   readonly ready: boolean;
   readonly sessions: ReadonlyArray<SessionMeta>;
   readonly openTabIds: ReadonlyArray<string>;
@@ -39,6 +44,7 @@ export interface SessionsState {
  * issues them once at construction time.
  */
 export interface SessionsController {
+  sessionLoad?: SessionLoadState;
   /** Current authoritative state for asynchronous target-addressed operations. */
   getSnapshot: () => SessionsState;
   /** True once the DSH session projection is loaded. */

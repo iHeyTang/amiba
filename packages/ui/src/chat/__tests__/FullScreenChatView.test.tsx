@@ -102,10 +102,12 @@ vi.mock("../../theme", () => ({
 vi.mock("../Sidebar", () => ({
   Sidebar: ({
     onNewChat,
+    onOpenSession,
     runningSessionIds,
     failedSessionIds,
   }: {
     onNewChat: () => void;
+    onOpenSession: (id: string) => void;
     runningSessionIds?: ReadonlySet<string>;
     failedSessionIds?: ReadonlySet<string>;
   }) => {
@@ -116,6 +118,7 @@ vi.mock("../Sidebar", () => ({
         <button type="button" onClick={onNewChat}>
           new-chat
         </button>
+        <button onClick={() => onOpenSession("session-1")}>open-session</button>
       </>
     );
   },
@@ -249,6 +252,56 @@ describe("FullScreenChatView new-chat home", () => {
         };
       },
     );
+  });
+
+  it.each(["main-panel", "workspace", "conversation"])(
+    "opens the active session from %s and only toggles a visible conversation",
+    async (surface) => {
+      const sessions = makeSessions();
+      mocks.useSessions.mockReturnValue(sessions);
+      const navigate = vi.fn();
+      function View() {
+        const [panel, setPanel] = useState(surface === "main-panel");
+        return <FullScreenChatView
+          client={makeClient() as never}
+          openSettings={() => {}}
+          openAgentDestination={() => {}}
+          restoreSidebarViewOnMount={surface === "workspace"}
+          slots={{
+            mainPanel: panel ? { id: "memory", content: <div>memory-page</div> } : undefined,
+            workspaceView: () => <div>workspace-page</div>,
+            onNativeNavigation: () => { navigate(); setPanel(false); },
+          }}
+        />;
+      }
+      render(<View />);
+      await act(async () => {});
+      await userEvent.click(screen.getByRole("button", { name: "open-session" }));
+      if (surface === "conversation") {
+        expect(sessions.deselect).toHaveBeenCalledOnce();
+        expect(sessions.openTab).not.toHaveBeenCalled();
+      } else {
+        expect(sessions.deselect).not.toHaveBeenCalled();
+        expect(sessions.openTab).toHaveBeenCalledWith("session-1");
+        expect(navigate).toHaveBeenCalled();
+        expect(screen.queryByText("memory-page")).not.toBeInTheDocument();
+        expect(screen.getByTestId("chats-view")).not.toHaveClass("hidden");
+      }
+    },
+  );
+
+  it("shows the failed destination with retry and home actions instead of the previous chat", async () => {
+    const sessions = { ...makeSessions(), sessionLoad: { sessionId: "session-1", status: "error" as const, message: "unsupported historical event" } };
+    sessions.openTab.mockRejectedValue(new Error("unsupported historical event"));
+    mocks.useSessions.mockReturnValue(sessions);
+    render(<FullScreenChatView client={makeClient() as never} openSettings={() => {}} openAgentDestination={() => {}} restoreSidebarViewOnMount={false} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("unsupported historical event");
+    expect(screen.queryByText("chat-surface")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Retry|重试/ }));
+    expect(sessions.openTab).toHaveBeenCalledWith("session-1");
+    expect(sessions.deselect).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: /New task|返回新任务/ }));
+    expect(sessions.deselect).toHaveBeenCalledOnce();
   });
 
   it("returns to the id-less home instead of creating a conversation", async () => {
