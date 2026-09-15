@@ -74,7 +74,7 @@ button stays in place.
 | seat | kind / scope | owner | render site |
 | --- | --- | --- | --- |
 | `conversation.session.header.utilities` | list / session | `ConversationHeaderUtilitiesOwnerProps` (empty) | right-aligned strip in the chat header (replaced the retired `amiba.chat.header.after`) |
-| `conversation.session.header.actions` | list / session | `ConversationHeaderActionsOwnerProps` (empty) | title-adjacent action row in the chat header |
+| `conversation.session.header.actions` | list / session | `ConversationHeaderActionsOwnerProps` (empty) | action row at the conversation header’s right edge |
 | `conversation.input.model` | single / session | `ConversationInputModelOwnerProps` (`{ locked }`) | composer tool row, left of the send button |
 | `conversation.input.plan` | single / session | `ConversationInputPlanOwnerProps` (`{ locked }`) | composer tool row, immediately right of the access-mode control |
 | `conversation.input.overlay` | list / session | `ConversationInputOverlayOwnerProps` (empty) | floating layer anchored to the composer card (`[data-composer-card]`) |

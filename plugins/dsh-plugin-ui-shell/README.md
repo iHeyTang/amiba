@@ -32,7 +32,7 @@ counterpart.
   the official current session is set (the shell's sessions bridge keeps that
   in step with Amiba's own selection); the home view renders nothing here.
 - `conversation.session.header.actions` — official name from the same
-  package: the TITLE-ADJACENT per-session action row (list, SESSION scope,
+  package: the per-session action row at the conversation header’s right edge (list, SESSION scope,
   empty owner — the contract says an action derives everything from the
   standard session kit and its own inject face). A separate seat from the
   utilities strip above, exactly as upstream splits them, so an optional
@@ -42,6 +42,8 @@ counterpart.
   flex gap. The `amiba-transcript` action opens the official Trajectory view
   and becomes “Back to chat” while it is selected. It shares this row with
   connector message sync; Trajectory no longer adds a separate tab strip.
+  Actions follow the conversation column when the workbench opens. When it is
+  closed, the gap before its toggle matches the gap between actions.
 - `amiba.chat.content.overlay`
 - `amiba.composer.modelPicker` — the session-less HERO model seat (root
   scope, list), dispatched through the composer's `modelPicker` render prop

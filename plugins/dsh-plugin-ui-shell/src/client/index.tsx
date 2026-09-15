@@ -831,7 +831,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
             kind: "list",
             scope: "session",
           },
-          // Official vocabulary: the TITLE-ADJACENT per-session action row
+          // Official per-session action slot; Amiba places it at the chat edge
           // (list, session scope, EMPTY owner — the contract is explicit
           // that an action derives sessionId and everything else from the
           // standard session kit and its own inject face). A separate seat

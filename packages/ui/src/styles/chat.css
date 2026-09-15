@@ -105,6 +105,14 @@
     display: contents;
   }
 
+  .amiba-chat-header--wide-overlay [data-content-header-actions] {
+    position: absolute;
+    top: 0;
+    right: var(--amiba-header-actions-right, 12px);
+    height: var(--amiba-header-height, 40px);
+    z-index: 30;
+  }
+
   .amiba-chat-header--wide-overlay [data-content-header-leading] {
     position: absolute;
     top: 0;

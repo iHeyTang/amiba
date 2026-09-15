@@ -131,7 +131,7 @@ const EMPTY_MESSAGE_SOURCES: readonly MessageSourceRow[] = [];
  * `.onboarding` / `.general.item` — `shell.overlay`, the two session-header seats —
  * `conversation.session.header.utilities`, the right-aligned strip that
  * replaced the retired `amiba.chat.header.after`, and
- * `conversation.session.header.actions`, the title-adjacent action row —
+ * `conversation.session.header.actions`, the conversation-edge action row —
  * and the two composer control seats, `conversation.input.model` and
  * `conversation.input.plan`, and the composer's floating overlay anchor,
  * `conversation.input.overlay`). Two names from the public vocabulary are
@@ -964,7 +964,7 @@ function ProductShellInner({
                   "conversation.session.header.utilities",
                   {},
                 ),
-                // The title-adjacent counterpart, same session resolution and the
+                // The conversation-edge counterpart, same session resolution and the
                 // same empty owner share the contract declares. The header row it
                 // lands in collapses while the seat is empty, so a session with no
                 // contributed action looks exactly as it did before the seat
