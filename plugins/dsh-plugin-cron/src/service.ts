@@ -6,6 +6,7 @@ import type { Context } from "@deepseek-ai/cordis";
 import type {} from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { SessionId } from "@deepseek-ai/dsh-session";
+import type {} from "@deepseek-ai/dsh-session-persistence";
 import type {} from "@amiba/dsh-plugin-notification-hub";
 
 import { cronSessionOrigin } from "./session-origin.js";
@@ -62,23 +63,23 @@ export class CronService {
 
   private readonly sessionOrigins = new Map<string, boolean>();
 
+  private async readSessionEvents(id: string) {
+    const handle = await this.ctx.sessionPersistence.open(SessionId(id), "read");
+    try {
+      return (await handle.read()).events;
+    } finally {
+      await handle.close();
+    }
+  }
+
   /** Read-only classification: survives rule deletion and needs no migration. */
   async sessionIds(ids: string[]): Promise<string[]> {
-    const persistence = (
-      this.ctx as unknown as {
-        sessionPersistence: {
-          inspect(
-            id: string,
-          ): Promise<{ events: readonly { type: string; data?: unknown }[] }>;
-        };
-      }
-    ).sessionPersistence;
     const result: string[] = [];
     for (const id of new Set(ids)) {
       let origin = this.sessionOrigins.get(id);
       if (origin === undefined) {
         try {
-          origin = cronSessionOrigin((await persistence.inspect(id)).events);
+          origin = cronSessionOrigin(await this.readSessionEvents(id));
           // Blank sessions and failed reads are retried when their history arrives.
           if (origin !== undefined) {
             if (this.sessionOrigins.size >= 10000) this.sessionOrigins.clear();
@@ -115,15 +116,6 @@ export class CronService {
   /** Recover pre-history runs from their persisted first-message provenance. */
   async list(sessionIds: string[] = []): Promise<CronTaskView[]> {
     let tasks = await this.store.list();
-    const persistence = (
-      this.ctx as unknown as {
-        sessionPersistence?: {
-          inspect(id: string): Promise<{
-            events: readonly { type: string; time?: number; data?: unknown }[];
-          }>;
-        };
-      }
-    ).sessionPersistence;
     const recovered = new Map<string, CronRun[]>();
     const settled = new Set<string>();
     const recorded = new Map(
@@ -131,7 +123,7 @@ export class CronService {
         this.taskRuns(task).map((run) => [run.sessionId, run] as const),
       ),
     );
-    if (persistence)
+    if (this.ctx.sessionPersistence)
       for (const id of new Set(sessionIds)) {
         if (
           this.recoveredSessions.has(id) ||
@@ -139,7 +131,7 @@ export class CronService {
         )
           continue;
         try {
-          const { events } = await persistence.inspect(id);
+          const events = await this.readSessionEvents(id);
           if (cronSessionOrigin(events) === undefined) continue;
           if (!cronSessionOrigin(events)) {
             this.recoveredSessions.add(id);

@@ -324,8 +324,10 @@ describe("durable cron run history", () => {
       })),
     );
     service.dispose();
-    const inspect = vi.fn(async (id: string) => ({
-      events: [
+    const close = vi.fn(async () => {});
+    const open = vi.fn(async (id: string) => ({
+      close,
+      read: async () => ({ events: [
         {
           type: "user/message",
           time: 500,
@@ -337,10 +339,10 @@ describe("durable cron run history", () => {
           },
         },
         { type: "turn/end", time: 600 },
-      ],
+      ] }),
     }));
     const restarted = new CronService(
-      { sessionPersistence: { inspect } } as never,
+      { sessionPersistence: { open } } as never,
       store,
       () => 1000,
     );
@@ -350,7 +352,9 @@ describe("durable cron run history", () => {
       { sessionId: "old", startedAt: 500, finishedAt: 600 },
     ]);
     await restarted.list(["old", "ordinary"]);
-    expect(inspect).toHaveBeenCalledTimes(2);
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(open).toHaveBeenCalledWith("old", "read");
+    expect(close).toHaveBeenCalledTimes(2);
     expect(
       (
         await new DshCronStore(store.path.replace(/\/tasks.json$/u, "")).list()
