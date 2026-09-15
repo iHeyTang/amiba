@@ -197,6 +197,36 @@ function useActiveChipInView(
   }, [box, chips, tabs, activeTabId])
 }
 
+/**
+ * Pan the chip box with the wheel. The box overflows sideways alone, and a
+ * wheel emits `deltaY` alone, so without this the chips past its edge are
+ * unreachable to anyone without a trackpad or a tilt wheel.
+ *
+ * The listener sits on the BOX rather than on the chips: between two chips is
+ * a slot with a hairline of its own, and a wheel over that hairline belongs to
+ * the row exactly as much as one over a chip does. The gesture is swallowed
+ * only while the box actually moves, so at either end the wheel still reaches
+ * whatever is behind the strip.
+ */
+function useStripWheelScroll(box: RefObject<HTMLDivElement | null>): void {
+  useLayoutEffect(() => {
+    const element = box.current
+    /* v8 ignore next -- the box is rendered unconditionally with the strip. */
+    if (element === null) return undefined
+    const onWheel = (event: WheelEvent): void => {
+      // Horizontal intent, and Shift+wheel, keep their native meaning.
+      if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return
+      const max = element.scrollWidth - element.clientWidth
+      if (max <= 0) return
+      const before = element.scrollLeft
+      element.scrollLeft = Math.max(0, Math.min(max, before + event.deltaY))
+      if (element.scrollLeft !== before) event.preventDefault()
+    }
+    element.addEventListener('wheel', onWheel, { passive: false })
+    return () => { element.removeEventListener('wheel', onWheel) }
+  }, [box])
+}
+
 /** Width of the chip box's fade at a hidden side; mirrors the stylesheet's 24px. */
 const STRIP_FADE = 24
 
@@ -217,6 +247,7 @@ export function TabPanel({ state, pane, callbacks }: TabPanelProps): ReactNode {
   const [chips] = useState(() => new Map<TabId, HTMLElement>())
   const stripTabs = useRef<HTMLDivElement | null>(null)
   useStripScrollFades(stripTabs, pane.tabs)
+  useStripWheelScroll(stripTabs)
   useActiveChipInView(stripTabs, chips, pane.tabs, pane.activeTabId)
   const active = pane.activeTabId === undefined ? undefined : getTab(state, pane.activeTabId)
   const block = callbacks.splitBlock(pane.id)
