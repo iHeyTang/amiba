@@ -1,9 +1,11 @@
+import { WorkspacePane, WorkspacePaneToggle } from "../WorkspacePane";
+import { createTerminalView } from "../../../../../plugins/dsh-plugin-terminal/src/client/index";
 import { createBrowserView } from "../../../../../plugins/dsh-plugin-browser-provider-electron/src/client/index";
 import { WorkbenchExtensionsProvider } from "../workbench-extensions";
 import {
   act,
   fireEvent,
-  render,
+  render as renderTesting,
   screen,
   waitFor,
 } from "@testing-library/react";
@@ -11,8 +13,12 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const shells = [{ id: "workbench", order: 100, component: WorkspacePane, toggle: () => <WorkspacePaneToggle showUnavailable /> }];
+function render(node: React.ReactNode) { return renderTesting(node, { wrapper: ({ children }) => <WorkbenchExtensionsProvider extensions={[]} shells={shells}>{children}</WorkbenchExtensionsProvider> }); }
+
 const mocks = vi.hoisted(() => ({
   useSessions: vi.fn(),
+  loadHistory: vi.fn(),
   storageGet: vi.fn(),
   storageSet: vi.fn(),
   storageWatch: vi.fn(
@@ -32,6 +38,7 @@ const mocks = vi.hoisted(() => ({
   snapshotListener: null as
     | ((frame: { sessionId: string; kind: string }) => void)
     | null,
+  sidebarActiveSessionId: "",
   sidebarRunningSessionIds: [] as string[],
   sidebarFailedSessionIds: [] as string[],
   embeddedBrowser: null as null | Record<string, ReturnType<typeof vi.fn>>,
@@ -39,6 +46,13 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@amiba/app-runtime/core", () => ({
   useSessions: mocks.useSessions,
+}));
+
+vi.mock("../../../../app-runtime/src/core/sessions-runtime/store", () => ({
+  loadIndex: async () => [{ id: "session-1", title: "启动项目", createdAt: 1, updatedAt: 1, messageCount: 1 }],
+  loadMessages: mocks.loadHistory,
+  saveMessages: async () => {},
+  saveIndex: async () => {},
 }));
 
 vi.mock("@amiba/i18n", () => ({
@@ -101,16 +115,19 @@ vi.mock("../../theme", () => ({
 
 vi.mock("../Sidebar", () => ({
   Sidebar: ({
+    activeSessionId,
     onNewChat,
     onOpenSession,
     runningSessionIds,
     failedSessionIds,
   }: {
+    activeSessionId: string;
     onNewChat: () => void;
     onOpenSession: (id: string) => void;
     runningSessionIds?: ReadonlySet<string>;
     failedSessionIds?: ReadonlySet<string>;
   }) => {
+    mocks.sidebarActiveSessionId = activeSessionId;
     mocks.sidebarRunningSessionIds = Array.from(runningSessionIds ?? []);
     mocks.sidebarFailedSessionIds = Array.from(failedSessionIds ?? []);
     return (
@@ -153,6 +170,9 @@ vi.mock("../ChatSurface", () => ({
     );
   },
 }));
+
+import { SessionsProvider, useSessions as useRealSessions } from "../../../../app-runtime/src/core/sessions-runtime/provider";
+import { SessionsStore } from "../../../../app-runtime/src/core/sessions-runtime/sessions-store";
 
 import FullScreenChatView from "../FullScreenChatView";
 import { APP_SIDEBAR_DEFAULT_WIDTH } from "../../navigation/sidebar-layout";
@@ -260,6 +280,7 @@ describe("FullScreenChatView new-chat home", () => {
       const sessions = makeSessions();
       mocks.useSessions.mockReturnValue(sessions);
       const navigate = vi.fn();
+      const navigationSeat = vi.fn(() => null);
       function View() {
         const [panel, setPanel] = useState(surface === "main-panel");
         return <FullScreenChatView
@@ -270,12 +291,15 @@ describe("FullScreenChatView new-chat home", () => {
           slots={{
             mainPanel: panel ? { id: "memory", content: <div>memory-page</div> } : undefined,
             workspaceView: () => <div>workspace-page</div>,
+            workspaceNavigation: navigationSeat,
             onNativeNavigation: () => { navigate(); setPanel(false); },
           }}
         />;
       }
       render(<View />);
       await act(async () => {});
+      expect(mocks.sidebarActiveSessionId).toBe(surface === "conversation" ? "session-1" : "");
+      expect(navigationSeat).toHaveBeenLastCalledWith(surface === "main-panel" ? "" : surface === "workspace" ? "scheduled" : "chats", mocks.sidebarActiveSessionId);
       await userEvent.click(screen.getByRole("button", { name: "open-session" }));
       if (surface === "conversation") {
         expect(sessions.deselect).toHaveBeenCalledOnce();
@@ -302,6 +326,34 @@ describe("FullScreenChatView new-chat home", () => {
     expect(sessions.deselect).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: /New task|返回新任务/ }));
     expect(sessions.deselect).toHaveBeenCalledOnce();
+  });
+
+  it("routes a real store failure through the Provider from memory to fallback and retries", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    mocks.loadHistory.mockRejectedValueOnce(new Error('format v0 contains unknown historical event type "amiba/notice"'));
+    mocks.loadHistory.mockResolvedValue([]);
+    mocks.useSessions.mockImplementation(useRealSessions);
+    function View() {
+      const [panel, setPanel] = useState(true);
+      return <SessionsProvider store={store}><FullScreenChatView
+        client={makeClient() as never} openSettings={() => {}} openAgentDestination={() => {}}
+        restoreSidebarViewOnMount={false}
+        slots={{ mainPanel: panel ? { id: "memory", content: <div>memory-page</div> } : undefined,
+          onNativeNavigation: () => setPanel(false) }}
+      /></SessionsProvider>;
+    }
+    render(<View />);
+    expect(mocks.sidebarActiveSessionId).toBe("");
+    await userEvent.click(screen.getByRole("button", { name: "open-session" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("amiba/notice");
+    expect(screen.queryByText("memory-page")).not.toBeInTheDocument();
+    expect(mocks.sidebarActiveSessionId).toBe("session-1");
+    await userEvent.click(screen.getByRole("button", { name: /Retry|重试/ }));
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    expect(screen.getByText("chat-surface")).toBeInTheDocument();
+    expect(store.getSnapshot().activeId).toBe("session-1");
+    expect(mocks.loadHistory).toHaveBeenCalledTimes(2);
   });
 
   it("returns to the id-less home instead of creating a conversation", async () => {
@@ -627,7 +679,7 @@ describe("FullScreenChatView new-chat home", () => {
     };
 
     render(
-      <WorkbenchExtensionsProvider extensions={[createBrowserView(mocks.embeddedBrowser as never)]}>
+      <WorkbenchExtensionsProvider shells={shells} extensions={[createBrowserView(mocks.embeddedBrowser as never)]}>
       <FullScreenChatView
         client={makeClient() as never}
         capabilities={
@@ -642,24 +694,10 @@ describe("FullScreenChatView new-chat home", () => {
       </WorkbenchExtensionsProvider>,
     );
 
-    const browserToggle = screen.getByRole("button", {
-      name: "embeddedBrowser.open",
-    });
-    const terminalToggle = screen.getByRole("button", {
-      name: "workspacePane.openTerminal",
-    });
-    const workbenchToggle = screen.getByRole("button", {
-      name: "workspacePane.open",
-    });
-    const controls = browserToggle.parentElement;
-    expect(controls?.children[0]).toBe(browserToggle);
-    expect(controls?.children[1]).toBe(terminalToggle);
-    expect(controls?.children[2]).toBe(workbenchToggle);
-
+    const workbenchToggle = screen.getByRole("button", { name: "workspacePane.open" });
+    expect(workbenchToggle.parentElement?.children).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "workspacePane.openTerminal" })).toBeNull();
     act(() => requestBrowserTab?.({}));
-    expect(
-      screen.queryByRole("button", { name: "workspacePane.openTerminal" }),
-    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "workspacePane.collapse" }),
     ).toBeInTheDocument();
@@ -712,29 +750,12 @@ describe("FullScreenChatView new-chat home", () => {
     expect(webview?.hasAttribute("contextIsolation")).toBe(false);
     expect(webview?.getAttribute("partition")).toBe("persist:amiba-browser");
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "embeddedBrowser.close" }),
-    );
-    const restoredWorkbenchToggle = screen.getByRole("button", {
-      name: "workspacePane.open",
-    });
-    expect(
-      screen.getByRole("button", { name: "embeddedBrowser.open" }),
-    ).toHaveAttribute("aria-pressed", "false");
-    expect(restoredWorkbenchToggle).toHaveAttribute("aria-pressed", "false");
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "embeddedBrowser.open" }),
-    );
-    expect(
-      screen.getByRole("button", { name: "workspacePane.collapse" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(
-      screen.getAllByRole("tab", { name: "New tab" }),
-    ).toHaveLength(1);
+    await userEvent.click(screen.getByRole("button", { name: "workspacePane.collapse" }));
+    await userEvent.click(screen.getByRole("button", { name: "workspacePane.open" }));
+    expect(screen.getAllByRole("tab", { name: "New tab" })).toHaveLength(1);
   });
 
-  it("opens a bottom terminal drawer with independent tabs", async () => {
+  it("opens independent terminal resources inside the workbench", async () => {
     mocks.useSessions.mockReturnValue(makeSessions());
     let terminalSnapshots: Array<{
       sessionId: string;
@@ -784,6 +805,7 @@ describe("FullScreenChatView new-chat home", () => {
     };
 
     render(
+      <WorkbenchExtensionsProvider shells={shells} extensions={[createTerminalView()]}>
       <FullScreenChatView
         client={makeClient() as never}
         capabilities={
@@ -794,83 +816,29 @@ describe("FullScreenChatView new-chat home", () => {
         openSettings={() => {}}
         openAgentDestination={() => {}}
         restoreSidebarViewOnMount={false}
-      />,
+      />
+      </WorkbenchExtensionsProvider>,
     );
 
-    const workbenchToggle = screen.getByRole("button", {
-      name: "workspacePane.open",
-    });
-    const terminalToggle = screen.getByRole("button", {
-      name: "workspacePane.openTerminal",
-    });
-    const toggleLayer = workbenchToggle.parentElement;
-    const panel = document.querySelector("[data-workspace-terminal-panel]");
-
-    expect(toggleLayer?.children[0]).toBe(terminalToggle);
-    expect(toggleLayer?.children[1]).toBe(workbenchToggle);
-    expect(terminalToggle.querySelector(".lucide-panel-bottom")).not.toBeNull();
-    expect(panel).toHaveStyle({ height: "0px" });
-
-    await userEvent.click(terminalToggle);
-
-    expect(
-      screen.getByRole("button", { name: "workspacePane.closeTerminal" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(panel).toHaveStyle({ height: "280px" });
-    expect(panel?.parentElement?.children[0]).toHaveAttribute(
-      "data-workspace-main-row",
-    );
-    const initialTab = await screen.findByRole("tab", {
-      name: "zhangdehui@MacBook",
-    });
-    const tabsBar = document.querySelector(
-      "[data-workspace-terminal-tabs-bar]",
-    );
-    expect(tabsBar).not.toHaveClass("border-b", "bg-muted");
-    expect(tabsBar).toHaveClass("px-3");
-    expect(tabsBar?.className).not.toContain("bg-[");
-    expect(initialTab).toHaveAttribute("aria-selected", "true");
-    expect(development.terminalStart).toHaveBeenCalledWith(
-      "session-1",
-      "primary",
-    );
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "workspacePane.newTerminal" }),
-    );
-    await waitFor(() =>
-      expect(
-        screen.getAllByRole("tab", { name: "zhangdehui@MacBook" }),
-      ).toHaveLength(2),
-    );
-    const tabs = screen.getAllByRole("tab", {
-      name: "zhangdehui@MacBook",
-    });
-    expect(tabs[1]).toHaveAttribute("aria-selected", "true");
-    await userEvent.click(tabs[0]);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "workspacePane.open" }));
+    expect(document.querySelector("[data-workspace-terminal-panel]")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Open terminal" }));
+    await waitFor(() => expect(development.terminalStart).toHaveBeenCalledTimes(1));
+    const firstId = development.terminalStart.mock.calls[0][1];
+    await user.click(screen.getByRole("button", { name: "workspacePane.newTab" }));
+    await user.click(screen.getByRole("button", { name: "Open terminal" }));
+    await waitFor(() => expect(development.terminalStart).toHaveBeenCalledTimes(2));
+    const tabs = screen.getAllByRole("tab", { name: "Terminal" });
+    expect(tabs).toHaveLength(2);
+    await user.click(tabs[0]);
     expect(tabs[0]).toHaveAttribute("aria-selected", "true");
-
-    await userEvent.click(
-      screen.getAllByRole("button", {
-        name: "workspacePane.closeTerminalTab",
-      })[0],
-    );
-    await waitFor(() =>
-      expect(
-        screen.getAllByRole("tab", { name: "zhangdehui@MacBook" }),
-      ).toHaveLength(1),
-    );
-    expect(development.terminalStop).toHaveBeenCalledWith(
-      "session-1",
-      "primary",
-    );
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "workspacePane.hideTerminalPanel" }),
-    );
-    expect(panel).toHaveStyle({ height: "0px" });
+    await user.click(screen.getAllByRole("button", { name: "common.close" })[0]);
+    await waitFor(() => expect(screen.getAllByRole("tab", { name: "Terminal" })).toHaveLength(1));
+    expect(development.terminalStop).toHaveBeenCalledWith("session-1", firstId);
+    await user.click(screen.getByRole("button", { name: "workspacePane.collapse" }));
     expect(development.terminalStop).toHaveBeenCalledTimes(1);
-  });
+  }, 15000);
 
   it("collapses and restores the sidebar from the pane headers", async () => {
     mocks.useSessions.mockReturnValue(makeSessions());

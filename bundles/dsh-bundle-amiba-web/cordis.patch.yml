@@ -155,6 +155,12 @@
     - id: amiba-ui-shell
       name: "@amiba/dsh-plugin-ui-shell"
 
+    - id: amiba-workbench
+      name: "@amiba/dsh-plugin-workbench"
+
+    - id: amiba-terminal
+      name: "@amiba/dsh-plugin-terminal"
+
     - id: amiba-file-preview
       name: "@amiba/dsh-plugin-file-preview"
 

@@ -1,6 +1,6 @@
 import type { ITheme } from "@xterm/xterm";
 
-import type { ResolvedTheme } from "../theme";
+type ResolvedTheme = "light" | "dark";
 
 /**
  * xterm does not accept every color format that Chromium accepts. In

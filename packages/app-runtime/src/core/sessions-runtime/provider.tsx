@@ -123,6 +123,7 @@ export function useSessions(): SessionsController {
   // compiling; the actual arrays are still treated immutably by the
   // store.
   return {
+    ...state,
     getSnapshot: store.getSnapshot,
     ready: state.ready,
     sessions: state.sessions as SessionsController["sessions"],

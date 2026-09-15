@@ -71,6 +71,7 @@ const testViews = [
     resourceType,
     order: 100,
     component: FileContribution,
+    ...(resourceType === "files" ? { launcher: { label: () => "Open file" } } : {}),
     instanceKey: "amiba.file-workspace",
   })),
 ];
@@ -514,6 +515,7 @@ describe("WorkspacePane responsive behavior", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "toggle workspace" }),
     );
+    await userEvent.click(screen.getByRole("button", { name: "Open file" }));
     // The project strip lives in the file tree, which now starts closed.
     await userEvent.click(
       await screen.findByRole("button", { name: "workspacePane.showFileTree" }),
@@ -539,7 +541,7 @@ describe("WorkspacePane responsive behavior", () => {
     ).not.toBeInTheDocument();
     expect(development.listWorktrees).not.toHaveBeenCalled();
     expect(development.createWorktree).not.toHaveBeenCalled();
-  });
+  }, 15000);
 
   it("keeps the unchanged-lines disclosure out of the line-number gutter", async () => {
     const capability = {

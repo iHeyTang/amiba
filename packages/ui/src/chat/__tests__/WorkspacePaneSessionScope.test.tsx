@@ -72,9 +72,9 @@ describe("workbench state is owned by the session", () => {
     dispatch("open-details");
     expect(snapshot()).toMatchObject({ open: "true", mode: "preview", tabs: "1" });
     view.rerender(<Harness sessionId="session-2" />);
-    expect(snapshot()).toMatchObject({ open: "false", mode: "files", tabs: "0" });
+    expect(snapshot()).toMatchObject({ open: "false", mode: "preview", tabs: "0" });
     dispatch("open-details");
-    expect(snapshot()).toMatchObject({ open: "true", mode: "files", tabs: "0" });
+    expect(snapshot()).toMatchObject({ open: "true", mode: "preview", tabs: "0" });
     dispatch("close-details");
     view.rerender(<Harness sessionId="session-1" />);
     expect(snapshot()).toMatchObject({ open: "true", mode: "preview", tabs: "1" });
@@ -105,7 +105,7 @@ describe("workbench state is owned by the session", () => {
     expect(snapshot()).toEqual({
       open: "false",
       tabs: "0",
-      mode: "files",
+      mode: "preview",
       tree: "false",
       terminal: "false",
     });

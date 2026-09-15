@@ -58,6 +58,8 @@ import type {
   SessionListMenuItem,
 } from "./session-list-extensions";
 import ChatSurface from "./ChatSurface";
+import { SessionLoadPanel } from "./SessionLoadPanel";
+import { useDelayedSessionLoad } from "./use-delayed-session-load";
 import type { MessageSourceLabelResolver } from "./bubble/Bubble";
 import type {
   ComposerModelPickerRenderer,
@@ -66,17 +68,13 @@ import type {
 import type { ToolCallSeatRenderer } from "./bubble/tool-call-seat";
 import type { QuestionSeatRenderer } from "./bubble/question-seat";
 import {
-  WorkspacePane,
   WorkspacePaneProvider,
-  WorkspacePaneToggle,
-  WorkspaceTerminalPanel,
-  WorkspaceTerminalToggle,
   useWorkspacePane,
 } from "./WorkspacePane";
 import {
   WorkbenchViewBoundary,
   WorkbenchExtensionHosts,
-  WorkbenchExtensionToolbar,
+  useWorkbenchShell,
 } from "./workbench-extensions";
 import {
   APP_SIDEBAR_DEFAULT_WIDTH,
@@ -177,7 +175,7 @@ export interface FullScreenChatViewProps {
     /** Additive DSH entries before built-in navigation rows. */
     navigationBefore?: ReactNode;
     /** DSH workspace plugin entries, rendered inside the existing sidebar. */
-    workspaceNavigation?: (activeView: string) => ReactNode;
+    workspaceNavigation?: (activeView: string, visibleSessionId: string) => ReactNode;
     /** Additive DSH entries after built-in navigation rows. */
     navigationAfter?: ReactNode;
     /** Active DSH workspace plugin body, keyed by the selected destination. */
@@ -760,6 +758,9 @@ function FullScreenChatViewInner({
   );
 
   const workspacePane = useWorkspacePane();
+  const workbenchShell = useWorkbenchShell();
+  const WorkbenchPane = workbenchShell?.component;
+  const WorkbenchToggle = workbenchShell?.toggle;
 
   const onSidebarViewChange = useCallback((next: ActivityViewId) => {
     if (next === "tasks") next = "chats";
@@ -770,6 +771,7 @@ function FullScreenChatViewInner({
 
   // Every session entry point (including plugin navigation) reveals its
   // loading/failure destination even when history cannot be restored.
+  const displayedLoad = useDelayedSessionLoad(sessions.sessionLoad);
   const loadingDestination = sessions.sessionLoad?.sessionId;
   useEffect(() => {
     if (loadingDestination) onSidebarViewChange("chats");
@@ -813,6 +815,8 @@ function FullScreenChatViewInner({
     [sessions, onSidebarViewChange, sidebarView, slots?.mainPanel],
   );
 
+  const conversationVisible = sidebarView === "chats" && !slots?.mainPanel;
+  const visibleSessionId = conversationVisible ? (sessions.sessionLoad?.sessionId ?? sessions.activeId) : "";
   const pluginWorkspaceActive = sidebarView !== "chats" && !slots?.mainPanel;
   const showSidebarExpandControl = sidebarCollapsed && sidebarMotion === "idle";
   const showSidebarCollapseControl =
@@ -825,7 +829,7 @@ function FullScreenChatViewInner({
   // the whole workbench — pane, terminal drawer and edge controls alike —
   // stays off there.
   const workbenchVisible =
-    (sidebarView === "chats" && !slots?.mainPanel) && Boolean(sessions.activeId) && !sessions.sessionLoad;
+    (sidebarView === "chats" && !slots?.mainPanel) && Boolean(sessions.activeId) && !displayedLoad;
 
   // Measure the edge-control row so the workbench tab strip can reserve its
   // width. The row floats over the pane at `z-50`; without this the tabs
@@ -900,13 +904,13 @@ function FullScreenChatViewInner({
           />
           <Sidebar
             navigationBefore={slots?.navigationBefore}
-            workspaceNavigation={slots?.workspaceNavigation?.(sidebarView)}
+            workspaceNavigation={slots?.workspaceNavigation?.(slots?.mainPanel ? "" : sidebarView, visibleSessionId)}
             navigationAfter={slots?.navigationAfter}
             onNewChat={() => void onNewChatAndShow()}
             sessions={chatSessions}
             runningSessionIds={runningSessionIds}
             failedSessionIds={failedSessionIds}
-            activeSessionId={sessions.activeId}
+            activeSessionId={visibleSessionId}
             sessionsReady={sessions.ready}
             onOpenSession={(id) => void onOpenSession(id)}
             onRenameSession={(id, title) => void sessions.rename(id, title)}
@@ -987,12 +991,12 @@ function FullScreenChatViewInner({
               testId="chats-view"
             >
               <ContentHeader
-                title={sessions.sessionLoad ? (sessions.sessions.find(item => item.id === sessions.sessionLoad?.sessionId)?.title ?? "") : chatTopBarPlaceholder}
+                title={displayedLoad ? (sessions.sessions.find(item => item.id === displayedLoad?.sessionId)?.title ?? "") : chatTopBarPlaceholder}
                 icon={<Folder className="h-4 w-4" />}
-                actions={sessions.sessionLoad ? undefined : slots?.headerActions}
-                lineage={sessions.sessionLoad ? undefined : slots?.headerLineage}
+                actions={displayedLoad ? undefined : slots?.headerActions}
+                lineage={displayedLoad ? undefined : slots?.headerLineage}
                 onRenameTitle={
-                  canRenameActiveChatTitle && !sessions.sessionLoad ? renameActiveChatTitle : undefined
+                  canRenameActiveChatTitle && !displayedLoad ? renameActiveChatTitle : undefined
                 }
                 sidebarCollapsed={sidebarCollapsed}
                 showExpandControl={showSidebarExpandControl}
@@ -1006,24 +1010,14 @@ function FullScreenChatViewInner({
                 )}
                 seamless
               />
-              {sessions.sessionLoad ? (
-                <div className="flex min-h-0 flex-1 items-center justify-center p-8" role={sessions.sessionLoad.status === "error" ? "alert" : "status"}>
-                  <div className="w-full max-w-lg space-y-4">
-                    <h2 className="text-base font-medium">{sessions.sessionLoad.status === "loading"
-                      ? (language === "zh-CN" ? "正在打开会话…" : "Opening conversation…")
-                      : (language === "zh-CN" ? "无法打开此会话" : "Unable to open this conversation")}</h2>
-                    <p className="text-sm text-muted-foreground">{sessions.sessions.find(item => item.id === sessions.sessionLoad?.sessionId)?.title}</p>
-                    {sessions.sessionLoad.status === "error" && <>
-                      <p className="text-sm text-muted-foreground">{language === "zh-CN" ? "会话加载失败，可能是历史格式不兼容或服务暂不可用。你可以重试，或打开其他会话。" : "The conversation could not be loaded. Its format may be incompatible or the service unavailable. Retry or open another conversation."}</p>
-                      <details className="text-sm text-muted-foreground">
-                        <summary className="cursor-pointer">{language === "zh-CN" ? "错误详情" : "Error details"}</summary>
-                        <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all">{sessions.sessionLoad.message}</pre>
-                      </details>
-                      <button className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accent" onClick={() => void onOpenSession(sessions.sessionLoad!.sessionId)}>{language === "zh-CN" ? "重试" : "Retry"}</button>
-                    </>}
-                    <button className="ml-3 text-sm text-muted-foreground hover:text-foreground" onClick={() => void onNewChatAndShow()}>{language === "zh-CN" ? "返回新任务" : "New task"}</button>
-                  </div>
-                </div>
+              {displayedLoad ? (
+                <SessionLoadPanel
+                  language={language}
+                  retrying={sessions.sessionLoad?.status === "loading"}
+                  error={displayedLoad.status === "error" ? displayedLoad.message : undefined}
+                  onRetry={() => void onOpenSession(sessions.sessionLoad?.sessionId ?? displayedLoad!.sessionId)}
+                  onHome={() => void onNewChatAndShow()}
+                />
               ) : <ConversationViewRegion headerViewIds={slots?.conversationHeaderViewIds} selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
                 <ChatSurface
                   messagesMaxWidth={messagesWidth}
@@ -1055,7 +1049,7 @@ function FullScreenChatViewInner({
               })}
             </PrimaryWorkspaceView>
           </div>
-          <WorkspacePane
+          {WorkbenchPane && <WorkbenchPane
             visible={workbenchVisible}
             renderPanel={slots?.workbenchPanel}
             inspectToolCall={(callId) => {
@@ -1066,13 +1060,8 @@ function FullScreenChatViewInner({
               toolNavigation.reveal(callId);
               return true;
             }}
-          />
+          />}
         </div>
-        <WorkspaceTerminalPanel
-          visible={workbenchVisible}
-          open={workspacePane.terminalOpen}
-          onClose={() => workspacePane.setTerminalOpen(false)}
-        />
         {workbenchVisible && (
           <div
             ref={edgeControlsRef}
@@ -1081,15 +1070,7 @@ function FullScreenChatViewInner({
             style={{ height: topBarHeightPx ?? 40 }}
           >
             {slots?.headerAfter}
-            <WorkbenchExtensionToolbar />
-            <WorkspaceTerminalToggle
-              open={workspacePane.terminalOpen}
-              onToggle={() =>
-                workspacePane.setTerminalOpen(!workspacePane.terminalOpen)
-              }
-              showUnavailable
-            />
-            <WorkspacePaneToggle showUnavailable />
+            {WorkbenchToggle && <WorkbenchToggle />}
             {slots?.headerCorner && (
               <div
                 data-conversation-header-corner=""

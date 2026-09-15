@@ -918,13 +918,12 @@ function ProductShellInner({
                 },
                 onNativeNavigation: leaveMainPanel,
                 navigationBefore: renderSlot("amiba.navigation.before", {}),
-                workspaceNavigation: (activeView) => <>
+                workspaceNavigation: (activeView, visibleSessionId) => <>
                   {renderSlot("amiba.workspace.navigation", {
-                    activeView: activePanelId === null ? activeView : "",
+                    activeView,
                     sessionActivity: {
                       sessions: sessions.sessions,
-                      visibleSessionId:
-                        activePanelId === null && activeView === "chats" ? sessions.activeId : "",
+                      visibleSessionId,
                       markUnread: sessions.markUnread,
                       markRead: sessions.markRead,
                     },

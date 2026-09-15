@@ -20,7 +20,6 @@ import {
 import {
   BrowserViewportContext,
   EmbeddedBrowserHost,
-  EmbeddedBrowserToggle,
   EmbeddedBrowserWorkspace,
   createEmbeddedBrowserResource,
   type EmbeddedBrowserResource,
@@ -124,36 +123,6 @@ function BrowserHost({
   );
 }
 
-function BrowserToolbar() {
-  const { pane, create } = useBrowserPane();
-  const active = pane.activeTab?.resource;
-  const open =
-    pane.open &&
-    pane.mode === "preview" &&
-    active?.kind === "extension" &&
-    active.resource.type === "browser";
-  return (
-    <EmbeddedBrowserToggle
-      open={open}
-      onToggle={() => {
-        if (open) {
-          pane.setOpen(false);
-          return;
-        }
-        const latest = pane.resources
-          .filter(
-            (entry) =>
-              entry.sessionId === pane.sessionId && browserData(entry.resource),
-          )
-          .at(-1);
-        if (latest)
-          pane.focusResourceIn(pane.sessionId, "browser", latest.resource.id);
-        else create();
-      }}
-    />
-  );
-}
-
 function BrowserView({ resource, sessionId }: WorkbenchViewProps) {
   const { pane, update, create } = useBrowserPane();
   const data = browserData(resource);
@@ -180,7 +149,11 @@ const baseBrowserView: WorkbenchViewExtension = {
   resourceType: "browser",
   order: 100,
   component: BrowserView,
-  toolbar: BrowserToolbar,
+  launcher: {
+    label: () => document.documentElement.lang.startsWith("zh") ? "打开浏览器" : "Open browser",
+    icon: Globe2,
+    createResource: () => browserResource(),
+  },
   resolveUrl: (url, resources) =>
     resources.find((resource) => browserData(resource)?.url === url) ??
     browserResource(url),
@@ -219,13 +192,6 @@ export function createBrowserView(
           <BrowserViewportContext.Provider value={source}>
             <BrowserView {...props} />
           </BrowserViewportContext.Provider>
-        </BrowserAdapterContext.Provider>
-      );
-    },
-    toolbar: function BrowserPluginToolbar() {
-      return (
-        <BrowserAdapterContext.Provider value={adapter}>
-          <BrowserToolbar />
         </BrowserAdapterContext.Provider>
       );
     },
