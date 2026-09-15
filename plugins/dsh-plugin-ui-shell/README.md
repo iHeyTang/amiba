@@ -39,7 +39,9 @@ counterpart.
   utility cannot reorder session context. Amiba had no such region before
   this seat; the row it added collapses (`:empty` → `display:none`) while
   the seat is unoccupied, so an absent plugin costs neither a box nor a
-  flex gap
+  flex gap. The `amiba-transcript` action opens the official Trajectory view
+  and becomes “Back to chat” while it is selected. It shares this row with
+  connector message sync; Trajectory no longer adds a separate tab strip.
 - `amiba.chat.content.overlay`
 - `amiba.composer.modelPicker` — the session-less HERO model seat (root
   scope, list), dispatched through the composer's `modelPicker` render prop
@@ -131,8 +133,8 @@ counterpart.
   to before the seat existed. Owner supply: `callId` / `toolName` / `block`
   come from the row (the `block` is rebuilt from the verbatim wire material
   both Amiba tool producers retain), `cwd` from the conversation's workspace
-  binding, `openFile` from the workspace pane. `inspect` is deliberately
-  omitted — it addresses the trajectory view, which Amiba does not run
+  binding, `openFile` from the workspace pane. `inspect` opens the official trajectory view focused on the call when
+  that view is available
 - `amiba.conversation.question` — Amiba's own name: the per-question screen in
   the conversation footer, KEYED by the question id (keyed, SESSION scope,
   owner `AmibaConversationQuestionOwner`). The second seat here with an open

@@ -1,3 +1,4 @@
+import { TrajectoryHeaderAction } from "./trajectory-header-action.js";
 import { conversationSnapshotSource } from "./conversation-snapshot.js";
 import { UiConversation, ConversationController } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type { UiSession } from "@deepseek-ai/dsh-client-ui-session/client";
@@ -1087,6 +1088,10 @@ export async function apply(ctx: ClientContext): Promise<void> {
       },
       AmibaCommandPopupSeat,
     );
+    const disposeTrajectoryAction = ctx.slots.register(
+      { name: "conversation.session.header.actions", id: "amiba-transcript", order: 10 },
+      TrajectoryHeaderAction,
+    );
     // CELL SHADOW of the official locale plugin's LanguageRow. The service,
     // persistence, dictionaries, and framework `t` seat remain official;
     // only the DSH-Menu-based pixels are replaced with @amiba/ui's Select.
@@ -1141,6 +1146,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       disposeAskToolview();
       void languageRowFiber.dispose();
       void sessionExportFiber.dispose();
+      disposeTrajectoryAction();
       disposeCommandPopup();
       disposeSurfaceSettings();
       disposeSlashMenu();

@@ -202,6 +202,7 @@ export interface FullScreenChatViewProps {
     /** Optional ancestry controls; the original editable title remains mounted. */
     headerLineage?: ReactNode;
     conversationViews?: readonly ConversationViewEntry[];
+    conversationHeaderViewIds?: readonly string[];
     conversationView?: (id: string) => ReactNode;
     conversationViewSelection?: { sessionId: string; id: string } | null;
     onConversationViewSelect?: (id: string | null) => void;
@@ -1023,7 +1024,7 @@ function FullScreenChatViewInner({
                     <button className="ml-3 text-sm text-muted-foreground hover:text-foreground" onClick={() => void onNewChatAndShow()}>{language === "zh-CN" ? "返回新任务" : "New task"}</button>
                   </div>
                 </div>
-              ) : <ConversationViewRegion selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
+              ) : <ConversationViewRegion headerViewIds={slots?.conversationHeaderViewIds} selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
                 <ChatSurface
                   messagesMaxWidth={messagesWidth}
                   client={client}

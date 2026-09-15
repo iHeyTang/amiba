@@ -1,3 +1,4 @@
+import { TrajectoryNavigationContext } from "./trajectory-header-action.js";
 import { MainPanelList, type MainPanelRow } from "./main-panel-list.js";
 import type { MainPanelNavigation } from "./main-panel-navigation.js";
 import { LegacyToolDetails } from "./legacy-tool-details.js";
@@ -853,6 +854,7 @@ function ProductShellInner({
               messageSourceLabel={messageSourceLabel}
               slots={{
                 conversationViews: viewEntries,
+                conversationHeaderViewIds: ["trajectory"],
                 conversationView: (id) => renderSlot("conversation.view", { ...trajectory.owner, ...(loadMessageImage ? { loadImage: loadMessageImage } : {}) }, { only: id }),
                 conversationViewSelection: trajectory.selection,
                 onConversationViewSelect: trajectory.select,
@@ -968,9 +970,15 @@ function ProductShellInner({
                 // lands in collapses while the seat is empty, so a session with no
                 // contributed action looks exactly as it did before the seat
                 // existed.
-                headerActions: renderSlot(
-                  "conversation.session.header.actions",
-                  {},
+                headerActions: (
+                  <TrajectoryNavigationContext.Provider value={{
+                    sessionId: sessions.activeId,
+                    available: viewEntries.some(entry => entry.id === "trajectory"),
+                    active: trajectory.selection?.id === "trajectory",
+                    select: trajectory.select,
+                  }}>
+                    {renderSlot("conversation.session.header.actions", {})}
+                  </TrajectoryNavigationContext.Provider>
                 ),
                 contentOverlay: renderSlot("amiba.chat.content.overlay", {}),
               }}
