@@ -838,7 +838,6 @@ function FullScreenChatViewInner({
   // scroll underneath the controls.
   const edgeControlsRef = useRef<HTMLDivElement>(null);
   const chatColumnRef = useRef<HTMLDivElement>(null);
-  const [headerActionInset, setHeaderActionInset] = useState(42);
   const [edgeControlsInset, setEdgeControlsInset] = useState(
     EDGE_CONTROLS_FALLBACK_PX,
   );
@@ -847,7 +846,7 @@ function FullScreenChatViewInner({
     const node = edgeControlsRef.current;
     if (!node) {
       setEdgeControlsInset((current) => (current === 0 ? current : 0));
-      setHeaderActionInset(HEADER_RIGHT_PADDING_PX);
+      chatColumnRef.current?.style.removeProperty("--amiba-header-actions-right");
       return;
     }
     const measure = () => {
@@ -861,7 +860,10 @@ function FullScreenChatViewInner({
         HEADER_RIGHT_PADDING_PX,
         chatRight - node.getBoundingClientRect().left + HEADER_ACTION_GAP_PX,
       );
-      setHeaderActionInset(current => current === inset ? current : inset);
+      // ResizeObserver runs before paint. Write geometry directly so React's
+      // deferred render cannot leave the actions a frame behind the CSS width
+      // transition and make them overshoot the window controls, then snap back.
+      chatColumnRef.current?.style.setProperty("--amiba-header-actions-right", `${inset}px`);
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -1008,7 +1010,6 @@ function FullScreenChatViewInner({
                 title={displayedLoad ? (sessions.sessions.find(item => item.id === displayedLoad?.sessionId)?.title ?? "") : chatTopBarPlaceholder}
                 icon={<Folder className="h-4 w-4" />}
                 actions={displayedLoad ? undefined : slots?.headerActions}
-                actionRightInset={headerActionInset}
                 lineage={displayedLoad ? undefined : slots?.headerLineage}
                 onRenameTitle={
                   canRenameActiveChatTitle && !displayedLoad ? renameActiveChatTitle : undefined
@@ -1244,7 +1245,6 @@ interface ContentHeaderProps {
    * unoccupied seat costs neither a box nor a flex gap.
    */
   actions?: ReactNode;
-  actionRightInset?: number;
   lineage?: ReactNode;
   onRenameTitle?: (title: string) => void;
   sidebarCollapsed: boolean;
@@ -1261,7 +1261,6 @@ function ContentHeader({
   title,
   icon,
   actions,
-  actionRightInset = HEADER_RIGHT_PADDING_PX,
   lineage,
   onRenameTitle,
   sidebarCollapsed,
@@ -1281,8 +1280,7 @@ function ContentHeader({
       leftInset={sidebarCollapsed ? leftInset : 0}
       bordered={!seamless}
       style={{
-        paddingRight: actionRightInset,
-        "--amiba-header-actions-right": `${actionRightInset}px`,
+        paddingRight: `var(--amiba-header-actions-right, ${HEADER_RIGHT_PADDING_PX}px)`,
         "--amiba-header-height": `${heightPx}px`,
       } as CSSProperties}
       className={cn(titleEditing && "app-no-drag", className)}

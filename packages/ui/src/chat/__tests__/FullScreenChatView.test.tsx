@@ -1149,18 +1149,32 @@ describe("FullScreenChatView session-header action seat", () => {
       const actions = container.querySelector("[data-content-header-actions]") as HTMLElement;
       const header = actions.closest("header")!;
       const controls = container.querySelector("[data-workspace-edge-toggle]") as HTMLElement;
+      const column = container.querySelector(".amiba-chat-column") as HTMLElement;
+      const inset = () => parseFloat(column.style.getPropertyValue("--amiba-header-actions-right"));
+      expect(header.style.paddingRight).toBe("var(--amiba-header-actions-right, 12px)");
       expect(actions.style.gap).toBe(controls.style.gap);
-      expect(chatRight - parseFloat(header.style.paddingRight)).toBe(controlsLeft - 2);
+      expect(chatRight - inset()).toBe(controlsLeft - 2);
       // Opening/resizing the pane moves only the chat boundary, not window controls.
       chatRight = 760;
       act(() => resizeCallbacks.forEach(callback => callback()));
-      expect(header.style.paddingRight).toBe("12px");
-      expect(chatRight - parseFloat(header.style.paddingRight)).toBe(748);
+      expect(inset()).toBe(12);
+      expect(chatRight - inset()).toBe(748);
+      // Each animation frame must update synchronously, without waiting for
+      // React/act to flush a render. The row may approach but never overshoot.
+      let previousRight = chatRight - inset();
+      for (const right of [1000, 1150, 1160, 1170, 1190, 1200]) {
+        chatRight = right;
+        resizeCallbacks.forEach(callback => callback());
+        const actionRight = chatRight - inset();
+        expect(actionRight).toBeGreaterThanOrEqual(previousRight);
+        expect(actionRight).toBeLessThanOrEqual(controlsLeft - 2);
+        previousRight = actionRight;
+      }
       // Closing the pane and adding another utility preserves the same 2px gap.
       chatRight = 1200;
       controlsLeft = 1130;
       act(() => resizeCallbacks.forEach(callback => callback()));
-      expect(chatRight - parseFloat(header.style.paddingRight)).toBe(controlsLeft - 2);
+      expect(chatRight - inset()).toBe(controlsLeft - 2);
     } finally {
       bounds.mockRestore();
       vi.unstubAllGlobals();
