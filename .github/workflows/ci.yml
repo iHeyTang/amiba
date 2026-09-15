@@ -29,4 +29,6 @@ jobs:
           ln -s "$RUNNER_TEMP/amiba-pr-deps/node_modules" apps/desktop/node_modules
       - run: node scripts/release/version.mjs --check
       - run: node --test scripts/release/*.test.mjs
+      - name: Validate committed runtime distribution locks
+        run: node --test packages/app-runtime/scripts/dsh-runtime/distribution-manifests.test.mjs
       - run: git diff --check HEAD^ HEAD
