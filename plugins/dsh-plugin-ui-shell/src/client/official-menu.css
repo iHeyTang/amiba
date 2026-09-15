@@ -1,0 +1,182 @@
+/* DSH 0.1.5-rc.1 Menu CSS module, from dsh-web-frontend.
+ * MIT, DeepSeek; see ../../LICENSE.deepseek. Keep selectors paired with the
+ * pinned frontend version. No global element selectors or theme side effects. */
+._root_1nxmc_1 {
+  position: relative;
+  display: inline-flex;
+}
+._list_1nxmc_8,
+._submenu_1nxmc_9 {
+  box-sizing: border-box;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 0;
+  border-radius: 20px;
+  background: var(--dsw-specific-menu);
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l1);
+  box-shadow: var(--dsw-elevation-prominent);
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+._list_1nxmc_8 {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 100;
+  min-width: 218px;
+  max-width: 360px;
+}
+._portal_1nxmc_44 {
+  position: fixed;
+  top: auto;
+  left: auto;
+  z-index: 1100;
+}
+._sideTop_1nxmc_52 {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+._alignEnd_1nxmc_57 {
+  left: auto;
+  right: 0;
+}
+._scrollable_1nxmc_22 {
+  max-height: calc(100vh - 24px);
+}
+._viewport_1nxmc_22 {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+._scrollable_1nxmc_22 ._viewport_1nxmc_22 {
+  overflow-y: auto;
+}
+._footer_1nxmc_64 {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+._itemWrap_1nxmc_92 {
+  position: relative;
+}
+._item_1nxmc_92 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+}
+._item_1nxmc_92:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+._denseList_1nxmc_119 ._item_1nxmc_92 {
+  min-height: 34px;
+  padding-block: 5px;
+}
+._denseList_1nxmc_119 ._label_1nxmc_124 {
+  padding-block: 4px;
+}
+._list_1nxmc_8._compactList_1nxmc_128,
+._submenu_1nxmc_9._compactList_1nxmc_128 {
+  min-width: 164px;
+  padding: 2px;
+  border-radius: 7px;
+}
+._compactList_1nxmc_128 ._item_1nxmc_92 {
+  min-height: 26px;
+  gap: 6px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  font-size: 12px;
+  line-height: 18px;
+}
+._compactList_1nxmc_128 ._itemIcon_1nxmc_144 {
+  width: 14px;
+  height: 14px;
+}
+._compactList_1nxmc_128 ._separator_1nxmc_82 {
+  margin: 2px;
+}
+._compactList_1nxmc_128 ._label_1nxmc_124 {
+  padding: 4px 7px;
+  font-size: 11px;
+  line-height: 16px;
+}
+._item_1nxmc_92:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+._itemIcon_1nxmc_144 {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  color: var(--dsw-alias-label-tertiary);
+}
+._itemLabel_1nxmc_174 {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+._check_1nxmc_182 {
+  flex: none;
+  color: var(--dsw-alias-label-primary);
+}
+._selected_1nxmc_189 {
+  background: transparent;
+}
+._selectedFill_1nxmc_194 {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+._danger_1nxmc_199,
+._danger_1nxmc_199 ._itemIcon_1nxmc_144 {
+  color: var(--dsw-alias-state-error-primary);
+}
+._danger_1nxmc_199:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+}
+._label_1nxmc_124 {
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+._separator_1nxmc_82 {
+  height: 0.5px;
+  margin: 4px 2px;
+  background: var(--dsw-alias-border-l1);
+}
+._submenu_1nxmc_9 {
+  position: absolute;
+  top: auto;
+  bottom: -4px;
+  left: calc(100% + 10px);
+  z-index: 101;
+  min-width: 163px;
+}
+._submenu_1nxmc_9:before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -10px;
+  width: 10px;
+}

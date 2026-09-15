@@ -1,0 +1,32 @@
+/* Compatibility contract for official DSH plugins, including body portals.
+ * Keep Amiba as the theme owner: aliases reference its live HSL tokens instead
+ * of mounting ui-theme or copying the official light/dark boot palette. */
+:root {
+  --dsw-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --dsw-alias-bg-base: hsl(var(--background));
+  --dsw-alias-bg-layer-1: hsl(var(--card));
+  --dsw-alias-bg-layer-2: hsl(var(--popover));
+  --dsw-alias-label-primary: hsl(var(--foreground));
+  --dsw-alias-label-secondary: hsl(var(--foreground) / 0.85);
+  --dsw-alias-label-tertiary: hsl(var(--muted-foreground));
+  --dsw-alias-label-caption: hsl(var(--muted-foreground) / 0.75);
+  --dsw-alias-label-dimmed: hsl(var(--muted-foreground) / 0.5);
+  --dsw-alias-border-l1: hsl(var(--border) / 0.5);
+  --dsw-alias-border-l2: hsl(var(--border) / 0.75);
+  --dsw-alias-border-l3: hsl(var(--border));
+  --dsw-alias-brand-primary: hsl(var(--primary));
+  --dsw-alias-link: hsl(var(--primary));
+  --dsw-alias-interactive-bg-hover: hsl(var(--accent));
+  --dsw-alias-interactive-bg-active: hsl(var(--accent));
+  --dsw-alias-interactive-bg-hover-danger: hsl(var(--destructive) / 0.1);
+  --dsw-alias-state-error-primary: hsl(var(--destructive));
+  --dsw-alias-button-floating-fill: hsl(var(--popover));
+  --dsw-alias-button-info-fill: hsl(var(--primary));
+  --dsw-specific-menu: hsl(var(--popover));
+  --dsw-elevation-prominent: 0 0 0 1px hsl(var(--border)),
+    0 4px 16px rgb(0 0 0 / 0.14);
+  --dsw-alias-scrollbar-bg-l1: hsl(var(--muted-foreground) / 0.25);
+  --dsw-alias-scrollbar-hover-l1: hsl(var(--muted-foreground) / 0.45);
+  --dsw-alias-scrollbar-bg-l2: var(--dsw-alias-scrollbar-bg-l1);
+  --dsw-alias-scrollbar-hover-l2: var(--dsw-alias-scrollbar-hover-l1);
+}

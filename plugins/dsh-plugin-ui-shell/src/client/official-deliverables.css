@@ -1,9 +1,6 @@
-/* Pinned rc.2 produced-file row only. Keep the original component geometry
- * and map its colors to the existing Amiba palette. */
-.P4kPIW_root {
-  --dsw-alias-label-primary: hsl(var(--foreground));
-  --dsw-alias-label-secondary: hsl(var(--foreground) / 0.85);
-  --dsw-alias-label-tertiary: hsl(var(--muted-foreground));
-  --dsw-alias-interactive-bg-hover: hsl(var(--muted));
-  --dsw-alias-border-l3: hsl(var(--border));
+/* DSH 0.1.5-rc.1 Deliverables: override its fixed neutral palette locally.
+ * Higher specificity also wins over lazily injected plugin CSS in dark mode. */
+:root body .nyYjTG_root {
+  --deliverable-fill: hsl(var(--card));
+  --deliverable-hover: hsl(var(--accent));
 }
