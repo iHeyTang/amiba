@@ -1,0 +1,86 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -538,8 +538,9 @@
+ * @param ref - durable normalized attachment omitted from the request.
+ * @returns deterministic text-only placeholder.
+ */
+-function textOnlyImageText(ref) {
+-	return `[image omitted because this model accepts text only; attachment sha256:${String(ref.attachmentId).slice(7, 15)}]`;
++function textOnlyImageText(ref, access) {
++	const identity = `[image omitted because this model accepts text only; attachment sha256:${String(ref.attachmentId).slice(7, 15)}]`;
++	return access === void 0 ? identity : `${identity}${normalizedAccessText(ref, access)}`;
+ }
+ /**
+ * Stable model-facing handle for one exact request image. Identity comes from
+@@ -687,19 +688,19 @@
+ 	return next ?? blocks;
+ }
+ /** Replace every image occurrence, including nested tool results, for a text-only model. */
+-function replaceImagesForTextModel(blocks) {
++function replaceImagesForTextModel(blocks, accessFor) {
+ 	let next;
+ 	for (const [index, block] of blocks.entries()) {
+ 		if (block.type === "image") {
+ 			next ??= blocks.slice(0, index);
+ 			next.push({
+ 				type: "text",
+-				text: textOnlyImageText(block.attachment)
++				text: textOnlyImageText(block.attachment, accessFor === void 0 ? void 0 : accessFor(block.attachment))
+ 			});
+ 			continue;
+ 		}
+ 		if (block.type === "tool-result") {
+-			const content = replaceImagesForTextModel(block.content);
++			const content = replaceImagesForTextModel(block.content, accessFor);
+ 			if (content !== block.content) {
+ 				next ??= blocks.slice(0, index);
+ 				next.push({
+@@ -718,10 +719,10 @@
+ * @param messages - complete request history.
+ * @returns the original list without images, otherwise shallow message copies with stable placeholders.
+ */
+-function projectImagesForTextModel(messages) {
++function projectImagesForTextModel(messages, accessFor) {
+ 	if (!messages.some((message) => contentHasImage(message.content))) return messages;
+ 	return messages.map((message) => {
+-		const content = replaceImagesForTextModel(message.content);
++		const content = replaceImagesForTextModel(message.content, accessFor);
+ 		return content === message.content ? message : {
+ 			...message,
+ 			content
+@@ -2216,6 +2217,21 @@
+ 			return this.ctx.get("fs")?.processPathFromHostPath(hostPath);
+ 		}
+ 		/**
++		* Resolve the current execution-world read path of one durable image
++		* reference, mirroring {@link fileReadPath}. A model that cannot accept
++		* the image still hands the caller a path a tool can read.
++		*/
++		imageReadPath(ref) {
++			let hostPath;
++			try {
++				hostPath = this.ctx.get("attachments")?.imageHostPath(ref);
++			} catch {
++				return;
++			}
++			if (hostPath === void 0) return void 0;
++			return this.ctx.get("fs")?.processPathFromHostPath(hostPath);
++		}
++		/**
+ 		* Final adapter boundary. Adapter selection, dispatch, iterator construction,
+ 		* and iteration failures become one terminal failure chunk. Middleware and
+ 		* downstream consumer failures remain thrown plugin or consumer errors.
+@@ -2248,7 +2264,12 @@
+ 				};
+ 				let projectedMessages = resolvedOptions.messages;
+ 				if (projectedMessages.some((message) => contentHasFile(message.content))) projectedMessages = projectFilesToText(projectedMessages, (ref) => this.fileReadPath(ref));
+-				if (modelInfo.inputModalities !== void 0 && !modelInfo.inputModalities.includes("image") && projectedMessages.some((message) => contentHasImage(message.content))) projectedMessages = projectImagesForTextModel(projectedMessages);
++				if (modelInfo.inputModalities !== void 0 && !modelInfo.inputModalities.includes("image") && projectedMessages.some((message) => contentHasImage(message.content))) projectedMessages = projectImagesForTextModel(projectedMessages, (ref) => {
++					const readonlyPath = this.imageReadPath(ref);
++					return readonlyPath === void 0 ? void 0 : {
++						readonlyPath
++					};
++				});
+ 				const projectedOptions = projectedMessages === resolvedOptions.messages ? resolvedOptions : Object.isFrozen(resolvedOptions) ? deepFreeze({
+ 					...resolvedOptions,
+ 					messages: projectedMessages

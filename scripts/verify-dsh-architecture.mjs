@@ -90,6 +90,7 @@ const bundleSpecs = [
       "@amiba/dsh-plugin-mcp-manager",
       "@amiba/dsh-plugin-media",
       "@amiba/dsh-plugin-media-minimax",
+      "@amiba/dsh-plugin-vision",
       "@amiba/dsh-plugin-memory-memos",
       "@amiba/dsh-plugin-messaging-core",
       "@amiba/dsh-plugin-model-plane",

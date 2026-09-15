@@ -1547,6 +1547,41 @@ export function apply(ctx) {
     if (holdMs) { process.stdout.write(`[dsh:smoke] media UI inspection window ${holdMs}ms at ${baseUrl}\n`); await new Promise(resolve => setTimeout(resolve, holdMs)); }
   });
 
+  await check("vision capability assignment and tool delivery", async () => {
+    const html = await (await fetch(new URL("/", baseUrl))).text();
+    const boot = /<script>(?:window\.__DSH_BOOT__|globalThis\[\s*["']__DSH_BOOT__["']\s*\])\s*=\s*([\s\S]*?)<\/script>/u.exec(html);
+    assert.ok(boot?.[1]);
+    const graph = JSON.parse(boot[1]);
+    const client = graph.entries.find(entry => entry.id === "@amiba/dsh-plugin-vision");
+    assert.ok(client, "Vision client missing from packaged graph");
+    // The slot owner and the Remote client are what make the row render at all.
+    assert.ok(
+      client.inject.includes("@amiba/dsh-plugin-ui-shell") && client.inject.includes("@deepseek-ai/dsh-api-remotes"),
+      `Vision client injects an unexpected surface: ${client.inject.join(", ")}`,
+    );
+    const bundle = await fetch(new URL(client.url, baseUrl));
+    assert.equal(bundle.status, 200);
+    const source = await bundle.text();
+    assert.ok(
+      source.includes("amiba.models.extension") && source.includes("vision_recognize") && source.includes("amibaVisionUi"),
+      "Vision client lacks the assignment slot, tool or RPC contribution",
+    );
+
+    // The tool must reach the product catalog, not merely the plugin's own registry.
+    const tools = await pluginRequest(baseUrl, "/api/amiba/tools");
+    const visionTool = tools.value.tools.find(tool => tool.name === "vision_recognize");
+    assert.ok(visionTool, "vision_recognize is not delivered to the product tool catalog");
+    assert.equal(visionTool.source.packageName, "@amiba/dsh-plugin-vision");
+
+    // The assignment namespace is registered by the plugin and readable by the UI.
+    const catalog = JSON.parse(await rpc(baseUrl, "amibaVisionUi/catalog", { args: {} }));
+    assert.ok(Array.isArray(catalog.models), "vision catalog omitted its candidate models");
+    assert.ok(Number.isInteger(catalog.revision), "vision catalog omitted its settings revision");
+    assert.ok(catalog.selection === null || typeof catalog.selection === "object");
+    // A text-only route must never be offered as a vision model.
+    assert.ok(catalog.models.every(row => typeof row.provider === "string" && typeof row.model === "string"));
+  });
+
   await check("background jobs durable host restart", async () => {
     const created = await rpc(baseUrl, "workspace.create", { path: workspacePath });
     const session = await rpc(baseUrl, "session.create", {workspaceId: created.workspace.workspaceId, agentPreset: "standard"});

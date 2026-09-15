@@ -1,0 +1,83 @@
+{
+  "name": "@amiba/dsh-plugin-vision",
+  "version": "0.1.0",
+  "description": "Assignable vision capability for Amiba: a text-only agent delegates image understanding to a model that can see",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json",
+    "./client": {
+      "types": "./lib/client/index.d.ts",
+      "default": "./lib/client.js"
+    }
+  },
+  "files": [
+    "lib",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@amiba/dsh-plugin-catalog": "workspace:*",
+    "@amiba/dsh-plugin-ui-shell": "workspace:*",
+    "@amiba/ui": "workspace:*",
+    "@deepseek-ai/dsh-agent": "catalog:",
+    "@deepseek-ai/dsh-attachment": "catalog:",
+    "@deepseek-ai/dsh-llm": "catalog:",
+    "@deepseek-ai/dsh-settings": "catalog:",
+    "@deepseek-ai/dsh-system-prompt": "catalog:",
+    "@deepseek-ai/dsh-tools": "catalog:",
+    "@deepseek-ai/dsh-typert-protocol": "catalog:",
+    "@deepseek-ai/schemastery": "catalog:",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-api-remotes": "catalog:",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-api-remotes": "catalog:",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.1",
+    "@testing-library/react": "^16.0.1",
+    "@types/node": "22.9.0",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "jsdom": "^25.0.1",
+    "lucide-react": "^0.460.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "typescript": "5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.4"
+  },
+  "private": true,
+  "dsh": {
+    "client": {
+      "external": [
+        "@amiba/dsh-plugin-ui-shell/client",
+        "react",
+        "react-dom",
+        "react/jsx-runtime"
+      ],
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-api-remotes",
+        "@amiba/dsh-plugin-ui-shell"
+      ],
+      "platform": "web"
+    }
+  }
+}
