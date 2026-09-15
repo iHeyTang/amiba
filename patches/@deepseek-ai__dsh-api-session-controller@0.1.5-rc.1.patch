@@ -1,0 +1,18 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -758,11 +758,10 @@
+ 					hasError: false
+ 				};
+ 				try {
+-					if (hasImage) {
+-						const current = this.agents.selectionFor(agent).current;
+-						const model = await this.ctx.llm.resolveModelInfo(current.provider, current.model);
+-						if (model.inputModalities !== void 0 && !model.inputModalities.includes("image")) throw new RemoteError("session/attachment-invalid", `Model "${current.model}" does not support image input.`, { reason: "MODEL_DOES_NOT_SUPPORT_IMAGES" });
+-					}
++					// A text-only model may still receive an image. The request layer
++					// projects its bytes to a placeholder naming a read-only path, and a
++					// vision tool reads the image on that model's behalf; refusing the
++					// attachment here removed the user's only way to attach it.
+ 					const admission = resolvePromptFileReceipts(request.content, (receiptId) => this.ctx.fileUploads.resolve(agent, receiptId));
+ 					const message = createUserMessage({
+ 						content: await this.ctx.attachments.admitPromptContent(admission.content),

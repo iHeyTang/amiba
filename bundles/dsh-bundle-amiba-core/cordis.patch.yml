@@ -52,6 +52,9 @@
       config:
         root: !!js dshHomePath('amiba-media')
 
+    - id: amiba-vision
+      name: "@amiba/dsh-plugin-vision"
+
     - id: llm-tokendance
       name: "@amiba/dsh-plugin-provider-tokendance"
 

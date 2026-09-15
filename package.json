@@ -47,7 +47,9 @@
       "@deepseek-ai/dsh-client-ui-settings-plugins@0.1.5-rc.1": "patches/@deepseek-ai__dsh-client-ui-settings-plugins@0.1.5-rc.1.patch",
       "@deepseek-ai/dsh-tools@0.1.5-rc.1": "patches/@deepseek-ai__dsh-tools@0.1.5-rc.1.patch",
       "@deepseek-ai/dsh-session-log-export@0.1.5-rc.1": "patches/@deepseek-ai__dsh-session-log-export@0.1.5-rc.1.patch",
-      "@deepseek-ai/dsh-session@0.1.5-rc.1": "patches/@deepseek-ai__dsh-session@0.1.5-rc.1.patch"
+      "@deepseek-ai/dsh-session@0.1.5-rc.1": "patches/@deepseek-ai__dsh-session@0.1.5-rc.1.patch",
+      "@deepseek-ai/dsh-api-session-controller@0.1.5-rc.1": "patches/@deepseek-ai__dsh-api-session-controller@0.1.5-rc.1.patch",
+      "@deepseek-ai/dsh-llm@0.1.5-rc.1": "patches/@deepseek-ai__dsh-llm@0.1.5-rc.1.patch"
     },
     "overrides": {
       "@deepseek-ai/dsh": "0.1.5-rc.1",

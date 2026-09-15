@@ -3497,6 +3497,88 @@ importers:
         specifier: ^2.1.4
         version: 2.1.4(@types/node@22.9.0)(jsdom@25.0.1)(lightningcss@1.32.0)
 
+  plugins/dsh-plugin-vision:
+    dependencies:
+      '@amiba/dsh-plugin-catalog':
+        specifier: workspace:*
+        version: link:../dsh-plugin-catalog
+      '@amiba/dsh-plugin-ui-shell':
+        specifier: workspace:*
+        version: link:../dsh-plugin-ui-shell
+      '@amiba/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@deepseek-ai/dsh-agent':
+        specifier: 0.1.5-rc.1
+        version: 0.1.5-rc.1(4kpswauwrlgsfba7ca7x35t3xa)
+      '@deepseek-ai/dsh-attachment':
+        specifier: 0.1.5-rc.1
+        version: 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-brand@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))
+      '@deepseek-ai/dsh-llm':
+        specifier: 0.1.5-rc.1
+        version: 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-settings':
+        specifier: 0.1.5-rc.1
+        version: 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-brand@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-session@0.1.5-rc.1(patch_hash=5oupbwjmrj4xblf6audiy2uaii)(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-scope@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))))(@deepseek-ai/schemastery@3.18.2)
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: 0.1.5-rc.1
+        version: 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-llm@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-scope@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)))
+      '@deepseek-ai/dsh-tools':
+        specifier: 0.1.5-rc.1
+        version: 0.1.5-rc.1(patch_hash=pj5magkx64xdcllzfuo6ooevaq)(rbvzyzkiec3rsldsz74kksmhua)
+      '@deepseek-ai/dsh-typert-protocol':
+        specifier: 0.1.5-rc.1
+        version: 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/schemastery':
+        specifier: 'catalog:'
+        version: 3.18.2
+      zod:
+        specifier: ^4.4.3
+        version: 4.6.5
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: 'catalog:'
+        version: 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
+      '@deepseek-ai/dsh-api-remotes':
+        specifier: 0.1.5-rc.1
+        version: 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-scope@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)))
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: 0.1.5-rc.1
+        version: 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
+      '@testing-library/react':
+        specifier: ^16.0.1
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/node':
+        specifier: 22.9.0
+        version: 22.9.0
+      '@types/react':
+        specifier: 18.3.12
+        version: 18.3.12
+      '@types/react-dom':
+        specifier: 18.3.1
+        version: 18.3.1
+      jsdom:
+        specifier: ^25.0.1
+        version: 25.0.1
+      lucide-react:
+        specifier: ^0.460.0
+        version: 0.460.0(react@18.3.1)
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: 18.3.1
+        version: 18.3.1(react@18.3.1)
+      typescript:
+        specifier: 5.6.3
+        version: 5.6.3
+      vite:
+        specifier: ^5.4.11
+        version: 5.4.11(@types/node@22.9.0)(lightningcss@1.32.0)
+      vitest:
+        specifier: ^2.1.4
+        version: 2.1.4(@types/node@22.9.0)(jsdom@25.0.1)(lightningcss@1.32.0)
+
   plugins/dsh-plugin-workbench:
     dependencies:
       '@amiba/app-runtime':
@@ -15988,7 +16070,7 @@ snapshots:
 
   '@types/fs-extra@9.0.13':
     dependencies:
-      '@types/node': 22.9.0
+      '@types/node': 20.19.43
 
   '@types/hast@3.0.5':
     dependencies:
@@ -16018,7 +16100,7 @@ snapshots:
 
   '@types/plist@3.0.5':
     dependencies:
-      '@types/node': 22.9.0
+      '@types/node': 20.19.43
       xmlbuilder: 15.1.1
     optional: true
 
@@ -18847,7 +18929,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.2
-      '@types/node': 22.9.0
+      '@types/node': 20.19.43
       long: 5.3.2
 
   proxy-addr@2.0.7:
