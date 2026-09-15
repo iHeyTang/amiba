@@ -2,6 +2,17 @@
  * Keep Amiba as the theme owner: aliases reference its live HSL tokens instead
  * of mounting ui-theme or copying the official light/dark boot palette. */
 :root {
+  /* FileTypeIcon uses static colors inside its SVG. White must stay white
+   * in dark mode as well: it is the mark on a colored file, not body text. */
+  --dsw-static-neutral-00: #fff;
+  --dsw-static-neutral-400: #9ca3af;
+  --dsw-static-neutral-bluish-300: #94a3b8;
+  --dsw-static-deepseek-450: #4d6bfe;
+  --dsw-static-deepseek-500: #4163eb;
+  --dsw-static-green-500: #16a34a;
+  --dsw-static-amber-400: #fbbf24;
+  --dsw-static-amber-500: #f59e0b;
+  --dsw-static-red-600: #dc2626;
   --dsw-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --dsw-alias-bg-base: hsl(var(--background));
   --dsw-alias-bg-layer-1: hsl(var(--card));
