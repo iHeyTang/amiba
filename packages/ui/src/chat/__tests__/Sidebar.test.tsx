@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "../Sidebar";
@@ -33,6 +33,7 @@ function setup(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
   const onSelectView = vi.fn();
   const props = {
     onNewChat: vi.fn(),
+    onNewWorkspaceChat: vi.fn(),
     sessions: [
       {
         id: "s1",
@@ -47,8 +48,6 @@ function setup(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
     onOpenSession: vi.fn(),
     onRenameSession: vi.fn(),
     onRefreshSessions: vi.fn(),
-    historyLayout: "timeline" as const,
-    onHistoryLayoutChange: vi.fn(),
     onOpenSettings: vi.fn(),
     workspaceNavigation: (
       <button
@@ -219,7 +218,6 @@ describe("Sidebar", () => {
       bySessionId: { s1: "/Users/amira/Code/amiba-project" },
     };
     setup({
-      historyLayout: "grouped",
       sessions: [
         {
           id: "s1",
@@ -252,7 +250,6 @@ describe("Sidebar", () => {
       bySessionId: { s1: "/Users/amira/Code/amiba-project" },
     };
     setup({
-      historyLayout: "grouped",
       runningSessionIds: new Set(["s1"]),
       sessions: [
         {
@@ -320,7 +317,6 @@ describe("Sidebar", () => {
       },
     };
     setup({
-      historyLayout: "grouped",
       sessions: [
         {
           id: "s1",
@@ -358,7 +354,7 @@ describe("Sidebar", () => {
     expect(workspaceGroup).toHaveClass("h-full", "w-full", "px-2.5");
     expect(workspaceGroup.parentElement).not.toHaveClass("px-2.5");
     expect(screen.getByText("superun")).toBeInTheDocument();
-    expect(screen.getByText("Independent tasks")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tasks" })).toBeInTheDocument();
     expect(screen.getByText("Refine workbench")).toBeInTheDocument();
     expect(screen.getByText("Fix tool cards")).toBeInTheDocument();
 
@@ -368,38 +364,13 @@ describe("Sidebar", () => {
     expect(screen.getByText("Review analytics")).toBeInTheDocument();
   });
 
-  it("switches history layout from the overflow submenu", async () => {
-    const props = setup();
-    expect(
-      screen.queryByRole("button", { name: "Group chats by workspace" }),
-    ).not.toBeInTheDocument();
-    await userEvent.click(
-      screen.getByRole("button", { name: "More task actions" }),
-    );
-    expect(
-      screen.getByRole("menu", { name: "More task actions" }),
-    ).toHaveAttribute("data-align", "start");
-    await userEvent.click(
-      screen.getByRole("menuitem", { name: "Display mode" }),
-    );
-    expect(screen.getAllByRole("menu")).toHaveLength(2);
-    expect(
-      screen.getByRole("menuitem", { name: "Display mode" }),
-    ).toBeInTheDocument();
-    await userEvent.click(
-      screen.getByRole("menuitemradio", {
-        name: "Group chats by workspace",
-      }),
-    );
-    expect(props.onHistoryLayoutChange).toHaveBeenCalledWith("grouped");
-  });
-
   it("keeps bulk selection inside the overflow menu", async () => {
     const props = setup({
       onArchiveSessions: vi.fn(),
     });
     const header = screen.getByTestId("sessions-header");
-    expect(header).toHaveClass("pr-1.5");
+    expect(header).toHaveClass("h-7");
+    expect(header.querySelector("button")).toHaveClass("px-2.5");
 
     expect(
       screen.queryByRole("button", { name: "Select tasks" }),
@@ -415,7 +386,7 @@ describe("Sidebar", () => {
       screen.getByRole("menuitem", { name: "Select tasks" }),
     );
     expect(header).toHaveTextContent("0 selected");
-    expect(header).not.toHaveTextContent("Recent tasks");
+    expect(header).not.toHaveTextContent("Workspaces");
     expect(
       screen.queryByRole("button", { name: "More task actions" }),
     ).not.toBeInTheDocument();
@@ -440,7 +411,6 @@ describe("Sidebar", () => {
       bySessionId: { s1: "/Users/amira/Code/amiba-project" },
     };
     setup({
-      historyLayout: "grouped",
       onArchiveSessions: vi.fn(),
     });
 
@@ -497,7 +467,7 @@ describe("Sidebar plugin-group sections", () => {
     claim: (session) => session.source === "steward",
   };
 
-  it("renders plugin groups after the built-in 最近任务 section", () => {
+  it("renders plugin groups after the built-in 工作空间 section", () => {
     setup({
       groups: [stewardGroup],
       sessions: [
@@ -518,7 +488,7 @@ describe("Sidebar plugin-group sections", () => {
     });
 
     const groupHeader = screen.getByText("Steward group");
-    const recentHeader = screen.getByText("Recent tasks");
+    const recentHeader = screen.getByText("Workspaces");
     // The built-in history section always owns the first section position;
     // slot-registered groups follow it in registration order.
     expect(
@@ -539,7 +509,9 @@ describe("Sidebar plugin-group sections", () => {
   });
 
   it("collapses recent tasks from the title while keeping the menu independent", async () => {
+    workspaceBindings.current.bySessionId = { s2: "/work/project" };
     setup({
+      onArchiveSessions: vi.fn(),
       groups: [stewardGroup],
       sessions: [
         {
@@ -559,8 +531,8 @@ describe("Sidebar plugin-group sections", () => {
     });
 
     const menu = screen.getByRole("button", { name: "More task actions" });
-    const collapse = screen.getByRole("button", { name: "Recent tasks" });
-    expect(collapse).toHaveTextContent("Recent tasks");
+    const collapse = screen.getByRole("button", { name: "Workspaces" });
+    expect(collapse).toHaveTextContent("Workspaces");
     expect(collapse).not.toContainElement(menu);
     await userEvent.click(menu);
     expect(collapse).toHaveAttribute("aria-expanded", "true");
@@ -618,6 +590,46 @@ describe("Sidebar plugin-group sections", () => {
       ],
     });
     expect(screen.getByText("Only chat")).toBeInTheDocument();
-    expect(screen.getByText("Recent tasks")).toBeInTheDocument();
+    expect(screen.getByText("Workspaces")).toBeInTheDocument();
   });
+});
+
+it("separates tasks from workspaces and starts a draft in the selected directory", async () => {
+  workspaceBindings.current.bySessionId = { project: String.raw`C:\Users\amira\Code\sample` };
+  const props = setup({ sessions: [
+    { id: "task", title: "Default task", createdAt: 1, updatedAt: 1 },
+    { id: "project", title: "Project task", createdAt: 2, updatedAt: 2 },
+  ] });
+  const tasks = screen.getByRole("button", { name: "Tasks" }).closest("section")!;
+  const workspaces = screen.getByTestId("sessions-header").closest("section")!;
+  expect(within(tasks).getByText("Default task")).toBeInTheDocument();
+  expect(within(tasks).queryByText("Project task")).not.toBeInTheDocument();
+  expect(within(workspaces).queryByText("Default task")).not.toBeInTheDocument();
+  const header = screen.getByRole("button", { name: "sample" });
+  expect(header.querySelector(".lucide-chevron-down")).toBeNull();
+  const create = screen.getByRole("button", { name: "New task in sample" });
+  await userEvent.click(create);
+  expect(props.onNewWorkspaceChat).toHaveBeenCalledWith(String.raw`C:\Users\amira\Code\sample`);
+  expect(props.onNewChat).not.toHaveBeenCalled();
+  expect(header).toHaveAttribute("aria-expanded", "true");
+  await userEvent.click(header);
+  expect(header).toHaveAttribute("aria-expanded", "false");
+  await userEvent.click(create);
+  expect(props.onNewWorkspaceChat).toHaveBeenCalledTimes(2);
+});
+
+it("uses the same header component for tasks, workspaces, and plugin groups", () => {
+  setup({ sessions: [
+    { id: "task", title: "Default task", createdAt: 1, updatedAt: 1 },
+    { id: "cron", title: "Scheduled task", createdAt: 2, updatedAt: 2 },
+    { id: "external", title: "External task", createdAt: 3, updatedAt: 3 },
+  ], groups: [
+    { id: "cron", label: "Scheduled", claim: session => session.id === "cron" },
+    { id: "external", label: "External", claim: session => session.id === "external" },
+  ] });
+  const headers = ["Tasks", "Workspaces", "Scheduled", "External"].map(name =>
+    screen.getByRole("button", { name }).closest('[data-section-header="rail"]')!,
+  );
+  expect(headers.every(header => header.className === headers[0].className)).toBe(true);
+  expect(headers.every(header => header.getAttribute("style") === headers[0].getAttribute("style"))).toBe(true);
 });

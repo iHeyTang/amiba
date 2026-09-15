@@ -1,3 +1,4 @@
+import { ensureDefaultWorkspaceRoot } from "@amiba/dsh-plugin-session-features/default-workspace";
 import { ConversationLifecycle } from "@amiba/dsh-plugin-session-features";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -860,10 +861,20 @@ describe("IM session cwd", () => {
     expect(created).toHaveLength(1);
     const meta = created[0]!.meta as { cwd?: string; agentPreset?: string };
     expect(typeof meta.cwd).toBe("string");
-    expect(meta.cwd).toBe(process.cwd());
+    expect(meta.cwd).toBe("/test-user/Amiba/workspace");
     expect(meta.cwd!.startsWith("/")).toBe(true);
     // The agent preset must still be carried alongside the new cwd field.
     expect(meta.agentPreset).toBe("restricted");
+  });
+
+  it("refuses to create a session when its default workspace is not writable", async () => {
+    const { center, created } = await harness();
+    const { channel, secret } = await center.createChannel({ provider: "webhook", name: "Fake connect", agentPreset: "restricted" });
+    vi.mocked(ensureDefaultWorkspaceRoot).mockRejectedValueOnce(new Error("Workspace is not writable"));
+    await expect(center.acceptInbound(channel.id, secret, {
+      id: "msg-unwritable", text: "hello", conversation: { key: "chat-unwritable", kind: "p2p" },
+    })).rejects.toThrow("Workspace is not writable");
+    expect(created).toHaveLength(0);
   });
 
   it("still succeeds without a cwd on the resume path (cwd comes from the persisted session header)", async () => {
@@ -1403,3 +1414,7 @@ it("opts in from current position, survives rotation, recovers a cold log withou
   await (center as unknown as { pumpDeliveries(): Promise<void> }).pumpDeliveries();
   expect((await center.store.listOutbox()).filter(row => row.envelope.sync)).toEqual([]);
 });
+
+vi.mock("@amiba/dsh-plugin-session-features/default-workspace", () => ({
+  ensureDefaultWorkspaceRoot: vi.fn(async () => "/test-user/Amiba/workspace"),
+}));

@@ -13,34 +13,110 @@ export interface TopSectionProps {
   children: ReactNode;
   variant?: "drawer" | "rail";
   actions?: ReactNode;
+  actionReplacesChevron?: boolean;
+  actionsAlwaysVisible?: boolean;
+  headerTestId?: string;
 }
 
 export function TopSection({
-  label, icon, title, labelClassName, collapsed, onToggle, children,
-  variant = "drawer", actions,
+  label,
+  icon,
+  title,
+  labelClassName,
+  collapsed,
+  onToggle,
+  children,
+  variant = "drawer",
+  actions,
+  actionReplacesChevron = false,
+  actionsAlwaysVisible = false,
+  headerTestId,
 }: TopSectionProps) {
   const rail = variant === "rail";
   const header = (
-    <div style={rail ? { top: "var(--session-group-sticky-top, 0px)", backgroundColor: "color-mix(in srgb, hsl(var(--muted)) 30%, hsl(var(--background)))" } : undefined} className={rail
-      ? "group/topsection sticky z-20 mt-2 flex h-7 w-full shrink-0 items-center rounded-md text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70 transition-colors hover:bg-accent/60 hover:text-foreground"
-      : "group/topsection relative flex w-full shrink-0 items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-accent/40"}>
-      <button aria-expanded={!collapsed} className={cn(
-        "flex min-w-0 flex-1 items-center gap-1.5 rounded-[inherit] text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40",
-        rail ? "h-full w-full px-2.5 hover:bg-accent/60" : "w-full px-2 py-1.5", actions && "pr-9",
-      )} onClick={onToggle} title={title} type="button">
-        {!rail ? <span className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </span> : null}
-        {icon ? <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground/75 [&_svg]:h-3.5 [&_svg]:w-3.5">{icon}</span> : null}
-        <span className={cn("flex-1 truncate", labelClassName)}>{label}</span>
-        {rail ? <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
-          {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        </span> : null}
+    <div
+      data-testid={headerTestId}
+      data-section-header={rail ? "rail" : "drawer"}
+      style={
+        rail
+          ? {
+              top: "var(--session-group-sticky-top, 0px)",
+              backgroundColor:
+                "color-mix(in srgb, hsl(var(--muted)) 30%, hsl(var(--background)))",
+            }
+          : undefined
+      }
+      className={
+        rail
+          ? "group/topsection sticky z-20 mt-2 flex h-7 w-full shrink-0 items-center rounded-md text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70 transition-colors hover:bg-accent/60 hover:text-foreground"
+          : "group/topsection relative flex w-full shrink-0 items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-accent/40"
+      }
+    >
+      <button
+        aria-expanded={!collapsed}
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-1.5 rounded-[inherit] text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40",
+          rail
+            ? "h-full w-full px-2.5 hover:bg-accent/60"
+            : "w-full px-2 py-1.5",
+          actions && actionReplacesChevron && "pr-9",
+        )}
+        onClick={onToggle}
+        title={title}
+        type="button"
+      >
+        {!rail ? (
+          <span className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+            {collapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </span>
+        ) : null}
+        {icon ? (
+          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground/75 [&_svg]:h-3.5 [&_svg]:w-3.5">
+            {icon}
+          </span>
+        ) : null}
+        <span
+          className={cn(
+            "flex-1 truncate",
+            actions && !actionReplacesChevron && "pr-12",
+            labelClassName,
+          )}
+        >
+          {label}
+        </span>
+        {rail && !(actionReplacesChevron && actions) ? (
+          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
+            {collapsed ? (
+              <ChevronRight className="h-3 w-3" />
+            ) : (
+              <ChevronDown className="h-3 w-3" />
+            )}
+          </span>
+        ) : null}
       </button>
-      {actions ? <span className="absolute right-1 z-10 hidden h-6 items-center gap-0.5 group-hover/topsection:flex">{actions}</span> : null}
+      {actions ? (
+        <span
+          className={cn(
+            "absolute z-10 h-6 items-center gap-0.5",
+            rail && !actionReplacesChevron ? "right-7" : "right-1",
+            actionReplacesChevron || actionsAlwaysVisible
+              ? "flex"
+              : "hidden group-hover/topsection:flex group-focus-within/topsection:flex",
+          )}
+        >
+          {actions}
+        </span>
+      ) : null}
     </div>
   );
-  return <section className={cn(!rail && "border-b border-border/60")}>
-    {header}{!collapsed ? <div>{children}</div> : null}
-  </section>;
+  return (
+    <section className={cn(!rail && "border-b border-border/60")}>
+      {header}
+      {!collapsed ? <div>{children}</div> : null}
+    </section>
+  );
 }

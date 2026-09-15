@@ -120,7 +120,7 @@ describe("cron service", () => {
       meta?: { cwd?: string };
       agentOptions?: { provider: string; model: string };
     };
-    expect(options.meta?.cwd).toMatch(/^\//u);
+    expect(options.meta?.cwd).toBe("/test-user/Amiba/workspace");
     expect(options.agentOptions).toEqual({ provider: "p", model: "m" });
     service.dispose();
   });
@@ -363,3 +363,7 @@ describe("durable cron run history", () => {
     restarted.dispose();
   });
 });
+
+vi.mock("@amiba/dsh-plugin-session-features/default-workspace", () => ({
+  ensureDefaultWorkspaceRoot: vi.fn(async () => "/test-user/Amiba/workspace"),
+}));

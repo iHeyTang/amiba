@@ -1,3 +1,4 @@
+import { NewChatWorkspaceContext, type NewChatWorkspaceRequest } from "./new-chat-workspace";
 import { ConversationViewRegion, type ConversationViewEntry } from "./ConversationViewRegion";
 import { createToolNavigation } from "./bubble/tool-navigation";
 import type { WorkbenchPanelOwner } from "@amiba/extension-sdk";
@@ -44,7 +45,7 @@ import { PaneHeaderBar } from "../navigation/PaneHeaderBar";
 import { SidebarExpandControl } from "../navigation/SidebarExpandControl";
 import type { ChatSurfaceCapabilities } from "./internal/capabilities";
 import type { MessagesMaxWidth, UiMessage } from "./internal/types";
-import { Sidebar, type ActivityViewId, type HistoryLayout } from "./Sidebar";
+import { Sidebar, type ActivityViewId } from "./Sidebar";
 import { CommandPalette } from "./CommandPalette";
 import { useCommandPalette } from "./useCommandPalette";
 import { SessionTitleProvider, useSessionTitle } from "./useSessionTitle";
@@ -112,9 +113,6 @@ const EDGE_CONTROLS_INSET_VAR = "--amiba-workbench-controls-inset";
 
 type SidebarMotion = "idle" | "collapsing" | "expanding";
 
-const HISTORY_LAYOUT_KEY = "settings.chat.historyLayout";
-const DEFAULT_HISTORY_LAYOUT: HistoryLayout = "timeline";
-
 function PrimaryWorkspaceView({
   active,
   testId,
@@ -149,10 +147,6 @@ function isSidebarCollapsed(v: unknown): v is boolean {
 
 function isSidebarView(v: unknown): v is ActivityViewId {
   return typeof v === "string" && v.length > 0;
-}
-
-function isHistoryLayout(v: unknown): v is HistoryLayout {
-  return v === "timeline" || v === "grouped";
 }
 
 function isMessagesMaxWidth(v: unknown): v is MessagesMaxWidth {
@@ -405,9 +399,6 @@ function FullScreenChatViewInner({
   const [sidebarWidth, setSidebarWidth] = useState(APP_SIDEBAR_DEFAULT_WIDTH);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarMotion, setSidebarMotion] = useState<SidebarMotion>("idle");
-  const [historyLayout, setHistoryLayout] = useState<HistoryLayout>(
-    DEFAULT_HISTORY_LAYOUT,
-  );
   const [runningSessionIds, setRunningSessionIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -548,7 +539,6 @@ function FullScreenChatViewInner({
     sidebarView,
     slots?.mainPanel?.id,
   ]);
-
 
   // External session authors wake their owning session instead of minting a
   // parallel transcript, so the chat list filters on exactly two things: the
@@ -692,27 +682,6 @@ function FullScreenChatViewInner({
   useEffect(() => {
     let cancelled = false;
     const storage = getPlatform().storage;
-    void storage.get(HISTORY_LAYOUT_KEY).then((r) => {
-      if (cancelled) return;
-      const v = r[HISTORY_LAYOUT_KEY];
-      if (isHistoryLayout(v)) setHistoryLayout(v);
-    });
-    const unsub = storage.watch(
-      [HISTORY_LAYOUT_KEY],
-      (changes: StorageChangeMap) => {
-        const ch = changes[HISTORY_LAYOUT_KEY];
-        if (ch && isHistoryLayout(ch.newValue)) setHistoryLayout(ch.newValue);
-      },
-    );
-    return () => {
-      cancelled = true;
-      unsub();
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const storage = getPlatform().storage;
     void storage.get(SIDEBAR_WIDTH_KEY).then((r) => {
       if (cancelled) return;
       const v = r[SIDEBAR_WIDTH_KEY];
@@ -779,11 +748,6 @@ function FullScreenChatViewInner({
     if (loadingDestination) onSidebarViewChange("chats");
   }, [loadingDestination, onSidebarViewChange]);
 
-  const onHistoryLayoutChange = useCallback((next: HistoryLayout) => {
-    setHistoryLayout(next);
-    void getPlatform().storage.set({ [HISTORY_LAYOUT_KEY]: next });
-  }, []);
-
   const onSidebarCollapsedChange = useCallback(
     (next: boolean) => {
       setSidebarCollapsedTarget(next);
@@ -794,8 +758,10 @@ function FullScreenChatViewInner({
 
   // New-chat row is navigation to the id-less home surface. A real session is
   // minted only when that surface submits its first message.
-  const onNewChatAndShow = useCallback(async () => {
+  const [newChatWorkspace, setNewChatWorkspace] = useState<NewChatWorkspaceRequest | null>(null);
+  const onNewChatAndShow = useCallback(async (workspacePath?: string) => {
     if (!sessions.ready) return;
+    setNewChatWorkspace({ path: workspacePath ?? null });
     await sessions.deselect();
     onSidebarViewChange("chats");
   }, [sessions, onSidebarViewChange]);
@@ -923,6 +889,7 @@ function FullScreenChatViewInner({
             workspaceNavigation={slots?.workspaceNavigation?.(slots?.mainPanel ? "" : sidebarView, visibleSessionId)}
             navigationAfter={slots?.navigationAfter}
             onNewChat={() => void onNewChatAndShow()}
+            onNewWorkspaceChat={(path) => void onNewChatAndShow(path)}
             sessions={chatSessions}
             runningSessionIds={runningSessionIds}
             failedSessionIds={failedSessionIds}
@@ -959,8 +926,6 @@ function FullScreenChatViewInner({
             }}
             onArchiveSessions={(ids) => sessions.archiveSessions(ids)}
             onRefreshSessions={() => void sessions.refresh()}
-            historyLayout={historyLayout}
-            onHistoryLayoutChange={onHistoryLayoutChange}
             onOpenSettings={(tab) => openSettings(tab)}
             settingsTrigger={slots?.settingsTrigger}
             sidebarFooterActions={slots?.sidebarFooterActions}
@@ -1035,17 +1000,19 @@ function FullScreenChatViewInner({
                   onHome={() => void onNewChatAndShow()}
                 />
               ) : <ConversationViewRegion headerViewIds={slots?.conversationHeaderViewIds} selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
-                <ChatSurface
-                  messagesMaxWidth={messagesWidth}
-                  client={client}
-                  capabilities={capabilities}
-                  slots={{ ...slots, toolNavigation }}
-                  openSettings={openSettings}
-                  openAgentDestination={openAgentDestination}
-                  mentionProviders={mentionProviders}
-                  triggerRuntime={triggerRuntime}
-                  messageSourceLabel={messageSourceLabel}
-                />
+                <NewChatWorkspaceContext.Provider value={newChatWorkspace}>
+                  <ChatSurface
+                    messagesMaxWidth={messagesWidth}
+                    client={client}
+                    capabilities={capabilities}
+                    slots={{ ...slots, toolNavigation }}
+                    openSettings={openSettings}
+                    openAgentDestination={openAgentDestination}
+                    mentionProviders={mentionProviders}
+                    triggerRuntime={triggerRuntime}
+                    messageSourceLabel={messageSourceLabel}
+                  />
+                </NewChatWorkspaceContext.Provider>
               </ConversationViewRegion>}
             </PrimaryWorkspaceView>
             {slots?.mainPanel && (

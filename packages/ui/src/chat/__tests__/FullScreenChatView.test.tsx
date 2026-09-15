@@ -1,3 +1,4 @@
+import { useNewChatWorkspace } from "../new-chat-workspace";
 import { WorkspacePane, WorkspacePaneToggle } from "../WorkspacePane";
 import { createTerminalView } from "../../../../../plugins/dsh-plugin-terminal/src/client/index";
 import { createBrowserView } from "../../../../../plugins/dsh-plugin-browser-provider-electron/src/client/index";
@@ -117,12 +118,14 @@ vi.mock("../Sidebar", () => ({
   Sidebar: ({
     activeSessionId,
     onNewChat,
+    onNewWorkspaceChat,
     onOpenSession,
     runningSessionIds,
     failedSessionIds,
   }: {
     activeSessionId: string;
     onNewChat: () => void;
+    onNewWorkspaceChat: (path: string) => void;
     onOpenSession: (id: string) => void;
     runningSessionIds?: ReadonlySet<string>;
     failedSessionIds?: ReadonlySet<string>;
@@ -135,6 +138,7 @@ vi.mock("../Sidebar", () => ({
         <button type="button" onClick={onNewChat}>
           new-chat
         </button>
+        <button onClick={() => onNewWorkspaceChat("/work/project")}>workspace-new-chat</button>
         <button onClick={() => onOpenSession("session-1")}>open-session</button>
       </>
     );
@@ -158,9 +162,11 @@ vi.mock("../useSessionTitle", () => ({
 vi.mock("../ChatSurface", () => ({
   default: () => {
     const [draft, setDraft] = useState("");
+    const workspace = useNewChatWorkspace();
     return (
       <div>
         <span>chat-surface</span>
+        <output aria-label="draft-workspace">{workspace?.path ?? "default"}</output>
         <input
           aria-label="chat-draft"
           onChange={(event) => setDraft(event.target.value)}
@@ -372,6 +378,19 @@ describe("FullScreenChatView new-chat home", () => {
     await userEvent.click(screen.getByRole("button", { name: "new-chat" }));
 
     expect(sessions.deselect).toHaveBeenCalledOnce();
+    expect(sessions.createNew).not.toHaveBeenCalled();
+  });
+
+  it("selects a workspace for a new draft and resets it from the top new-task action", async () => {
+    const sessions = makeSessions();
+    mocks.useSessions.mockReturnValue(sessions);
+    render(<FullScreenChatView client={makeClient() as never} openSettings={() => {}} openAgentDestination={() => {}} restoreSidebarViewOnMount={false} />);
+    await userEvent.click(screen.getByRole("button", { name: "workspace-new-chat" }));
+    expect(screen.getByLabelText("draft-workspace")).toHaveTextContent("/work/project");
+    expect(sessions.deselect).toHaveBeenCalledOnce();
+    expect(sessions.createNew).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "new-chat" }));
+    expect(screen.getByLabelText("draft-workspace")).toHaveTextContent("default");
     expect(sessions.createNew).not.toHaveBeenCalled();
   });
 

@@ -1,3 +1,4 @@
+import { ensureDefaultWorkspaceRoot } from "@amiba/dsh-plugin-session-features/default-workspace";
 import { projectDesktopSync, syncScope, inputTurn } from "./desktop-sync.js";
 import { readSessionHistory, sharedConversationSeed, type ConversationCadence, type ConversationLifecycle, type ConversationView } from "@amiba/dsh-plugin-session-features";
 import type { Agent } from "@deepseek-ai/dsh-agent";
@@ -671,17 +672,9 @@ export class MessageChannelCenter {
     const handle = await this.ctx.agents.create({
       sessionId: sessionId as never,
       ...(conversation?.access === "shared" ? { seed: sharedConversationSeed(sessionId, { plugin: channel.provider, entry: channel.id, scope: conversationAccessScope(conversation) }) } : {}),
-      // Agent presets (e.g. `restricted`'s persona section) reference
-      // `{{cwd}}`, resolved from `agent.session.header.cwd`. IM-originated
-      // sessions have no workspace of their own — mirror the desktop
-      // host's own default for a no-workspace session (dsh-host-apiproxy)
-      // by seeding the runtime process's own working directory, a valid
-      // absolute path, rather than leaving it unset and failing prompt
-      // assembly on the first turn. The RESUME path can't inject a cwd —
-      // it comes from the persisted session header — so only CREATE needs
-      // this; a session created with a cwd carries it into future resumes.
+      // Every unbound entry point uses the same writable product workspace.
       meta: {
-        cwd: process.cwd(),
+        cwd: await ensureDefaultWorkspaceRoot(),
         ...(channel.agentPreset ? { agentPreset: channel.agentPreset } : {}),
       },
       ...(agentOptions ? { agentOptions } : {}),

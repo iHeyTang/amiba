@@ -96,7 +96,8 @@
     "streamdown": "^2.5.0",
     "tailwind-merge": "^2.5.4",
     "uiohook-napi": "^1.5.4",
-    "ws": "8.21.0"
+    "ws": "8.21.0",
+    "@amiba/dsh-plugin-session-features": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.9.0",
