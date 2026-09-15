@@ -2,7 +2,6 @@ import path from "node:path"
 import { readFile, unlink } from "node:fs/promises"
 import { globalShortcut, systemPreferences } from "electron"
 
-import { dshAttachments } from "./dsh-attachments"
 import { deliverStagedPrompt } from "./external-inbox"
 import { startScreenCapture } from "./screen-capture"
 import { mainStore, type StorageChangeMap } from "./storage"
@@ -291,12 +290,7 @@ function handleSnipHotkey(): void {
       const result = await startScreenCapture()
       if (!result) return
       const name = path.basename(result.imagePath)
-      const staged = await dshAttachments.put({
-        sessionId: `snip-${Date.now()}`,
-        name,
-        mime: "image/png",
-        bytes: await readFile(result.imagePath),
-      })
+      const bytes = await readFile(result.imagePath)
       await unlink(result.imagePath).catch(() => {})
       await deliverStagedPrompt(
         {
@@ -307,7 +301,7 @@ function handleSnipHotkey(): void {
               mime: "image/png",
               size: result.sizeBytes,
               kind: "image",
-              attachmentId: staged.attachmentId,
+              dataBase64: bytes.toString("base64"),
               thumbDataUrl: result.thumbDataUrl || undefined,
             },
           ],

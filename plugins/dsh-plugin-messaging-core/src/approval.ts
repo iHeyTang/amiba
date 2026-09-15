@@ -90,7 +90,7 @@ export interface ApprovalOutcomeNotice {
  */
 export interface RelayApprovalRequest {
   readonly agent: {
-    readonly session: { readonly id: string; readonly events: readonly unknown[] };
+    readonly session: { readonly id: string; snapshotEvents(): readonly unknown[] };
   };
   readonly toolName: string;
   readonly callId?: string;
@@ -216,7 +216,7 @@ export function readApprovalId(
   req: RelayApprovalRequest,
   claimed: ReadonlySet<string>,
 ): string | undefined {
-  const events = req.agent.session.events;
+  const events = req.agent.session.snapshotEvents();
   const decided = new Set<string>();
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index] as

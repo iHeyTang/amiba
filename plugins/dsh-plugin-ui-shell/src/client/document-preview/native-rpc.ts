@@ -1,5 +1,5 @@
 import type { WorkspaceDocumentContent, WorkspaceDocumentReadRequest, WorkspaceFilesAdapter } from '@amiba/app-runtime/platform'
-import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import type { ResourceResult as RemoteResult } from '../resources/result.js'
 import type { ReadDocumentBytes, ReadWorkspaceFilePage } from './rpc.js'
 import type { WorkspaceFileBytes, WorkspaceFileText } from './wire.js'
 import { hostFileOf } from './rpc.js'

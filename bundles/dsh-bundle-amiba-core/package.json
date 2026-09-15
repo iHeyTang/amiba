@@ -13,7 +13,6 @@
     }
   },
   "dependencies": {
-    "@amiba/dsh-plugin-attachments": "workspace:*",
     "@amiba/dsh-plugin-browser-core": "workspace:*",
     "@amiba/dsh-plugin-browser-provider-cdp": "workspace:*",
     "@amiba/dsh-plugin-catalog": "workspace:*",

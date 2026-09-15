@@ -1,5 +1,6 @@
 import type { ToolNavigation } from "./tool-navigation";
-import type { ToolCallOwnerProps } from "@amiba/extension-sdk";
+import type { ToolCallOwnerProps as OfficialToolCallOwnerProps } from "@amiba/extension-sdk";
+type ToolCallOwnerProps = Omit<OfficialToolCallOwnerProps, "loadImage">;
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
 /**

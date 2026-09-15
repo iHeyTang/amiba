@@ -25,7 +25,10 @@
         "react/jsx-runtime"
       ],
       "inject": [
-        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-api-workspace-controller",
+        "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-api-remotes",
         "@amiba/dsh-plugin-ui-shell"
       ],
@@ -54,19 +57,18 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
-    "@deepseek-ai/dsh-agent": "catalog:",
+    "@deepseek-ai/dsh-agent": "0.1.5-rc.1",
     "@deepseek-ai/dsh-api-remotes": "catalog:",
-    "@deepseek-ai/dsh-client-runtime": "catalog:",
-    "@deepseek-ai/dsh-client-ui-slots": "catalog:",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.1",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "@deepseek-ai/dsh-session-persistence": "0.1.5-rc.1"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "catalog:",
-    "@deepseek-ai/dsh-agent": "catalog:",
+    "@deepseek-ai/dsh-agent": "0.1.5-rc.1",
     "@deepseek-ai/dsh-api-remotes": "catalog:",
-    "@deepseek-ai/dsh-client-runtime": "catalog:",
-    "@deepseek-ai/dsh-client-ui-slots": "catalog:",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.5.2",
@@ -79,6 +81,7 @@
     "typescript": "5.6.3",
     "vite": "^5.4.11",
     "vitest": "^2.1.4",
-    "lucide-react": "^0.460.0"
+    "lucide-react": "^0.460.0",
+    "@deepseek-ai/dsh-session-persistence": "0.1.5-rc.1"
   }
 }

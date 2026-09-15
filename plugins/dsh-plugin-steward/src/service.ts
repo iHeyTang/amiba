@@ -1,3 +1,4 @@
+import { readSessionHistory } from "@amiba/dsh-plugin-session-features";
 import { featureSeed, type ConversationCadence, type ConversationLifecycle } from "@amiba/dsh-plugin-session-features";
 import { randomUUID } from "node:crypto";
 
@@ -6,7 +7,7 @@ import type { Agent } from "@deepseek-ai/dsh-agent";
 // Type-only: loads the `ctx.agents` / `ctx.tools` augmentations.
 import type {} from "@deepseek-ai/dsh-agent";
 import type {} from "@deepseek-ai/dsh-tools";
-import { resolveSessionPreset } from "@deepseek-ai/dsh-agent-presets";
+import { agentPresetProjectionDefinition } from "@deepseek-ai/dsh-agent-presets";
 import { boundContextSummary, createUserMessage } from "@deepseek-ai/dsh-llm";
 import type { Session, SessionEvent } from "@deepseek-ai/dsh-session";
 
@@ -87,10 +88,7 @@ type StewardRuntimeContext = Omit<Context, "agentPresets" | "sessionPersistence"
     readonly defaultId: string;
     mount(agentCtx: Context, id?: string): Promise<unknown>;
   };
-  sessionPersistence: {
-    inspect(id: string): Promise<{ meta: { cwd?: string; agentPreset?: string; createdAt?: number }; events: readonly SessionEvent[] }>;
-    readFrom(id: string, fromSeq: number): Promise<{ events: readonly SessionEvent[] }>;
-  };
+  sessionPersistence: import("@deepseek-ai/dsh-session-persistence").SessionPersistence;
   sessionQuery: {
     searchSessions(request: { query: string; limit?: number }): Promise<{ items: ReadonlyArray<{ header: { id: string; cwd?: string } }> }>;
     readTitle(id: string): Promise<{ title: string } | undefined>;
@@ -229,7 +227,7 @@ export class StewardService {
    */
   private async pinStewardTitle(agent: Agent): Promise<void> {
     try {
-      if (lastSessionTitle(agent.session.events) === (this.options.title?.() ?? STEWARD_TITLE)) return;
+      if (lastSessionTitle(agent.session.snapshotEvents()) === (this.options.title?.() ?? STEWARD_TITLE)) return;
       this.ctx.sessionTitle.rename(agent.session, this.options.title?.() ?? STEWARD_TITLE);
     } catch (error) {
       this.log.warn(`steward: failed to pin the steward session title: ${String(error)}`);
@@ -300,7 +298,7 @@ export class StewardService {
         const origin = { plugin: STEWARD_SOURCE, entry: this.options.instanceId ?? "main", scope: "owner" };
         if (state.stewardSessionId && !await lifecycle.originForSession(state.stewardSessionId)) {
           try {
-            const legacy = await this.ctx.sessionPersistence.inspect(state.stewardSessionId);
+            const legacy = await readSessionHistory(this.ctx.sessionPersistence, state.stewardSessionId);
             const persistedPreset = resolveSessionPreset({ header: legacy.meta, events: legacy.events } as never);
             if (persistedPreset) basePreset = persistedPreset;
             await lifecycle.adopt(origin, state.stewardSessionId, legacy.meta.createdAt ?? legacy.events[0]?.time ?? this.now());
@@ -324,7 +322,7 @@ export class StewardService {
           isClosed: async (id) => {
             if (this.isArchived(id)) return true;
             if (this.ctx.agents.get(id as never)) return false;
-            try { await this.ctx.sessionPersistence.inspect(id); return false; }
+            try { await readSessionHistory(this.ctx.sessionPersistence, id); return false; }
             catch (error) {
               if ((error as NodeJS.ErrnoException).code === "ENOENT" || (error instanceof Error && error.message === "session_not_found")) return true;
               throw error;
@@ -365,7 +363,7 @@ export class StewardService {
         // user's steward history — so it propagates instead.
         let loadable = true;
         try {
-          const inspected = await this.ctx.sessionPersistence.inspect(id);
+          const inspected = await readSessionHistory(this.ctx.sessionPersistence, id);
           const persistedPreset = resolveSessionPreset({ header: inspected.meta, events: inspected.events } as never);
           if (persistedPreset) {
             basePreset = persistedPreset;
@@ -602,7 +600,7 @@ export class StewardService {
     const existing = this.taskAgents.get(task.sessionId);
     if (existing) return existing;
     const resume = (async () => {
-      const inspected = await this.ctx.sessionPersistence.inspect(task.sessionId);
+      const inspected = await readSessionHistory(this.ctx.sessionPersistence, task.sessionId);
       const preset = resolveSessionPreset({ header: inspected.meta, events: inspected.events } as never);
       const handle = await this.ctx.agents.resume({
         resumeSessionId: task.sessionId as never,
@@ -654,7 +652,7 @@ export class StewardService {
     if (this.isArchived(sessionId)) throw new Error(`steward: session "${sessionId}" is archived and cannot be adopted`);
     const bound = state.tasks.find((task) => task.sessionId === sessionId);
     if (bound) return { kind: "adopted", task: bound, existing: true };
-    const inspected = await this.ctx.sessionPersistence.inspect(sessionId);
+    const inspected = await readSessionHistory(this.ctx.sessionPersistence, sessionId);
     const title = input.title?.trim() || (await this.ctx.sessionQuery.readTitle(sessionId))?.title || UNTITLED;
     const finished = completedTurns(inspected.events, -1);
     const lastReportedSeq = finished.length ? finished[finished.length - 1]!.endSeq : -1;
@@ -681,7 +679,7 @@ export class StewardService {
       throw new Error(`steward: task "${taskId}" is closed — its session was archived`);
     }
     const live = this.ctx.agents.get(task.sessionId as never) as Agent | undefined;
-    const events = live ? live.session.events : (await this.ctx.sessionPersistence.inspect(task.sessionId)).events;
+    const events = live ? live.session.snapshotEvents() : (await readSessionHistory(this.ctx.sessionPersistence, task.sessionId)).events;
     return completedTurns(events, -1)
       .slice(-Math.max(1, turns))
       .map((turn) => ({ turn: turn.turn, user: turn.userText, assistant: turn.assistantText, endedAt: turn.endedAt, failed: turn.failed }));
@@ -726,7 +724,7 @@ export class StewardService {
       const task = await this.taskBySession(session.id as string);
       if (!task) return;
       if (row.type === "turn/end") {
-        await this.reconcileTask(task.id, session.events);
+        await this.reconcileTask(task.id, session.snapshotEvents());
         return;
       }
       if (row.type === "tool/call" && row.data.name === ASK_USER_TOOL) {
@@ -740,7 +738,7 @@ export class StewardService {
       if (row.type === "tool/result") {
         const fresh = await this.findTask(task.id);
         if (fresh.status === "done") return;
-        if (fresh.status === "needs_input" && pendingAskUser(session.events) === null) {
+        if (fresh.status === "needs_input" && pendingAskUser(session.snapshotEvents()) === null) {
           this.clearAskNotice(task.id);
           await this.updateTask(task.id, { status: "running" });
         }
@@ -772,7 +770,7 @@ export class StewardService {
         // Read the live log rather than the captured event array: it is the
         // only view guaranteed to include whatever landed during the delay.
         const live = this.ctx.agents.get(fresh.sessionId as never) as Agent | undefined;
-        if (!live || pendingAskUser(live.session.events) === null) {
+        if (!live || pendingAskUser(live.session.snapshotEvents()) === null) {
           // The question was already answered (or denied) by the time this
           // fired — e.g. its tool/result raced ahead of the tool/call in the
           // queue — so the earlier needs_input never got rolled back. Heal it.
@@ -865,8 +863,8 @@ export class StewardService {
       try {
         const live = this.ctx.agents.get(task.sessionId as never) as Agent | undefined;
         const events = live
-          ? live.session.events
-          : (await this.ctx.sessionPersistence.readFrom(task.sessionId, Math.max(0, task.lastReportedSeq + 1))).events;
+          ? live.session.snapshotEvents()
+          : (await readSessionHistory(this.ctx.sessionPersistence, task.sessionId, Math.max(0, task.lastReportedSeq + 1))).events;
         await this.enqueue(() => this.reconcileTask(task.id, events));
       } catch (error) {
         this.log.error(`steward: failed to recover task ${task.id}: ${String(error)}`);
@@ -907,4 +905,9 @@ function reportSummary(title: string, outcome: string): string {
 export function formatReport(task: StewardTask, turn: CompletedTurn): string {
   const body = turn.assistantText || "（这一轮没有文字回复）";
   return `task ${task.id} · ${reportOutcome(turn)}\n\n${body}`;
+}
+
+/** Replay the official preset projection so a post-creation selection survives resume. */
+function resolveSessionPreset(session: { header: import("@deepseek-ai/dsh-session").SessionHeader; events: readonly SessionEvent[] }): string | undefined {
+  return session.events.reduce(agentPresetProjectionDefinition.apply, agentPresetProjectionDefinition.init(session.header)) ?? undefined;
 }

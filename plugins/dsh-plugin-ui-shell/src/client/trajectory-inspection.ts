@@ -31,8 +31,13 @@ export function useTrajectoryInspection(sessionId: string | null | undefined, en
     select,
     inspectCall: available && sessionId ? inspectCall : undefined,
     owner: {
-      inspect: activeRequest ? { callId: activeRequest.callId } : null,
-      onInspectDone: () => setRequest(current => current === activeRequest ? null : current),
+      viewRequest: activeRequest ? { view: "trajectory", focus: activeRequest.callId } : null,
+      openView: (view: string, focus: string) => {
+        if (!sessionId || visit.current.epoch !== epoch || !entries.some(entry => entry.id === view)) return;
+        setSelection({ sessionId, id: view });
+        setRequest(view === "trajectory" ? { epoch, callId: focus } : null);
+      },
+      completeViewRequest: () => setRequest(current => current === activeRequest ? null : current),
     },
   };
 }

@@ -46,12 +46,7 @@ declare module "@deepseek-ai/cordis" {
         id?: string,
       ): Promise<NonNullable<SkillViewOptions["scope"]>>;
     };
-    sessionPersistence: {
-      inspect(id: Parameters<Context["agents"]["get"]>[0]): Promise<{
-        meta: { cwd?: string; agentPreset?: string };
-        events: readonly unknown[];
-      }>;
-    };
+    sessionPersistence: import("@deepseek-ai/dsh-session-persistence").SessionPersistence;
   }
 
   interface Events {
@@ -236,8 +231,13 @@ export class AmibaSkillStore {
     const attached = this.ctx.sessions.get(sessionId);
     const persisted = attached
       ? undefined
-      : await this.ctx.get("sessionPersistence")?.inspect(sessionId);
-    const session = attached ??
+      : await (async () => {
+          const handle = await this.ctx.get("sessionPersistence")?.open(sessionId, "read");
+          if (!handle) return;
+          try { return { meta: handle.header, ...(await handle.read()) }; }
+          finally { await handle.close(); }
+        })();
+    const session = (attached ? { header: attached.header, events: attached.snapshotEvents() } : undefined) ??
       (persisted
         ? { header: persisted.meta, events: persisted.events }
         : undefined);

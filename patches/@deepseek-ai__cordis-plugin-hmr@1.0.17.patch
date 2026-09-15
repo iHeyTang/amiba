@@ -1,0 +1,20 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1,7 +1,7 @@
+ import { createRequire } from "node:module";
+ import { Service } from "@deepseek-ai/cordis";
+ import { watch } from "chokidar";
+-import { dirname, relative, resolve } from "node:path";
++import { dirname, relative, resolve, sep } from "node:path";
+ import { realpath, stat } from "node:fs/promises";
+ import { codeFrameColumns } from "@babel/code-frame";
+ import { readFileSync } from "node:fs";
+@@ -196,7 +196,7 @@
+ 		this.watcher = watch(root, {
+ 			...this.config,
+ 			cwd: watchBaseDir,
+-			ignored: (path) => match(relative(watchBaseDir, path)),
++			ignored: (path) => match(relative(watchBaseDir, path).split(sep).join("/")),
+ 			ignoreInitial: true
+ 		});
+ 		const partialReload = this.ctx.debounce(() => this.partialReload(), this.config.debounce);

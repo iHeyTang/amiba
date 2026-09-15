@@ -2,7 +2,7 @@ import type {} from "@amiba/dsh-plugin-onboarding/client";
 import { GuideCompanion } from "./GuideCompanion.js";
 import type {} from "@amiba/dsh-plugin-notification-hub/client";
 import { DesktopPet } from "./desktop.js";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import type { SurfaceVisualOwner } from "@amiba/extension-sdk";
 import { PawPrint } from "lucide-react";

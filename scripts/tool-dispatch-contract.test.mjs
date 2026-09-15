@@ -33,8 +33,8 @@ const mutations = [
   ],
   [
     "wrong loader",
-    "{ loadImage: loadMessageImage }",
-    "{ loadImage: otherLoader }",
+    "loadImage: loadMessageImage,",
+    "loadImage: otherLoader,",
   ],
   [
     "wrong inspector target",
@@ -43,7 +43,7 @@ const mutations = [
   ],
   [
     "missing capability",
-    "...(loadMessageImage ? { loadImage: loadMessageImage } : {}),",
+    "loadImage: loadMessageImage,",
     "",
   ],
   [

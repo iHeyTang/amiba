@@ -10,7 +10,6 @@ import { textFace } from './face.js'
 import { createResourceSnapshotStore } from '../resources/snapshot-store.js'
 import { bindSnapshotSelector } from '../../dev/renderer-bindings.js'
 import { ADDRESS, FILE, SESSION, TAB_ID, page } from './fixtures.js'
-vi.mock('@deepseek-ai/dsh-client-runtime/client', async () => await import('../../dev/runtime-store.js'))
 afterEach(cleanup)
 it('dispatches loaded pages, preserves view on remount, reloads changed files and clears closed tabs', async () => {
   const instance = createTextStore().create()

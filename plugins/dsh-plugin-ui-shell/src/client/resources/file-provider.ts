@@ -1,5 +1,5 @@
 import type { WorkspaceFileObservation, WorkspaceFileStat, WorkspaceFilesAdapter } from '@amiba/app-runtime/platform'
-import type { RemoteFailure, RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import type { ResourceFailure as RemoteFailure, ResourceResult as RemoteResult } from './result.js'
 import type { ResourceProvider } from './contract.js'
 import { parseFileAddress } from './file-address.js'
 
@@ -89,6 +89,6 @@ export function createFileResourceProvider(
   };
 }
 
-function failure(code: string, message: string, details: object): { ok: false; error: RemoteFailure } {
+function failure(code: string, message: string, details: Record<string, unknown>): { ok: false; error: RemoteFailure } {
   return { ok: false, error: { code, message, details } };
 }

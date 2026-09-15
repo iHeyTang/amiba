@@ -98,10 +98,10 @@ it("writes an ignorable envelope using the real official Session append implemen
   const { appendPresentationNotice } = await import("./notice.js");
   const session=Session.create("notice-roundtrip" as any);
   appendPresentationNotice(session,{version:1,id:"n1",source:"test",summary:"Done",body:"Result"});
-  const serialized=JSON.parse(JSON.stringify(session.events));
+  const serialized=JSON.parse(JSON.stringify(session.snapshotEvents()));
   expect(serialized[0]).toMatchObject({type:"amiba/notice",ignorable:true});
   const restored=Session.create("notice-roundtrip" as any,serialized);
-  expect(restored.events[0]).toEqual(session.events[0]);
+  expect(restored.snapshotEvents()[0]).toEqual(session.snapshotEvents()[0]);
 });
 
 it("returns JSON-safe native job details and relations without absent optional fields", async () => {

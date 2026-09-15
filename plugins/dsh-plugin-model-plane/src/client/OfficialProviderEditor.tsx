@@ -1,3 +1,4 @@
+import { jsonValue } from "./schema-object.js";
 import { ChevronDown, RefreshCw } from "lucide-react";
 import {
   providerFieldKeys,
@@ -58,7 +59,7 @@ export function configurationDiff(
       ]),
     );
   }
-  return [{ op: "set", path, value: after }];
+  return [{ op: "set", path, value: jsonValue(after) }];
 }
 const containsSecret = (schema: unknown): boolean => {
   const s = object(schema);

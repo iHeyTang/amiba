@@ -1,4 +1,3 @@
-vi.mock('@deepseek-ai/dsh-client-runtime/client', async () => await import('../../dev/runtime-store.js'))
 // Adapted from DeepSeek c291e796, MIT. See LICENSE.deepseek.
 /**
  * The store's write set: pages keyed by their first line, invalidated by a newer
@@ -6,7 +5,7 @@ vi.mock('@deepseek-ai/dsh-client-runtime/client', async () => await import('../.
  * `forget` so a closed tab leaves nothing behind.
  */
 import { describe, expect, it, vi } from 'vitest'
-import type { RemoteFailure } from '@deepseek-ai/dsh-typert-protocol'
+import type { ResourceFailure as RemoteFailure } from '../resources/result.js'
 import { createTextStore, fresh } from './store.js'
 import { page } from './fixtures.js'
 import type { TabId } from '../sidebar-right/dockkit/index.js'

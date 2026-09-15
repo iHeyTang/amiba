@@ -174,3 +174,18 @@ test("native download handoff preserves query and rejects other authorities or e
     assert.throws(() => resolveDshSessionDownloadUrl(url,base));
   }
 });
+
+
+test("decodes official combo preload URL attributes exactly once", () => {
+  const shell = extractDshShellAssets('<script src="/plugins/??@deepseek-ai/dsh-client-modules/client.js&amp;rev=abc"></script><script type="module" src="/assets/main.js"></script>', "http://127.0.0.1:43123");
+  assert.deepEqual(shell.preload, ["http://127.0.0.1:43123/plugins/??@deepseek-ai/dsh-client-modules/client.js&rev=abc"]);
+});
+
+
+test("preserves official bootstrap/application batches and rejects foreign URLs", () => {
+  const graph = { rev: "r", entries: [], batches: [{ phase: "application", url: "/plugins/??a/client.js&rev=r", rev: "r", entries: ["a"] }] };
+  const html = () => `<script>globalThis["__DSH_BOOT__"] = ${JSON.stringify(graph)}</script>`;
+  assert.deepEqual(extractDshClientBootGraph(html(), "http://127.0.0.1:43123").batches, [{ ...graph.batches[0], url: "http://127.0.0.1:43123/plugins/??a/client.js&rev=r" }]);
+  graph.batches[0].url = "https://outside.example/plugins/a.js";
+  assert.throws(() => extractDshClientBootGraph(html(), "http://127.0.0.1:43123"), /outside/);
+});

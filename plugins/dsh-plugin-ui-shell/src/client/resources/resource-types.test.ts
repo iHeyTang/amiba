@@ -1,7 +1,7 @@
 import { expectTypeOf, it } from 'vitest';
 import type { PropsRuntime, SlotRendererHost, RootStandardSourceContribution, ResourceProtocolMap } from '@deepseek-ai/dsh-client-ui-slots';
 import type { ResourceProvider, ResourceSnapshot } from './contract.js';
-import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol';
+import type { ResourceResult as RemoteResult } from './result.js';
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface ResourceProtocolMap { counter: number }

@@ -12,7 +12,7 @@ import {
 import { dirname, join } from "node:path";
 
 export const name = "amiba-session-storage";
-export const inject = ["agents", "sessionPersistence"];
+export const inject = ["agents", "sessionPersistence", "sessions"];
 const SEGMENT = /^[a-z][a-z0-9-]*$/;
 /** One official domain facility per session/plugin namespace. Consumers never receive paths. */
 export class SessionStorage {
@@ -56,19 +56,29 @@ export class SessionStorage {
     const live = this.ctx.agents.get(id);
     const header =
       live?.session.header ??
-      (await this.ctx.sessionPersistence.inspect(id)).meta;
+      (await this.ctx.sessionPersistence.stat(id))?.header;
+    if (!header) throw new Error("Session not found");
     if (header.id !== id) throw new Error("Session storage identity mismatch");
-    const location = this.ctx.sessionPersistence.locate(header);
-    if (location?.kind !== "jsonl")
+    const backend = this.ctx.sessionPersistence;
+    if (!("resolveCurrentLog" in backend) || typeof backend.resolveCurrentLog !== "function")
+      throw new Error("Session-local plugin storage requires a JSONL session backend");
+    let logPath: unknown = await backend.resolveCurrentLog(id);
+    if (logPath === undefined && live) {
+      // New sessions are visible before JSONL materialization. Flush their
+      // authoritative owner before locating the directory for plugin state.
+      await this.ctx.sessions.flush(live.session);
+      logPath = await backend.resolveCurrentLog(id);
+    }
+    if (typeof logPath !== "string")
       throw new Error(
         "Session-local plugin storage requires a JSONL session backend",
       );
     const scope = new Context();
     const storage = new Storage(scope);
-    const backend = new JsonStorageBackend(
-      join(dirname(location.path), "plugins", namespace),
+    const storageBackend = new JsonStorageBackend(
+      join(dirname(logPath), "plugins", namespace),
     );
-    const unregister = storage.backend.register("json", backend);
+    const unregister = storage.backend.register("json", storageBackend);
     const facility = new DomainFacility(scope, { backend: "json" });
     return {
       facility,
@@ -77,7 +87,7 @@ export class SessionStorage {
           await facility.closeAll();
         } finally {
           unregister();
-          await backend.close();
+          await storageBackend.close();
           await scope.fiber.dispose();
         }
       },

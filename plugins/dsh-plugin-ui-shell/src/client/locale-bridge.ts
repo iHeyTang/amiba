@@ -28,7 +28,7 @@ type AssertAllTrue<T extends Record<string, true>> = T;
  */
 export type OfficialLocaleIdMatchesUpstream = AssertAllTrue<{
   /** `"zh" | "en"` on both sides — the domain `setLocale` accepts. */
-  ids: Mutual<OfficialLocaleId, LocaleId>;
+  ids: Mutual<OfficialLocaleId, import("@deepseek-ai/dsh-client-locale").BuiltInLocaleId>;
   /** The durable field carries the same domain, so an adopted value is a valid id. */
   preference: Mutual<NonNullable<LocaleSettings["preference"]>, LocaleId>;
 }>;

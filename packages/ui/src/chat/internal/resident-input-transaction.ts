@@ -71,10 +71,7 @@ export function createResidentInputTransaction(deps: ResidentInputTransactionDep
           if (claim) {
             deps.claims.setAttemptPhase("submitting");
             prepared = await deps.prepare(images, signal);
-            const upload = deps.uploadCommandFile;
-            const bytes = await commandImages(claim, prepared.attachments, upload
-              ? (data, name) => { check(); return upload(data, name, signal); }
-              : undefined);
+            const bytes = await commandImages(claim, prepared.attachments, deps.sessionId, signal);
             check(); current.dispatched = true;
             const result = await deps.submitClaim(claim, argsAfter(draft, claim.token), bytes);
             if (result.kind === "success") consume();

@@ -29,10 +29,8 @@ import {
   type AgentModelSelection,
   type AgentSubagentAddress,
 } from "@amiba/app-runtime/platform";
-import type {
-  SessionListState,
-  WorkspaceListState,
-} from "@deepseek-ai/dsh-client-runtime/client";
+import type { SessionListState } from "@deepseek-ai/dsh-api-session-controller/client";
+import type { WorkspaceSnapshot } from "@deepseek-ai/dsh-api-workspace-controller/client";
 import type {
   PropsRenderSlots,
   SnapshotSelectorHook,
@@ -371,8 +369,8 @@ interface ProductShellProps {
   legacyToolDetailsAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
   toolImagesAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
   commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
-  conversationSource: (sessionId: string) => import("@deepseek-ai/dsh-client-runtime/client").SessionFace | undefined;
-    fileMentions: import("@deepseek-ai/dsh-client-ui-conversation/client").ChatFileMentions["forClosing"];
+  conversationSource: (sessionId: string) => import("./conversation-snapshot.js").ConversationSource | undefined;
+    fileMentions: import("@deepseek-ai/dsh-client-ui-chat/client").ChatFileMentions["forClosing"];
   directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
   conversationViews: ContributionsSource<ConversationViewEntry>;
   surfaces: SurfaceSelections;
@@ -405,7 +403,7 @@ interface ProductShellProps {
    */
   useOfficialSessions: SnapshotSelectorHook<SessionListState>;
   lineageAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
-  openLineageSession: (sessionId: import("@deepseek-ai/dsh-client-runtime/client").SessionId) => void;
+  openLineageSession: (sessionId: import("@deepseek-ai/dsh-session/types").SessionId) => void;
   /**
    * The framework's `useWorkspaces` standard hook, from the same
    * `GlobalStandardProps` kit. The archive set is workspace-registry state,
@@ -414,7 +412,7 @@ interface ProductShellProps {
    * is a SECOND live source Amiba's own index has to follow. REQUIRED for the
    * same reason as `useOfficialSessions`.
    */
-  useOfficialWorkspaces: SnapshotSelectorHook<WorkspaceListState>;
+  useOfficialWorkspaces: SnapshotSelectorHook<WorkspaceSnapshot>;
 }
 
 export function AmibaProductShell(props: ProductShellProps): ReactElement {
@@ -531,7 +529,7 @@ function ProductShellInner({
   const lineage = useOfficialSessions(list => sessionLineage(list, sessions.activeId), equalSessionLineage);
   const childAddressSource = useRef<(id: string) => AgentSubagentAddress | undefined>(() => undefined);
   childAddressSource.current = (id) => sessions.sessions.find((session) => session.id === id)?.subagentAddress
-    ?? conversationSource(id)?.getSnapshot().subagent?.address;
+    ?? conversationSource(id)?.getSnapshot()?.subagent?.address;
   const activitySource = useRef(conversationSource);
   activitySource.current = conversationSource;
   const client = useMemo(() => createChatClient(dshClient, (id) => childAddressSource.current(id),
@@ -666,9 +664,10 @@ function ProductShellInner({
   // Unknown tools retain the generic row; plugin registrations still win.
   const renderToolViewSeat = useCallback(
     (request: ToolCallSeatRequest) => {
+      if (!loadMessageImage) return request.fallback;
       const owner = {
         ...request.owner,
-        ...(loadMessageImage ? { loadImage: loadMessageImage } : {}),
+        loadImage: loadMessageImage,
         ...(trajectory.inspectCall ? { inspect: () => trajectory.inspectCall?.(request.owner.callId) } : {}),
       };
       const fallback = renderSlot("tool.call.toolview", owner, {
@@ -684,7 +683,7 @@ function ProductShellInner({
         render={hasToolImages && loadMessageImage ? images => renderSlot("tool.call.images", { images, loadImage: loadMessageImage, align: "start" }) : undefined}>
         {row}
       </ToolImageEvidenceProvider>;
-      return request.owner.toolName === "cordis_run" ? <>{withImages}<CordisBusiness owner={request.owner}
+      return request.owner.toolName === "cordis_run" ? <>{withImages}<CordisBusiness owner={owner}
         source={conversationSource(sessions.activeId)} packages={cordisPackages}
         render={owner => renderSlot("tool.view.cordis", owner, { entryKey: `${owner.pluginId}.${owner.packageId}` })} /></> : withImages;
     },

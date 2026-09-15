@@ -1,23 +1,5 @@
-/**
- * Composer-time attachments — files the user attaches before sending the
- * next chat turn (manual upload, drag/drop, paste, or auto-attach of the
- * current tab when it isn't an HTML page).
- *
- * Storage model: **opaque-id-based, not path-based**.
- *
- * Payloads are staged by the DSH attachment plugin. PNG/JPEG/WebP/GIF bytes
- * are admitted through DSH's native image wire; UTF-8 text and PDFs are read
- * on demand through plugin tools using an opaque attachment id.
- *
- * `kind` picks the chip icon and the native-image vs. attachment-tool
- * delivery path.
- *
- * Persistence: at send time we strip the heavy fields (the original File
- * reference, large preview blobs we don't want twice in storage) and keep
- * only an `AttachmentBadge` on the message so old bubbles still render the
- * chip after a panel reload. Full image bytes are never persisted in UI
- * state; only the opaque id and an optional 256px thumbnail remain.
- */
+/** Composer attachment metadata. Files and draft identities are owned by the
+ * official DSH browser controller; persisted messages use official references. */
 
 /**
  * Presentation classification — drives chip icon, preview kind, and the
@@ -38,7 +20,7 @@ interface AttachmentBase {
   /** Presentation classification — see `AttachmentKind`. */
   kind: AttachmentKind;
   /**
-   * Opaque id returned by the DSH attachment plugin.
+   * Runtime-only draft ID returned by the official DSH controller.
    *
    * Optional only because host intake may fail (store unavailable, write
    * error, etc.) — in that case we surface the error to the user and the
@@ -70,7 +52,7 @@ export interface FileAttachment extends AttachmentBase {
    */
   textPreview?: string;
   /**
-   * True while bytes are being staged by the DSH plugin.
+   * True while the official draft is being created.
    * Composer chip shows a spinner; `attachmentId` is unset until complete.
    */
   uploading?: boolean;

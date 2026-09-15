@@ -1,0 +1,21 @@
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -8357,6 +8357,7 @@
+ 			ctx.slots.inject("conversation.approval.detail", () => ctx.slots.register({ name: "conversation.approval.detail" }, ApprovalCommand));
+ 		}
+ 		//#endregion
++		exports.registerConversationNodes = registerConversationNodes;
+ 		exports.EMPTY_CHAT_SNAPSHOT = EMPTY_CHAT_SNAPSHOT;
+ 		exports.apply = apply;
+ 		exports.inject = inject;
+--- a/lib/types/client/index.d.ts
++++ b/lib/types/client/index.d.ts
+@@ -33,4 +33,6 @@
+     interface ChatNodeDataMap extends PublicChatNodeDataMap {
+     }
+ }
+-//# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=index.d.ts.map
++/** Register official Chat projection without replacing the host shell. */
++export declare function registerConversationNodes(ctx: import("@deepseek-ai/cordis").Context): void;

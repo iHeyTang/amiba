@@ -1,10 +1,13 @@
+import { officialClientCore } from "../../scripts/official-client-core";
 import { clientInputs } from "../../scripts/dsh-client-inputs.mjs";
 import { defineConfig } from "vite";
 
 const PLUGIN_ID = "@amiba/dsh-plugin-runtime-inventory";
 
 export default defineConfig({
-  plugins: [clientInputs()],
+  plugins: [officialClientCore(import.meta.url, {
+    "@deepseek-ai/dsh-client-ui-settings-plugins/client": ["BashCardController", "AgentLoopCardController", "WebSearchCardController"],
+  }), clientInputs()],
   build: {
     // Match the TypeScript target. Vite's default ("modules") includes
     // safari14, which makes esbuild lower optional chaining — and that lowering
@@ -27,8 +30,9 @@ export default defineConfig({
         "react-dom/client",
         "@deepseek-ai/cordis",
         "@deepseek-ai/dsh-api-remotes/client",
-        "@deepseek-ai/dsh-client-runtime/client",
         "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-store",
         "@amiba/dsh-plugin-ui-shell/client",
       ],
       output: {

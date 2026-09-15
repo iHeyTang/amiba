@@ -1,10 +1,10 @@
+import type {} from "@deepseek-ai/dsh-settings";
 import type { Context } from '@deepseek-ai/cordis';
 import z from '@deepseek-ai/schemastery';
-import { settingsNamespace } from '@deepseek-ai/dsh-settings';
 import type { MediaOperation } from './contracts.js';
 export interface MediaSelection { provider: string; model: string; protocol: string }
 export type MediaDefaults = Partial<Record<MediaOperation, MediaSelection>>;
-const NS = settingsNamespace('amiba-media-defaults');
+const NS = 'amiba-media-defaults';
 const selection = z.object({ provider: z.string().required(), model: z.string().required(), protocol: z.string().required() });
 export class MediaPreferences {
   constructor(private readonly ctx: Context) {

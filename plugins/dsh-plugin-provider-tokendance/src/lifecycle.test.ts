@@ -46,7 +46,7 @@ describe("TokenDance standard plugin lifecycle", () => {
         .describe()
         .find((d) => d.ns === "llm-tokendance")!;
       await ctx.settings.mutate(
-        settingsNamespace("llm-tokendance"),
+        "llm-tokendance",
         [
           {
             op: "set",
@@ -80,7 +80,7 @@ describe("TokenDance standard plugin lifecycle", () => {
         await ctx.llm.resolveModelInfo("tokendance", "local-custom"),
       ).toMatchObject({ context: { contextWindow: 8192 } });
       await ctx.settings.mutate(
-        settingsNamespace("llm-tokendance"),
+        "llm-tokendance",
         [{ op: "unset", path: ["providers", "tokendance"] }],
         ctx.settings.describe().find((d) => d.ns === "llm-tokendance")!
           .revision,

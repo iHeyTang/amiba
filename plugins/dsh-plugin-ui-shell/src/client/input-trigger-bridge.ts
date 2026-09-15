@@ -32,7 +32,7 @@ import { shortId } from "@amiba/app-runtime/utils";
  */
 
 import { createInputStateSource, type InputStateSource, type InputQueueSession } from "./input-state-source.js";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type {
   CommandPopupController,
   ComposerImageOps,
@@ -252,7 +252,7 @@ export function createInputTriggerBridge(
   const canEditResidentImages = (id: string) => {
     const session = inputSessions.get(id)?.session;
     const phase = readDraft(id)?.phase;
-    return !!session && residentInputs.has(id) && session.getSnapshot().subagent?.address.mode !== "one-shot" &&
+    return !!session && residentInputs.has(id) && session.getSnapshot()?.subagent?.address.mode !== "one-shot" &&
       phase !== "adjudicating" && phase !== "submitting";
   };
   const filterResidentImages = (id: string, keep: (image: ComposerAttachment, registration: ComposerDraftImageRegistration) => boolean) => {
@@ -309,7 +309,7 @@ export function createInputTriggerBridge(
           },
         }, claims: claimsFor(id),
         available: () => !editors.has(id) && residentInputs.get(id)?.source === source && !!inputSessions.get(id) &&
-          inputSessions.get(id)!.session.getSnapshot().subagent?.address.mode !== "one-shot" && (!bridge.isSessionRunning!(id) || !!deps.pendingQueue),
+          inputSessions.get(id)!.session.getSnapshot()?.subagent?.address.mode !== "one-shot" && (!bridge.isSessionRunning!(id) || !!deps.pendingQueue),
         busy: () => bridge.isSessionRunning!(id) || residentSender?.isBusy?.(id) === true,
         enqueue: async (request, images) => {
           const queue = deps.pendingQueue?.(id);
@@ -529,7 +529,7 @@ export function createInputTriggerBridge(
       // A mounted editor's phase/read-only refusal must not fall through.
       if (editor) return editor.ops.editInputDraft?.(text) ?? false;
       const session = inputSessions.get(sessionId)?.session;
-      if (!session || session.getSnapshot().subagent?.address.mode === "one-shot") return false;
+      if (!session || session.getSnapshot()?.subagent?.address.mode === "one-shot") return false;
       const draft = deps.residentDraft?.(sessionId);
       if (!draft) return false;
       draft.setDisplayText(text);
@@ -540,7 +540,7 @@ export function createInputTriggerBridge(
       if (editor) return editor.draft.write(text, expectedRevision);
       const session = inputSessions.get(sessionId)?.session;
       const resident = residentInputs.get(sessionId);
-      if (!session || !resident || session.getSnapshot().subagent?.address.mode === "one-shot") return false;
+      if (!session || !resident || session.getSnapshot()?.subagent?.address.mode === "one-shot") return false;
       const before = readDraft(sessionId)!;
       if (expectedRevision !== undefined && before.draftRev !== expectedRevision) return false;
       resident.source.setDisplayText(text);

@@ -3,7 +3,7 @@ import { MEDIA_CONFIRM_QUESTION } from "../cost-policy.js";
 import { mediaMarkdown } from './delivery.js';
 import { MediaSettings } from './settings.js';
 import type {} from '@amiba/dsh-plugin-ui-shell/client';
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client';
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import { MEDIA_REMOTE } from '../remote.js';
 import { MediaToolview } from './view.js';
 import css from './style.css?inline';

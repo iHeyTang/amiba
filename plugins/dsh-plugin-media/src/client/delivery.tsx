@@ -2,7 +2,7 @@ import { MediaOutcome } from "./outcome.js";
 import { MediaAccountingSummary } from "./accounting.js";
 import { usePluginT } from '@amiba/ui/plugin';
 import { useEffect, useState } from 'react';
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client';
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { MediaRecord } from '../store.js';
 import { ArtifactPreview } from './view.js';
 

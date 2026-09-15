@@ -3,7 +3,7 @@ import type { ConversationInputState, ConversationInputZoneOwner, ObservableSnap
 
 /** InputZone entries receive real snapshots as owner props, not invented defaults. */
 export function InputRegion({ source, input, render }: {
-  source?: ObservableSnapshot<ConversationInputZoneOwner["session"]>;
+  source?: ObservableSnapshot<ConversationInputZoneOwner["session"] | undefined>;
   input?: ObservableSnapshot<ConversationInputState | undefined>;
   render(owner: ConversationInputZoneOwner): ReactNode;
 }) {

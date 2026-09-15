@@ -72,7 +72,7 @@ export function projectDshUsage(
     }
 
     let usage: unknown;
-    if (event.type === "assistant/chunk") {
+    if (String(event.type) === "assistant/chunk") {
       const chunk = recordValue(data?.chunk);
       if (chunk?.type === "usage") usage = chunk.usage;
     } else if (event.type === "assistant/message") {

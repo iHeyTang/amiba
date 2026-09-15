@@ -1,6 +1,7 @@
 import type { Context } from "@deepseek-ai/cordis";
 // Value-less import also loads dsh-tools' `ctx.tools` cordis augmentation.
-import type { JsonValue, ToolDefinition } from "@deepseek-ai/dsh-tools";
+import type { JsonValue } from "@deepseek-ai/dsh-util-values";
+import type { ToolDefinition } from "@deepseek-ai/dsh-tools";
 
 import type { StewardService } from "./service.js";
 

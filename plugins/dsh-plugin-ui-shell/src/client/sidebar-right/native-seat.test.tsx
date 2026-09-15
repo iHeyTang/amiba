@@ -14,7 +14,6 @@ import { guideDefinition } from './tabs/guide/definition.js'
 import type { TabId } from './dockkit/index.js'
 
 afterEach(() => { cleanup(); Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 }) })
-vi.mock('@deepseek-ai/dsh-client-runtime/client', async () => await import('../../dev/runtime-store.js'))
 
 it('opens from an unmounted body, retains floats when collapsed, and restores native preview on removal', async () => {
   const sessionId = 'native-seat-session' as SessionId

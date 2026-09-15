@@ -1,4 +1,4 @@
-import type { SessionListState } from "@deepseek-ai/dsh-client-runtime/client";
+import type { SessionListState } from "@deepseek-ai/dsh-api-session-controller/client";
 
 /**
  * Rule 1 of the official onboarding coordinator, reproduced verbatim from

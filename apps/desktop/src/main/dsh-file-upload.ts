@@ -10,10 +10,10 @@ interface Upload {
 /** Bounded, owner-scoped streaming carrier. The Host owns all file/session semantics. */
 export class DshFileUploadCarrier {
   private readonly uploads = new Map<string, Upload>();
-  open(owner: number, rawUrl: string, baseUrl: string): string {
+  open(owner: number, rawUrl: string, baseUrl: string, browserCookie?: string): string {
     const target = new URL(rawUrl, baseUrl);
     if (target.origin !== new URL(baseUrl).origin || target.pathname !== '/api/session/uploadFileBinary' || target.username || target.password) throw new Error('File upload refused a non-runtime upload URL.');
-    const request = (target.protocol === 'https:' ? httpsRequest : httpRequest)(target, { method: 'POST', headers: { 'content-type': 'application/octet-stream' } });
+    const request = (target.protocol === 'https:' ? httpsRequest : httpRequest)(target, { method: 'POST', headers: { 'content-type': 'application/octet-stream', ...(browserCookie ? { cookie: browserCookie } : {}) } });
     const result = new Promise<UploadResponse>((resolve, reject) => {
       request.on('error', reject);
       request.on('response', response => {

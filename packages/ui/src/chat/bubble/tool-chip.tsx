@@ -1,5 +1,6 @@
 import { useNestedToolCalls, useNestedToolExpansion } from "./nested-tool-calls";
-import type { ToolCallOwnerProps } from "@amiba/extension-sdk";
+import type { ToolCallOwnerProps as OfficialToolCallOwnerProps } from "@amiba/extension-sdk";
+type ToolCallOwnerProps = Omit<OfficialToolCallOwnerProps, "loadImage">;
 import { useToolImageEvidence } from "./tool-image-evidence";
 import type { ToolProgress } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";

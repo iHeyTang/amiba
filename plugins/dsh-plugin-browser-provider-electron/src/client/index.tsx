@@ -7,7 +7,7 @@ import {
 } from "./adapter.js";
 import type { EmbeddedBrowserAdapter } from "../shared/browser.js";
 import { useCallback, useEffect } from "react";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type {
   WorkbenchResource,
   WorkbenchViewExtension,

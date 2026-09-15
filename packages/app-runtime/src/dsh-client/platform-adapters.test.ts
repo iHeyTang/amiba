@@ -9,6 +9,29 @@ function rpcClient(
   let call = 0;
   return new DshApiClient({
     baseUrl: "http://dsh.test",
+    createWebSocket: () => {
+      const listeners = new Map<string, Set<(event: Event) => void>>();
+      const socket = {
+        readyState: 0,
+        addEventListener(type: string, listener: (event: Event) => void) { const set = listeners.get(type) ?? new Set(); set.add(listener); listeners.set(type, set) },
+        removeEventListener(type: string, listener: (event: Event) => void) { listeners.get(type)?.delete(listener) },
+        close() { socket.readyState = 3 },
+        send(data: string) {
+          const frame = JSON.parse(data);
+          if (frame.type !== "open") return;
+          seen.push({ method: frame.endpoint, payload: frame.payload });
+          const value = resolve(frame.endpoint, frame.payload, call) as { events: unknown[]; hasMore: boolean; projections?: unknown } | Error;
+          queueMicrotask(() => {
+            const wire = value instanceof Error
+              ? { type: "error", streamId: frame.streamId, error: { code: (value as Error & { code?: string }).code, message: value.message } }
+              : { type: "item", streamId: frame.streamId, value: { type: "snapshot", cursor: 12, records: value.events, hasMore: value.hasMore, projections: value.projections } };
+            for (const listener of listeners.get("message") ?? []) listener(new MessageEvent("message", { data: JSON.stringify(wire) }));
+          });
+        },
+      };
+      queueMicrotask(() => { socket.readyState = 1; for (const listener of listeners.get("open") ?? []) listener(new Event("open")) });
+      return socket;
+    },
     makeRpcId: () => `rpc-${++call}`,
     fetch: (async (_url, init) => {
       const body = JSON.parse(String(init?.body)) as {
@@ -17,7 +40,8 @@ function rpcClient(
         payload: unknown;
       };
       seen.push({ method: body.method, payload: body.payload });
-      const result = resolve(body.method, body.payload, call);
+      const resolved = resolve(body.method, body.payload, call);
+      const result = body.method === "session/page" && !(resolved instanceof Error) ? { ...(resolved as object), records: (resolved as { events: unknown[] }).events } : resolved;
       return new Response(
         JSON.stringify({
           type: "server-response",
@@ -51,9 +75,10 @@ describe("createDshPlatformAdapters", () => {
       beforeSeq: 20,
       maxMessages: 200,
     })).resolves.toEqual({ events, hasMore: true, projections: { title: "Child" } });
-    expect(seen).toEqual([{ method: "subagent.history", payload: {
-      parentSessionId: "parent", childSessionId: "child", mode, beforeSeq: 20, maxMessages: 200,
-    } }]);
+    expect(seen).toEqual([
+      { method: "session/follow", payload: { args: { request: { address: { kind: "subagent", parentSessionId: "parent", childSessionId: "child", mode }, maxMessages: 200 } } } },
+      { method: "session/page", payload: { args: { request: { address: { kind: "subagent", parentSessionId: "parent", childSessionId: "child", mode }, throughSeq: 12, beforeSeq: 20, maxMessages: 200 } } } },
+    ]);
   });
 
   it("rejects a mismatched child address before issuing any RPC", async () => {
@@ -71,41 +96,16 @@ describe("createDshPlatformAdapters", () => {
     await expect(adapters.agentSessions.history("child", {
       subagent: { parentSessionId: "parent", childSessionId: "child", mode: "continuable" },
     })).rejects.toMatchObject({ code: "session-not-found" });
-    expect(seen.map(({ method }) => method)).toEqual(["subagent.history"]);
+    expect(seen.map(({ method }) => method)).toEqual(["session/follow"]);
   });
 
   it("preserves ordinary session history transport when no catalog address is supplied", async () => {
     const seen: Array<{ method: string; payload: unknown }> = [];
     const adapters = createDshPlatformAdapters(rpcClient(() => ({ events: [], hasMore: false }), seen));
     await adapters.agentSessions.history("root", { beforeSeq: 0, maxMessages: 10 });
-    expect(seen).toEqual([{ method: "session.history", payload: { sessionId: "root", beforeSeq: 0, maxMessages: 10 } }]);
-  });
-
-  it("uses plugin-owned Typert Remotes for feature domains", async () => {
-    const seen: Array<{ method: string; payload: unknown }> = [];
-    const client = rpcClient(
-      (method) =>
-        ({
-          "amibaAttachments/readForPrompt": {
-            attachmentId: "att-1",
-            name: "notes.txt",
-            mime: "text/plain",
-            size: 5,
-            kind: "text",
-            dataBase64: "aGVsbG8=",
-          },
-        })[method],
-      seen,
-    );
-    const adapters = createDshPlatformAdapters(client);
-
-    await adapters.agentAttachments.readForPrompt("att-1");
-
     expect(seen).toEqual([
-      {
-        method: "amibaAttachments/readForPrompt",
-        payload: { args: { attachmentId: "att-1" } },
-      },
+      { method: "session/follow", payload: { args: { request: { address: { kind: "session", sessionId: "root" }, maxMessages: 10 } } } },
+      { method: "session/page", payload: { args: { request: { address: { kind: "session", sessionId: "root" }, throughSeq: 12, beforeSeq: 0, maxMessages: 10 } } } },
     ]);
   });
 
@@ -114,7 +114,7 @@ describe("createDshPlatformAdapters", () => {
     const client = rpcClient(
       (method) =>
         ({
-          "session.list": {
+          "session/list": {
             items: [
               {
                 sessionId: "session-1",
@@ -126,7 +126,7 @@ describe("createDshPlatformAdapters", () => {
               },
             ],
           },
-          "session.create": { sessionId: "session-1", agentPreset: "standard" },
+          "session/create": { sessionId: "session-1", agentPreset: "standard" },
           "amibaCommands/list": [{ name: "help", description: "Show help" }],
         })[method],
       seen,
@@ -138,7 +138,7 @@ describe("createDshPlatformAdapters", () => {
     ]);
 
     expect(
-      seen.filter((entry) => entry.method === "session.create"),
+      seen.filter((entry) => entry.method === "session/create"),
     ).toHaveLength(1);
     expect(seen.at(-1)).toEqual({
       method: "amibaCommands/list",
@@ -149,7 +149,7 @@ describe("createDshPlatformAdapters", () => {
   it("derives permission choices from DSH settings and session projections", async () => {
     const seen: Array<{ method: string; payload: unknown }> = [];
     const client = rpcClient((method) => {
-      if (method === "settings.describe") {
+      if (method === "settings/describe") {
         return {
           writable: true,
           hasDocument: true,
@@ -173,7 +173,7 @@ describe("createDshPlatformAdapters", () => {
           ],
         };
       }
-      if (method === "session.history") {
+      if (method === "session/follow") {
         return {
           events: [],
           hasMore: false,
@@ -205,12 +205,4 @@ describe("createDshPlatformAdapters", () => {
       scope: "session",
     });
   });
-});
-
-
-it("routes durable attachment references to the Host remote",async()=>{
-  const seen:Array<{method:string;payload:unknown}>=[];
-  const adapters=createDshPlatformAdapters(rpcClient(()=>({retained:true}),seen));
-  await adapters.agentAttachments.retainForSession!("att-id","session-id");
-  expect(seen).toEqual([{method:"amibaAttachments/retainForSession",payload:{args:{attachmentId:"att-id",sessionId:"session-id"}}}]);
 });

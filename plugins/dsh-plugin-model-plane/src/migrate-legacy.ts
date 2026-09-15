@@ -1,7 +1,6 @@
 /** One-way upgrade of old installations. Never used by provider registration or UI requests. */
 import type { Context } from "@deepseek-ai/cordis";
 import {
-  settingsNamespace,
   type SettingsPathOp,
 } from "@deepseek-ai/dsh-settings";
 import type { ModelPlaneStore } from "./store.js";
@@ -69,7 +68,7 @@ export async function migrateLegacySettings(
               value: v,
             }));
         await ctx.settings.mutate(
-          settingsNamespace(ns),
+          ns,
           ops,
           descriptor.revision,
         );

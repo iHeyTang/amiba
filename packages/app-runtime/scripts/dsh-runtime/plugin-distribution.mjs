@@ -17,7 +17,7 @@ export function pluginInstallManifest(plugin, host, resolveCatalog, target) {
   }
   const config = plugin.amiba?.distribution ?? {};
   return { name: plugin.name, version: plugin.version, private: true, dependencies,
-    peerDependencies, overrides: { ...config.overrides, ...config.targets?.[target]?.overrides } };
+    peerDependencies, overrides: { ...host.overrides, ...config.overrides, ...config.targets?.[target]?.overrides } };
 }
 
 export function checkHostContract(manifest, hostLock) {

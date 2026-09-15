@@ -10,7 +10,7 @@
  * recreated record would make every render resubscribe and restart the stream.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import type { ResourceResult as RemoteResult } from './result.js'
 import type { ObservableSnapshot } from '@amiba/extension-sdk'
 import { createResourceSnapshotStore as createSnapshotStore, type ResourceSnapshotStore as SnapshotStore } from './snapshot-store.js'
 import type {

@@ -1,4 +1,4 @@
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TabId, PaneId, HalvesFit } from './dockkit/index.js'
 import { createSidebarRightController } from './service.js'

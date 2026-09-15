@@ -236,23 +236,6 @@ export async function readBlobAsAttachment(args: {
   }
 
   const kind = classify(name, mime);
-  if (kind === "binary") {
-    return {
-      ok: false,
-      error:
-        "Unsupported file type. Amiba currently accepts UTF-8 text, PDF, PNG, JPEG, WebP, and GIF attachments.",
-      name,
-    };
-  }
-  if (kind === "image" && !isDshNativeImage(name, mime)) {
-    return {
-      ok: false,
-      error:
-        "Unsupported image type. DSH native image input accepts PNG, JPEG, WebP, and GIF.",
-      name,
-    };
-  }
-
   // Upload first. We used to build image/text previews *before* this step;
   // `buildImageThumbnail` / `decode` can hang or run for minutes on some
   // inputs (huge PNGs, exotic codecs), which left the composer stuck on

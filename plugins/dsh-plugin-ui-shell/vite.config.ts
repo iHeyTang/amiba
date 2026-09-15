@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { clientInputs } from "../../scripts/dsh-client-inputs.mjs";
 import { defineConfig } from "vite";
+import { officialClientCore } from "../../scripts/official-client-core";
 import { pdfBuildData } from './scripts/pdf-assets';
 const pdf = pdfBuildData();
 
@@ -21,12 +22,15 @@ const DSH_CLIENT_EXTERNALS = [
   "@deepseek-ai/dsh-client-ui-primitives",
   "@deepseek-ai/dsh-client-ui-attachment",
   "@deepseek-ai/dsh-client-schema-form",
-  "@deepseek-ai/dsh-client-runtime/client",
+  "@deepseek-ai/dsh-client-store",
 ];
 
 export default defineConfig({
   define: { __DSH_PDFJS_ASSETS__: pdf.assets },
-  plugins: [clientInputs()],
+  plugins: [officialClientCore(import.meta.url, {
+    "@deepseek-ai/dsh-client-ui-conversation/client": ["UiConversation", "ConversationController"],
+    "@deepseek-ai/dsh-client-ui-chat/client": ["EMPTY_CHAT_SNAPSHOT", "registerConversationNodes"],
+  }), clientInputs()],
   build: {
     // Match the TypeScript target. Vite's default ("modules") includes
     // safari14, which makes esbuild LOWER optional chaining — and its

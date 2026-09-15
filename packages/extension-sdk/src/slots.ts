@@ -1,3 +1,6 @@
+export type { TrajectorySnapshot } from "@deepseek-ai/dsh-client-ui-trajectory/client";
+export type { SlotRendererHost } from "@deepseek-ai/dsh-client-ui-renderer/client";
+export type { SessionBinding } from "@deepseek-ai/dsh-api-session-controller/client";
 /**
  * Amiba's stable semantic slot vocabulary.
  *
@@ -278,7 +281,7 @@ export type {
  * `PopupSelectController.state`) is one of these, and an Amiba-side mirror of
  * the shape would be a second definition of an official contract.
  */
-export type { ObservableSnapshot } from "@deepseek-ai/dsh-client-runtime/client";
+export type { ObservableSnapshot } from "@deepseek-ai/dsh-client-store";
 
 /**
  * Merge anchor for the official COMMAND-UI vocabulary (`ctx.commandUi`, from
@@ -372,16 +375,10 @@ declare module "@deepseek-ai/dsh-client-ui-tool/client" {
     presentation?: "row" | "summary";
     revealToolCall?: (callId: string) => void;
     revealVersion?: number;
-    /** Available on image-aware hosts; rc.2 tool owners predate this member. */
-    loadImage?: ToolImageLoader;
   }
 }
 export type { ToolCallOwnerProps } from "@deepseek-ai/dsh-client-ui-tool/client";
-export type {
-  RunningToolCall,
-  ToolCallBlock,
-  ToolResultNode,
-} from "@deepseek-ai/dsh-client-runtime/client";
+export type { RunningToolCall, ToolCallBlock, ToolResultNode } from "@deepseek-ai/dsh-client-ui-conversation/client";
 
 /**
  * Official owner contract of `tool.call.toolview` — the keyed per-tool call
@@ -693,9 +690,6 @@ export interface AmibaConversationQuestionOwner {
 }
 
 declare module "@deepseek-ai/dsh-client-ui-slots" {
-  interface GlobalStandardProps {
-    usePanelInfo: import("@deepseek-ai/dsh-client-ui-slots").SnapshotSelectorHook<{ readonly activePanelId: string | null }>;
-  }
   interface SlotMap {
     "main": { kind: "keyed"; scope: "root" };
     "sidebar.panellist": { kind: "list"; scope: "root"; owner: { size: number; active: boolean } };
@@ -783,9 +777,12 @@ export type { ConvViewOwnerProps } from "@deepseek-ai/dsh-client-ui-conversation
 export type { DirectoryFlowOwnerProps } from "@deepseek-ai/dsh-client-ui-workspace/client";
 
 /** Exact input-state currency of the installed official input region. */
-export type ConversationInputState = OwnerOf<"conversation.input.left">["input"];
+export type ConversationInputState = import("@deepseek-ai/dsh-client-ui-conversation/client").InputState;
 
-export type ConversationInputZoneOwner = OwnerOf<"conversation.input.left">;
+export interface ConversationInputZoneOwner {
+  session: import("@deepseek-ai/dsh-api-session-controller/client").SessionSnapshot;
+  input: ConversationInputState;
+}
 
 export type ConversationInputActions = PropsRuntime<"conversation.input.left">["inputActions"];
 
@@ -822,28 +819,15 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
 }
 
 /** Canonical durable image currency already present in the installed rc.2 API. */
-export type ImageAttachmentRef = import("@deepseek-ai/dsh-client-ui-conversation/client").MessageImagesOwnerProps["images"][number]["attachment"];
+export type ImageAttachmentRef = import("@deepseek-ai/dsh-attachment").ImageAttachmentRef;
 
 /** Tool image contract mirrored from c291e796; rc.2 has only message images. */
-export type ToolImageSource = { readonly attachment: ImageAttachmentRef } | {
-  readonly preview: { readonly url: string; readonly name?: string; readonly width?: number; readonly height?: number };
-};
-export type ToolImageLoader = ((attachment: ImageAttachmentRef) => Promise<string>) & {
-  peek?: (attachment: ImageAttachmentRef) => string | undefined;
-};
-export interface ToolImagesOwnerProps {
-  images: readonly ToolImageSource[];
-  loadImage: ToolImageLoader;
-  align: "start" | "end";
-}
-declare module "@deepseek-ai/dsh-client-ui-slots" {
-  interface SlotMap {
-    "tool.call.images": { kind: "single"; scope: "session"; owner: ToolImagesOwnerProps };
-  }
-}
+export type ToolImageSource = import("@deepseek-ai/dsh-client-ui-conversation/client").MessageImageSource;
+export type ToolImageLoader = import("@deepseek-ai/dsh-client-ui-conversation/client").MessageImageLoader;
+export type ToolImagesOwnerProps = import("@deepseek-ai/dsh-client-ui-slots").OwnerOf<"tool.call.images">;
 
 /** Trajectory owns its image slot declaration; importing its contract retains the merge. */
-export type { TrajectoryImagesOwnerProps } from "@deepseek-ai/dsh-client-ui-trajectory/client";
+export type TrajectoryImagesOwnerProps = import("@deepseek-ai/dsh-client-ui-slots").OwnerOf<"conversation.trajectory.images">;
 declare module "@deepseek-ai/dsh-client-ui-conversation/client" {
   interface ConvViewOwnerProps {
     /** Shared session-authorized loader supplied by image-aware shells. */
@@ -857,7 +841,7 @@ export type { ConversationHeaderLineageOwnerProps } from "@deepseek-ai/dsh-clien
 /** Model settings additions from the fixed official models-page contract. */
 export interface ModelsFooterOwnerProps { children?: never }
 export type ModelsProviderDirectoryEntry =
-  Omit<Readonly<import("@deepseek-ai/dsh-api-remotes/client").ConfigurableProviderView>, "settingsPath"> &
+  Omit<Readonly<import("@deepseek-ai/dsh-api-remotes/client").LlmConfigurableProvider>, "settingsPath"> &
   { readonly settingsPath: readonly string[] };
 export interface ProviderCardExtrasOwnerProps {
   provider: ModelsProviderDirectoryEntry;
@@ -871,4 +855,15 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
   }
 }
 
-export type { DetailsToolOwnerProps } from "@deepseek-ai/dsh-client-ui-conversation/client";
+/** Legacy Amiba details seat retained after upstream removed the named slot. */
+export interface DetailsToolOwnerProps {
+  block: import("@deepseek-ai/dsh-client-ui-conversation/client").ToolCallBlock;
+  cwd?: string;
+}
+
+/** Retained compatibility seat for plugins authored before the details view was removed upstream. */
+declare module "@deepseek-ai/dsh-client-ui-slots" {
+  interface SlotMap {
+    "conversation.details.tool": { kind: "single"; scope: "session"; owner: DetailsToolOwnerProps };
+  }
+}

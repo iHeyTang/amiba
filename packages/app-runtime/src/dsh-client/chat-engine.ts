@@ -46,7 +46,7 @@ interface SubmissionObserver {
 }
 
 export interface DshSessionActivitySource {
-  getSnapshot(): { running: boolean };
+  getSnapshot(): { running: boolean } | undefined;
   subscribe(listener: () => void): () => void;
 }
 
@@ -128,51 +128,6 @@ function lastUserText(payload: SubmitPayload): string {
   throw new Error("DSH turn requires a user message.");
 }
 
-function imageMediaType(attachment: RuntimeAttachment): DshImageMediaType | null {
-  const mime = attachment.mime.toLowerCase();
-  if (mime === "image/png") return "image/png";
-  if (mime === "image/jpeg" || mime === "image/jpg") return "image/jpeg";
-  if (mime === "image/webp") return "image/webp";
-  if (mime === "image/gif") return "image/gif";
-  return null;
-}
-
-async function promptAttachments(
-  adapter: AgentAttachmentsAdapter | undefined,
-  attachments: RuntimeAttachment[] | undefined,
-  uploadFile?: (dataBase64: string, name: string) => Promise<string>,
-  signal?: AbortSignal,
-): Promise<DshPromptContentPart[]> {
-  if (!attachments?.length) return [];
-  if (!adapter) throw new Error("DSH attachment plugin is unavailable.");
-  const parts: DshPromptContentPart[] = [];
-  // Validate the complete batch before creating any official file receipts.
-  const prepared = [];
-  for (const attachment of attachments) {
-    if (attachment.kind !== "image" && !uploadFile) continue;
-    signal?.throwIfAborted();
-    const stored = await adapter.readForPrompt(attachment.attachmentId);
-    signal?.throwIfAborted();
-    if (stored.attachmentId !== attachment.attachmentId || stored.kind !== attachment.kind || stored.size !== attachment.size
-      || (attachment.kind === "image" && !imageMediaType(attachment))) {
-      throw new Error(`Attachment ${attachment.name} failed validation.`);
-    }
-    prepared.push({ attachment, stored });
-  }
-  for (const { attachment, stored } of prepared) {
-    signal?.throwIfAborted();
-    if (attachment.kind !== "image") {
-      const receiptId = await uploadFile!(stored.dataBase64, stored.name);
-      signal?.throwIfAborted();
-      if (!receiptId) throw new Error("File upload returned no receipt.");
-      parts.push({ type: "file", receiptId });
-    } else {
-      parts.push({ type: "image", mediaType: imageMediaType(attachment)!, data: stored.dataBase64, name: stored.name });
-    }
-  }
-  return parts;
-}
-
 async function waitUntilSubscribed(
   iterator: AsyncIterator<DshMuxEnvelope>,
   sessionId: string,
@@ -237,11 +192,11 @@ export class DshChatEngineClient implements ChatEngineClient {
     previous?.off();
     this.activities.delete(sessionId);
     if (!source) return;
-    const binding = { source, running: source.getSnapshot().running, off: () => {} };
+    const binding = { source, running: (source.getSnapshot()?.running ?? false), off: () => {} };
     this.activities.set(sessionId, binding);
     binding.off = source.subscribe(() => {
       if (this.disposed || this.activities.get(sessionId) !== binding) return;
-      const running = source.getSnapshot().running;
+      const running = (source.getSnapshot()?.running ?? false);
       if (running === binding.running) return;
       binding.running = running;
       this.emitSnapshot(sessionId);
@@ -525,10 +480,6 @@ export class DshChatEngineClient implements ChatEngineClient {
       controller.signal.throwIfAborted();
       if (address && address.childSessionId !== sessionId) throw new Error("Subagent address does not match the requested session");
       if (address?.mode === "one-shot") throw new Error("One-shot subagent conversations are read-only");
-      for (const attachmentId of new Set(payload.attachments?.map(item => item.attachmentId) ?? [])) {
-        await this.options.attachments?.retainForSession?.(attachmentId, sessionId);
-        controller.signal.throwIfAborted();
-      }
 
       if (!address) {
         // Existing IM/plugin sessions own their cwd and preset; desktop defaults
@@ -571,29 +522,18 @@ export class DshChatEngineClient implements ChatEngineClient {
       // Socket readiness establishes the mux before a cold child is attached by
       // its continuation. Waiting for that child's frame first would deadlock.
       const iterator = address
-        ? await client.openEvents(controller.signal)
-        : client.events(controller.signal)[Symbol.asyncIterator]();
+        ? await client.openEvents(controller.signal, { ...address, kind: "subagent" })
+        : client.events(controller.signal, undefined, { kind: "session", sessionId })[Symbol.asyncIterator]();
       try {
         if (!address) await waitUntilSubscribed(iterator, sessionId, bridge, (event) =>
           this.emit(sessionId, event),
         );
-        const attachmentParts = await promptAttachments(
-          this.options.attachments,
-          payload.attachments,
-          !address && this.options.uploadFile
-            ? (data, name) => this.options.uploadFile!(sessionId, data, name, controller.signal)
-            : undefined,
-          controller.signal,
-        );
-        const textParts: DshPromptContentPart[] = [
-          // Attachment metadata rides its own part; the user's words ride
-          // theirs. The composer requires typed text to enable sending, so
-          // the engine does not compensate for its absence.
-          ...(payload.attachmentPrompt
-            ? [{ type: "text" as const, text: payload.attachmentPrompt }]
-            : []),
-          { type: "text" as const, text: lastUserText(payload) },
-        ];
+        controller.signal.throwIfAborted();
+        const ids = payload.attachments?.map(item => item.attachmentId) ?? [];
+        const adapter = this.options.attachments;
+        if (ids.length && !adapter?.serialize) throw new Error("Attachment drafts are unavailable. Please attach the files again.");
+        const attachmentParts = ids.length ? await adapter!.serialize!(sessionId, ids, controller.signal) : [];
+        const textParts: DshPromptContentPart[] = [{ type: "text", text: lastUserText(payload) }];
         if (address && attachmentParts.length) throw new Error("Image input is unavailable for subagent continuations");
         // Cancellation during preparation must not dispatch a later prompt,
         // even when an attachment/storage adapter did not observe the signal.

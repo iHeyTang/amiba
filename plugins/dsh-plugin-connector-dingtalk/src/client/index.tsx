@@ -1,5 +1,5 @@
 import { DingtalkConversationSettings } from "./DingtalkConversationSettings.js";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 // Type-only: loads connector-core's `declare module "@deepseek-ai/cordis"`
 // augmentation, which is what puts `amibaConnectorUI` on `Context`. This

@@ -1,6 +1,6 @@
+import type {} from "@deepseek-ai/dsh-settings";
 import type { Context } from "@deepseek-ai/cordis";
 import { credentialRef } from "@deepseek-ai/dsh-credentials";
-import { settingsNamespace } from "@deepseek-ai/dsh-settings";
 import type {} from "@deepseek-ai/dsh-llm";
 import { MediaError } from "@amiba/dsh-plugin-media/contracts";
 /** Public DSH directory + settings + credential seam. No adapter state or grant payload access. */
@@ -17,7 +17,7 @@ export async function minimaxConnection(ctx: Context) {
       "UNAVAILABLE",
       "Configure the official minimax-cn provider first",
     );
-  let profile: any = ctx.settings.get(settingsNamespace(entry.settingsNs));
+  let profile: any = ctx.settings.get(entry.settingsNs);
   for (const key of entry.settingsPath) profile = profile?.[key];
   if (!profile || typeof profile.apiKeyEnv !== "string" || !profile.apiKeyEnv)
     throw new MediaError(

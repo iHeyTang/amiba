@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ImageAttachmentRef } from "@amiba/extension-sdk";
-import type { SessionFace } from "@deepseek-ai/dsh-client-runtime/client";
+import type { SessionFace } from "@deepseek-ai/dsh-api-session-controller/client";
 
 export type MessageImageLoader = ((attachment: ImageAttachmentRef) => Promise<string>) & {
   peek(attachment: ImageAttachmentRef): string | undefined;

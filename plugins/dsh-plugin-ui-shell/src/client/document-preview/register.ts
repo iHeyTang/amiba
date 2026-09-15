@@ -20,7 +20,7 @@ import { pdfBodyDefinition, PDF_BODY_ID } from './pdf/index.js'
 import { createPdfStore } from './pdf/store.js'
 import { en as pdfEn, zh as pdfZh } from './pdf/locales.js'
 import pdfCss from './pdf/PdfBody.module.css?inline'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { WorkspaceFilesAdapter } from '@amiba/app-runtime/platform'
 import type { SidebarRightTabRegistry } from '../sidebar-right/tab-registry.js'
 import { DocumentPreviewRegistry } from './document/registry.js'

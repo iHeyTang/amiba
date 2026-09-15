@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { SessionRead } from "../model.js";
 import type {} from "@amiba/extension-sdk";
 import { NOTIFICATION_REMOTE } from "../remote.js";

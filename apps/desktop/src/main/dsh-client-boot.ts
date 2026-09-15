@@ -10,6 +10,7 @@ export interface DshWebBootEntry {
 export interface DshWebBootGraph {
   rev: string;
   entries: DshWebBootEntry[];
+  batches?: Array<{ phase: "bootstrap" | "application"; url: string; rev: string; entries: string[] }>;
 }
 
 export interface DshClientBootPayload {
@@ -54,7 +55,7 @@ export interface DshProxyResponse {
 }
 
 interface DshRuntimeSource {
-  ensureStarted(): Promise<{ baseUrl: string }>;
+  ensureStarted(): Promise<{ baseUrl: string; browserCookie?: string }>;
 }
 
 const BOOT_SCRIPT_PATTERN =
@@ -76,7 +77,15 @@ function attribute(attributes: string, name: string): string | undefined {
     "iu",
   );
   const match = pattern.exec(attributes);
-  return match?.[1] ?? match?.[2] ?? match?.[3];
+  const value = match?.[1] ?? match?.[2] ?? match?.[3];
+  return value?.replace(/&(?:amp|quot|apos|lt|gt|#\d+|#x[\da-f]+);/giu, entity => {
+    const names: Record<string, string> = { "&amp;": "&", "&quot;": '"', "&apos;": "'", "&lt;": "<", "&gt;": ">" };
+    const known = names[entity.toLowerCase()];
+    if (known !== undefined) return known;
+    const hex = entity[2]?.toLowerCase() === "x";
+    const code = Number.parseInt(entity.slice(hex ? 3 : 2, -1), hex ? 16 : 10);
+    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "\uFFFD";
+  });
 }
 
 function shellAssetUrl(
@@ -214,9 +223,19 @@ export function extractDshClientBootGraph(
   if (typeof graph.rev !== "string" || !Array.isArray(graph.entries)) {
     throw new Error("Managed DSH client graph is missing rev/entries.");
   }
+  const batches = graph.batches === undefined ? undefined : (() => {
+    if (!Array.isArray(graph.batches)) throw new Error("DSH client batches must be an array");
+    return graph.batches.map((value: unknown): NonNullable<DshWebBootGraph["batches"]>[number] => {
+      if (!value || typeof value !== "object") throw new Error("Invalid DSH client batch");
+      const batch = value as Record<string, unknown>;
+      if ((batch.phase !== "bootstrap" && batch.phase !== "application") || typeof batch.url !== "string" || typeof batch.rev !== "string" || !Array.isArray(batch.entries) || !batch.entries.every(id => typeof id === "string")) throw new Error("Invalid DSH client batch fields");
+      return { phase: batch.phase, url: shellAssetUrl(batch.url, baseUrl, "/plugins/"), rev: batch.rev, entries: batch.entries };
+    });
+  })();
   return {
     rev: graph.rev,
     entries: graph.entries.map((entry) => parseEntry(entry, baseUrl)),
+    ...(batches === undefined ? {} : { batches }),
   };
 }
 
@@ -224,8 +243,9 @@ export function extractDshClientBootGraph(
 export async function loadDshClientBoot(
   runtime: DshRuntimeSource,
 ): Promise<DshClientBootPayload> {
-  const { baseUrl } = await runtime.ensureStarted();
+  const { baseUrl, browserCookie } = await runtime.ensureStarted();
   const response = await fetch(new URL("/", baseUrl), {
+    headers: browserCookie ? { cookie: browserCookie } : undefined,
     signal: AbortSignal.timeout(30_000),
   });
   if (!response.ok) {
@@ -255,7 +275,7 @@ export async function proxyDshClientFetch(
   runtime: DshRuntimeSource,
   request: DshProxyRequest,
 ): Promise<DshProxyResponse> {
-  const { baseUrl } = await runtime.ensureStarted();
+  const { baseUrl, browserCookie } = await runtime.ensureStarted();
   const runtimeOrigin = new URL(baseUrl).origin;
   const target = new URL(request.url, runtimeOrigin);
   if (target.origin !== runtimeOrigin || !target.pathname.startsWith("/api")) {
@@ -268,6 +288,7 @@ export async function proxyDshClientFetch(
       headers.set(name, value);
     }
   }
+  if (browserCookie) headers.set("cookie", browserCookie);
   const response = await fetch(target, {
     method,
     headers,

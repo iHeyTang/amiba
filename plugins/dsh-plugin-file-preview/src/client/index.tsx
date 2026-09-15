@@ -1,7 +1,7 @@
 import type { PropsRenderSlots } from "@deepseek-ai/dsh-client-ui-slots";
 import { FolderTree } from "lucide-react";
 import { useSyncExternalStore } from "react";
-import type { ClientContext } from "@deepseek-ai/dsh-client-runtime/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { WorkbenchViewProps } from "@amiba/extension-sdk";
 import {
   createSlotContributionsSource,

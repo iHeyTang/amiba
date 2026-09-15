@@ -69,10 +69,6 @@
         memosRoot: !!js dshHomePath('amiba-memos')
         viewerPort: !!js Number(process.env.AMIBA_MEMOS_VIEWER_PORT || 18801)
 
-    - id: amiba-attachments
-      name: "@amiba/dsh-plugin-attachments"
-      config:
-        root: !!js dshHomePath('amiba-attachments')
 
     - id: amiba-messaging-core
       name: "@amiba/dsh-plugin-messaging-core"

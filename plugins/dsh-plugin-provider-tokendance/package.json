@@ -24,22 +24,22 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-llm-pi-ai": "catalog:",
-    "@earendil-works/pi-ai": "0.82.1",
+    "@earendil-works/pi-ai": "0.85.1",
     "@deepseek-ai/schemastery": "catalog:",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
-    "@deepseek-ai/dsh-credentials": "catalog:",
-    "@deepseek-ai/dsh-llm": "catalog:",
-    "@deepseek-ai/dsh-settings": "catalog:",
+    "@deepseek-ai/dsh-credentials": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-llm": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-settings": "0.1.5-rc.1",
     "@amiba/dsh-plugin-media": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "catalog:",
-    "@deepseek-ai/dsh-credentials": "catalog:",
-    "@deepseek-ai/dsh-llm": "catalog:",
-    "@deepseek-ai/dsh-settings": "catalog:",
+    "@deepseek-ai/dsh-credentials": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-llm": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-settings": "0.1.5-rc.1",
     "typescript": "5.6.3",
     "vite": "^5.4.11",
     "vitest": "^2.1.4",
