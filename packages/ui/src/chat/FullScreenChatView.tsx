@@ -91,6 +91,8 @@ const DEFAULT_SIDEBAR_VIEW: ActivityViewId = "chats";
 const SIDEBAR_WIDTH_KEY = "settings.chat.sidebarWidth";
 const SIDEBAR_COLLAPSED_KEY = "settings.chat.sidebarCollapsed";
 const SIDEBAR_TRANSITION_FALLBACK_MS = 240;
+const HEADER_ACTION_GAP_PX = 2;
+const HEADER_RIGHT_PADDING_PX = 12;
 
 /**
  * Space the workbench edge controls need on top of their own width: the row's
@@ -200,6 +202,7 @@ export interface FullScreenChatViewProps {
     /** Optional ancestry controls; the original editable title remains mounted. */
     headerLineage?: ReactNode;
     conversationViews?: readonly ConversationViewEntry[];
+    conversationHeaderViewIds?: readonly string[];
     conversationView?: (id: string) => ReactNode;
     conversationViewSelection?: { sessionId: string; id: string } | null;
     onConversationViewSelect?: (id: string | null) => void;
@@ -834,6 +837,7 @@ function FullScreenChatViewInner({
   // width. The row floats over the pane at `z-50`; without this the tabs
   // scroll underneath the controls.
   const edgeControlsRef = useRef<HTMLDivElement>(null);
+  const chatColumnRef = useRef<HTMLDivElement>(null);
   const [edgeControlsInset, setEdgeControlsInset] = useState(
     EDGE_CONTROLS_FALLBACK_PX,
   );
@@ -842,16 +846,29 @@ function FullScreenChatViewInner({
     const node = edgeControlsRef.current;
     if (!node) {
       setEdgeControlsInset((current) => (current === 0 ? current : 0));
+      chatColumnRef.current?.style.removeProperty("--amiba-header-actions-right");
       return;
     }
     const measure = () => {
       const next =
         Math.ceil(node.getBoundingClientRect().width) + EDGE_CONTROLS_GUTTER_PX;
       setEdgeControlsInset((current) => (current === next ? current : next));
+      // Actions belong to the chat column. Reserve only the part of the
+      // window-edge controls that overlaps it, including during pane resize.
+      const chatRight = chatColumnRef.current?.getBoundingClientRect().right;
+      const inset = chatRight === undefined ? HEADER_RIGHT_PADDING_PX : Math.max(
+        HEADER_RIGHT_PADDING_PX,
+        chatRight - node.getBoundingClientRect().left + HEADER_ACTION_GAP_PX,
+      );
+      // ResizeObserver runs before paint. Write geometry directly so React's
+      // deferred render cannot leave the actions a frame behind the CSS width
+      // transition and make them overshoot the window controls, then snap back.
+      chatColumnRef.current?.style.setProperty("--amiba-header-actions-right", `${inset}px`);
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(node);
+    if (chatColumnRef.current) observer.observe(chatColumnRef.current);
     return () => observer.disconnect();
   }, [workbenchVisible]);
 
@@ -984,7 +1001,7 @@ function FullScreenChatViewInner({
           data-workspace-main-row
           className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
         >
-          <div className="amiba-chat-column relative flex min-h-0 min-w-0 flex-1 flex-col">
+          <div ref={chatColumnRef} className="amiba-chat-column relative flex min-h-0 min-w-0 flex-1 flex-col">
             <PrimaryWorkspaceView
               active={(sidebarView === "chats" && !slots?.mainPanel)}
               testId="chats-view"
@@ -1017,7 +1034,7 @@ function FullScreenChatViewInner({
                   onRetry={() => void onOpenSession(sessions.sessionLoad?.sessionId ?? displayedLoad!.sessionId)}
                   onHome={() => void onNewChatAndShow()}
                 />
-              ) : <ConversationViewRegion selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
+              ) : <ConversationViewRegion headerViewIds={slots?.conversationHeaderViewIds} selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
                 <ChatSurface
                   messagesMaxWidth={messagesWidth}
                   client={client}
@@ -1065,8 +1082,8 @@ function FullScreenChatViewInner({
           <div
             ref={edgeControlsRef}
             data-workspace-edge-toggle
-            className="app-no-drag absolute right-3 top-0 z-50 flex items-center gap-0.5"
-            style={{ height: topBarHeightPx ?? 40 }}
+            className="app-no-drag absolute right-3 top-0 z-50 flex items-center"
+            style={{ height: topBarHeightPx ?? 40, gap: HEADER_ACTION_GAP_PX }}
           >
             {slots?.headerAfter}
             {WorkbenchToggle && <WorkbenchToggle />}
@@ -1221,7 +1238,7 @@ interface ContentHeaderProps {
   title: string;
   icon: ReactNode;
   /**
-   * Per-session action row rendered immediately right of the title. Host
+   * Per-session action row at the right edge of the conversation column. Host
    * content only — the header neither knows nor cares that the node comes
    * from the official `conversation.session.header.actions` seat. Nothing
    * to render means no row: the wrapper carries `empty:hidden`, so an
@@ -1262,6 +1279,10 @@ function ContentHeader({
       heightPx={heightPx}
       leftInset={sidebarCollapsed ? leftInset : 0}
       bordered={!seamless}
+      style={{
+        paddingRight: `var(--amiba-header-actions-right, ${HEADER_RIGHT_PADDING_PX}px)`,
+        "--amiba-header-height": `${heightPx}px`,
+      } as CSSProperties}
       className={cn(titleEditing && "app-no-drag", className)}
       onPointerDown={(event) => {
         if (!titleEditing) return;
@@ -1331,21 +1352,17 @@ function ContentHeader({
               </WorkbenchViewBoundary>
             </div>
           ) : null}
-          {/* Title-adjacent action row. `empty:hidden` is load-bearing: an
-              unoccupied seat renders no DOM inside this wrapper, and a
-              zero-child flex item would still spend one parent gap. Hidden
-              means no box AND no gap — the header is pixel-identical to a
-              build without the seat. */}
-          {actions ? (
-            <div
-              data-content-header-actions
-              className="app-no-drag flex min-w-0 shrink-0 items-center gap-0.5 empty:hidden"
-            >
-              {actions}
-            </div>
-          ) : null}
         </div>
       }
+      trailing={actions ? (
+        <div
+          data-content-header-actions
+          className="app-no-drag flex min-w-0 shrink-0 items-center empty:hidden"
+          style={{ gap: HEADER_ACTION_GAP_PX }}
+        >
+          {actions}
+        </div>
+      ) : undefined}
     />
   );
 }

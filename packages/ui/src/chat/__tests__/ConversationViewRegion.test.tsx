@@ -111,3 +111,22 @@ it("accepts external trajectory selection without remounting the native editor",
   expect(screen.getByRole("textbox")).toBe(editor);
   expect(editor).toHaveValue("keep me");
 });
+
+it("uses external header navigation for trajectory while preserving other plugin tabs and drafts", () => {
+  const props = { sessionId: "one", chatLabel: "Chat", headerViewIds: ["trajectory"], entries: [{ id: "trajectory", label: "Transcript" }], renderView: (id: string) => <p>Records: {id}</p> };
+  const chat = <textarea aria-label="Draft" defaultValue="Keep this draft" />;
+  const { rerender } = render(<ConversationViewRegion {...props}>{chat}</ConversationViewRegion>);
+  const editor = screen.getByRole("textbox");
+  expect(screen.queryByRole("tablist")).toBeNull();
+  const selection = { sessionId: "one", id: "trajectory" };
+  rerender(<ConversationViewRegion {...props} selection={selection}>{chat}</ConversationViewRegion>);
+  expect(screen.getByRole("region", { name: "Transcript" })).toBeVisible();
+  expect(editor).not.toBeVisible();
+  expect(screen.queryByRole("tablist")).toBeNull();
+  rerender(<ConversationViewRegion {...props} selection={null}>{chat}</ConversationViewRegion>);
+  expect(screen.getByRole("textbox")).toBe(editor);
+  expect(editor).toHaveValue("Keep this draft");
+  rerender(<ConversationViewRegion {...props} entries={[...props.entries, { id: "extra", label: "Extra" }]}>{chat}</ConversationViewRegion>);
+  expect(screen.getByRole("tab", { name: "Extra" })).toBeVisible();
+  expect(screen.queryByRole("tab", { name: "Transcript" })).toBeNull();
+});

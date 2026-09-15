@@ -1102,7 +1102,7 @@ describe("FullScreenChatView session-header action seat", () => {
     expect(row).toHaveClass("empty:hidden");
   });
 
-  it("renders a contributed action title-adjacent, not in the utilities strip", () => {
+  it("renders contributed actions at the chat header edge, separately from window utilities", () => {
     const { container } = renderView(
       <button type="button">contributed-action</button>,
     );
@@ -1111,9 +1111,11 @@ describe("FullScreenChatView session-header action seat", () => {
     const action = screen.getByRole("button", { name: "contributed-action" });
     expect(row).toContainElement(action);
 
-    // Title-adjacent: inside the header's leading cluster, after the title.
+    // Trailing in the chat column, outside the title cluster.
     const leading = container.querySelector("[data-content-header-leading]");
-    expect(leading).toContainElement(row as HTMLElement);
+    expect(leading).not.toContainElement(row as HTMLElement);
+    expect(row?.closest(".amiba-chat-column")).toBeTruthy();
+    expect(row).toHaveStyle({ gap: "2px" });
     const title = container.querySelector("[data-content-header-title]");
     expect(
       title!.compareDocumentPosition(row as HTMLElement) &
@@ -1125,6 +1127,58 @@ describe("FullScreenChatView session-header action seat", () => {
     // two regions apart is why upstream declares them as separate seats.
     const utilities = container.querySelector("[data-workspace-edge-toggle]");
     expect(utilities).not.toContainElement(action);
+  });
+
+  it("keeps equal gaps beside the toggle and follows the chat boundary as the pane resizes", () => {
+    let chatRight = 1200;
+    let controlsLeft = 1160;
+    const resizeCallbacks: Array<() => void> = [];
+    const bounds = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("amiba-chat-column")) return { right: chatRight } as DOMRect;
+      if (this.hasAttribute("data-workspace-edge-toggle")) return { left: controlsLeft, width: 28 } as DOMRect;
+      return { width: 0, height: 0, left: 0, right: 0, top: 0, bottom: 0 } as DOMRect;
+    });
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: () => void) { resizeCallbacks.push(callback); }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    try {
+      const { container } = renderView(<><button>Sync</button><button>Transcript</button></>);
+      const actions = container.querySelector("[data-content-header-actions]") as HTMLElement;
+      const header = actions.closest("header")!;
+      const controls = container.querySelector("[data-workspace-edge-toggle]") as HTMLElement;
+      const column = container.querySelector(".amiba-chat-column") as HTMLElement;
+      const inset = () => parseFloat(column.style.getPropertyValue("--amiba-header-actions-right"));
+      expect(header.style.paddingRight).toBe("var(--amiba-header-actions-right, 12px)");
+      expect(actions.style.gap).toBe(controls.style.gap);
+      expect(chatRight - inset()).toBe(controlsLeft - 2);
+      // Opening/resizing the pane moves only the chat boundary, not window controls.
+      chatRight = 760;
+      act(() => resizeCallbacks.forEach(callback => callback()));
+      expect(inset()).toBe(12);
+      expect(chatRight - inset()).toBe(748);
+      // Each animation frame must update synchronously, without waiting for
+      // React/act to flush a render. The row may approach but never overshoot.
+      let previousRight = chatRight - inset();
+      for (const right of [1000, 1150, 1160, 1170, 1190, 1200]) {
+        chatRight = right;
+        resizeCallbacks.forEach(callback => callback());
+        const actionRight = chatRight - inset();
+        expect(actionRight).toBeGreaterThanOrEqual(previousRight);
+        expect(actionRight).toBeLessThanOrEqual(controlsLeft - 2);
+        previousRight = actionRight;
+      }
+      // Closing the pane and adding another utility preserves the same 2px gap.
+      chatRight = 1200;
+      controlsLeft = 1130;
+      act(() => resizeCallbacks.forEach(callback => callback()));
+      expect(chatRight - inset()).toBe(controlsLeft - 2);
+    } finally {
+      bounds.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 
   it("resets the stored sidebar view when landing on home without restoring it", async () => {

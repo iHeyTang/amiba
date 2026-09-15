@@ -1,3 +1,4 @@
+import { TrajectoryNavigationContext } from "./trajectory-header-action.js";
 import { MainPanelList, type MainPanelRow } from "./main-panel-list.js";
 import type { MainPanelNavigation } from "./main-panel-navigation.js";
 import { LegacyToolDetails } from "./legacy-tool-details.js";
@@ -130,7 +131,7 @@ const EMPTY_MESSAGE_SOURCES: readonly MessageSourceRow[] = [];
  * `.onboarding` / `.general.item` — `shell.overlay`, the two session-header seats —
  * `conversation.session.header.utilities`, the right-aligned strip that
  * replaced the retired `amiba.chat.header.after`, and
- * `conversation.session.header.actions`, the title-adjacent action row —
+ * `conversation.session.header.actions`, the conversation-edge action row —
  * and the two composer control seats, `conversation.input.model` and
  * `conversation.input.plan`, and the composer's floating overlay anchor,
  * `conversation.input.overlay`). Two names from the public vocabulary are
@@ -853,6 +854,7 @@ function ProductShellInner({
               messageSourceLabel={messageSourceLabel}
               slots={{
                 conversationViews: viewEntries,
+                conversationHeaderViewIds: ["trajectory"],
                 conversationView: (id) => renderSlot("conversation.view", { ...trajectory.owner, ...(loadMessageImage ? { loadImage: loadMessageImage } : {}) }, { only: id }),
                 conversationViewSelection: trajectory.selection,
                 onConversationViewSelect: trajectory.select,
@@ -962,14 +964,20 @@ function ProductShellInner({
                   "conversation.session.header.utilities",
                   {},
                 ),
-                // The title-adjacent counterpart, same session resolution and the
+                // The conversation-edge counterpart, same session resolution and the
                 // same empty owner share the contract declares. The header row it
                 // lands in collapses while the seat is empty, so a session with no
                 // contributed action looks exactly as it did before the seat
                 // existed.
-                headerActions: renderSlot(
-                  "conversation.session.header.actions",
-                  {},
+                headerActions: (
+                  <TrajectoryNavigationContext.Provider value={{
+                    sessionId: sessions.activeId,
+                    available: viewEntries.some(entry => entry.id === "trajectory"),
+                    active: trajectory.selection?.id === "trajectory",
+                    select: trajectory.select,
+                  }}>
+                    {renderSlot("conversation.session.header.actions", {})}
+                  </TrajectoryNavigationContext.Provider>
                 ),
                 contentOverlay: renderSlot("amiba.chat.content.overlay", {}),
               }}

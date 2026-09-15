@@ -147,8 +147,9 @@
 - id: ui-user-questions
   disabled: true
 
+# Official trajectory records are opened through Amiba's title action.
 - id: ui-trajectory
-  disabled: true
+  disabled: false
 
 - insert:
     - id: amiba-ui-shell

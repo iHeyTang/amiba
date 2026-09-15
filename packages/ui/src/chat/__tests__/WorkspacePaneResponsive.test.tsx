@@ -235,6 +235,9 @@ describe("WorkspacePane responsive behavior", () => {
       name: "toggle workspace",
     });
     expect(toggle).toHaveAttribute("aria-pressed", "false");
+    const tabbar = document.querySelector("[data-workspace-tabbar]");
+    expect(tabbar).not.toHaveClass("app-drag-region");
+    expect(tabbar).toHaveClass("app-no-drag");
     const edgeToggle = screen.getByRole("button", {
       name: "workspacePane.open",
     });
@@ -242,6 +245,7 @@ describe("WorkspacePane responsive behavior", () => {
     await userEvent.click(toggle);
 
     expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(tabbar).toHaveClass("app-drag-region");
     const openEdgeToggle = screen.getByRole("button", {
       name: "workspacePane.collapse",
     });
@@ -258,6 +262,8 @@ describe("WorkspacePane responsive behavior", () => {
 
     await userEvent.click(openEdgeToggle);
     expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(tabbar).not.toHaveClass("app-drag-region");
+    expect(tabbar).toHaveClass("app-no-drag");
   });
 
   it("prepares and marks an addressed background checkpoint without changing the foreground pane", async () => {
