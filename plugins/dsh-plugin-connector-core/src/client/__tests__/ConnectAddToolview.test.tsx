@@ -1,9 +1,11 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ConnectAddToolview } from "../ConnectAddToolview";
 
-const base = { callId: "k1", toolName: "amiba_connect_add", openFile: () => {} };
+// `loadImage` is part of the official tool-call owner contract this row is
+// handed; the row never reads it, but the owner props require it.
+const base = { callId: "k1", toolName: "amiba_connect_add", openFile: () => {}, loadImage: vi.fn(async () => "blob:authorized") };
 const running = { callId: "k1", name: "amiba_connect_add", argsRaw: "{}", turn: 1, step: 1, time: 1, callView: null, subCalls: [] };
 function settled(text: string, isError = false) {
   return { kind: "tool-result", seq: 1, time: 2, callId: "k1", call: { name: "amiba_connect_add", argsRaw: "{}" }, callTime: 1, content: [{ type: "text", text }], isError, callView: null, resultView: null, subCalls: [] };

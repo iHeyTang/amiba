@@ -1,10 +1,11 @@
 import type { PresetOption } from "./connector-ui-registry.js";
 
 /**
- * Minimal shape of the engine-native connection face this reads — the same
- * `ctx.get("connection").api.agentPresets.list({})` that
- * `dsh-plugin-agent-preset`'s client/data.ts consumes. Kept structural so the
- * client half never has to import a DSH connection type here.
+ * Minimal shape of the engine-native wire face this reads — the same
+ * `ctx.remote.agentPresets.list()` that `dsh-plugin-agent-preset`'s
+ * client/data.ts consumes (so the reading fiber must declare
+ * `remote.agentPresets` in its `inject`). Kept structural so the client half
+ * never has to import a DSH connection type here.
  */
 export type PresetConnection = Pick<import("@deepseek-ai/dsh-api-remotes/client").ClientRemote, "agentPresets">;
 
@@ -17,11 +18,12 @@ interface RawEntry {
 /**
  * Read the installed agent presets as picker options; [] on any failure.
  *
- * The call resolves to an rpc envelope — `{ rpcId, result: { ok, value } }`
- * — exactly as `dsh-plugin-agent-preset`'s `client/data.ts` `unwrap()` reads
- * it; `value.presets` carries camelCase `AgentPresetEntry` rows. `name` is the
- * display name and falls back to `id` (DSH's own contract); `description` is a
- * longer blurb and is NOT the label.
+ * The call resolves to the bare result envelope `{ ok, value }` — the shape
+ * DSH 0.1.5-rc.1 `remote.<namespace>` methods return, read the same way by
+ * `dsh-plugin-agent-preset`'s `client/data.ts` `unwrap()`; `value.presets`
+ * carries camelCase `AgentPresetEntry` rows. `name` is the display name and
+ * falls back to `id` (DSH's own contract); `description` is a longer blurb
+ * and is NOT the label.
  */
 export async function loadAgentPresets(
   connection: PresetConnection,
