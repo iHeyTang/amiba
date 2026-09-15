@@ -62,7 +62,7 @@ export function WorkspaceMarkdownLink({
       }}>{children}</a>
       <button
         type="button"
-        className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded align-text-bottom text-muted-foreground hover:bg-muted/45 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded align-middle text-muted-foreground hover:bg-muted/45 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         title={t("workspacePane.openInDefaultBrowser")}
         aria-label={t("workspacePane.openInDefaultBrowser")}
         onClick={(event) => {
