@@ -67,7 +67,8 @@
         "@deepseek-ai/dsh-api-session-controller",
         "@deepseek-ai/dsh-api-workspace-controller",
         "@deepseek-ai/dsh-client-ui-settings",
-        "@amiba/dsh-plugin-ui-shell"
+        "@amiba/dsh-plugin-ui-shell",
+        "@amiba/dsh-plugin-workbench"
       ],
       "platform": "web",
       "external": [
@@ -80,5 +81,8 @@
     "bundle": {
       "patch": "./cordis.patch.yml"
     }
+  },
+  "dependencies": {
+    "@amiba/dsh-plugin-workbench": "workspace:*"
   }
 }

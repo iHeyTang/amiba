@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { workspaceTerminalTheme } from "../workspace-terminal-theme";
+import { workspaceTerminalTheme } from "./workspace-terminal-theme";
 
 const OPAQUE_HEX = /^#[0-9a-f]{6}$/i;
 

@@ -74,11 +74,11 @@ describe("session workbench jobs", () => {
     fireEvent.click(screen.getByRole("button",{name:/已结束/}));
     expect(screen.queryByText("hello")).toBeNull();
   });
-  it("opens the workbench from its tab", () => {
+  it("keeps the background bridge mounted without adding a permanent tab", () => {
     const {props}=fixture();
     render(<WorkbenchActivity {...props as any}/>);
-    fireEvent.click(screen.getByRole("tab",{name:/后台任务/}));
-    expect(props.openPanel).toHaveBeenCalledWith("background-jobs");
+    expect(screen.queryByRole("tab", { name: /后台任务/ })).toBeNull();
+    expect(props.openPanel).not.toHaveBeenCalled();
   });
 });
 

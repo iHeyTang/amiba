@@ -33,7 +33,8 @@
         "@deepseek-ai/dsh-api-session-controller",
         "@deepseek-ai/dsh-api-workspace-controller",
         "@deepseek-ai/dsh-client-ui-settings",
-        "@amiba/dsh-plugin-ui-shell"
+        "@amiba/dsh-plugin-ui-shell",
+        "@amiba/dsh-plugin-workbench"
       ],
       "platform": "web",
       "external": [
@@ -48,7 +49,8 @@
     "@amiba/extension-sdk": "workspace:*",
     "@amiba/dsh-plugin-ui-shell": "workspace:*",
     "@amiba/app-runtime": "workspace:*",
-    "@amiba/i18n": "workspace:*"
+    "@amiba/i18n": "workspace:*",
+    "@amiba/dsh-plugin-workbench": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",

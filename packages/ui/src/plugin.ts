@@ -165,7 +165,7 @@ export { SemanticToolRow, type SemanticToolSpec, type SemanticEvidenceContext } 
 export { MarkdownCodeView, MarkdownTableView } from "./primitives/markdown-blocks";
 
 export { WorkbenchExtensionsProvider, WorkbenchViewBoundary } from "./chat/workbench-extensions";
-export { builtinWorkbenchViews, WorkspaceFileWorkspace, CodeEditor, PreviewHeader, useWorkspacePane, type FileResource } from "./chat/WorkspacePane";
+export { WorkspacePane, WorkspacePaneToggle, builtinWorkbenchViews, WorkspaceFileWorkspace, CodeEditor, PreviewHeader, useWorkspacePane, type FileResource } from "./chat/WorkspacePane";
 
 export { ModelDetailsDialog } from "./models/ModelDetailsDialog";
 
@@ -176,3 +176,5 @@ export { PresentationRoot, usePresentationCoordinator, useSurfaceActivity, useSu
 export { ConversationSubmitProvider } from "./chat/conversation-submit";
 
 export { ToolImageEvidenceProvider } from "./chat/bubble/tool-image-evidence";
+
+export { useDocumentTheme } from "./theme";

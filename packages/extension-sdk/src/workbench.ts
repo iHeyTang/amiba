@@ -1,4 +1,5 @@
-import type { ComponentType } from "react";
+import type { WorkbenchPanelOwner } from "./slots.js";
+import type { ComponentType, ReactNode } from "react";
 
 /** Open domain: resource types belong to their contributing plugins. */
 export interface WorkbenchResource {
@@ -31,16 +32,40 @@ export interface WorkbenchViewExtension {
   tabIcon?: ComponentType<{ resource: WorkbenchResource; className?: string }>;
   /** Optional action in the workbench header, follows the same election as the view. */
   toolbar?: ComponentType;
+  /** Await cleanup before closing a tab. Rejection keeps it open for retry. */
+  onClose?(
+    resource: WorkbenchResource,
+    sessionId: string,
+  ): void | Promise<void>;
   /** Resolve a URL using this plugin's resource semantics; null declines it. */
   resolveUrl?(
     url: string,
     resources: readonly WorkbenchResource[],
   ): WorkbenchResource | null;
-  /** Optional persistent navigation entry, removed with the contribution. */
-  launcher?: { label(): string; icon?: ComponentType<{ className?: string }> };
+  /** New-tab action. The same contribution drives the empty state and + menu. */
+  launcher?: {
+    label(): string;
+    icon?: ComponentType<{ className?: string }>;
+    /** Omit for a singleton resource with the resourceType as its id. */
+    createResource?(): WorkbenchResource;
+  };
+}
+
+/** The shell supplies session/platform context; an installed plugin supplies the workbench. */
+export interface WorkbenchShellExtension {
+  id: string;
+  order: number;
+  component: ComponentType<{
+    visible?: boolean;
+    renderPanel?: (owner: WorkbenchPanelOwner) => ReactNode;
+    inspectToolCall?: (callId: string) => boolean;
+  }>;
+  toggle: ComponentType;
 }
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotMap {
+    /** Register inject: () => ({ extension: WorkbenchShellExtension }). */
+    "amiba.workbench.shell": { kind: "list"; scope: "root" };
     /** Register inject: () => ({ extension: WorkbenchViewExtension }). */
     "amiba.workbench.view": { kind: "list"; scope: "root" };
   }

@@ -18,6 +18,8 @@
     "@amiba/dsh-plugin-runtime-inventory": "workspace:*",
     "@amiba/dsh-plugin-ui-shell": "workspace:*",
     "@amiba/dsh-plugin-markdown": "workspace:*",
-    "@amiba/dsh-plugin-file-preview": "workspace:*"
+    "@amiba/dsh-plugin-file-preview": "workspace:*",
+    "@amiba/dsh-plugin-workbench": "workspace:*",
+    "@amiba/dsh-plugin-terminal": "workspace:*"
   }
 }

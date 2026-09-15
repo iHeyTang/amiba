@@ -66,17 +66,13 @@ import type {
 import type { ToolCallSeatRenderer } from "./bubble/tool-call-seat";
 import type { QuestionSeatRenderer } from "./bubble/question-seat";
 import {
-  WorkspacePane,
   WorkspacePaneProvider,
-  WorkspacePaneToggle,
-  WorkspaceTerminalPanel,
-  WorkspaceTerminalToggle,
   useWorkspacePane,
 } from "./WorkspacePane";
 import {
   WorkbenchViewBoundary,
   WorkbenchExtensionHosts,
-  WorkbenchExtensionToolbar,
+  useWorkbenchShell,
 } from "./workbench-extensions";
 import {
   APP_SIDEBAR_DEFAULT_WIDTH,
@@ -759,6 +755,9 @@ function FullScreenChatViewInner({
   );
 
   const workspacePane = useWorkspacePane();
+  const workbenchShell = useWorkbenchShell();
+  const WorkbenchPane = workbenchShell?.component;
+  const WorkbenchToggle = workbenchShell?.toggle;
 
   const onSidebarViewChange = useCallback((next: ActivityViewId) => {
     if (next === "tasks") next = "chats";
@@ -1054,7 +1053,7 @@ function FullScreenChatViewInner({
               })}
             </PrimaryWorkspaceView>
           </div>
-          <WorkspacePane
+          {WorkbenchPane && <WorkbenchPane
             visible={workbenchVisible}
             renderPanel={slots?.workbenchPanel}
             inspectToolCall={(callId) => {
@@ -1065,13 +1064,8 @@ function FullScreenChatViewInner({
               toolNavigation.reveal(callId);
               return true;
             }}
-          />
+          />}
         </div>
-        <WorkspaceTerminalPanel
-          visible={workbenchVisible}
-          open={workspacePane.terminalOpen}
-          onClose={() => workspacePane.setTerminalOpen(false)}
-        />
         {workbenchVisible && (
           <div
             ref={edgeControlsRef}
@@ -1080,15 +1074,7 @@ function FullScreenChatViewInner({
             style={{ height: topBarHeightPx ?? 40 }}
           >
             {slots?.headerAfter}
-            <WorkbenchExtensionToolbar />
-            <WorkspaceTerminalToggle
-              open={workspacePane.terminalOpen}
-              onToggle={() =>
-                workspacePane.setTerminalOpen(!workspacePane.terminalOpen)
-              }
-              showUnavailable
-            />
-            <WorkspacePaneToggle showUnavailable />
+            {WorkbenchToggle && <WorkbenchToggle />}
             {slots?.headerCorner && (
               <div
                 data-conversation-header-corner=""

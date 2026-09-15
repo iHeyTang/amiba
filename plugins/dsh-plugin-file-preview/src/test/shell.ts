@@ -9,3 +9,6 @@ export { createSlotContributionsSource } from "../../../dsh-plugin-ui-shell/src/
 
 export { getPlatform } from "@amiba/app-runtime/platform";
 export { cn } from "@amiba/ui/primitives";
+
+export { useT } from "@amiba/i18n";
+export { useDocumentTheme } from "../../../../packages/ui/src/theme";

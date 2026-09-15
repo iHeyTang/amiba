@@ -64,9 +64,8 @@ it("unmounts surfaces and listeners on removal, restores resources on reinstall,
   };
   const browserView = createBrowserView(platform.embeddedBrowser as never);
   const app = render(<App extensions={[browserView]} />);
-  expect(
-    screen.getByRole("button", { name: "Open browser" }),
-  ).toBeInTheDocument();
+  expect(browserView.launcher?.label()).toBe("Open browser");
+  expect(screen.queryByRole("button", { name: "Open browser" })).toBeNull();
   fireEvent.change(screen.getByLabelText("chat draft"), {
     target: { value: "keep my draft" },
   });

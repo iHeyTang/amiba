@@ -40,7 +40,6 @@ import {
   type WorkspaceFilesAdapter,
   type WorkspaceGitState,
   type WorkspaceProject,
-  type WorkspaceTerminalSnapshot,
   type WorkspaceTreeEntry,
 } from "@amiba/app-runtime/platform";
 import {
@@ -67,7 +66,6 @@ import {
   History,
   List,
   MoreHorizontal,
-  PanelBottom,
   PanelRight,
   Plus,
   RotateCw,
@@ -92,8 +90,6 @@ import {
   type UIEvent as ReactUIEvent,
 } from "react";
 import { tags } from "@lezer/highlight";
-import { FitAddon } from "@xterm/addon-fit";
-import { Terminal as XtermTerminal } from "@xterm/xterm";
 
 import {
   Button,
@@ -108,7 +104,6 @@ import {
 import type { WorkspaceInspectorCapability } from "./internal/capabilities";
 import { formatToolDuration } from "./internal/helpers";
 import { useHorizontalWheelScroll } from "../hooks/useHorizontalWheelScroll";
-import { useDocumentTheme } from "../theme";
 import {
   compactWorkspacePath,
   parseWorkspaceReview,
@@ -121,16 +116,11 @@ import {
   type WorkspaceReviewLine,
   type WorkspaceReviewRow,
 } from "./workspace-review";
-import { workspaceTerminalTheme } from "./workspace-terminal-theme";
 
 export { workspaceFileTargets } from "./workspace-review";
 
 const PANE_WIDTH_KEY = "settings.chat.workspacePaneWidth";
-const TERMINAL_HEIGHT_KEY = "settings.chat.workspaceTerminalHeight";
 const DEFAULT_PANE_WIDTH = 520;
-const DEFAULT_TERMINAL_HEIGHT = 280;
-const MIN_TERMINAL_HEIGHT = 160;
-const MAX_TERMINAL_HEIGHT = 640;
 
 const WORKSPACE_CODE_HIGHLIGHT = HighlightStyle.define([
   {
@@ -212,8 +202,8 @@ type WorkbenchMode =
 
 /**
  * Everything the workbench remembers is owned by ONE session: its tabs, whether
- * the pane is open, which view it shows, whether the file tree is unfolded and
- * whether the terminal drawer is out. Switching sessions swaps the whole
+ * the pane is open, which view it shows and whether the file tree is unfolded.
+ * Switching sessions swaps the whole
  * record — nothing here is a global preference (the pane WIDTH is the one
  * layout setting shared across sessions).
  */
@@ -279,7 +269,7 @@ const EMPTY_CONTEXT: WorkspacePaneContextValue = {
   width: DEFAULT_PANE_WIDTH,
   tabs: [],
   activeTab: null,
-  mode: "files",
+  mode: "preview",
   fileTreeOpen: false,
   terminalOpen: false,
   sessionId: "",
@@ -664,26 +654,12 @@ function clampPaneWidth(value: number): number {
   return preferredWorkspaceWidth(value);
 }
 
-function clampTerminalHeight(value: number): number {
-  const viewportMaximum =
-    typeof window === "undefined"
-      ? MAX_TERMINAL_HEIGHT
-      : Math.max(
-          MIN_TERMINAL_HEIGHT,
-          Math.min(MAX_TERMINAL_HEIGHT, window.innerHeight - 160),
-        );
-  return Math.min(
-    viewportMaximum,
-    Math.max(MIN_TERMINAL_HEIGHT, Math.round(value)),
-  );
-}
-
 function emptySessionState(): SessionPaneState {
   return {
     tabs: [],
     activeTabId: null,
     open: false,
-    mode: "files",
+    mode: "preview",
     fileTreeOpen: false,
     terminalOpen: false,
   };
@@ -986,7 +962,7 @@ export function WorkspacePaneProvider({
           resource,
           pinned: true,
         };
-        const tabs = [...state.tabs, tab].slice(-10);
+        const tabs = [...state.tabs, tab];
         return { ...state, tabs, activeTabId: tab.id, mode: "preview" };
       });
       persistOpen(true);
@@ -3457,599 +3433,6 @@ function WorkspaceGitReview({
   );
 }
 
-type PendingTerminalChunk = {
-  sequence: number;
-  chunk: string;
-};
-
-export function WorkspaceTerminalView({
-  sessionId,
-  terminalId,
-  development,
-  onSnapshot,
-}: {
-  sessionId: string;
-  terminalId: string;
-  development: WorkspaceDevelopmentAdapter;
-  onSnapshot: (snapshot: WorkspaceTerminalSnapshot) => void;
-}) {
-  const { t } = useT();
-  const documentTheme = useDocumentTheme();
-  const hostRef = useRef<HTMLDivElement>(null);
-  const terminalRef = useRef<XtermTerminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const initialThemeRef = useRef(documentTheme);
-  const hydratedRef = useRef(false);
-  const outputSequenceRef = useRef(0);
-  const pendingChunksRef = useRef<PendingTerminalChunk[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  const hydrateTerminal = useCallback(
-    (next: WorkspaceTerminalSnapshot) => {
-      const terminal = terminalRef.current;
-      if (!terminal) return;
-      terminal.reset();
-      terminal.write(next.output);
-      outputSequenceRef.current = next.sequence;
-      hydratedRef.current = true;
-      for (const event of pendingChunksRef.current) {
-        if (event.sequence <= outputSequenceRef.current) continue;
-        terminal.write(event.chunk);
-        outputSequenceRef.current = event.sequence;
-      }
-      pendingChunksRef.current = [];
-      onSnapshot(next);
-    },
-    [onSnapshot],
-  );
-
-  useEffect(() => {
-    if (!development || !hostRef.current) return;
-    let disposed = false;
-    let resizeFrame: number | null = null;
-    hydratedRef.current = false;
-    outputSequenceRef.current = 0;
-    pendingChunksRef.current = [];
-
-    const terminal = new XtermTerminal({
-      cursorBlink: true,
-      cursorStyle: "block",
-      fontFamily:
-        "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-      fontSize: 12,
-      lineHeight: 1.35,
-      macOptionIsMeta: true,
-      minimumContrastRatio: 4.5,
-      scrollOnUserInput: true,
-      scrollback: 10_000,
-      theme: workspaceTerminalTheme(initialThemeRef.current),
-    });
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    terminal.open(hostRef.current);
-    terminalRef.current = terminal;
-    fitAddonRef.current = fitAddon;
-
-    terminal.attachCustomKeyEventHandler((event) => {
-      if (
-        event.type === "keydown" &&
-        event.metaKey &&
-        event.key.toLocaleLowerCase() === "c" &&
-        terminal.hasSelection()
-      ) {
-        void navigator.clipboard.writeText(terminal.getSelection());
-        return false;
-      }
-      return true;
-    });
-
-    const inputSubscription = terminal.onData((data) => {
-      development.terminalWrite(sessionId, terminalId, data);
-    });
-    const resizeSubscription = terminal.onResize(({ cols, rows }) => {
-      development.terminalResize(sessionId, terminalId, cols, rows);
-    });
-    const unsubscribe = development.onTerminalData((event) => {
-      if (
-        event.sessionId !== sessionId ||
-        event.terminalId !== terminalId ||
-        disposed
-      )
-        return;
-      if (!hydratedRef.current) {
-        pendingChunksRef.current.push({
-          sequence: event.sequence,
-          chunk: event.chunk,
-        });
-        return;
-      }
-      if (event.sequence <= outputSequenceRef.current) return;
-      terminal.write(event.chunk);
-      outputSequenceRef.current = event.sequence;
-    });
-
-    const fit = () => {
-      if (disposed || !hostRef.current) return;
-      try {
-        fitAddon.fit();
-        development.terminalResize(
-          sessionId,
-          terminalId,
-          terminal.cols,
-          terminal.rows,
-        );
-      } catch {
-        /* The pane can collapse between ResizeObserver and animation frame. */
-      }
-    };
-    const resizeObserver = new ResizeObserver(() => {
-      if (resizeFrame != null) cancelAnimationFrame(resizeFrame);
-      resizeFrame = requestAnimationFrame(fit);
-    });
-    resizeObserver.observe(hostRef.current);
-    fit();
-
-    void development
-      .terminalGet(sessionId, terminalId)
-      .then(
-        (current) =>
-          current ?? development.terminalStart(sessionId, terminalId),
-      )
-      .then((next) => {
-        if (disposed) return;
-        hydrateTerminal(next);
-        fit();
-        terminal.focus();
-        setError(null);
-      })
-      .catch((cause) => {
-        if (!disposed)
-          setError(cause instanceof Error ? cause.message : String(cause));
-      });
-
-    return () => {
-      disposed = true;
-      if (resizeFrame != null) cancelAnimationFrame(resizeFrame);
-      resizeObserver.disconnect();
-      unsubscribe();
-      inputSubscription.dispose();
-      resizeSubscription.dispose();
-      terminal.dispose();
-      terminalRef.current = null;
-      fitAddonRef.current = null;
-    };
-  }, [development, hydrateTerminal, sessionId, terminalId]);
-
-  useEffect(() => {
-    const terminal = terminalRef.current;
-    if (!terminal) return;
-    terminal.options.theme = workspaceTerminalTheme(documentTheme);
-    fitAddonRef.current?.fit();
-  }, [documentTheme]);
-
-  return (
-    <div
-      data-workspace-terminal-id={terminalId}
-      className="relative h-full min-h-0 bg-background p-2"
-    >
-      <div
-        ref={hostRef}
-        data-selection="text"
-        className="amiba-terminal h-full min-h-0 overflow-hidden"
-        aria-label={t("workspacePane.terminal")}
-      />
-      {error ? (
-        <p className="pointer-events-none absolute inset-x-3 bottom-3 rounded-md border border-destructive/20 bg-background/95 px-2 py-1.5 text-[10px] text-destructive shadow-sm">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function createWorkspaceTerminalId(): string {
-  return (
-    globalThis.crypto?.randomUUID?.() ??
-    `terminal-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  );
-}
-
-export function WorkspaceTerminalToggle({
-  open,
-  onToggle,
-  className,
-  showUnavailable = false,
-}: {
-  open: boolean;
-  onToggle: () => void;
-  className?: string;
-  showUnavailable?: boolean;
-}) {
-  const pane = useWorkspacePane();
-  const { t } = useT();
-  const available = pane.enabled && !!pane.sessionId && !!pane.development;
-  if (!available && !showUnavailable) return null;
-  return (
-    <button
-      type="button"
-      disabled={!available}
-      onClick={() => {
-        if (available) onToggle();
-      }}
-      title={
-        open
-          ? t("workspacePane.closeTerminal")
-          : t("workspacePane.openTerminal")
-      }
-      aria-label={
-        open
-          ? t("workspacePane.closeTerminal")
-          : t("workspacePane.openTerminal")
-      }
-      aria-pressed={open}
-      className={cn(
-        "app-no-drag relative inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors",
-        "hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-        "disabled:pointer-events-none disabled:opacity-30",
-        open && "bg-foreground/5 text-foreground",
-        className,
-      )}
-    >
-      <PanelBottom className="h-3.5 w-3.5" />
-    </button>
-  );
-}
-
-export function WorkspaceTerminalPanel({
-  visible = true,
-  open,
-  onClose,
-}: {
-  visible?: boolean;
-  open: boolean;
-  onClose: () => void;
-}) {
-  const pane = useWorkspacePane();
-  const { t } = useT();
-  const development = pane.development;
-  const [height, setHeight] = useState(() =>
-    clampTerminalHeight(DEFAULT_TERMINAL_HEIGHT),
-  );
-  const [terminals, setTerminals] = useState<WorkspaceTerminalSnapshot[]>([]);
-  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
-  const [terminalBusy, setTerminalBusy] = useState(false);
-  const [terminalError, setTerminalError] = useState<string | null>(null);
-  const heightRef = useRef(height);
-  const resizeCleanupRef = useRef<(() => void) | null>(null);
-  heightRef.current = height;
-
-  useEffect(
-    () => () => {
-      resizeCleanupRef.current?.();
-    },
-    [],
-  );
-
-  useEffect(() => {
-    const onWindowResize = () => {
-      setHeight((current) => {
-        const next = clampTerminalHeight(current);
-        heightRef.current = next;
-        return next;
-      });
-    };
-    window.addEventListener("resize", onWindowResize);
-    return () => window.removeEventListener("resize", onWindowResize);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void getPlatform()
-      .storage.get(TERMINAL_HEIGHT_KEY)
-      .then((result) => {
-        if (cancelled) return;
-        const stored = result[TERMINAL_HEIGHT_KEY];
-        if (typeof stored === "number" && Number.isFinite(stored)) {
-          setHeight(clampTerminalHeight(stored));
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    setTerminals([]);
-    setActiveTerminalId(null);
-    setTerminalError(null);
-  }, [pane.sessionId]);
-
-  useEffect(() => {
-    if (!visible || !open || !pane.enabled || !development) return;
-    let cancelled = false;
-    const sessionId = pane.sessionId;
-    setTerminalBusy(true);
-    void development
-      .terminalList(sessionId)
-      .then(async (existing) => {
-        const next = existing.length
-          ? existing
-          : [await development.terminalStart(sessionId, "primary")];
-        if (cancelled) return;
-        setTerminals(next);
-        setActiveTerminalId((current) =>
-          current && next.some((terminal) => terminal.terminalId === current)
-            ? current
-            : (next[0]?.terminalId ?? null),
-        );
-        setTerminalError(null);
-      })
-      .catch((cause) => {
-        if (!cancelled)
-          setTerminalError(
-            cause instanceof Error ? cause.message : String(cause),
-          );
-      })
-      .finally(() => {
-        if (!cancelled) setTerminalBusy(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [development, open, pane.enabled, pane.sessionId, visible]);
-
-  const updateTerminalSnapshot = useCallback(
-    (snapshot: WorkspaceTerminalSnapshot) => {
-      setTerminals((current) => {
-        const index = current.findIndex(
-          (terminal) => terminal.terminalId === snapshot.terminalId,
-        );
-        if (index < 0) return [...current, snapshot];
-        const next = [...current];
-        next[index] = snapshot;
-        return next;
-      });
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (!visible || !open || !development) return;
-    return development.onTerminalData((event) => {
-      if (event.sessionId === pane.sessionId) {
-        updateTerminalSnapshot(event.snapshot);
-      }
-    });
-  }, [development, open, pane.sessionId, updateTerminalSnapshot, visible]);
-
-  const addTerminal = useCallback(async () => {
-    if (!development || terminalBusy) return;
-    setTerminalBusy(true);
-    try {
-      const snapshot = await development.terminalStart(
-        pane.sessionId,
-        createWorkspaceTerminalId(),
-      );
-      setTerminals((current) => [...current, snapshot]);
-      setActiveTerminalId(snapshot.terminalId);
-      setTerminalError(null);
-    } catch (cause) {
-      setTerminalError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setTerminalBusy(false);
-    }
-  }, [development, pane.sessionId, terminalBusy]);
-
-  const closeTerminal = useCallback(
-    async (terminalId: string) => {
-      if (!development) return;
-      const closingIndex = terminals.findIndex(
-        (terminal) => terminal.terminalId === terminalId,
-      );
-      try {
-        await development.terminalStop(pane.sessionId, terminalId);
-        const remaining = terminals.filter(
-          (terminal) => terminal.terminalId !== terminalId,
-        );
-        setTerminals(remaining);
-        if (activeTerminalId === terminalId) {
-          setActiveTerminalId(
-            remaining[Math.min(Math.max(closingIndex, 0), remaining.length - 1)]
-              ?.terminalId ?? null,
-          );
-        }
-        setTerminalError(null);
-        if (remaining.length === 0) onClose();
-      } catch (cause) {
-        setTerminalError(
-          cause instanceof Error ? cause.message : String(cause),
-        );
-      }
-    },
-    [activeTerminalId, development, onClose, pane.sessionId, terminals],
-  );
-
-  const onResizeStart = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      resizeCleanupRef.current?.();
-      const handle = event.currentTarget;
-      handle.setPointerCapture(event.pointerId);
-      const startY = event.clientY;
-      const startHeight = heightRef.current;
-      const previousCursor = document.documentElement.style.cursor;
-      const previousUserSelect = document.documentElement.style.userSelect;
-      let nextHeight = startHeight;
-      document.documentElement.style.cursor = "row-resize";
-      document.documentElement.style.userSelect = "none";
-      let finished = false;
-
-      const onMove = (moveEvent: PointerEvent) => {
-        moveEvent.preventDefault();
-        nextHeight = clampTerminalHeight(
-          startHeight - (moveEvent.clientY - startY),
-        );
-        heightRef.current = nextHeight;
-        setHeight(nextHeight);
-      };
-      const finish = () => {
-        if (finished) return;
-        finished = true;
-        handle.removeEventListener("pointermove", onMove);
-        handle.removeEventListener("pointerup", finish);
-        handle.removeEventListener("pointercancel", finish);
-        document.documentElement.style.cursor = previousCursor;
-        document.documentElement.style.userSelect = previousUserSelect;
-        if (resizeCleanupRef.current === finish) {
-          resizeCleanupRef.current = null;
-        }
-        void getPlatform().storage.set({
-          [TERMINAL_HEIGHT_KEY]: nextHeight,
-        });
-      };
-      resizeCleanupRef.current = finish;
-      handle.addEventListener("pointermove", onMove);
-      handle.addEventListener("pointerup", finish);
-      handle.addEventListener("pointercancel", finish);
-    },
-    [],
-  );
-
-  if (!visible || !pane.enabled || !development) return null;
-  const activeTerminal = terminals.find(
-    (terminal) => terminal.terminalId === activeTerminalId,
-  );
-  return (
-    <div
-      data-workspace-terminal-panel
-      aria-hidden={!open}
-      className={cn(
-        "relative shrink-0 overflow-hidden border-t border-border/50 bg-background transition-[height] duration-200 ease-out motion-reduce:transition-none",
-        !open && "pointer-events-none border-transparent",
-      )}
-      style={{ height: open ? height : 0 }}
-    >
-      {open ? (
-        <>
-          <div
-            role="separator"
-            aria-orientation="horizontal"
-            aria-label={t("workspacePane.resizeTerminal")}
-            onPointerDown={onResizeStart}
-            className="group absolute inset-x-0 top-0 z-40 h-1 -translate-y-1/2 cursor-row-resize touch-none"
-          >
-            <div className="absolute inset-x-0 top-1/2 h-px bg-border/55 transition-colors group-hover:bg-foreground/15 group-active:bg-foreground/25" />
-          </div>
-          <div className="flex h-full min-h-0 flex-col">
-            <div
-              data-workspace-terminal-tabs-bar
-              className="flex h-10 shrink-0 items-center px-3"
-            >
-              <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <div
-                  role="tablist"
-                  aria-label={t("workspacePane.terminalTabs")}
-                  className="flex w-max min-w-full items-center gap-1"
-                >
-                  {terminals.map((terminal, index) => {
-                    const active = terminal.terminalId === activeTerminalId;
-                    const label = terminal.title || `Terminal ${index + 1}`;
-                    return (
-                      <div
-                        key={terminal.terminalId}
-                        data-workspace-terminal-tab={terminal.terminalId}
-                        className={cn(
-                          "group flex h-7 max-w-52 shrink-0 items-center rounded-md text-xs transition-colors",
-                          active
-                            ? "bg-muted/75 text-foreground"
-                            : "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
-                        )}
-                      >
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={active}
-                          onClick={() =>
-                            setActiveTerminalId(terminal.terminalId)
-                          }
-                          className="flex min-w-0 items-center gap-2 py-1 pl-2 pr-1"
-                        >
-                          <Terminal className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate font-medium">{label}</span>
-                          {!terminal.running ? (
-                            <span
-                              className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/45"
-                              title={t("workspacePane.terminalStopped")}
-                            />
-                          ) : null}
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={t("workspacePane.closeTerminalTab", {
-                            title: label,
-                          })}
-                          title={t("workspacePane.closeTerminalTab", {
-                            title: label,
-                          })}
-                          onClick={() =>
-                            void closeTerminal(terminal.terminalId)
-                          }
-                          className="mr-1 rounded p-1 text-muted-foreground/70 transition-colors hover:bg-foreground/[0.07] hover:text-foreground"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    disabled={terminalBusy}
-                    aria-label={t("workspacePane.newTerminal")}
-                    title={t("workspacePane.newTerminal")}
-                    onClick={() => void addTerminal()}
-                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-40"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-              <button
-                type="button"
-                aria-label={t("workspacePane.hideTerminalPanel")}
-                title={t("workspacePane.hideTerminalPanel")}
-                onClick={onClose}
-                className="ml-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <div className="relative min-h-0 flex-1">
-              {activeTerminal ? (
-                <WorkspaceTerminalView
-                  key={`${pane.sessionId}:${activeTerminal.terminalId}`}
-                  sessionId={pane.sessionId}
-                  terminalId={activeTerminal.terminalId}
-                  development={development}
-                  onSnapshot={updateTerminalSnapshot}
-                />
-              ) : terminalBusy ? (
-                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                  {t("workspacePane.startingTerminal")}
-                </div>
-              ) : null}
-              {terminalError ? (
-                <p className="pointer-events-none absolute inset-x-3 bottom-3 rounded-md border border-destructive/20 bg-background/95 px-2 py-1.5 text-[10px] text-destructive shadow-sm">
-                  {terminalError}
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
-}
-
 function WorkspaceRecoveryPointsView() {
   const { t } = useT();
   const pane = useWorkspacePane();
@@ -4190,7 +3573,18 @@ export function WorkspacePane({
   // it exactly as it was left. The tree starts closed: the pane usually opens
   // to show a PREVIEW (a browser tab, a diff, a file the agent touched), and a
   // directory tree unfolding beside it on every open reads as clutter.
-  const { mode, setMode, fileTreeOpen, setFileTreeOpen } = pane;
+  const { mode, setMode } = pane;
+  const [newTabOpen, setNewTabOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const closingTabs = useRef(new Set<string>());
+  useEffect(() => { setNewTabOpen(false); setActionError(null); }, [pane.sessionId, pane.open]);
+  const launch = (entry: WorkbenchViewExtension) => {
+    setNewTabOpen(false);
+    try {
+      pane.openResource(entry.launcher?.createResource?.() ?? { type: entry.resourceType, id: entry.resourceType, title: entry.launcher!.label() });
+      setActionError(null);
+    } catch (error) { setActionError(error instanceof Error ? error.message : String(error)); }
+  };
   const previousPanelModes = useRef(new Map<string, WorkbenchMode>());
   const openPanel = useCallback(
     (id: string) => {
@@ -4413,29 +3807,6 @@ export function WorkspacePane({
               className="amiba-tab-rail flex min-w-0 flex-1 self-stretch items-center gap-1.5 overflow-x-auto"
             >
               {renderPanel?.({ ...panelOwner, placement: "tab" })}
-              {launchers.map((entry) => {
-                const id = `view:${entry.resourceType}` as const;
-                const selected = mode === id || mode === entry.resourceType;
-                const Icon = entry.launcher!.icon;
-                return (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={selected}
-                    onClick={() => setMode(id)}
-                    className={cn(
-                      "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[10.5px] transition-colors",
-                      selected
-                        ? "bg-secondary text-foreground"
-                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                    )}
-                  >
-                    {Icon && <Icon className="h-3.5 w-3.5" />}
-                    {entry.launcher!.label()}
-                  </button>
-                );
-              })}
               {pane.tabs.map((tab) => {
                 const selected = mode === "preview" && tab.id === active?.id;
                 const labels =
@@ -4452,10 +3823,40 @@ export function WorkspacePane({
                       setMode("preview");
                       pane.selectTab(tab.id);
                     }}
-                    onClose={() => pane.closeTab(tab.id)}
+                    onClose={async () => {
+                      const key = `${pane.sessionId}:${tab.id}`;
+                      if (closingTabs.current.has(key)) return;
+                      closingTabs.current.add(key);
+                      try {
+                        const resource = toWorkbenchResource(tab.resource);
+                        await selectWorkbenchView(extensions, resource.type)?.onClose?.(resource, pane.sessionId);
+                        pane.closeTab(tab.id);
+                        setActionError(null);
+                      } catch (error) { setActionError(error instanceof Error ? error.message : String(error)); }
+                      finally { closingTabs.current.delete(key); }
+                    }}
                   />
                 );
               })}
+              {pane.tabs.length > 0 && launchers.length > 0 && (
+                <Popover open={newTabOpen} onOpenChange={setNewTabOpen}>
+                  <PopoverTrigger asChild>
+                    <button type="button" aria-label={t("workspacePane.newTab")} title={t("workspacePane.newTab")} className="app-no-drag inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" size="compact" aria-label={t("workspacePane.newTab")}>
+                    <div className="flex flex-col gap-1">
+                      {launchers.map(entry => {
+                        const Icon = entry.launcher!.icon;
+                        return <button key={entry.id} type="button" onClick={() => launch(entry)} className="flex items-center gap-2 rounded-md px-3 py-2 text-left text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                          {Icon && <Icon className="h-4 w-4" />}{entry.launcher!.label()}
+                        </button>;
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
             </div>
           ) : (
             <div className="min-w-0 flex-1 truncate px-2 text-[11px] font-medium text-muted-foreground/70">
@@ -4464,10 +3865,26 @@ export function WorkspacePane({
           )}
         </div>
 
+        {actionError && <p role="alert" className="px-4 py-2 text-xs text-destructive">{actionError}</p>}
         <div className="relative min-h-0 flex-1">
           <div className="h-full min-h-0">
             {mode.startsWith("extension:") ? (
               renderPanel?.({ ...panelOwner, placement: "content" })
+            ) : !active && mode === "preview" ? (
+              <div data-workbench-empty className="flex h-full items-center justify-center px-6 py-8">
+                <div className="w-full max-w-60">
+                  <h2 className="text-sm font-medium">{t("workspacePane.title")}</h2>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{t(launchers.length ? "workspacePane.chooseView" : "workspacePane.noExtensions")}</p>
+                  <div className="mt-5 flex flex-col gap-1">
+                    {launchers.map(entry => {
+                      const Icon = entry.launcher!.icon;
+                      return <button key={entry.id} type="button" onClick={() => launch(entry)} className="flex items-center gap-3 rounded-md px-3 py-2.5 text-left text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                        {Icon && <Icon className="h-4 w-4" />}{entry.launcher!.label()}
+                      </button>;
+                    })}
+                  </div>
+                </div>
+              </div>
             ) : (
               <WorkbenchResourceView
                 resource={
