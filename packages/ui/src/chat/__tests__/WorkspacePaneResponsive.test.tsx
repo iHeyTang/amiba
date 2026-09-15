@@ -4,7 +4,7 @@ import type { WorkbenchViewProps } from "@amiba/extension-sdk";
 import { WorkbenchExtensionsProvider } from "../workbench-extensions";
 import { WorkspaceFileView } from "../../../../../plugins/dsh-plugin-file-preview/src/client/FileView";
 import { defaultFileRenderers } from "../../../../../plugins/dsh-plugin-file-preview/src/client/defaults";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -71,6 +71,7 @@ const testViews = [
     resourceType,
     order: 100,
     component: FileContribution,
+    instanceKey: "amiba.file-workspace",
   })),
 ];
 function WorkspacePaneProvider(props: ComponentProps<typeof HostProvider>) {
@@ -453,7 +454,7 @@ describe("WorkspacePane responsive behavior", () => {
     expect(treeToggle).toHaveClass("h-7", "w-7");
     expect(treeToggle.parentElement).toHaveClass("px-3");
     await userEvent.click(treeToggle);
-    expect(document.querySelector("[data-workspace-file-tree]")).toBeNull();
+    expect(document.querySelector("[data-workspace-file-tree]")).not.toBeVisible();
 
     await userEvent.click(
       screen.getByRole("button", { name: "workspacePane.showFileTree" }),
@@ -529,7 +530,7 @@ describe("WorkspacePane responsive behavior", () => {
     );
     await userEvent.click(projectMenu);
 
-    expect(screen.getByText("session-isolation")).toBeInTheDocument();
+    expect(within(screen.getByRole("menu")).getByText("session-isolation")).toBeInTheDocument();
     expect(
       screen.queryByPlaceholderText("workspacePane.worktreeBranch"),
     ).not.toBeInTheDocument();

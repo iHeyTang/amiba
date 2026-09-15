@@ -36,7 +36,8 @@ export class WorkbenchViewBoundary extends Component<
     return { failed: true };
   }
   componentDidUpdate(previous: Readonly<{ resetKey?: unknown }>) {
-    if (this.state.failed && previous.resetKey !== this.props.resetKey) this.setState({ failed: false });
+    if (this.state.failed && previous.resetKey !== this.props.resetKey)
+      this.setState({ failed: false });
   }
   render() {
     return this.state.failed ? this.props.fallback : this.props.children;
@@ -60,7 +61,19 @@ export function WorkbenchResourceView(props: WorkbenchViewProps) {
   const View = extension.component;
   return (
     <WorkbenchViewBoundary
-      key={`${props.sessionId}:${props.resource.type}:${props.resource.id}:${extension.id}`}
+      key={JSON.stringify([
+        props.sessionId,
+        extension.instanceKey ?? [
+          props.resource.type,
+          props.resource.id,
+          extension.id,
+        ],
+      ])}
+      resetKey={JSON.stringify([
+        extension.id,
+        props.resource.type,
+        props.resource.id,
+      ])}
       fallback={fallback}
     >
       <View {...props} />

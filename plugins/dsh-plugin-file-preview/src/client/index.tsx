@@ -100,6 +100,7 @@ export function apply(ctx: ClientContext) {
             resourceType: "file",
             order: 100,
             component: FileWorkbench,
+            instanceKey: "amiba.file-workspace",
           },
         }),
         children: {
@@ -119,6 +120,7 @@ export function apply(ctx: ClientContext) {
             resourceType: "files",
             order: 100,
             component: FileWorkbench,
+            instanceKey: "amiba.file-workspace",
             launcher: {
               label: () =>
                 document.documentElement.lang.startsWith("zh")
