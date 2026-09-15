@@ -250,34 +250,6 @@ export function Sidebar({
       {/* History groups share one scroll area and follow their content height. */}
       <ScrollArea className="min-h-0 flex-1 px-2">
         <TopSection
-          label={t("sidepanel.sessions.tasks")}
-          collapsed={tasksCollapsed}
-          onToggle={() => setTasksCollapsed(value => !value)}
-          variant="rail"
-        >
-          <SessionsListView
-            sessions={taskSessions}
-            runningSessionIds={runningSessionIds}
-            failedSessionIds={failedSessionIds}
-            activeId={activeSessionId}
-            ready={sessionsReady && workspaceBindings.ready}
-            query={historyQuery}
-            onOpen={onOpenSession}
-            onRename={onRenameSession}
-            onArchive={onArchiveSession}
-            onBranch={onBranchSession}
-            onExport={onExportSession}
-            selecting={selectingSessions}
-            selectedIds={selectedSessionIds}
-            onToggleSelected={toggleSelectedSession}
-            showSectionHeaders={false}
-            groupKeyFor={() => HISTORY_ALL_GROUP}
-            rowIconFor={() => <MessageSquare />}
-            itemMenuItems={itemMenuItems}
-            emptyLabel={t("sidepanel.sessions.tasks.empty")}
-          />
-        </TopSection>
-        <TopSection
           headerTestId="sessions-header"
           label={selectingSessions
             ? t("sidepanel.sessions.selected", { count: selectedSessionIds.size })
@@ -381,6 +353,34 @@ export function Sidebar({
             />
           </TopSection>
         ))}
+        <TopSection
+          label={t("sidepanel.sessions.tasks")}
+          collapsed={tasksCollapsed}
+          onToggle={() => setTasksCollapsed(value => !value)}
+          variant="rail"
+        >
+          <SessionsListView
+            sessions={taskSessions}
+            runningSessionIds={runningSessionIds}
+            failedSessionIds={failedSessionIds}
+            activeId={activeSessionId}
+            ready={sessionsReady && workspaceBindings.ready}
+            query={historyQuery}
+            onOpen={onOpenSession}
+            onRename={onRenameSession}
+            onArchive={onArchiveSession}
+            onBranch={onBranchSession}
+            onExport={onExportSession}
+            selecting={selectingSessions}
+            selectedIds={selectedSessionIds}
+            onToggleSelected={toggleSelectedSession}
+            showSectionHeaders={false}
+            groupKeyFor={() => HISTORY_ALL_GROUP}
+            rowIconFor={() => <MessageSquare />}
+            itemMenuItems={itemMenuItems}
+            emptyLabel={t("sidepanel.sessions.tasks.empty")}
+          />
+        </TopSection>
       </ScrollArea>
 
       <div className="mt-1 border-t border-border/30 p-2">
