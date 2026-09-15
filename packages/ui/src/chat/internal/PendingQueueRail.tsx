@@ -4,9 +4,10 @@ import { useT } from "@amiba/i18n";
 import { cn } from "../../primitives";
 
 /**
- * "Queued for after the current turn" tabs inside Composer's context rail.
+ * "Queued for after the current turn" rows inside Composer's context rail.
  * They share the same attached shelf as the conversation workspace instead of
- * introducing a second card above the input. Each tab exposes three actions:
+ * introducing a second card above the input. Each row spans the full shelf
+ * width and exposes three actions:
  *
  *   - **Send now** — pre-empt the current stream and fire this item.
  *   - **Click the preview** — hoist it into the composer for editing.
@@ -15,7 +16,7 @@ import { cn } from "../../primitives";
  * Pure presentational: the parent owns the queue state and the three
  * action callbacks. We don't re-export the `PendingChatTurn` shape on
  * purpose — keeping it parent-internal means we can change its fields
- * without touching the chip-row component.
+ * without touching the rail component.
  */
 export interface QueueRailItem {
   queueId: string;
@@ -44,7 +45,7 @@ export function PendingQueueRail({
   return (
     <ul
       aria-label={t("sidepanel.queue.tooltip")}
-      className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex min-w-0 flex-1 flex-col gap-1"
     >
       {items.map((item) => {
         const isEditing = item.queueId === editingQueueId;
@@ -52,7 +53,7 @@ export function PendingQueueRail({
           <li
             key={item.queueId}
             className={cn(
-              "group flex h-6 w-fit max-w-64 shrink-0 items-center rounded-md bg-background/55 pl-1.5 pr-0.5 text-[11px]",
+              "group flex h-6 w-full items-center rounded-md bg-background/55 pl-1.5 pr-0.5 text-[11px]",
               "transition-colors hover:bg-background/85",
               isEditing && "text-muted-foreground",
             )}
@@ -66,12 +67,12 @@ export function PendingQueueRail({
               }
               aria-label={t("sidepanel.queue.edit.aria")}
               className={cn(
-                "flex min-w-0 items-center gap-1.5 rounded px-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                "flex min-w-0 flex-1 items-center gap-1.5 rounded px-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
                 isEditing ? "cursor-default" : "text-foreground/85",
               )}
             >
               <MessageSquareText className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-              <span className="max-w-40 truncate">
+              <span className="min-w-0 flex-1 truncate">
                 {item.preview}
               </span>
             </button>
