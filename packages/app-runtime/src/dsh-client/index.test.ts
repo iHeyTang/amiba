@@ -19,17 +19,19 @@ class FakeWebSocket implements DshWebSocketLike {
 
 function harness() {
   const calls: Array<{ method: string; payload: unknown }> = []
+  const httpUrls: string[] = []
   const sockets: FakeWebSocket[] = []
   const urls: string[] = []
   const client = new DshApiClient({
     baseUrl: "http://dsh.test", makeRpcId: () => "request-id",
     fetch: vi.fn(async (_url, init) => {
+      httpUrls.push(String(_url))
       const body = JSON.parse(String(init?.body)); calls.push({ method: body.method, payload: body.payload })
       return Response.json({ type: "server-response", rpcId: body.rpcId, result: { ok: true, value: { accepted: true } } })
     }),
     createWebSocket: url => { urls.push(url); const socket = new FakeWebSocket(); sockets.push(socket); return socket },
   })
-  return { client, calls, sockets, urls }
+  return { client, calls, httpUrls, sockets, urls }
 }
 const address = { kind: "session" as const, sessionId: "s-1" }
 const snapshot = { type: "snapshot", cursor: 7, records: [], hasMore: false, projections: { asOfSeq: 7, values: {} } }
@@ -110,5 +112,19 @@ describe("DSH 0.1.5 Remote transport", () => {
     await expect(first).rejects.toThrow("identity")
     const other = new DshApiClient({ baseUrl: "http://dsh.test", makeRpcId: () => "id", fetch: async () => Response.json({ type: "server-response", rpcId: "id", result: { ok: false, error: { code: "session/missing", message: "missing" } } }) })
     await expect(other.cancel("missing")).rejects.toMatchObject({ name: "DshRpcError", code: "session/missing" })
+  })
+  it("posts $events/result on the raw endpoint path without percent-encoding", async () => {
+    const { client, calls, httpUrls } = harness()
+    ;(client as unknown as { eventRequests: Map<string, unknown> }).eventRequests
+      .set("evt", { clientId: "c-1", sessionId: "s-1", kind: "question" })
+    const receipt = await client.respondToQuestions("evt", { sessionId: "s-1", answer: "later" })
+    expect(receipt).toEqual({ accepted: true })
+    expect(httpUrls).toEqual(["http://dsh.test/api/$events/result"])
+    expect(calls[0]!.method).toBe("$events/result")
+  })
+  it("rejects endpoint segments the connection layer cannot route", async () => {
+    const { client, calls } = harness()
+    await expect(client.call("bad method/endpoint", {})).rejects.toThrow("not a valid endpoint path")
+    expect(calls).toHaveLength(0)
   })
 })
