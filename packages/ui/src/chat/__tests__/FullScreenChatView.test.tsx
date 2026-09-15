@@ -18,6 +18,7 @@ function render(node: React.ReactNode) { return renderTesting(node, { wrapper: (
 
 const mocks = vi.hoisted(() => ({
   useSessions: vi.fn(),
+  loadHistory: vi.fn(),
   storageGet: vi.fn(),
   storageSet: vi.fn(),
   storageWatch: vi.fn(
@@ -37,6 +38,7 @@ const mocks = vi.hoisted(() => ({
   snapshotListener: null as
     | ((frame: { sessionId: string; kind: string }) => void)
     | null,
+  sidebarActiveSessionId: "",
   sidebarRunningSessionIds: [] as string[],
   sidebarFailedSessionIds: [] as string[],
   embeddedBrowser: null as null | Record<string, ReturnType<typeof vi.fn>>,
@@ -44,6 +46,13 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@amiba/app-runtime/core", () => ({
   useSessions: mocks.useSessions,
+}));
+
+vi.mock("../../../../app-runtime/src/core/sessions-runtime/store", () => ({
+  loadIndex: async () => [{ id: "session-1", title: "启动项目", createdAt: 1, updatedAt: 1, messageCount: 1 }],
+  loadMessages: mocks.loadHistory,
+  saveMessages: async () => {},
+  saveIndex: async () => {},
 }));
 
 vi.mock("@amiba/i18n", () => ({
@@ -106,16 +115,19 @@ vi.mock("../../theme", () => ({
 
 vi.mock("../Sidebar", () => ({
   Sidebar: ({
+    activeSessionId,
     onNewChat,
     onOpenSession,
     runningSessionIds,
     failedSessionIds,
   }: {
+    activeSessionId: string;
     onNewChat: () => void;
     onOpenSession: (id: string) => void;
     runningSessionIds?: ReadonlySet<string>;
     failedSessionIds?: ReadonlySet<string>;
   }) => {
+    mocks.sidebarActiveSessionId = activeSessionId;
     mocks.sidebarRunningSessionIds = Array.from(runningSessionIds ?? []);
     mocks.sidebarFailedSessionIds = Array.from(failedSessionIds ?? []);
     return (
@@ -158,6 +170,9 @@ vi.mock("../ChatSurface", () => ({
     );
   },
 }));
+
+import { SessionsProvider, useSessions as useRealSessions } from "../../../../app-runtime/src/core/sessions-runtime/provider";
+import { SessionsStore } from "../../../../app-runtime/src/core/sessions-runtime/sessions-store";
 
 import FullScreenChatView from "../FullScreenChatView";
 import { APP_SIDEBAR_DEFAULT_WIDTH } from "../../navigation/sidebar-layout";
@@ -265,6 +280,7 @@ describe("FullScreenChatView new-chat home", () => {
       const sessions = makeSessions();
       mocks.useSessions.mockReturnValue(sessions);
       const navigate = vi.fn();
+      const navigationSeat = vi.fn(() => null);
       function View() {
         const [panel, setPanel] = useState(surface === "main-panel");
         return <FullScreenChatView
@@ -275,12 +291,15 @@ describe("FullScreenChatView new-chat home", () => {
           slots={{
             mainPanel: panel ? { id: "memory", content: <div>memory-page</div> } : undefined,
             workspaceView: () => <div>workspace-page</div>,
+            workspaceNavigation: navigationSeat,
             onNativeNavigation: () => { navigate(); setPanel(false); },
           }}
         />;
       }
       render(<View />);
       await act(async () => {});
+      expect(mocks.sidebarActiveSessionId).toBe(surface === "conversation" ? "session-1" : "");
+      expect(navigationSeat).toHaveBeenLastCalledWith(surface === "main-panel" ? "" : surface === "workspace" ? "scheduled" : "chats", mocks.sidebarActiveSessionId);
       await userEvent.click(screen.getByRole("button", { name: "open-session" }));
       if (surface === "conversation") {
         expect(sessions.deselect).toHaveBeenCalledOnce();
@@ -307,6 +326,34 @@ describe("FullScreenChatView new-chat home", () => {
     expect(sessions.deselect).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: /New task|返回新任务/ }));
     expect(sessions.deselect).toHaveBeenCalledOnce();
+  });
+
+  it("routes a real store failure through the Provider from memory to fallback and retries", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    mocks.loadHistory.mockRejectedValueOnce(new Error('format v0 contains unknown historical event type "amiba/notice"'));
+    mocks.loadHistory.mockResolvedValue([]);
+    mocks.useSessions.mockImplementation(useRealSessions);
+    function View() {
+      const [panel, setPanel] = useState(true);
+      return <SessionsProvider store={store}><FullScreenChatView
+        client={makeClient() as never} openSettings={() => {}} openAgentDestination={() => {}}
+        restoreSidebarViewOnMount={false}
+        slots={{ mainPanel: panel ? { id: "memory", content: <div>memory-page</div> } : undefined,
+          onNativeNavigation: () => setPanel(false) }}
+      /></SessionsProvider>;
+    }
+    render(<View />);
+    expect(mocks.sidebarActiveSessionId).toBe("");
+    await userEvent.click(screen.getByRole("button", { name: "open-session" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("amiba/notice");
+    expect(screen.queryByText("memory-page")).not.toBeInTheDocument();
+    expect(mocks.sidebarActiveSessionId).toBe("session-1");
+    await userEvent.click(screen.getByRole("button", { name: /Retry|重试/ }));
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    expect(screen.getByText("chat-surface")).toBeInTheDocument();
+    expect(store.getSnapshot().activeId).toBe("session-1");
+    expect(mocks.loadHistory).toHaveBeenCalledTimes(2);
   });
 
   it("returns to the id-less home instead of creating a conversation", async () => {
