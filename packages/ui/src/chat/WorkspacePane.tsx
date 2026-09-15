@@ -3801,6 +3801,18 @@ export function WorkspacePane({
               ref={tabRailRef}
               role="tablist"
               aria-label={t("workspacePane.tabs")}
+              // The strip is a scrolling control, so it opts out of the drag
+              // region the tab bar sets on `[data-workspace-tabbar]`: the
+              // platform swallows the pointer for everything under
+              // `-webkit-app-region: drag` that does not opt out itself, and
+              // the gaps between two pills are this rail's own background —
+              // a wheel aimed between two tabs never reached the listener
+              // bound here, while one aimed at a pill did.
+              //
+              // `w-fit` keeps the bar's empty tail outside the rail, so that
+              // space still drags the window; a rail that overflows is capped
+              // by `max-w-full` and then covers the strip exactly as before.
+              //
               // `self-stretch` is what separates the hairline from the pills,
               // and it needs no padding to do it: the rail fills the 44px
               // strip, the scrollbar takes 3px off the bottom of the padding
@@ -3809,7 +3821,7 @@ export function WorkspacePane({
               // hairline for free. Adding padding instead would push the pills
               // off the strip's optical centre, since the gap would be counted
               // as content to centre around.
-              className="amiba-tab-rail flex min-w-0 flex-1 self-stretch items-center gap-1.5 overflow-x-auto"
+              className="amiba-tab-rail app-no-drag flex w-fit min-w-0 max-w-full self-stretch items-center gap-1.5 overflow-x-auto"
             >
               {renderPanel?.({ ...panelOwner, placement: "tab" })}
               {pane.tabs.map((tab) => {

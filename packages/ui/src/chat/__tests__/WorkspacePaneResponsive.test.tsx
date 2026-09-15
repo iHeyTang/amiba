@@ -246,6 +246,14 @@ describe("WorkspacePane responsive behavior", () => {
 
     expect(toggle).toHaveAttribute("aria-pressed", "true");
     expect(tabbar).toHaveClass("app-drag-region");
+    // A drag region swallows the pointer for everything inside it that does
+    // not opt out, and the gap between two pills is the rail's own background:
+    // without the opt-out a wheel aimed there never reaches the listener the
+    // rail binds for horizontal panning.
+    const rail = tabbar?.querySelector('[role="tablist"]');
+    expect(rail).toHaveClass("app-no-drag");
+    // The bar's empty tail stays outside the rail, so it still drags the window.
+    expect(rail).toHaveClass("w-fit");
     const openEdgeToggle = screen.getByRole("button", {
       name: "workspacePane.collapse",
     });
