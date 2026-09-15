@@ -47,7 +47,8 @@ export const name = "amiba-connector-core";
 // grouping — see plugins/dsh-plugin-connector-core/README or task-5-report
 // for the grep that confirmed this. So required deps are declared as a plain
 // array here; `amibaMcpManager` is intentionally NOT listed (optional dep).
-export const inject = ["amibaMessageCenter", "credentials", "tools", "userQuestions"];
+// External-session classification reads persisted origins through this scope.
+export const inject = ["amibaMessageCenter", "credentials", "tools", "userQuestions", "sessionPersistence"];
 
 export interface Config {
   root: string;

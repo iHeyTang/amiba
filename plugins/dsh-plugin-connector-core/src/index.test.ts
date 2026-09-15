@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ConnectorCenter } from "./center.js";
 import { provisionCli, type CliProvisionHandle } from "./cli-provision.js";
-import { apply, connectInstanceKey } from "./index.js";
+import { Context } from "@deepseek-ai/cordis";
+import { apply, connectInstanceKey, inject } from "./index.js";
 import type {
   ConnectorHandle,
   ConnectorProvider,
@@ -550,4 +551,45 @@ describe("connector-core plugin apply() — cli capability applier wiring", () =
     // "unknown capability kind" contract center.test.ts covers for "mcp".
     expect(runtimes[0]!.stop).toHaveBeenCalledTimes(1);
   });
+});
+
+
+it("classifies external sessions inside the declared Cordis dependency scope", async () => {
+  const root = new Context();
+  const close = vi.fn(async () => {});
+  const open = vi.fn(async () => ({
+    header: { createdAt: 123 },
+    read: async () => ({ events: [{
+      type: "user/message",
+      data: { source: { kind: "plugin", plugin: "amiba-message:channel-1" } },
+    }] }),
+    close,
+  }));
+  const provider = root.plugin({
+    apply(ctx: Context) {
+      for (const name of new Set([...inject, "sessionPersistence"])) {
+        ctx.reflect.provide(name, name === "sessionPersistence" ? { open } : {});
+      }
+    },
+  });
+  let classify: (() => Promise<unknown>) | undefined;
+  const fiber = root.plugin({
+    inject,
+    apply(ctx: Context) {
+      const center = new ConnectorCenter(ctx, {
+        list: async () => [{ channelId: "channel-1", name: "飞书" }],
+      } as never, {} as never, {} as never, new Map());
+      classify = () => center.externalSessions(["external"]);
+    },
+  });
+  try {
+    await vi.waitFor(() => expect(classify).toBeTypeOf("function"));
+    await expect(classify!()).resolves.toEqual([
+      { id: "external", connectorName: "飞书", createdAt: 123 },
+    ]);
+    expect(close).toHaveBeenCalledOnce();
+  } finally {
+    await fiber.dispose();
+    await provider.dispose();
+  }
 });
