@@ -499,7 +499,10 @@ export const zhCN: UiMessages = {
   "sidepanel.empty.newChat": "新建任务",
   "sidepanel.empty.openHistory": "从历史打开",
   // Session drawer
-  "sidepanel.sessions.title": "最近任务",
+  "sidepanel.sessions.title": "工作空间",
+  "sidepanel.sessions.tasks": "任务",
+  "sidepanel.sessions.tasks.empty": "还没有任务，开始一个新任务吧。",
+  "sidepanel.sessions.newInWorkspace": "在 {name} 中新建对话",
   "sidepanel.sessions.empty": "暂无会话。发送一条消息以开始。",
   "sidepanel.sessions.dialogAria": "会话历史",
   "sidepanel.sessions.close": "关闭",
@@ -523,7 +526,7 @@ export const zhCN: UiMessages = {
   "sidepanel.sessions.group.channelChats": "{name}对话",
 
   // 会话历史与 DSH 定时运行
-  "sidepanel.sessions.history.empty": "暂无对话或定时任务运行记录。",
+  "sidepanel.sessions.history.empty": "选择一个目录开始工作，相关对话会显示在这里。",
   "sidepanel.sessions.layout.menu": "显示方式",
   "sidepanel.sessions.layout.timeline": "全部按时间排列",
   "sidepanel.sessions.layout.grouped": "按工作目录分组",

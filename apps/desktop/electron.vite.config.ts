@@ -11,6 +11,7 @@ import { defineConfig, externalizeDepsPlugin } from "electron-vite";
  */
 const WORKSPACE_PKGS = [
   "@amiba/app-runtime",
+  "@amiba/dsh-plugin-session-features",
   "@amiba/extension-sdk",
   "@amiba/i18n",
   "@amiba/ui",

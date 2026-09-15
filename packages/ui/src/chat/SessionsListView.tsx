@@ -78,6 +78,8 @@ export interface SessionsListViewProps {
    * Returning `null`/`undefined` hides the slot for that section.
    */
   sectionActionsFor?: (source: string) => ReactNode;
+  /** Keep the workspace action visible in place of the trailing chevron. */
+  sectionActionReplacesChevron?: boolean;
   /** Optional semantic icon for each top-level history section. */
   sectionIconFor?: (source: string) => ReactNode;
   /** Full section title used when a shortened label is displayed. */
@@ -125,6 +127,7 @@ export function SessionsListView({
   noMatchesLabel,
   sectionLabelFor,
   sectionActionsFor,
+  sectionActionReplacesChevron,
   sectionIconFor,
   sectionTitleFor,
   sectionLabelClassName,
@@ -252,7 +255,7 @@ export function SessionsListView({
     : (emptyLabel ?? t("chat.noSessions"));
 
   return (
-    <div className="pb-2">
+    <div>
       {totalMatching === 0 ? (
         showSectionHeaders ? (
           <TopSection
@@ -306,6 +309,7 @@ export function SessionsListView({
               onToggle={() => toggleTop(sec.source)}
               variant="rail"
               actions={sectionActionsFor?.(sec.source)}
+              actionReplacesChevron={sectionActionReplacesChevron}
               icon={sectionIconFor?.(sec.source)}
               title={sectionTitleFor?.(sec.source)}
               labelClassName={sectionLabelClassName}
@@ -313,7 +317,7 @@ export function SessionsListView({
               {rows}
             </TopSection>
           ) : (
-            <div key={sec.source} className="pt-1">
+            <div key={sec.source}>
               {rows}
             </div>
           );

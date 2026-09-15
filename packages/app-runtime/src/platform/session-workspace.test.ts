@@ -5,6 +5,7 @@ function fixture() {
   const workspaces = {
     listBindings: vi.fn(async (): Promise<Record<string, string>> => ({})),
     getCurrent: vi.fn(async () => "/default"),
+    getDefaultRoot: vi.fn(async () => "/default/Amiba/workspace"),
     bindIfUnbound: vi.fn(async (_id: string, cwd: string) => cwd),
   };
   const agentSessions = { list: vi.fn(async () => [{ sessionId: "target", cwd: "/host-root" }]) };
@@ -29,7 +30,7 @@ it("uses the mutation authority's result if a binding appeared after the initial
 });
 it("keeps the product default for a genuinely new session", async () => {
   const f = fixture();
-  expect(await ensureSessionWorkspace("new", f.platform)).toBe("/default");
+  expect(await ensureSessionWorkspace("new", f.platform)).toBe("/default/Amiba/workspace");
   expect(f.workspaces.bindIfUnbound).not.toHaveBeenCalled();
 });
 it("does not silently replace a failed Host read with a different default directory", async () => {
@@ -56,4 +57,10 @@ it("shared creation keeps the existing workspace registry path for a new explici
   f.platform.agentWorkspaces = { create } as unknown as PlatformAdapter["agentWorkspaces"];
   expect(await resolveSessionCreationWorkspace("new", f.platform)).toEqual({ workspaceId: "registered" });
   expect(create).toHaveBeenCalledWith("/chosen");
+});
+
+it("does not create a task when the default workspace cannot be prepared", async () => {
+  const f = fixture();
+  f.workspaces.getDefaultRoot.mockRejectedValue(new Error("Workspace is not writable"));
+  await expect(resolveSessionCreationWorkspace("new", f.platform)).rejects.toThrow("not writable");
 });

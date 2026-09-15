@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { homedir } from "node:os";
+import { ensureDefaultWorkspaceRoot } from "@amiba/dsh-plugin-session-features/default-workspace";
 
 import type { Context } from "@deepseek-ai/cordis";
 // Type-only: loads dsh-agent's `ctx.agents` module augmentation.
@@ -369,7 +369,7 @@ export class CronService {
       // same default the desktop host and the steward use — because a
       // session created without `cwd` fails its first turn: agent presets
       // reference `{{cwd}}` in prompt assembly.
-      meta: { cwd: homedir() },
+      meta: { cwd: await ensureDefaultWorkspaceRoot() },
       ...(agentOptions ? { agentOptions } : {}),
     });
     try {

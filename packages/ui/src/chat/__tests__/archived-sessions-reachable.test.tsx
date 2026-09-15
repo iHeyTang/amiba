@@ -68,8 +68,6 @@ function renderSidebar(
     onOpenSession: vi.fn(),
     onRenameSession: vi.fn(),
     onRefreshSessions: vi.fn(),
-    historyLayout: "timeline",
-    onHistoryLayoutChange: vi.fn(),
     onOpenSettings: vi.fn(),
     ...overrides,
   };
