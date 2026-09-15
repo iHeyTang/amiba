@@ -1255,7 +1255,7 @@ describe("chat message chrome", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps the latest tool activity visible between consecutive tool calls", () => {
+  it("uses one generic activity label between completed and subsequent tool calls", () => {
     const { container } = render(
       <MessageTurns
         messages={
@@ -1293,8 +1293,8 @@ describe("chat message chrome", () => {
     );
 
     const summary = container.querySelector("[data-execution-summary]");
-    expect(summary).toHaveTextContent("sidepanel.trace.actions.useTool");
-    expect(summary).toHaveTextContent("src/main.ts");
+    expect(summary).toHaveTextContent("sidepanel.trace.working");
+    expect(screen.getAllByText("sidepanel.trace.working")).toHaveLength(1);
     expect(summary).not.toHaveTextContent("sidepanel.trace.generating");
     expect(summary?.querySelector(".agent-thinking-text")).not.toBeNull();
   });
