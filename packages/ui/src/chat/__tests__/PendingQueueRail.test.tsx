@@ -9,7 +9,7 @@ vi.mock("@amiba/i18n", () => ({
 import { PendingQueueRail } from "../internal/PendingQueueRail";
 
 describe("PendingQueueRail", () => {
-  it("renders queued turns as compact context tabs", async () => {
+  it("renders queued turns as full-width context rows", async () => {
     const onSendNow = vi.fn();
     const onEdit = vi.fn();
     const onRemove = vi.fn();
@@ -27,8 +27,11 @@ describe("PendingQueueRail", () => {
     const rail = screen.getByRole("list", {
       name: "sidepanel.queue.tooltip",
     });
-    expect(rail).toHaveClass("flex", "overflow-x-auto");
-    expect(rail).not.toHaveClass("divide-y", "border", "shadow-sm");
+    expect(rail).toHaveClass("flex", "flex-col");
+    expect(rail).not.toHaveClass("overflow-x-auto", "divide-y", "border", "shadow-sm");
+
+    const row = screen.getByRole("listitem");
+    expect(row).toHaveClass("w-full");
 
     await userEvent.click(
       screen.getByRole("button", { name: "sidepanel.queue.edit.aria" }),

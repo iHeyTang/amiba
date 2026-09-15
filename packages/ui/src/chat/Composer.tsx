@@ -1024,10 +1024,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
           <div
             data-composer-context-rail=""
             className={cn(
-              "relative z-0 mx-4 -mb-2.5 flex h-10 items-start rounded-t-[14px] border border-b-0 border-border/45 bg-muted/45 px-3 pt-[3px]",
+              "relative z-0 mx-4 -mb-2.5 flex min-h-10 items-start rounded-t-[14px] border border-b-0 border-border/45 bg-muted/45 px-3 pb-2.5 pt-[3px]",
               "shadow-[inset_0_1px_0_rgb(255_255_255_/_0.5)] dark:shadow-[inset_0_1px_0_rgb(255_255_255_/_0.04)]",
               frameVariant === "hero" &&
-                "mx-6 h-11 rounded-t-[16px] px-4 pt-[5px]",
+                "mx-6 min-h-11 rounded-t-[16px] px-4 pt-[5px]",
               flatTop && "mx-0 rounded-t-none",
             )}
           >
