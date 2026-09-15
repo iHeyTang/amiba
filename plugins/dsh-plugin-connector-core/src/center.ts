@@ -5,6 +5,8 @@ import type { ResourceCenter } from "@amiba/dsh-plugin-resources";
 import { searchShareableResources, validateSharedResources } from "./conversation-sharing.js";
 
 import type { Context } from "@deepseek-ai/cordis";
+import { SessionId } from "@deepseek-ai/dsh-session";
+import type {} from "@deepseek-ai/dsh-session-persistence";
 import type {
   ApprovalOutcomeNotice,
   ApprovalPrompt,
@@ -432,9 +434,7 @@ export class ConnectorCenter {
   private readonly externalOrigins = new Map<string, { channelId: string; createdAt: number } | null>();
 
   async externalSessions(ids: string[]): Promise<ExternalSessionInfo[]> {
-    const persistence = this.ctx.reflect.get("sessionPersistence") as {
-      inspect(id: string): Promise<{ meta: { createdAt: number; parentSession?: string }; events: readonly { type: string; data?: unknown }[] }>;
-    } | undefined;
+    const persistence = this.ctx.sessionPersistence;
     if (!persistence) throw new Error("session_persistence_unavailable");
     const connects = await this.store.list();
     const result: ExternalSessionInfo[] = [];
@@ -442,11 +442,15 @@ export class ConnectorCenter {
       let origin = this.externalOrigins.get(id);
       if (origin === undefined) {
         try {
-          const inspected = await persistence.inspect(id);
-          // A locally branched conversation does not inherit its parent's group.
-          const channelId = inspected.meta.parentSession ? null : externalSessionChannel(inspected.events);
-          if (channelId === undefined) continue;
-          origin = channelId ? { channelId, createdAt: inspected.meta.createdAt } : null;
+          const handle = await persistence.open(SessionId(id), "read");
+          try {
+            // A locally branched conversation does not inherit its parent's group.
+            const channelId = handle.header.parentSession ? null : externalSessionChannel((await handle.read()).events);
+            if (channelId === undefined) continue;
+            origin = channelId ? { channelId, createdAt: handle.header.createdAt } : null;
+          } finally {
+            await handle.close();
+          }
           if (this.externalOrigins.size >= 10000) this.externalOrigins.clear();
           this.externalOrigins.set(id, origin);
         } catch { continue; }
