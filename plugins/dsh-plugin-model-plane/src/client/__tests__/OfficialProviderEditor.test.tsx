@@ -208,3 +208,22 @@ it.each(["deepseek", "openai", "anthropic", "community"])(
     }
   },
 );
+
+
+it("groups custom models and per-model overrides under advanced settings even without other options", () => {
+  const provider = { ...snapshot.providers[0]!, configuration: {
+    ...snapshot.providers[0]!.configuration!, value: { models: [], modelOverrides: {} },
+    schema: { type: "object", dict: {
+      models: { type: "array", inner: { type: "string" } },
+      modelOverrides: { type: "record" },
+    } },
+  } };
+  render(<OfficialProviderEditor provider={provider} snapshot={snapshot}
+    adapter={{} as ProviderSettingsController} onClose={() => {}} onSaved={() => {}} />);
+  const advanced = document.querySelector("[data-provider-advanced]")!;
+  expect(advanced).not.toHaveAttribute("open");
+  expect(advanced.querySelector("textarea")).not.toBeVisible();
+  fireEvent.click(advanced.querySelector("summary")!);
+  expect(advanced).toHaveAttribute("open");
+  expect(advanced.querySelectorAll("fieldset, textarea").length).toBe(2);
+});

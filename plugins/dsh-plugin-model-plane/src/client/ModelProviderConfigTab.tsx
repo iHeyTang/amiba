@@ -406,6 +406,8 @@ export function ModelProviderConfigTab({
       {activeProvider && snapshot && adapter.configure ? (
         <OfficialProviderEditor
           provider={activeProvider.provider}
+          displayModels={displayRows.find((row) => row.provider.id === activeProvider.provider.id)?.provider.models}
+          onRefreshed={setSnapshot}
           renderProviderCard={renderProviderCard}
           snapshot={snapshot}
           adapter={adapter}
