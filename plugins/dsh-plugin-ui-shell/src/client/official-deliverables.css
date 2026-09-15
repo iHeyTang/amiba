@@ -4,3 +4,25 @@
   --deliverable-fill: hsl(var(--card));
   --deliverable-hover: hsl(var(--accent));
 }
+
+/* Keep official interactions, with Amiba's compact file-row proportions. */
+:root body .nyYjTG_file {
+  border-radius: 10px;
+  height: 64px;
+  padding: 10px;
+}
+:root body .nyYjTG_fileIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+}
+:root body .nyYjTG_fileName {
+  font-size: 13px;
+  line-height: 20px;
+}
+:root body .nyYjTG_split {
+  border-radius: 6px;
+}
+:root body .nyYjTG_open {
+  font-size: 12px;
+}

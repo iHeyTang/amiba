@@ -1,0 +1,14 @@
+/* DSH 0.1.5-rc.1 primitive selectors. Keep Amiba contrast and geometry even
+ * when the official component chooses literal colors internally. */
+:root ._bubble_1nw3t_1 {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  font-size: 12px;
+  box-shadow: var(--dsw-elevation-soft);
+}
+:root ._button_cfgyt_4 {
+  border-radius: 6px;
+  font-size: 13px;
+}

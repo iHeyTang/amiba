@@ -250,11 +250,14 @@ export function useDocumentTheme(): ResolvedTheme {
   return theme
 }
 
-function applyThemeClass(theme: ResolvedTheme) {
+export function applyThemeClass(theme: ResolvedTheme) {
   if (typeof document === "undefined") return
   const root = document.documentElement
   root.classList.toggle("dark", theme === "dark")
   root.classList.toggle("light", theme === "light")
+  // Official plugins use this selector, including content portaled to body.
+  // Amiba still owns the preference and palette; no official theme is mounted.
+  document.body?.toggleAttribute("data-ds-dark-theme", theme === "dark")
 }
 
 /**

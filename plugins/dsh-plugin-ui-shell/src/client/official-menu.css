@@ -180,3 +180,30 @@
   left: -10px;
   width: 10px;
 }
+
+/* Amiba presentation over the pinned structural fallback. Portals retain the
+ * same compact spacing, focus cue, and surface as native menus. */
+:root ._list_1nxmc_8,
+:root ._submenu_1nxmc_9 {
+  border-radius: 8px;
+  min-width: 180px;
+  font-family: var(--dsw-font-family);
+}
+:root ._item_1nxmc_92 {
+  min-height: 32px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  line-height: 20px;
+}
+:root ._item_1nxmc_92:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+  background: hsl(var(--accent));
+}
+
+@media (pointer: coarse) {
+  :root ._item_1nxmc_92 {
+    min-height: 44px;
+  }
+}
