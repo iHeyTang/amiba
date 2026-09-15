@@ -18,7 +18,7 @@ export const zhCN: ShellMessages = {
   "shell.tool.runRuntime": "运行模块",
   "shell.tool.stopRuntime": "停止模块",
   "shell.tool.removeRuntime": "移除模块",
-  "shell.tool.runCommand": "运行命令",
+  "shell.tool.runCommand": "执行",
   "shell.tool.readFile": "读取文件",
   "shell.tool.inspectImage": "查看图片",
   "shell.tool.editFile": "修改文件",
