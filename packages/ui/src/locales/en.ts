@@ -456,7 +456,7 @@ export const en = {
   "sidepanel.trace.executionDetails": "Execution details",
   "sidepanel.trace.toolCount": "{count} tool calls",
   "sidepanel.trace.generating": "Generating answer…",
-  "sidepanel.trace.working": "Working…",
+  "sidepanel.trace.working": "Thinking…",
   "sidepanel.trace.expandDetails": "Show details",
   "sidepanel.trace.collapseDetails": "Hide details",
   "sidepanel.trace.actionStatus.running": "In progress · ",

@@ -418,7 +418,7 @@ export const zhCN: UiMessages = {
   "sidepanel.trace.executionDetails": "执行详情",
   "sidepanel.trace.toolCount": "{count} 次工具调用",
   "sidepanel.trace.generating": "正在整理回答…",
-  "sidepanel.trace.working": "正在处理…",
+  "sidepanel.trace.working": "正在思考…",
   "sidepanel.trace.expandDetails": "查看详情",
   "sidepanel.trace.collapseDetails": "收起详情",
   "sidepanel.trace.actionStatus.running": "正在",
