@@ -85,7 +85,7 @@ describe("tool views", () => {
         )}
       </>,
     );
-    expect(screen.getByText("shell.tool.runCommand")).toBeTruthy();
+    expect(screen.getByText("shell.tool.runCommand", { exact: false })).toBeTruthy();
     expect(screen.queryByText("generic")).toBeNull();
   });
   it("renders background result reads as independent tool rows", () => {
@@ -93,8 +93,8 @@ describe("tool views", () => {
     render(<>{reads.map((call, index) => <div key={index}>
       {renderOfficialToolFallback({...call, callId: `read-${index}`}, <span>generic</span>)}
     </div>)}</>);
-    expect(screen.getByText("shell.tool.readJob")).toBeTruthy();
-    expect(screen.getByText("shell.tool.waitJob")).toBeTruthy();
+    expect(screen.getByText("shell.tool.readJob", { exact: false })).toBeTruthy();
+    expect(screen.getByText("shell.tool.waitJob", { exact: false })).toBeTruthy();
     screen.getAllByRole("button").forEach(button => fireEvent.click(button));
     expect(screen.getAllByText("result evidence")).toHaveLength(2);
     expect(screen.queryByText("generic")).toBeNull();
@@ -154,6 +154,7 @@ describe("tool views", () => {
             : command === "create"
               ? "shell.tool.writeFile"
               : "shell.tool.editFile",
+          { exact: false },
         ),
       ).toBeTruthy();
       fireEvent.click(screen.getByRole("button"));
@@ -199,7 +200,7 @@ describe("tool views", () => {
         />
       </ToolCallSeatProvider>,
     );
-    expect(screen.getByText("shell.tool.runCommand")).toBeTruthy();
+    expect(screen.getByText("shell.tool.runCommand", { exact: false })).toBeTruthy();
     expect(screen.queryByText("sidepanel.trace.actions.useTool")).toBeNull();
     fireEvent.click(screen.getByRole("button"));
     expect(

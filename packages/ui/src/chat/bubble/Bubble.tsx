@@ -837,10 +837,6 @@ function ExecutionDisclosure({
   const runningTool = [...tools]
     .reverse()
     .find((event) => event.status === "running");
-  // Completed tools remain in the disclosure, but cannot describe the
-  // current activity. With no newer reasoning, the live row owns the
-  // generic task-running fallback (including unclassified background waits).
-  const summaryTool = streaming ? runningTool : undefined;
   const hasDetails = details.length > 0;
   const thought = details.find(
     (detail): detail is Extract<TurnTraceDetail, { kind: "reasoning" }> =>
@@ -859,6 +855,15 @@ function ExecutionDisclosure({
   const reasoningOwnsActivity =
     details.at(-1)?.kind === "reasoning" ||
     (tools.length === 0 && (liveReasoning.length > 0 || latestProgress.length > 0));
+  // Keep the latest completed action visible, with its own completed tense.
+  // Only a genuinely live activity may suppress the separate turn fallback.
+  const summaryTool = streaming && runningTool
+    ? runningTool
+    : streaming && !reasoningOwnsActivity
+      ? tools.at(-1)
+      : undefined;
+  const showWaiting = streaming && Boolean(summaryTool) && !runningTool;
+  const summaryActive = streaming && !showWaiting;
   const showLiveReasoning =
     streaming && reasoningOwnsActivity && !expanded && liveReasoning.length > 0;
   const summaryLabel = summaryTool
@@ -895,7 +900,7 @@ function ExecutionDisclosure({
         <span
           className={cn(
             "min-w-0 truncate",
-            streaming && "agent-thinking-text",
+            summaryActive && "agent-thinking-text",
 
           )}
         >
@@ -979,6 +984,7 @@ function ExecutionDisclosure({
           })}
         </div>
       )}
+      {showWaiting && <div className="mt-2"><TurnRunningIndicator /></div>}
     </div>
   );
 }
@@ -1338,8 +1344,8 @@ function InterleavedAssistantFlow({
   const processStreaming = resultStreaming && resultText.length === 0;
   const hasCompactions = flow.some(segment => segment.kind === "compaction");
   const compacting = flow.some(segment => segment.kind === "compaction" && segment.compaction.status === "running");
-  // The live execution tail already owns the activity label. A historical
-  // disclosure above subsequent prose must not suppress the tail fallback.
+  // The execution tail owns its live label or its completed row + fallback.
+  // Historical disclosures above subsequent prose must not suppress it.
   const tailOwnsActivity = flow.at(-1)?.kind === "execution";
   const showRunning = resultStreaming && !awaitingUserInput && !compacting && !tailOwnsActivity;
 

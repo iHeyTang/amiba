@@ -106,7 +106,10 @@ describe("one activity owner", () => {
     rerender(view(waiting));
     expect(container.querySelector("[data-execution-summary]")).toBe(disclosure);
     expect(screen.getAllByText(WORKING)).toHaveLength(1);
-    expect(screen.queryByTestId("turn-running")).not.toBeInTheDocument();
+    expect(screen.getByTestId("turn-running")).toBeInTheDocument();
+    const summaryButton = disclosure!.querySelector("button")!;
+    expect(summaryButton).toHaveTextContent("sidepanel.trace.actionStatus.completed");
+    expect(summaryButton.querySelector(".agent-thinking-text")).toBeNull();
     fireEvent.click(disclosure!.querySelector("button")!);
     expect(screen.getByText("Inspecting the request")).toBeInTheDocument();
     expect(screen.getAllByText(WORKING)).toHaveLength(1);

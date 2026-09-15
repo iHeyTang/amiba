@@ -728,7 +728,7 @@ describe("chat message chrome", () => {
       }),
     );
 
-    expect(screen.getAllByText("sidepanel.trace.actions.useTool")).toHaveLength(
+    expect(screen.getAllByText(/sidepanel\.trace\.actions\.useTool$/)).toHaveLength(
       2,
     );
     // Summary + one nested thought fold per execution-only step.
@@ -1255,7 +1255,7 @@ describe("chat message chrome", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("uses one generic activity label between completed and subsequent tool calls", () => {
+  it("keeps completed tool history above the current activity between calls", () => {
     const { container } = render(
       <MessageTurns
         messages={
@@ -1293,10 +1293,12 @@ describe("chat message chrome", () => {
     );
 
     const summary = container.querySelector("[data-execution-summary]");
-    expect(summary).toHaveTextContent("sidepanel.trace.working");
+    const button = summary?.querySelector("button");
+    expect(button).toHaveTextContent("sidepanel.trace.actionStatus.completed");
+    expect(button).toHaveTextContent("src/main.ts");
+    expect(button?.querySelector(".agent-thinking-text")).toBeNull();
     expect(screen.getAllByText("sidepanel.trace.working")).toHaveLength(1);
     expect(summary).not.toHaveTextContent("sidepanel.trace.generating");
-    expect(summary?.querySelector(".agent-thinking-text")).not.toBeNull();
   });
 
   it("shows the repo controls without redundant runtime chrome", async () => {

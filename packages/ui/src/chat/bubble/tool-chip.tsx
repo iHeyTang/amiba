@@ -80,6 +80,7 @@ function ToolChipRow({ event, mode, owner }: { event: ToolProgress; mode?: "row"
 
   return (
     <ToolRowFrame
+      actionStatus={event.error ? "failed" : running ? "running" : "completed"}
       {...expansion}
       presentation={mode}
       icon={presentation.icon}
