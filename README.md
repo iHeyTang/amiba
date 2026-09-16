@@ -17,15 +17,15 @@ layer.
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/workspace-overview.png" width="720" alt="Amiba workspace overview" />
+  <img src="docs/screenshots/workspace-overview.webp" width="720" alt="Amiba workspace overview" />
 </p>
 <p align="center"><em>A chat-driven workspace: workspaces, scheduled tasks, external messages and task history on the left; the conversation in the center.</em></p>
 
 |  |  |
 |:---:|:---:|
-| <img src="docs/screenshots/embedded-browser.png" width="380" alt="Embedded browser and live web research" /> | <img src="docs/screenshots/settings-models.png" width="380" alt="Models & Services settings" /> |
+| <img src="docs/screenshots/embedded-browser.webp" width="380" alt="Embedded browser and live web research" /> | <img src="docs/screenshots/settings-models.webp" width="380" alt="Models & Services settings" /> |
 | *Embedded browser + live web research* | *Model assignment & capability routing* |
-| <img src="docs/screenshots/settings-connections.png" width="380" alt="Connections settings" /> | <img src="docs/screenshots/settings-usage.png" width="380" alt="Usage analytics" /> |
+| <img src="docs/screenshots/settings-connections.webp" width="380" alt="Connections settings" /> | <img src="docs/screenshots/settings-usage.webp" width="380" alt="Usage analytics" /> |
 | *Connectors: Lark, DingTalk, WeChat, Webhook* | *Usage: tokens, activity heatmap, per-model* |
 
 ## What Amiba adds on top of DSH

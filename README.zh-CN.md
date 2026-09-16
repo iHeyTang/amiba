@@ -14,15 +14,15 @@ Cordis 插件运行在 DSH 内部。
 ## 界面截图
 
 <p align="center">
-  <img src="docs/screenshots/workspace-overview.png" width="720" alt="Amiba 工作台总览" />
+  <img src="docs/screenshots/workspace-overview.webp" width="720" alt="Amiba 工作台总览" />
 </p>
 <p align="center"><em>以对话驱动的工作台：左侧是工作空间、定时任务、外部消息与任务历史，中间是会话。</em></p>
 
 |  |  |
 |:---:|:---:|
-| <img src="docs/screenshots/embedded-browser.png" width="380" alt="内嵌浏览器与联网搜索" /> | <img src="docs/screenshots/settings-models.png" width="380" alt="模型与服务设置" /> |
+| <img src="docs/screenshots/embedded-browser.webp" width="380" alt="内嵌浏览器与联网搜索" /> | <img src="docs/screenshots/settings-models.webp" width="380" alt="模型与服务设置" /> |
 | *内嵌浏览器 + 联网检索* | *模型分配与能力路由* |
-| <img src="docs/screenshots/settings-connections.png" width="380" alt="连接设置" /> | <img src="docs/screenshots/settings-usage.png" width="380" alt="用量分析" /> |
+| <img src="docs/screenshots/settings-connections.webp" width="380" alt="连接设置" /> | <img src="docs/screenshots/settings-usage.webp" width="380" alt="用量分析" /> |
 | *连接器：飞书、钉钉、微信、Webhook* | *用量：Token、活跃度热力图、按模型拆分* |
 
 ## Amiba 在 DSH 之上额外做了什么
