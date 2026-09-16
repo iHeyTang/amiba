@@ -1,4 +1,4 @@
-import { browserMessages } from "./locales.js";
+import { browserMessages, useBrowserT } from "./locales.js";
 import { Globe2 } from "lucide-react";
 import {
   BrowserAdapterContext,
@@ -6,10 +6,11 @@ import {
   useBrowserAdapter,
 } from "./adapter.js";
 import type { EmbeddedBrowserAdapter } from "../shared/browser.js";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type {
   WorkbenchResource,
+  WorkbenchSummaryContribution,
   WorkbenchViewExtension,
   WorkbenchViewProps,
 } from "@amiba/extension-sdk";
@@ -270,6 +271,86 @@ export function createBrowserView(
   };
 }
 
+/**
+ * The browser group of the pinned summary popover. Tabs render flat (favicon +
+ * title + URL) and stack while collapsed; expanding lists them all, and a
+ * click focuses the tab inside the workbench.
+ */
+function BrowserSummary({ sessionId }: { sessionId: string }) {
+  const pane = useWorkspacePane();
+  const { t } = useBrowserT();
+  const [expanded, setExpanded] = useState(false);
+  const tabs = pane.resources
+    .filter((entry) => entry.sessionId === sessionId)
+    .flatMap((entry) => {
+      const data = browserData(entry.resource);
+      return data ? [data] : [];
+    });
+  if (tabs.length === 0) {
+    return (
+      <p className="px-1 text-xs text-muted-foreground">
+        {t("embeddedBrowser.summary.empty")}
+      </p>
+    );
+  }
+  const open = (tabId: string) =>
+    pane.focusResourceIn(sessionId, "browser", tabId);
+  const shown = expanded ? tabs : tabs.slice(0, 1);
+  return (
+    <div className="flex flex-col">
+      <div className="relative flex flex-col">
+        {shown.map((tab) => (
+          <button
+            key={tab.browserTabId}
+            type="button"
+            onClick={() => open(tab.browserTabId)}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60"
+          >
+            {tab.favicon ? (
+              <img
+                src={tab.favicon}
+                alt=""
+                className="size-4 shrink-0 rounded-sm"
+              />
+            ) : (
+              <Globe2 className="size-4 shrink-0 text-muted-foreground" />
+            )}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs font-medium">
+                {tab.title || tab.url}
+              </span>
+              <span className="block truncate text-[11px] text-muted-foreground">
+                {tab.url}
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
+      {tabs.length > 1 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="self-start px-2 py-1 text-[11px] font-medium text-primary hover:underline"
+        >
+          {expanded
+            ? t("embeddedBrowser.summary.collapse")
+            : t("embeddedBrowser.summary.expand")}
+        </button>
+      )}
+    </div>
+  );
+}
+
+const browserSummary: WorkbenchSummaryContribution = {
+  id: "amiba.browser.summary",
+  order: 100,
+  label: () =>
+    browserMessages[
+      document.documentElement.lang.startsWith("zh") ? "zh-CN" : "en"
+    ]["embeddedBrowser.title"],
+  component: BrowserSummary,
+};
+
 export async function apply(ctx: ClientContext): Promise<void> {
   const bridge = getPlatform().nativeExtensions;
   if (!bridge) return;
@@ -287,7 +368,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
   );
   if (disposed) return;
   const browserView = createBrowserView(createBrowserAdapter(bridge, lease));
-  cleanup = ctx.slots.inject("amiba.workbench.view", () =>
+  const disposeView = ctx.slots.inject("amiba.workbench.view", () =>
     ctx.slots.register(
       {
         name: "amiba.workbench.view",
@@ -298,4 +379,19 @@ export async function apply(ctx: ClientContext): Promise<void> {
       () => null,
     ),
   );
+  const disposeSummary = ctx.slots.inject("amiba.workbench.summary", () =>
+    ctx.slots.register(
+      {
+        name: "amiba.workbench.summary",
+        id: browserSummary.id,
+        order: browserSummary.order,
+        inject: () => ({ extension: browserSummary }),
+      },
+      () => null,
+    ),
+  );
+  cleanup = () => {
+    disposeView();
+    disposeSummary();
+  };
 }

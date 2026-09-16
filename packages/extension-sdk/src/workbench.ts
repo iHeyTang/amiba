@@ -64,15 +64,17 @@ export interface WorkbenchShellExtension {
 }
 
 /**
- * A plugin-owned card in the pinned summary panel (the floating right-edge
- * rail that summarizes workspace activity without expanding the workbench).
- * The component renders its own rows; the shell only orders and hosts them.
+ * A plugin-owned GROUP in the pinned summary popover (the floating panel that
+ * summarizes workspace activity without expanding the workbench). Each
+ * contribution is one collapsible group: a localized title plus its rows.
  */
 export interface WorkbenchSummaryContribution {
   id: string;
   /** Lower order wins; id breaks ties deterministically. */
   order: number;
-  /** Renders the summary rows for the addressed session. */
+  /** Localized group title, e.g. "浏览器" / "Browser". */
+  label(): string;
+  /** Renders the group's rows for the addressed session. */
   component: ComponentType<{ sessionId: string }>;
 }
 declare module "@deepseek-ai/dsh-client-ui-slots" {

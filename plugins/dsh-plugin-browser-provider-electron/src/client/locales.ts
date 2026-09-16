@@ -19,6 +19,9 @@ export const browserMessages = {
     "embeddedBrowser.detecting": "Detecting…",
     "embeddedBrowser.noDevServer": "No local dev server detected",
     "embeddedBrowser.agentOperating": "Agent is browsing",
+    "embeddedBrowser.summary.empty": "No open tabs",
+    "embeddedBrowser.summary.expand": "Show all tabs",
+    "embeddedBrowser.summary.collapse": "Show less",
   },
   "zh-CN": {
     "embeddedBrowser.title": "浏览器",
@@ -38,6 +41,9 @@ export const browserMessages = {
     "embeddedBrowser.detecting": "正在检测…",
     "embeddedBrowser.noDevServer": "没有检测到本地开发服务器",
     "embeddedBrowser.agentOperating": "Agent 正在操作",
+    "embeddedBrowser.summary.empty": "暂无标签页",
+    "embeddedBrowser.summary.expand": "展开全部标签页",
+    "embeddedBrowser.summary.collapse": "收起",
   },
 };
 export const useBrowserT = () => usePluginT(browserMessages);
