@@ -317,6 +317,26 @@ describe("SessionsStore with DSH sessions", () => {
     store.teardown();
   });
 
+  it("recovers durable messages in place and rejects a recovery raced by new work", async () => {
+    const store = new SessionsStore();
+    await store.initialize();
+    await store.openTab("dsh-1");
+    store.setActiveMessages([{role:"user",content:"hello",uiId:"u"}]);
+    await store.recoverMessages("dsh-1");
+    expect(store.getSnapshot().activeMessages.at(-1)?.content).toBe("world");
+    const history = await mocks.history();
+    let resolve!: (value: unknown) => void;
+    mocks.history.mockImplementationOnce(() => new Promise(done => {resolve=done;}));
+    const recovery = store.recoverMessages("dsh-1");
+    store.setActiveMessages(previous => [...previous,{role:"user",content:"new work",uiId:"new"}]);
+    resolve(history);
+    await recovery;
+    expect(store.getSnapshot().activeMessages.at(-1)?.content).toBe("new work");
+    await store.recoverMessages("dsh-1");
+    expect(store.getSnapshot().activeMessages.at(-1)?.content).toBe("new work");
+    store.teardown();
+  });
+
   beforeEach(() => {
     mocks.watch.mockClear();
     mocks.storage = {};

@@ -1,3 +1,4 @@
+import { retryProgress } from "./retry"
 import { compactionUpdate } from "./compaction.js"
 import { ClosingAssistant } from "./closing-assistant"
 import { CodeDispatchTree } from "./code-dispatch-tree"
@@ -215,9 +216,14 @@ export class DshAmibaEventBridge {
       return [{ sessionId, event: { kind: "turn", turnId: `${sessionId}:${turn}`, ...(Number.isSafeInteger(data.turn) && (data.turn as number) >= 0 ? { runtimeTurn: data.turn as number } : {}) } }]
     }
     const runtimeStep = Number.isSafeInteger(data.step) && (data.step as number) >= 0 ? data.step as number : undefined
-    if (source.type === "llm/retry" && runtimeStep !== undefined) {
-      return [{sessionId,event:{kind:"assistantTextSource",phase:"reset",runtimeStep}}]
+    const retry = retryProgress(source)
+    if (retry) {
+      return [
+        ...(source.type === "llm/retry" && runtimeStep !== undefined ? [{sessionId,event:{kind:"assistantTextSource" as const,phase:"reset" as const,runtimeStep}}] : []),
+        {sessionId,event:{kind:"retry",event:retry}},
+      ]
     }
+    if (source.type === "llm/retry" && runtimeStep !== undefined) return [{sessionId,event:{kind:"assistantTextSource",phase:"reset",runtimeStep}}]
     if (source.type === "assistant/message" && source.surfaceOp === "append" && runtimeStep !== undefined) {
       const content = record(data.message)?.content
       const text = Array.isArray(content) ? content.map(block => {

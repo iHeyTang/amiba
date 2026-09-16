@@ -98,3 +98,13 @@ describe("chat error recovery", () => {
     expect(icon?.parentElement).not.toHaveClass("text-destructive/75")
   })
 })
+
+it("offers retry separately from diagnostics and disables it while running", async () => {
+  const retry = vi.fn();
+  const props = {error:{message:"stream failed",source:"run" as const},onOpenSettings:vi.fn(),onRetry:retry};
+  const {rerender} = render(<ErrorBlock {...props} />);
+  await userEvent.click(screen.getByRole("button", {name:"sidepanel.retry.action"}));
+  expect(retry).toHaveBeenCalledTimes(1);
+  rerender(<ErrorBlock {...props} retryDisabled />);
+  expect(screen.getByRole("button", {name:"sidepanel.retry.action"})).toBeDisabled();
+});

@@ -117,3 +117,25 @@ it("flushes exact live text provenance and keeps previous published ranges uncha
   expect((before as any).sourceRanges[0]).not.toHaveProperty("runtimeSeq");
   expect(current()[0].assistantTimeline![0]).toMatchObject({text:"report.txt",sourceRanges:[{start:0,end:10,runtimeStep:2,runtimeSeq:42}]});
 });
+
+
+it("retains pending text, tool evidence and retry records when an error resets the stream", () => {
+  const { stub, current } = makeSessionsStub();
+  const { result } = renderHook(() => useStreamBuffer({ sessions: stub }));
+  act(() => {
+    result.current.prime("a1");
+    result.current.onChunk("partial answer");
+    result.current.onReasoning("retained thought");
+    result.current.onToolProgress({tool:"bash",toolCallId:"c",status:"completed"});
+    result.current.onRetry({id:"r:1",attempt:1,delayMs:500,startedAt:100,status:"waiting"});
+    result.current.cancelStreamChunkFlush();
+    result.current.applyVerboseToAssistant();
+    result.current.cancelVerboseFlush();
+    result.current.flushStreamChunksToMessages();
+    result.current.reset();
+  });
+  expect(current()[0].content).toBe("partial answer");
+  expect(current()[0].reasoning).toBe("retained thought");
+  expect(current()[0].toolProgress).toHaveLength(1);
+  expect(current()[0].assistantTimeline?.at(-1)).toMatchObject({kind:"retry",retry:{attempt:1}});
+});

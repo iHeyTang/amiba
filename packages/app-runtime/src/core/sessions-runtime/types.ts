@@ -161,5 +161,6 @@ export interface SessionsController {
    * Re-fetch the native DSH session index, including sessions created by
    * plugins or other DSH clients.
    */
+  recoverMessages: (id: string) => Promise<void>;
   refresh: () => Promise<void>;
 }
