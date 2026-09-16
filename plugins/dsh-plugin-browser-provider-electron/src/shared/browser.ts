@@ -4,6 +4,7 @@ export type EmbeddedBrowserCommand =
   | { action: "back" }
   | { action: "forward" }
   | { action: "reload" }
+  | { action: "hardReload" }
   | { action: "stop" };
 
 export interface EmbeddedBrowserPageState {

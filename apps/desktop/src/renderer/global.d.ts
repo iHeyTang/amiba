@@ -87,6 +87,9 @@ interface AmibaBridgeApi {
   shell: {
     openExternal(url: string): Promise<void>;
   };
+  window: {
+    close(): Promise<void>;
+  };
   nativeExtensions: import("@amiba/extension-sdk").DesktopExtensionBridge;
   workspaces: {
     chooseDirectory(defaultPath?: string): Promise<string | null>;

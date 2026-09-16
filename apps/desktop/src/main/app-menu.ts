@@ -89,13 +89,11 @@ export function buildAppMenuTemplate({
   const viewMenu: MenuItemConstructorOptions = {
     label: "View",
     submenu: [
+      // `reload` / `forceReload` are intentionally omitted: Ctrl/Cmd+R and
+      // Ctrl/Cmd+Shift+R belong to the workbench's "reload the active browser
+      // tab" shortcuts, so they must reach the renderer instead of the menu.
       ...(!isMac
-        ? [
-            { role: "reload" } as const,
-            { role: "forceReload" } as const,
-            { role: "toggleDevTools" } as const,
-            { type: "separator" } as const,
-          ]
+        ? [{ role: "toggleDevTools" } as const, { type: "separator" } as const]
         : []),
       { role: "resetZoom" },
       { role: "zoomIn" },
@@ -127,7 +125,13 @@ export function buildAppMenuTemplate({
           { type: "separator" },
           { role: "front" },
         ]
-      : [{ role: "minimize" }, { role: "zoom" }, { role: "close" }],
+      : [
+          { role: "minimize" },
+          { role: "zoom" },
+          // `close` is intentionally omitted: Ctrl+W belongs to the workbench's
+          // "close the active tab" shortcut (with a window-close fallback in
+          // the renderer), so it must reach the renderer instead of the menu.
+        ],
   };
 
   return isMac

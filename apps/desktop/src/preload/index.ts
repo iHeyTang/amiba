@@ -130,6 +130,10 @@ const api = {
       ipcRenderer.invoke("shell:open-external", url),
   },
 
+  window: {
+    close: () => ipcRenderer.invoke("window:close"),
+  },
+
   nativeExtensions: {
     connect: (packageName: string) => ipcRenderer.invoke("native-extension:connect", packageName),
     call: (lease: string, method: string, args?: unknown) => ipcRenderer.invoke("native-extension:call", lease, method, args),

@@ -40,6 +40,7 @@ type BrowserCommand =
   | { action: "back" }
   | { action: "forward" }
   | { action: "reload" }
+  | { action: "hardReload" }
   | { action: "stop" };
 
 interface ConsoleEntry {
@@ -553,6 +554,8 @@ class EmbeddedBrowserController {
       entry.contents.navigationHistory.goForward();
     } else if (command.action === "reload") {
       entry.contents.reload();
+    } else if (command.action === "hardReload") {
+      entry.contents.reloadIgnoringCache();
     } else if (command.action === "stop") {
       entry.contents.stop();
     }

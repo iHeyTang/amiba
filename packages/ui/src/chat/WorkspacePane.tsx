@@ -3677,22 +3677,75 @@ export function WorkspacePane({
     },
     [pane.tabs, pane.sessionId, pane.closeTab, extensions],
   );
-  // Cmd/Ctrl+W closes the active workbench tab. The chord is left alone while
-  // focus sits in an editable field so text editing is never hijacked.
+  // Workbench tab keyboard shortcuts. On macOS the menu never binds these
+  // chords; on Windows/Linux the close/reload/forceReload menu roles were
+  // removed so they reach the renderer here too. Editable focus is never
+  // hijacked, and every action is gated on the pane being open.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey)) return;
-      if (event.key.toLowerCase() !== "w") return;
-      if (isEditableTarget(event.target)) return;
-      if (!pane.open) return;
-      const activeTab = pane.activeTab;
-      if (!activeTab) return;
-      event.preventDefault();
-      void closeTab(activeTab.id);
+      // Ctrl+Tab / Ctrl+Shift+Tab cycle tabs (Ctrl only, matching Codex).
+      if (event.ctrlKey && !event.metaKey && event.key === "Tab") {
+        if (!pane.open || pane.tabs.length < 2) return;
+        event.preventDefault();
+        const current = pane.activeTab;
+        const index = current
+          ? pane.tabs.findIndex((tab) => tab.id === current.id)
+          : -1;
+        const nextIndex =
+          (index + (event.shiftKey ? -1 : 1) + pane.tabs.length) %
+          pane.tabs.length;
+        pane.selectTab(pane.tabs[nextIndex].id);
+        return;
+      }
+      // Ctrl+` toggles the terminal drawer (Ctrl only, matching Codex).
+      if (event.ctrlKey && !event.metaKey && event.key === "`") {
+        if (!pane.open) return;
+        event.preventDefault();
+        pane.setTerminalOpen(!pane.terminalOpen);
+        return;
+      }
+      const cmdOrCtrl = event.metaKey || event.ctrlKey;
+      if (!cmdOrCtrl) return;
+      const key = event.key.toLowerCase();
+      if (key === "w") {
+        if (isEditableTarget(event.target)) return;
+        event.preventDefault();
+        if (pane.open && pane.activeTab) {
+          void closeTab(pane.activeTab.id);
+        } else {
+          // No workbench tab to close: fall back to closing the window.
+          void getPlatform().shell.closeWindow?.();
+        }
+        return;
+      }
+      if (event.shiftKey && key === "e") {
+        if (!pane.open) return;
+        event.preventDefault();
+        pane.setFileTreeOpen(!pane.fileTreeOpen);
+        return;
+      }
+      if (!event.shiftKey && !event.altKey && key >= "1" && key <= "9") {
+        if (!pane.open) return;
+        const tab = pane.tabs[Number(key) - 1];
+        if (!tab) return;
+        event.preventDefault();
+        pane.selectTab(tab.id);
+        return;
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [pane.open, pane.activeTab, closeTab]);
+  }, [
+    pane.open,
+    pane.activeTab,
+    pane.tabs,
+    pane.fileTreeOpen,
+    pane.terminalOpen,
+    pane.selectTab,
+    pane.setFileTreeOpen,
+    pane.setTerminalOpen,
+    closeTab,
+  ]);
   const panelOwner = {
     workbenchSessionId: pane.sessionId,
     openResource: pane.openResource,

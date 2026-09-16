@@ -98,7 +98,7 @@ function BrowserHost({
     getSnapshot(): HTMLElement | null;
   };
 }) {
-  const { pane, update } = useBrowserPane();
+  const { pane, update, create } = useBrowserPane();
   const { openResourceIn, focusResourceIn, sessionId } = pane;
   const adapter = useBrowserAdapter();
   useEffect(() => {
@@ -123,24 +123,48 @@ function BrowserHost({
       create();
     };
   }, [adapter, openResourceIn, focusResourceIn, sessionId]);
-  // Cmd/Ctrl+R reloads the active browser tab. The chord is left alone while
-  // focus sits in an editable field (or when another view owns the active tab).
+  // Browser tab shortcuts: Cmd/Ctrl+T opens a new tab, Cmd/Ctrl+R reloads the
+  // active tab, Cmd/Ctrl+Shift+R hard-reloads it, and Cmd/Ctrl+←/→ navigate
+  // history. The chords are left alone while focus sits in an editable field
+  // (or when another view owns the active tab).
   useEffect(() => {
     if (!adapter) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey)) return;
-      if (event.key.toLowerCase() !== "r") return;
+      const cmdOrCtrl = event.metaKey || event.ctrlKey;
+      if (!cmdOrCtrl) return;
       if (isEditableTarget(event.target)) return;
+      const key = event.key.toLowerCase();
+      if (!event.shiftKey && key === "t") {
+        if (!pane.enabled) return;
+        event.preventDefault();
+        create();
+        return;
+      }
       if (!pane.open) return;
       const active = pane.activeTab?.resource;
       const data = active?.kind === "extension" ? browserData(active.resource) : null;
-      if (!data) return;
-      event.preventDefault();
-      void adapter.command(data.browserTabId, { action: "reload" });
+      if (key === "arrowleft") {
+        if (!data) return;
+        event.preventDefault();
+        void adapter.command(data.browserTabId, { action: "back" });
+        return;
+      }
+      if (key === "arrowright") {
+        if (!data) return;
+        event.preventDefault();
+        void adapter.command(data.browserTabId, { action: "forward" });
+        return;
+      }
+      if (key === "r" && data) {
+        event.preventDefault();
+        void adapter.command(data.browserTabId, {
+          action: event.shiftKey ? "hardReload" : "reload",
+        });
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [adapter, pane.open, pane.activeTab]);
+  }, [adapter, pane.open, pane.activeTab, pane.enabled, create]);
   const active = pane.activeTab?.resource;
   const selected =
     active?.kind === "extension" ? browserData(active.resource) : null;
