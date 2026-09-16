@@ -1,8 +1,19 @@
-import { createContext, useContext, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { LayoutGrid } from "lucide-react";
 import { useT } from "@amiba/i18n";
 import type { WorkbenchSummaryContribution } from "@amiba/extension-sdk";
-import { Popover, PopoverContent, PopoverTrigger } from "../primitives";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+} from "../primitives";
 import { useWorkspacePane } from "./WorkspacePane";
 
 /**
@@ -40,9 +51,27 @@ export function SummaryHeaderAction({ sessionId }: { sessionId: string }) {
   const pane = useWorkspacePane();
   const contributions = useSummaryContributions();
   const { t } = useT();
+  const [open, setOpen] = useState(false);
+  // Auto-reveal on new activity so the summary surfaces what just happened.
+  // Closing it while the same attention is still pending keeps it closed until
+  // the next activity; opening the workbench clears the attention itself.
+  useEffect(() => {
+    if (pane.attention) setOpen(true);
+  }, [pane.attention]);
   if (!pane.enabled || pane.sessionId !== sessionId) return null;
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
+      {/* Anchor the panel to the window's right edge (not the icon) so it is
+          flush with the conversation side. */}
+      <PopoverAnchor asChild>
+        <div
+          className="pointer-events-none fixed h-px w-px"
+          style={{
+            right: 8,
+            top: "calc(var(--amiba-header-height, 40px) + 4px)",
+          }}
+        />
+      </PopoverAnchor>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -56,7 +85,13 @@ export function SummaryHeaderAction({ sessionId }: { sessionId: string }) {
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" sideOffset={6} size="md" padding="none">
+      <PopoverContent
+        align="end"
+        side="bottom"
+        sideOffset={4}
+        size="md"
+        padding="none"
+      >
         <div className="flex flex-col gap-4 p-3">
           {contributions.length > 0 ? (
             contributions.map((contribution) => {
