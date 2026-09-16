@@ -1,0 +1,27 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1720,8 +1720,14 @@
+ 	} };
+ }
+ /** Merge deployment headers while removing case-insensitive attribution collisions. */
+-function requestHeaders(headers) {
++function requestHeaders(headers, model, sessionId) {
+ 	const attribution = attributionHeaders();
++	// SDK session affinity is not projected to headers on every OpenCode API.
++	let openCode = model.provider === "opencode" || model.provider === "opencode-go";
++	if (!openCode) try {
++		openCode = new URL(model.baseUrl).hostname === "opencode.ai";
++	} catch {}
++	if (openCode && sessionId !== void 0) attribution["x-opencode-session"] = String(sessionId);
+ 	const reserved = new Set(Object.keys(attribution).map((name) => name.toLowerCase()));
+ 	return {
+ 		...Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => !reserved.has(name.toLowerCase()))),
+@@ -1870,7 +1876,7 @@
+ 					...options.maxTokens === void 0 ? {} : { maxTokens: options.maxTokens },
+ 					...options.sessionId === void 0 ? {} : { sessionId: String(options.sessionId) },
+ 					signal: watchdog.signal,
+-					headers: requestHeaders(profile.headers)
++					headers: requestHeaders(profile.headers, model, options.sessionId)
+ 				}), model.contextWindow, options.signal, model.id)[Symbol.asyncIterator]();
+ 				let exhausted = false;
+ 				try {
