@@ -897,15 +897,22 @@ export function WorkspacePaneProvider({
   useEffect(() => {
     if (!enabled) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.code !== "Backslash" ||
-        !event.shiftKey ||
-        (!event.metaKey && !event.ctrlKey)
-      ) {
+      const cmdOrCtrl = event.metaKey || event.ctrlKey;
+      // Cmd/Ctrl+J (Codex's "toggle panel") — the standard chord.
+      if (cmdOrCtrl && !event.shiftKey && event.key.toLowerCase() === "j") {
+        event.preventDefault();
+        persistOpen(!open);
         return;
       }
-      event.preventDefault();
-      persistOpen(!open);
+      // Legacy chord kept as an alias.
+      if (
+        event.code === "Backslash" &&
+        event.shiftKey &&
+        cmdOrCtrl
+      ) {
+        event.preventDefault();
+        persistOpen(!open);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);

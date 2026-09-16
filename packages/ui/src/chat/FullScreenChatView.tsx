@@ -114,6 +114,19 @@ const EDGE_CONTROLS_INSET_VAR = "--amiba-workbench-controls-inset";
 
 type SidebarMotion = "idle" | "collapsing" | "expanding";
 
+/** Whether a key event target is an editable field, so shell shortcuts never hijack text editing. */
+function isEditableTarget(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null;
+  if (!element || typeof element.tagName !== "string") return false;
+  const tag = element.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    element.isContentEditable
+  );
+}
+
 function PrimaryWorkspaceView({
   active,
   testId,
@@ -773,6 +786,27 @@ function FullScreenChatViewInner({
     await sessions.deselect();
     onSidebarViewChange("chats");
   }, [sessions, onSidebarViewChange]);
+
+  // Shell-level keyboard shortcuts: Cmd/Ctrl+B toggles the sidebar and
+  // Cmd/Ctrl+N starts a new chat. N is guarded while focus sits in an editable
+  // field so an in-progress draft is never silently discarded.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const key = event.key.toLowerCase();
+      if (key === "b") {
+        event.preventDefault();
+        onSidebarCollapsedChange(!sidebarCollapsedRef.current);
+        return;
+      }
+      if (key === "n" && !isEditableTarget(event.target)) {
+        event.preventDefault();
+        void onNewChatAndShow();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onSidebarCollapsedChange, onNewChatAndShow]);
 
   // Only toggle a conversation that is actually visible. A plugin panel or
   // workspace retains the active session underneath; clicking that session

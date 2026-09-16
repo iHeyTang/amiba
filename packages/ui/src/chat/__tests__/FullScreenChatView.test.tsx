@@ -974,6 +974,29 @@ describe("FullScreenChatView new-chat home", () => {
     });
   });
 
+  it("toggles the sidebar with Cmd/Ctrl+B", () => {
+    mocks.useSessions.mockReturnValue(makeSessions());
+
+    render(
+      <FullScreenChatView
+        client={makeClient() as never}
+        openSettings={() => {}}
+        openAgentDestination={() => {}}
+        restoreSidebarViewOnMount={false}
+      />,
+    );
+
+    const sidebar = screen.getByTestId("main-sidebar");
+    expect(sidebar).toHaveStyle({ width: `${APP_SIDEBAR_DEFAULT_WIDTH}px` });
+
+    fireEvent.keyDown(window, { key: "b", metaKey: true });
+    expect(sidebar).toHaveAttribute("aria-hidden", "true");
+    expect(sidebar).toHaveStyle({ width: "0px" });
+
+    fireEvent.keyDown(window, { key: "b", metaKey: true });
+    expect(sidebar).toHaveStyle({ width: `${APP_SIDEBAR_DEFAULT_WIDTH}px` });
+  });
+
   it("snaps sidebar resizing to the shared default width", () => {
     mocks.useSessions.mockReturnValue(makeSessions());
 
