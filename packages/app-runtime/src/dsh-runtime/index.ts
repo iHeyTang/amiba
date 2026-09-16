@@ -129,6 +129,18 @@ export function resolveAmibaDshHomes(
   return roots.map(root => path.join(root, "dsh", "home"))
 }
 
+/** Include isolated previews in plugin development discovery; explicit homes stay authoritative. */
+export function resolveAmibaDshDevelopmentHomes(
+  explicit?: string,
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  userHome = homedir(),
+): string[] {
+  const homes = resolveAmibaDshHomes(explicit, env, platform, userHome)
+  if (explicit?.trim() || env.AMIBA_DSH_HOME?.trim() || env.DSH_HOME?.trim() || env.AMIBA_USER_DATA_DIR?.trim()) return homes
+  return [...homes.map(home => path.join(`${path.dirname(path.dirname(home))}-dev`, "dsh", "home")), ...homes]
+}
+
 export function resolveAmibaDshHome(
   explicit?: string,
   env: NodeJS.ProcessEnv = process.env,

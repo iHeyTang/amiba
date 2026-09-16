@@ -59,7 +59,7 @@ jobs:
       - name: Test tool catalog
         run: pnpm --dir plugins/dsh-plugin-catalog test
       - name: Test desktop plugin integration
-        run: node --experimental-strip-types --test apps/desktop/src/main/__tests__/desktop-extensions.test.mjs apps/desktop/src/main/__tests__/dsh-profile-plugins.test.mjs apps/desktop/src/main/__tests__/plugin-development.test.mjs
+        run: node --experimental-strip-types --test apps/desktop/src/main/__tests__/user-data.test.mjs apps/desktop/src/main/__tests__/desktop-extensions.test.mjs apps/desktop/src/main/__tests__/dsh-profile-plugins.test.mjs apps/desktop/src/main/__tests__/plugin-development.test.mjs
       - name: Smoke test plugin composition
         run: pnpm runtime:smoke
       - name: Test private memory native dependencies
