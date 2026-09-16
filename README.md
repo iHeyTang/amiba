@@ -1,14 +1,53 @@
 # Amiba
 
-Amiba is a DSH-native desktop agent workspace. DeepSeek Harness owns the agent
-runtime, sessions, event stream, context assembly, models, presets, tools,
-approvals, questions, skills, MCP clients, and schedules. Electron owns the
-desktop shell and narrowly scoped native bridges. Product capabilities that
-need agent lifecycle access run as Cordis plugins inside DSH.
+**A DSH-native desktop agent workspace.** · [中文文档](./README.zh-CN.md)
 
-This repository intentionally has one runtime path. There is no compatibility
-gateway, Python sidecar, browser-extension runtime, transcript fallback, or
-dual-write migration layer.
+Amiba is a desktop agent workspace built on top of
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). DSH remains
+the **single source of truth** for the agent runtime — sessions, the event stream,
+context assembly, models, presets, tools, approvals, questions, skills, MCP clients,
+and schedules. Amiba adds a desktop application, a narrow native OS bridge, and a set
+of product capabilities that need agent-lifecycle access, each implemented as a Cordis
+plugin *inside* DSH.
+
+This repository intentionally has one runtime path. There is no compatibility gateway,
+Python sidecar, browser-extension runtime, transcript fallback, or dual-write migration
+layer.
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/workspace-overview.webp" width="720" alt="Amiba workspace overview" />
+</p>
+<p align="center"><em>A chat-driven workspace: workspaces, scheduled tasks, external messages and task history on the left; the conversation in the center.</em></p>
+
+|  |  |
+|:---:|:---:|
+| <img src="docs/screenshots/embedded-browser.webp" width="380" alt="Embedded browser and live web research" /> | <img src="docs/screenshots/settings-models.webp" width="380" alt="Models & Services settings" /> |
+| *Embedded browser + live web research* | *Model assignment & capability routing* |
+| <img src="docs/screenshots/settings-connections.webp" width="380" alt="Connections settings" /> | <img src="docs/screenshots/settings-usage.webp" width="380" alt="Usage analytics" /> |
+| *Connectors: Lark, DingTalk, WeChat, Webhook* | *Usage: tokens, activity heatmap, per-model* |
+
+## What Amiba adds on top of DSH
+
+Amiba is **not** a fork of DSH's core — the agent runtime is used as-is. The difference
+is everything around it, shipped as independent `dsh-plugin-*` projects.
+
+| Layer | Official DSH | Amiba (this repo) |
+| --- | --- | --- |
+| Agent runtime | Owns sessions, events, context, tools, skills, MCP, schedules, approvals | Consumed unchanged |
+| Surfaces | Web Shell, CLI | **+ a native desktop app** (Electron): windows, notifications, filesystem, PTY terminals, visible embedded browser, screen capture, external inbox, workspace checkpoints |
+| Models & credentials | Presets + execution | **+ Model Plane**: provider/model discovery, credentials, capability routing (default + reasoning, vision, image/video/speech/music generation), cost-confirmation gates |
+| Integrations | MCP, web tools | **+ first-class connectors**: Lark, DingTalk, WeChat, Webhook, with an external inbox and persisted sessions |
+| Memory | Per-session context | **+ cross-session long-term memory** (memos) |
+| Observability | — | **+ usage analytics**: token/turn counts, activity heatmap, per-model breakdown |
+| Assistant abilities | — | **+ vision** (assignable for text-only agents), **media generation** routing, **steward**, **scheduled tasks**, **desktop pet** |
+| UI | Official Web Shell slots | **+ a full desktop UI** (`@amiba/ui` + `dsh-plugin-ui-shell`) that adopts official slots but ships its own pixels |
+| Authoring | Host/Client plugin API | **+ Extension SDK** (`@amiba/extension-sdk`) and `amiba plugin create` |
+
+Every Amiba capability is an independent, versioned Cordis plugin; the bundles only
+compose them. The ownership map is documented in
+[`docs/2026-08-15-dsh-native-architecture.md`](docs/2026-08-15-dsh-native-architecture.md).
 
 ## Architecture
 
@@ -66,8 +105,7 @@ The physical application-runtime consolidation is audited in
 CLI, Web, and Electron do not discover a system DSH or use system Node to run
 DSH. Their shared runtime is pinned to:
 
-- DSH `0.1.1-rc.2`
-- source commit `47f943859bef60e4160492346772ded9b24f765a`
+- DSH `0.1.5-rc.1`
 - Node.js `22.22.0`
 - Amiba plugin revision `2026-08-16.2`
 - plugin-installer pnpm `9.12.0` (bundled with the managed runtime)
