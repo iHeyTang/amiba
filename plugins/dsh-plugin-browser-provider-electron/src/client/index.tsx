@@ -28,6 +28,19 @@ import {
 export const name = "amiba-browser-electron-ui";
 export const inject = ["slots"];
 
+/** Whether a key event target is an editable field, so tab shortcuts never hijack text editing. */
+function isEditableTarget(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null;
+  if (!element || typeof element.tagName !== "string") return false;
+  const tag = element.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    element.isContentEditable
+  );
+}
+
 function browserData(
   resource: WorkbenchResource,
 ): EmbeddedBrowserResource | null {
@@ -110,6 +123,24 @@ function BrowserHost({
       create();
     };
   }, [adapter, openResourceIn, focusResourceIn, sessionId]);
+  // Cmd/Ctrl+R reloads the active browser tab. The chord is left alone while
+  // focus sits in an editable field (or when another view owns the active tab).
+  useEffect(() => {
+    if (!adapter) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.key.toLowerCase() !== "r") return;
+      if (isEditableTarget(event.target)) return;
+      if (!pane.open) return;
+      const active = pane.activeTab?.resource;
+      const data = active?.kind === "extension" ? browserData(active.resource) : null;
+      if (!data) return;
+      event.preventDefault();
+      void adapter.command(data.browserTabId, { action: "reload" });
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [adapter, pane.open, pane.activeTab]);
   const active = pane.activeTab?.resource;
   const selected =
     active?.kind === "extension" ? browserData(active.resource) : null;

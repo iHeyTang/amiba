@@ -3593,6 +3593,19 @@ function WorkspaceRecoveryPointsView() {
   );
 }
 
+/** Whether a key event target is an editable field, so tab shortcuts never hijack text editing. */
+function isEditableTarget(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null;
+  if (!element || typeof element.tagName !== "string") return false;
+  const tag = element.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    element.isContentEditable
+  );
+}
+
 export function WorkspacePane({
   visible = true,
   renderPanel,
@@ -3641,6 +3654,45 @@ export function WorkspacePane({
     pane.setMode(previousPanelModes.current.get(pane.sessionId) ?? "preview");
     previousPanelModes.current.delete(pane.sessionId);
   }, [pane.setMode, pane.sessionId, mode]);
+  // Close one tab, awaiting its view's cleanup (e.g. the browser unregisters
+  // the tab) before dropping the row. Shared by the tab button and the
+  // Cmd/Ctrl+W shortcut so both paths honor the same lifecycle.
+  const closeTab = useCallback(
+    async (id: string) => {
+      const tab = pane.tabs.find((t) => t.id === id);
+      if (!tab) return;
+      const key = `${pane.sessionId}:${id}`;
+      if (closingTabs.current.has(key)) return;
+      closingTabs.current.add(key);
+      try {
+        const resource = toWorkbenchResource(tab.resource);
+        await selectWorkbenchView(extensions, resource.type)?.onClose?.(resource, pane.sessionId);
+        pane.closeTab(id);
+        setActionError(null);
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : String(error));
+      } finally {
+        closingTabs.current.delete(key);
+      }
+    },
+    [pane.tabs, pane.sessionId, pane.closeTab, extensions],
+  );
+  // Cmd/Ctrl+W closes the active workbench tab. The chord is left alone while
+  // focus sits in an editable field so text editing is never hijacked.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.key.toLowerCase() !== "w") return;
+      if (isEditableTarget(event.target)) return;
+      if (!pane.open) return;
+      const activeTab = pane.activeTab;
+      if (!activeTab) return;
+      event.preventDefault();
+      void closeTab(activeTab.id);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pane.open, pane.activeTab, closeTab]);
   const panelOwner = {
     workbenchSessionId: pane.sessionId,
     openResource: pane.openResource,
@@ -3882,18 +3934,7 @@ export function WorkspacePane({
                       setMode("preview");
                       pane.selectTab(tab.id);
                     }}
-                    onClose={async () => {
-                      const key = `${pane.sessionId}:${tab.id}`;
-                      if (closingTabs.current.has(key)) return;
-                      closingTabs.current.add(key);
-                      try {
-                        const resource = toWorkbenchResource(tab.resource);
-                        await selectWorkbenchView(extensions, resource.type)?.onClose?.(resource, pane.sessionId);
-                        pane.closeTab(tab.id);
-                        setActionError(null);
-                      } catch (error) { setActionError(error instanceof Error ? error.message : String(error)); }
-                      finally { closingTabs.current.delete(key); }
-                    }}
+                    onClose={() => closeTab(tab.id)}
                   />
                 );
               })}

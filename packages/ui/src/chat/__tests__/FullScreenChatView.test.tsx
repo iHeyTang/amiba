@@ -784,6 +784,12 @@ describe("FullScreenChatView new-chat home", () => {
     await userEvent.click(screen.getByRole("button", { name: "workspacePane.collapse" }));
     await userEvent.click(screen.getByRole("button", { name: "workspacePane.open" }));
     expect(screen.getAllByRole("tab", { name: "New tab" })).toHaveLength(1);
+
+    // Cmd/Ctrl+W closes the active workbench tab.
+    fireEvent.keyDown(window, { key: "w", metaKey: true });
+    await waitFor(() =>
+      expect(screen.queryByRole("tab", { name: "New tab" })).toBeNull(),
+    );
   });
 
   it("opens independent terminal resources inside the workbench", async () => {
