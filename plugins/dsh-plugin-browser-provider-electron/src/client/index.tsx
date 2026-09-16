@@ -6,7 +6,7 @@ import {
   useBrowserAdapter,
 } from "./adapter.js";
 import type { EmbeddedBrowserAdapter } from "../shared/browser.js";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type {
   WorkbenchResource,
@@ -272,9 +272,44 @@ export function createBrowserView(
 }
 
 /**
- * The browser group of the pinned summary popover. Tabs render flat (favicon +
- * title + URL) and stack while collapsed; expanding lists them all, and a
- * click focuses the tab inside the workbench.
+ * A small, non-interactive live `<webview>` used as a page preview inside the
+ * summary popover. It reuses the workbench's partition so cookies/storage are
+ * shared, but it is NOT registered with main (it is display-only). It is
+ * created imperatively because the summary is outside the workbench's webview
+ * host and must not double-register the tab.
+ */
+function PreviewWebview({ url }: { url: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !url || url === "about:blank") return;
+    const webview = document.createElement("webview");
+    webview.setAttribute("src", url);
+    webview.setAttribute("partition", "persist:amiba-browser");
+    webview.style.width = "100%";
+    webview.style.height = "100%";
+    webview.style.minWidth = "0";
+    webview.style.minHeight = "0";
+    webview.style.pointerEvents = "none";
+    webview.style.border = "0";
+    webview.style.display = "flex";
+    container.appendChild(webview);
+    return () => {
+      webview.remove();
+    };
+  }, [url]);
+  return (
+    <div
+      ref={containerRef}
+      className="h-40 w-full overflow-hidden rounded-t-lg bg-background"
+    />
+  );
+}
+
+/**
+ * The browser group of the pinned summary popover. The active tab renders as a
+ * live page preview; the rest stack (favicon + title + URL) behind an expand
+ * toggle. A click on any entry focuses that tab inside the workbench.
  */
 function BrowserSummary({ sessionId }: { sessionId: string }) {
   const pane = useWorkspacePane();
@@ -295,11 +330,41 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
   }
   const open = (tabId: string) =>
     pane.focusResourceIn(sessionId, "browser", tabId);
-  const shown = expanded ? tabs : tabs.slice(0, 1);
+  const active = pane.activeTab?.resource;
+  const activeBrowserId =
+    active?.kind === "extension"
+      ? browserData(active.resource)?.browserTabId
+      : undefined;
+  const previewTab =
+    tabs.find((tab) => tab.browserTabId === activeBrowserId) ?? tabs[0];
+  const others = tabs.filter(
+    (tab) => tab.browserTabId !== previewTab.browserTabId,
+  );
   return (
-    <div className="flex flex-col">
-      <div className="relative flex flex-col">
-        {shown.map((tab) => (
+    <div className="flex flex-col gap-1.5">
+      <button
+        type="button"
+        onClick={() => open(previewTab.browserTabId)}
+        className="group relative overflow-hidden rounded-lg border border-border/60 text-left"
+      >
+        <PreviewWebview url={previewTab.url} />
+        <span className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/60 to-transparent px-2 py-1.5 text-[10px] text-white">
+          {previewTab.favicon ? (
+            <img
+              src={previewTab.favicon}
+              alt=""
+              className="size-3 shrink-0 rounded-sm"
+            />
+          ) : (
+            <Globe2 className="size-3 shrink-0" />
+          )}
+          <span className="min-w-0 flex-1 truncate">
+            {previewTab.title || previewTab.url}
+          </span>
+        </span>
+      </button>
+      {expanded &&
+        others.map((tab) => (
           <button
             key={tab.browserTabId}
             type="button"
@@ -325,8 +390,7 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
             </span>
           </button>
         ))}
-      </div>
-      {tabs.length > 1 && (
+      {others.length > 0 && (
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
