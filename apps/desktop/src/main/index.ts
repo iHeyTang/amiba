@@ -2,6 +2,7 @@ import { registerAppUpdates, finishPendingUpdate } from "./updates";
 import { installDesktopPetWindow } from "./desktop-pet-window";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { mkdirSync } from "node:fs";
 import type net from "node:net";
 import {
   BrowserWindow,
@@ -61,15 +62,22 @@ import {
   startDshNativeGateway,
   type DshNativeGateway,
 } from "./dsh-native-gateway";
-import { resolveUserDataOverride } from "./user-data";
+import { resolveDesktopUserData, desktopOsIntegrationEnabled } from "./user-data";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const userDataOverride = resolveUserDataOverride(
+const userDataDirectory = resolveDesktopUserData(
   process.env.AMIBA_USER_DATA_DIR,
+  app.getPath("userData"),
+  app.isPackaged,
 );
-if (userDataOverride) app.setPath("userData", userDataOverride);
+mkdirSync(userDataDirectory, { recursive: true });
+app.setPath("userData", userDataDirectory);
+const enableOsIntegration = desktopOsIntegrationEnabled(
+  app.isPackaged, process.env.AMIBA_DEV_OS_INTEGRATION,
+);
+if (!app.isPackaged) console.log(`[desktop:dev] Preview data: ${userDataDirectory}`);
 
 const isDev = !app.isPackaged;
 const RENDERER_DEV_URL = process.env.ELECTRON_RENDERER_URL;
@@ -540,6 +548,7 @@ if (!gotSingleInstanceLock) {
   // Another Amiba instance already owns this user's session — its
   // `second-instance` handler will pick up our argv (including any
   // amiba:// URL) and surface the prompt over there. Bail.
+  console.log(`[desktop] Another instance is already using ${userDataDirectory}; exiting.`);
   app.quit();
 } else {
   attachSecondInstanceHandler(summonWindow);
@@ -709,12 +718,12 @@ if (!gotSingleInstanceLock) {
     // hotkey (⌘⇧.) takes the raw `summonWindow` because by the time we
     // raise the main window the snip flow has already written its own
     // pendingPrompt.
-    void startHotkeyManager(summonQuickAskFromHotkey, summonWindow);
+    if (enableOsIntegration) void startHotkeyManager(summonQuickAskFromHotkey, summonWindow);
 
     // External entry points: OS-level `amiba://` URLs and the local
     // Unix socket inbox. Both write `home.pendingPrompt` and summon the
     // window; the renderer's existing watcher routes to chat.
-    registerProtocolHandler(summonWindow);
+    if (enableOsIntegration) registerProtocolHandler(summonWindow);
     try {
       inboxServer = await startUnixSocketInbox(summonWindow);
     } catch (err) {
