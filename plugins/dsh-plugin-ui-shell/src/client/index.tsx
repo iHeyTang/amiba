@@ -36,6 +36,7 @@ export { cn } from "@amiba/ui/plugin";
 export { getPlatform } from "@amiba/app-runtime/platform";
 export { createSlotContributionsSource } from "./session-list-sources.js";
 import { WorkbenchExtensionsProvider } from "@amiba/ui/plugin";
+import { SummaryContributionsProvider, SummaryHeaderAction } from "@amiba/ui/plugin";
 import type { WorkbenchShellExtension, WorkbenchSummaryContribution, WorkbenchViewExtension } from "@amiba/extension-sdk";
 import { createWorkbenchSource, createWorkbenchShellSource, createSummarySource } from "./workbench-source.js";
 import type { NoticeReference } from "@amiba/app-runtime/protocol";
@@ -364,7 +365,7 @@ function AmibaRoot({
   }, []);
 
   return (
-    <ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench} shells={workbenchShells}><MarkdownProvider extensions={markdown} report={reportMarkdown}><AmibaProductShell
+    <ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench} shells={workbenchShells}><MarkdownProvider extensions={markdown} report={reportMarkdown}><SummaryContributionsProvider contributions={summary}><AmibaProductShell
       mainPanelList={mainPanelList}
       mainPanels={mainPanels}
       dshClient={dshClient}
@@ -392,10 +393,9 @@ function AmibaRoot({
       directoryFlows={directoryFlows}
       conversationViews={conversationViews}
       messageSources={messageSources}
-      summaryContributions={summary}
       useOfficialSessions={useSessions}
       useOfficialWorkspaces={useWorkspaces}
-    /></MarkdownProvider></WorkbenchExtensionsProvider></ConversationSubmitProvider>
+    /></SummaryContributionsProvider></MarkdownProvider></WorkbenchExtensionsProvider></ConversationSubmitProvider>
   );
 }
 
@@ -1103,6 +1103,12 @@ export async function apply(ctx: ClientContext): Promise<void> {
       { name: "conversation.session.header.actions", id: "amiba-transcript", order: 10 },
       TrajectoryHeaderAction,
     );
+    // The pinned-summary popover rides the same header-action seat as the
+    // transcript, ordering after it so its icon sits to the transcript's right.
+    const disposeSummaryAction = ctx.slots.register(
+      { name: "conversation.session.header.actions", id: "amiba-summary", order: 20 },
+      SummaryHeaderAction,
+    );
     // CELL SHADOW of the official locale plugin's LanguageRow. The service,
     // persistence, dictionaries, and framework `t` seat remain official;
     // only the DSH-Menu-based pixels are replaced with @amiba/ui's Select.
@@ -1158,6 +1164,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       void languageRowFiber.dispose();
       void sessionExportFiber.dispose();
       disposeTrajectoryAction();
+      disposeSummaryAction();
       disposeCommandPopup();
       disposeSurfaceSettings();
       disposeSlashMenu();

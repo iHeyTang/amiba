@@ -1,9 +1,8 @@
 import { NewChatWorkspaceContext, type NewChatWorkspaceRequest } from "./new-chat-workspace";
 import { ConversationViewRegion, type ConversationViewEntry } from "./ConversationViewRegion";
 import { createToolNavigation } from "./bubble/tool-navigation";
-import type { WorkbenchPanelOwner, WorkbenchSummaryContribution } from "@amiba/extension-sdk";
+import type { WorkbenchPanelOwner } from "@amiba/extension-sdk";
 import type { MessageNoticeRenderer } from "./bubble/Bubble";
-import { SummaryPanel } from "./SummaryPanel";
 /**
  * Full-screen chat surface — two direct side-by-side panes. Each pane owns
  * its own header so the window chrome reinforces the sidebar/content split
@@ -357,12 +356,6 @@ export interface FullScreenChatViewProps {
    * bubbles that carry an `origin`.
    */
   messageSourceLabel?: MessageSourceLabelResolver;
-  /**
-   * `amiba.workbench.summary` contributions, sorted by `order` — rendered by
-   * the pinned summary panel (the floating right-edge rail). Empty until a
-   * plugin (browser, background jobs, …) registers a summary contributor.
-   */
-  summaryContributions?: readonly WorkbenchSummaryContribution[];
 }
 
 export default function FullScreenChatView(props: FullScreenChatViewProps) {
@@ -403,7 +396,6 @@ function FullScreenChatViewInner({
   itemMenuItems,
   groups,
   messageSourceLabel,
-  summaryContributions,
 }: FullScreenChatViewProps) {
   useResolvedTheme();
   const { t, language } = useT();
@@ -1073,10 +1065,6 @@ function FullScreenChatViewInner({
                 showSidebarExpandControl,
               })}
             </PrimaryWorkspaceView>
-            <SummaryPanel
-              contributions={summaryContributions ?? []}
-              topOffsetPx={topBarHeightPx}
-            />
           </div>
           {WorkbenchPane && <WorkbenchPane
             visible={workbenchVisible}
