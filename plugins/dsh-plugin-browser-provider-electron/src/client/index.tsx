@@ -91,10 +91,19 @@ function BrowserHost({
   useEffect(() => {
     if (!adapter) return;
     const create = adapter.onCreateRequested((event) =>
-      openResourceIn(event?.sessionId ?? sessionId, browserResource()),
+      openResourceIn(
+        event?.sessionId ?? sessionId,
+        browserResource(),
+        "automatic",
+      ),
     );
     const focus = adapter.onFocusRequested((event) =>
-      focusResourceIn(event.sessionId ?? sessionId, "browser", event.tabId),
+      focusResourceIn(
+        event.sessionId ?? sessionId,
+        "browser",
+        event.tabId,
+        "automatic",
+      ),
     );
     return () => {
       focus();

@@ -214,6 +214,8 @@ interface SessionPaneState {
   mode: WorkbenchMode;
   fileTreeOpen: boolean;
   terminalOpen: boolean;
+  /** New activity arrived while the pane was closed — drives the summary badge. */
+  attention: boolean;
 }
 
 interface WorkspacePaneContextValue {
@@ -225,6 +227,8 @@ interface WorkspacePaneContextValue {
   mode: WorkbenchMode;
   fileTreeOpen: boolean;
   terminalOpen: boolean;
+  /** New activity arrived while the pane was closed — drives the summary badge. */
+  attention: boolean;
   sessionId: string;
   files?: WorkspaceFilesAdapter;
   development?: WorkspaceDevelopmentAdapter;
@@ -236,18 +240,28 @@ interface WorkspacePaneContextValue {
   setMode(mode: WorkbenchMode): void;
   setFileTreeOpen(open: boolean): void;
   setTerminalOpen(open: boolean): void;
+  clearAttention(): void;
   selectTab(id: string): void;
   closeTab(id: string): void;
   openUrl(url: string): boolean;
   resources: readonly { sessionId: string; resource: WorkbenchResource }[];
-  openResourceIn(sessionId: string, resource: WorkbenchResource): void;
+  openResourceIn(
+    sessionId: string,
+    resource: WorkbenchResource,
+    source?: "user" | "automatic",
+  ): void;
   updateResourceIn(
     sessionId: string,
     type: string,
     id: string,
     update: (resource: WorkbenchResource) => WorkbenchResource,
   ): void;
-  focusResourceIn(sessionId: string, type: string, id: string): void;
+  focusResourceIn(
+    sessionId: string,
+    type: string,
+    id: string,
+    source?: "user" | "automatic",
+  ): void;
   openResource(resource: WorkbenchResource): void;
   openFile(path: string, line?: number): void;
   openReview(resource: WorkspaceReviewResource): void;
@@ -272,6 +286,7 @@ const EMPTY_CONTEXT: WorkspacePaneContextValue = {
   mode: "preview",
   fileTreeOpen: false,
   terminalOpen: false,
+  attention: false,
   sessionId: "",
   development: undefined,
   workspaces: undefined,
@@ -282,6 +297,7 @@ const EMPTY_CONTEXT: WorkspacePaneContextValue = {
   setMode: () => {},
   setFileTreeOpen: () => {},
   setTerminalOpen: () => {},
+  clearAttention: () => {},
   selectTab: () => {},
   closeTab: () => {},
   openUrl: () => false,
@@ -662,6 +678,7 @@ function emptySessionState(): SessionPaneState {
     mode: "preview",
     fileTreeOpen: false,
     terminalOpen: false,
+    attention: false,
   };
 }
 
@@ -820,9 +837,14 @@ export function WorkspacePaneProvider({
 
   const persistOpen = useCallback(
     (next: boolean) => {
-      updateActiveSession((state) =>
-        state.open === next ? state : { ...state, open: next },
-      );
+      updateActiveSession((state) => {
+        // Opening the pane means the user is now looking at the activity, so
+        // any pending attention badge is cleared; closing leaves it untouched.
+        const attention = next ? false : state.attention;
+        return state.open === next && state.attention === attention
+          ? state
+          : { ...state, open: next, attention };
+      });
     },
     [updateActiveSession],
   );
@@ -862,6 +884,13 @@ export function WorkspacePaneProvider({
           : { ...state, terminalOpen },
       );
     },
+    [updateActiveSession],
+  );
+  const clearAttention = useCallback(
+    () =>
+      updateActiveSession((state) =>
+        state.attention ? { ...state, attention: false } : state,
+      ),
     [updateActiveSession],
   );
 
@@ -947,6 +976,7 @@ export function WorkspacePaneProvider({
               tabs,
               activeTabId: previewTab.id,
               mode: "preview",
+              attention: !state.open,
             };
           }
           return {
@@ -954,6 +984,7 @@ export function WorkspacePaneProvider({
             tabs: [...state.tabs, previewTab],
             activeTabId: previewTab.id,
             mode: "preview",
+            attention: !state.open,
           };
         }
 
@@ -965,7 +996,7 @@ export function WorkspacePaneProvider({
         const tabs = [...state.tabs, tab];
         return { ...state, tabs, activeTabId: tab.id, mode: "preview" };
       });
-      persistOpen(true);
+      if (source === "user") persistOpen(true);
     },
     [capability, persistOpen, sessionId, updateActiveSession],
   );
@@ -994,7 +1025,7 @@ export function WorkspacePaneProvider({
   );
 
   const openResourceIn = useCallback(
-    (owner: string, resource: WorkbenchResource) => {
+    (owner: string, resource: WorkbenchResource, source: "user" | "automatic" = "user") => {
       updateSession(owner, (state) => {
         const wrapped: WorkspacePaneResource = { kind: "extension", resource };
         const id = resourceKey(wrapped);
@@ -1006,7 +1037,8 @@ export function WorkspacePaneProvider({
             : [...state.tabs, { id, resource: wrapped, pinned: true }],
           activeTabId: id,
           mode: "preview",
-          open: true,
+          open: source === "user" ? true : state.open,
+          attention: source === "automatic" ? !state.open : false,
         };
       });
     },
@@ -1045,14 +1077,20 @@ export function WorkspacePaneProvider({
   );
 
   const focusResourceIn = useCallback(
-    (owner: string, type: string, id: string) => {
+    (owner: string, type: string, id: string, source: "user" | "automatic" = "user") => {
       updateSession(owner, (state) => {
         const tab = state.tabs.find((tab) => {
           const resource = toWorkbenchResource(tab.resource);
           return resource.type === type && resource.id === id;
         });
         return tab
-          ? { ...state, activeTabId: tab.id, mode: "preview", open: true }
+          ? {
+              ...state,
+              activeTabId: tab.id,
+              mode: "preview",
+              open: source === "user" ? true : state.open,
+              attention: source === "automatic" ? !state.open : false,
+            }
           : state;
       });
     },
@@ -1231,6 +1269,7 @@ export function WorkspacePaneProvider({
       mode: activeState.mode,
       fileTreeOpen: activeState.fileTreeOpen,
       terminalOpen: activeState.terminalOpen,
+      attention: activeState.attention,
       sessionId,
       files: capability?.files,
       development: capability?.development,
@@ -1242,6 +1281,7 @@ export function WorkspacePaneProvider({
       setMode,
       setFileTreeOpen,
       setTerminalOpen,
+      clearAttention,
       selectTab: (id) =>
         updateActiveSession((state) => ({
           ...state,
@@ -1288,12 +1328,14 @@ export function WorkspacePaneProvider({
       activeState.mode,
       activeState.fileTreeOpen,
       activeState.terminalOpen,
+      activeState.attention,
       activeTab,
       beginTurn,
       beginTurnFor,
       canOpenToolEvent,
       capability,
       checkpoints,
+      clearAttention,
       deleteCheckpoint,
       enabled,
       observeToolEvent,

@@ -1,5 +1,6 @@
 import type {
   WorkbenchShellExtension,
+  WorkbenchSummaryContribution,
   WorkbenchViewExtension,
 } from "@amiba/extension-sdk";
 import {
@@ -36,6 +37,22 @@ export function createWorkbenchShellSource(ctx: SlotContributionsCtx) {
     (entry, face) => {
       const extension = face?.extension as WorkbenchShellExtension | undefined;
       return extension?.id && extension.component && extension.toggle
+        ? { ...extension, order: entry.options.order ?? extension.order ?? 0 }
+        : null;
+    },
+  );
+}
+
+/** The `amiba.workbench.summary` contribution ledger for the pinned summary panel. */
+export function createSummarySource(ctx: SlotContributionsCtx) {
+  return createSlotContributionsSource<WorkbenchSummaryContribution>(
+    ctx,
+    "amiba.workbench.summary",
+    (entry, face) => {
+      const extension = face?.extension as
+        | WorkbenchSummaryContribution
+        | undefined;
+      return extension?.id && extension.component
         ? { ...extension, order: entry.options.order ?? extension.order ?? 0 }
         : null;
     },

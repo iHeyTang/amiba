@@ -717,9 +717,21 @@ describe("FullScreenChatView new-chat home", () => {
     expect(workbenchToggle.parentElement?.children).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "workspacePane.openTerminal" })).toBeNull();
     act(() => requestBrowserTab?.({}));
+    // Agent-driven browser activity must NOT auto-expand the workbench: the
+    // tab is recorded and the pinned summary surfaces the new activity instead.
     expect(
       screen.queryByRole("button", { name: "workspacePane.collapse" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "workspacePane.open" }),
     ).toBeInTheDocument();
+    expect(document.querySelector("[data-summary-panel]")).not.toBeNull();
+    expect(screen.queryByRole("tab", { name: "New tab" })).toBeNull();
+
+    // Opening the workbench reveals the recorded browser tab.
+    await userEvent.click(
+      screen.getByRole("button", { name: "workspacePane.open" }),
+    );
     expect(
       document.querySelector("[data-embedded-browser-pane]"),
     ).not.toBeInTheDocument();

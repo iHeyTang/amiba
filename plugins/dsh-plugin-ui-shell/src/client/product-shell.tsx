@@ -39,6 +39,7 @@ import type {
 import type {
   AmibaRootSlot,
   ConversationInputPlanOwnerProps,
+  WorkbenchSummaryContribution,
 } from "@amiba/extension-sdk";
 
 import type { AmibaSessionsBridge } from "./sessions-bridge.js";
@@ -389,6 +390,8 @@ interface ProductShellProps {
   sessionItemMenuItems?: ContributionsSource<SessionMenuItemRow>;
   /** `amiba.message.source` contributions, sorted by `order`. */
   messageSources?: ContributionsSource<MessageSourceRow>;
+  /** `amiba.workbench.summary` contributions, sorted by `order`. */
+  summaryContributions?: readonly WorkbenchSummaryContribution[];
   /**
    * The framework's `useSessions` standard hook (`GlobalStandardProps`),
    * handed down from the root entry. It is the OFFICIAL sessions list store —
@@ -447,6 +450,7 @@ function ProductShellInner({
   sessionListGroups,
   sessionItemMenuItems,
   messageSources,
+  summaryContributions,
   surfaces,
   useOfficialSessions,
   openLineageSession,
@@ -852,6 +856,7 @@ function ProductShellInner({
               groups={sessionGroupList}
               itemMenuItems={sessionMenuItemList}
               messageSourceLabel={messageSourceLabel}
+              summaryContributions={summaryContributions}
               slots={{
                 conversationViews: viewEntries,
                 conversationHeaderViewIds: ["trajectory"],

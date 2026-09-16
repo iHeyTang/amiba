@@ -62,11 +62,26 @@ export interface WorkbenchShellExtension {
   }>;
   toggle: ComponentType;
 }
+
+/**
+ * A plugin-owned card in the pinned summary panel (the floating right-edge
+ * rail that summarizes workspace activity without expanding the workbench).
+ * The component renders its own rows; the shell only orders and hosts them.
+ */
+export interface WorkbenchSummaryContribution {
+  id: string;
+  /** Lower order wins; id breaks ties deterministically. */
+  order: number;
+  /** Renders the summary rows for the addressed session. */
+  component: ComponentType<{ sessionId: string }>;
+}
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotMap {
     /** Register inject: () => ({ extension: WorkbenchShellExtension }). */
     "amiba.workbench.shell": { kind: "list"; scope: "root" };
     /** Register inject: () => ({ extension: WorkbenchViewExtension }). */
     "amiba.workbench.view": { kind: "list"; scope: "root" };
+    /** Register inject: () => ({ extension: WorkbenchSummaryContribution }). */
+    "amiba.workbench.summary": { kind: "list"; scope: "root" };
   }
 }
