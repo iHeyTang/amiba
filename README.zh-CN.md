@@ -1,12 +1,50 @@
 # Amiba
 
-Amiba 是一个以 DSH（DeepSeek Harness）为唯一智能体内核的桌面工作台。智能体、
-会话、事件流、上下文组装、模型、Preset、工具、审批、提问、Skills、MCP Client
-和调度均由 DSH 管理；Electron 只负责桌面壳与边界清晰的本地能力桥接；需要进入
-智能体生命周期的产品能力，则作为 Cordis 插件运行在 DSH 内。
+**以 DSH 为唯一智能体内核的桌面工作台。** · [English](./README.md)
 
-仓库现在只有一条运行路径：不保留兼容网关、Python sidecar、浏览器扩展运行时、
-旧会话回退或双写迁移层。
+Amiba 是一个构建在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）
+之上的桌面 Agent 工作台。智能体、会话、事件流、上下文组装、模型、Preset、工具、审批、
+提问、Skills、MCP Client 和调度都由 DSH 作为**唯一真源**管理；Amiba 在其上增加了一个桌面应用、
+一层边界清晰的本地能力桥接，以及一批需要进入智能体生命周期的产品能力——每一项都作为
+Cordis 插件运行在 DSH 内部。
+
+仓库现在只有一条运行路径：不保留兼容网关、Python sidecar、浏览器扩展运行时、旧会话回退或
+双写迁移层。
+
+## 界面截图
+
+<p align="center">
+  <img src="docs/screenshots/workspace-overview.png" width="720" alt="Amiba 工作台总览" />
+</p>
+<p align="center"><em>以对话驱动的工作台：左侧是工作空间、定时任务、外部消息与任务历史，中间是会话。</em></p>
+
+|  |  |
+|:---:|:---:|
+| <img src="docs/screenshots/embedded-browser.png" width="380" alt="内嵌浏览器与联网搜索" /> | <img src="docs/screenshots/settings-models.png" width="380" alt="模型与服务设置" /> |
+| *内嵌浏览器 + 联网检索* | *模型分配与能力路由* |
+| <img src="docs/screenshots/settings-connections.png" width="380" alt="连接设置" /> | <img src="docs/screenshots/settings-usage.png" width="380" alt="用量分析" /> |
+| *连接器：飞书、钉钉、微信、Webhook* | *用量：Token、活跃度热力图、按模型拆分* |
+
+## Amiba 在 DSH 之上额外做了什么
+
+Amiba **不是** DSH 内核的分叉——智能体运行时被原样使用。区别在于它周边的一切，全部以
+独立的 `dsh-plugin-*` 工程交付。
+
+| 层面 | 官方 DSH | Amiba（本仓库） |
+| --- | --- | --- |
+| 智能体运行时 | 拥有会话、事件、上下文、工具、Skills、MCP、调度、审批 | 原样使用 |
+| 产品界面 | Web Shell、CLI | **+ 原生桌面应用**（Electron）：窗口、通知、文件系统、PTY 终端、可见内嵌浏览器、屏幕截取、外部收件箱、Workspace Checkpoint |
+| 模型与凭据 | Preset + 执行 | **+ Model Plane**：Provider/模型发现、凭据、能力路由（默认 + 推理、视觉、图片/视频/语音/音乐生成）、费用确认阈值 |
+| 集成 | MCP、Web 工具 | **+ 一等连接器**：飞书、钉钉、微信、Webhook，带外部收件箱与会话持久化 |
+| 记忆 | 会话内上下文 | **+ 跨会话长期记忆**（memos） |
+| 可观测性 | — | **+ 用量分析**：Token/轮次统计、活跃度热力图、按模型拆分 |
+| 助手能力 | — | **+ 视觉**（可为纯文本 Agent 指派）、**媒体生成**路由、**管家**、**定时任务**、**桌面宠物** |
+| 界面 | 官方 Web Shell slot | **+ 完整桌面 UI**（`@amiba/ui` + `dsh-plugin-ui-shell`），采纳官方 slot 但自带像素 |
+| 扩展开发 | Host/Client 插件 API | **+ Extension SDK**（`@amiba/extension-sdk`）与 `amiba plugin create` |
+
+每一项 Amiba 能力都是独立、按功能版本化的 Cordis 插件；Bundle 只负责把它们装配起来。
+职责边界与能力归属见
+[`docs/2026-08-15-dsh-native-architecture.md`](docs/2026-08-15-dsh-native-architecture.md)。
 
 ## 架构
 
@@ -59,8 +97,7 @@ Electron main
 
 CLI、Web 与 Electron 不发现系统 DSH，也不使用系统 Node 执行 DSH；公共 Runtime 固定为：
 
-- DSH `0.1.1-rc.2`
-- 源码提交 `47f943859bef60e4160492346772ded9b24f765a`
+- DSH `0.1.5-rc.1`
 - Node.js `22.22.0`
 - Amiba 插件修订 `2026-08-16.2`
 - 插件安装器 pnpm `9.12.0`（随受管运行时打包）
