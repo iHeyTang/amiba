@@ -46,6 +46,8 @@ jobs:
         run: node packages/app-runtime/scripts/dsh-runtime/prepare.mjs --validate-only
       - name: Test runtime dependency validation
         run: node --test packages/app-runtime/scripts/dsh-runtime/dependency-lock.test.mjs packages/app-runtime/scripts/dsh-runtime/plugin-distribution.test.mjs packages/app-runtime/scripts/dsh-runtime/process-tools.test.mjs
+      - name: Test OpenCode session headers through SDK HTTP clients
+        run: node --test packages/app-runtime/scripts/dsh-runtime/opencode-session.test.mjs
       - name: Build isolated runtime
         run: pnpm runtime:prepare
       - name: Smoke test linked development plugins
@@ -57,7 +59,7 @@ jobs:
       - name: Test tool catalog
         run: pnpm --dir plugins/dsh-plugin-catalog test
       - name: Test desktop plugin integration
-        run: node --experimental-strip-types --test apps/desktop/src/main/__tests__/desktop-extensions.test.mjs apps/desktop/src/main/__tests__/dsh-profile-plugins.test.mjs apps/desktop/src/main/__tests__/plugin-development.test.mjs
+        run: node --experimental-strip-types --test apps/desktop/src/main/__tests__/user-data.test.mjs apps/desktop/src/main/__tests__/desktop-extensions.test.mjs apps/desktop/src/main/__tests__/dsh-profile-plugins.test.mjs apps/desktop/src/main/__tests__/plugin-development.test.mjs
       - name: Smoke test plugin composition
         run: pnpm runtime:smoke
       - name: Test private memory native dependencies

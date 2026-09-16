@@ -2,7 +2,7 @@ import { watch, existsSync } from "node:fs"
 import { realpath } from "node:fs/promises"
 import { join, resolve } from "node:path"
 import kleur from "kleur"
-import { buildDevelopmentProject, resolveAmibaDshHomes, type DesktopDevelopmentEndpoint } from "@amiba/app-runtime/dsh-runtime"
+import { buildDevelopmentProject, resolveAmibaDshDevelopmentHomes, type DesktopDevelopmentEndpoint } from "@amiba/app-runtime/dsh-runtime"
 import { discoverDevelopmentEndpoint } from "../lib/development-connection.js"
 import { readDshPluginPackage } from "../lib/plugin-package.js"
 
@@ -12,7 +12,7 @@ export async function devCommand(options: { connect?: boolean; home?: string } =
   console.log(kleur.bold(`amiba plugin dev — ${kleur.cyan(manifest.name)}`))
   let endpoint: DesktopDevelopmentEndpoint | undefined
   if (options.connect !== false) {
-    endpoint = await discoverDevelopmentEndpoint(resolveAmibaDshHomes(options.home))
+    endpoint = await discoverDevelopmentEndpoint(resolveAmibaDshDevelopmentHomes(options.home))
   }
   async function request(operation: string, body: object) {
     const response = await fetch(new URL(operation, endpoint!.url), {

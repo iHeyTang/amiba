@@ -144,6 +144,18 @@ source watcher and Electron. It reuses verified Client bundles instead of rebuil
 all of them again before opening the window. The first preparation, or a changed
 runtime source digest, still runs the normal runtime build/install path.
 
+Development previews can run alongside the installed release. Electron uses a
+separate persistent user-data directory (the normal directory with `-dev` appended;
+on macOS, `~/Library/Application Support/@amiba/desktop-dev`). Preview settings,
+credentials, conversations, runtime profiles, and the single-instance lock are
+isolated from the release. Configure providers once in the preview; its data is
+retained across restarts. `AMIBA_USER_DATA_DIR` still overrides this location,
+including for the fresh-profile commands.
+
+Global shortcuts and `amiba://` registration stay with the installed release by
+default. To test those OS integrations in the preview, quit the release and launch
+with `AMIBA_DEV_OS_INTEGRATION=1 pnpm dev:desktop`.
+
 Saving UI or plugin source queues only affected Client bundles. Compiler-recorded
 inputs include tree-shaken modules; older bundles fall back to workspace dependency
 tracking. A short debounce coalesces saves, and one short-lived compiler runs at a
