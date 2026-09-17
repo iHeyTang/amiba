@@ -23,6 +23,7 @@ import {
   EmbeddedBrowserHost,
   EmbeddedBrowserWorkspace,
   createEmbeddedBrowserResource,
+  summaryPreviewViewport,
   type EmbeddedBrowserResource,
 } from "./EmbeddedBrowserPane.js";
 
@@ -271,58 +272,22 @@ export function createBrowserView(
   };
 }
 
-/**
- * A small, non-interactive live `<webview>` used as a page preview. The page
- * is rendered at a fixed virtual viewport (1280×800) and uniformly scaled down
- * to the card width, so the layout keeps its proportions instead of re-flowing
- * or cropping. It reuses the workbench's partition and is NOT registered with
- * main (display-only, created imperatively to avoid double-registering the tab).
- */
-const PREVIEW_VIEWPORT_W = 1280;
-const PREVIEW_VIEWPORT_H = 800;
-/** Card width, matching the summary panel's width. */
+/** Card width/height, matching the summary panel's width and a 16:10 preview. */
 const PREVIEW_CARD_WIDTH = 320;
-
-function PreviewWebview({ url, width }: { url: string; width: number }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const scale = width / PREVIEW_VIEWPORT_W;
-  const height = PREVIEW_VIEWPORT_H * scale;
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || !url || url === "about:blank") return;
-    const webview = document.createElement("webview");
-    webview.setAttribute("src", url);
-    webview.setAttribute("partition", "persist:amiba-browser");
-    webview.style.width = `${PREVIEW_VIEWPORT_W}px`;
-    webview.style.height = `${PREVIEW_VIEWPORT_H}px`;
-    webview.style.pointerEvents = "none";
-    webview.style.border = "0";
-    webview.style.display = "flex";
-    webview.style.transform = `scale(${scale})`;
-    webview.style.transformOrigin = "top left";
-    container.appendChild(webview);
-    return () => {
-      webview.remove();
-    };
-  }, [url, scale]);
-  return (
-    <div
-      ref={containerRef}
-      className="overflow-hidden bg-background"
-      style={{ width, height }}
-    />
-  );
-}
+const PREVIEW_CARD_HEIGHT = 200;
 
 /**
- * The browser card of the pinned summary. The active tab renders as a
- * borderless live page preview; any other tabs sit in a bordered text card
- * behind an expand toggle. Clicking any entry focuses that tab in the workbench.
+ * The browser card of the pinned summary. It does NOT host its own webview:
+ * it publishes a transparent viewport and the browser host parks the ACTIVE
+ * tab's live webview over it (scaled), so the preview stays in sync with the
+ * workbench and never reloads. Other tabs sit in a bordered text card behind
+ * an expand toggle.
  */
 function BrowserSummary({ sessionId }: { sessionId: string }) {
   const pane = useWorkspacePane();
   const { t } = useBrowserT();
   const [expanded, setExpanded] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
   const tabs = pane.resources
     .filter((entry) => entry.sessionId === sessionId)
     .flatMap((entry) => {
@@ -348,10 +313,26 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
   const others = tabs.filter(
     (tab) => tab.browserTabId !== previewTab.browserTabId,
   );
+
+  // Publish the preview viewport so the host parks the active tab's live
+  // webview here (scaled); release it on unmount.
+  useEffect(() => {
+    summaryPreviewViewport.register(
+      previewRef.current && previewTab.url !== "about:blank"
+        ? {
+            element: previewRef.current,
+            sessionId,
+            tabId: previewTab.browserTabId,
+          }
+        : null,
+    );
+    return () => summaryPreviewViewport.register(null);
+  }, [previewTab, sessionId]);
+
   return (
     <div className="flex flex-col gap-2">
-      {/* Borderless live preview card. Other tabs peek out behind it as a
-          stacked deck so multiple tabs read as one cascade. */}
+      {/* Transparent window over the live webview. Other tabs peek out behind
+          it as a stacked deck so multiple tabs read as one cascade. */}
       <div className="relative" style={{ width: PREVIEW_CARD_WIDTH }}>
         {others.length > 0 &&
           others
@@ -371,9 +352,10 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
           type="button"
           onClick={() => open(previewTab.browserTabId)}
           className="group relative overflow-hidden rounded-xl text-left shadow-lg"
-          style={{ width: PREVIEW_CARD_WIDTH }}
+          style={{ width: PREVIEW_CARD_WIDTH, height: PREVIEW_CARD_HEIGHT }}
         >
-          <PreviewWebview url={previewTab.url} width={PREVIEW_CARD_WIDTH} />
+          {/* The viewport the host positions the scaled webview over. */}
+          <div ref={previewRef} className="absolute inset-0" />
           <span className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/60 to-transparent px-2 py-1.5 text-[10px] text-white">
             {previewTab.favicon ? (
               <img
