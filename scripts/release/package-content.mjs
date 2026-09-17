@@ -7,9 +7,12 @@ export const packageExclusions = [
   '!**/_cacache{,/**/*}',
   // Workspace symlinks are matched against their real source paths by builder 25.
   '!**/resources/dsh-runtime{,/**/*}',
+  // `.d.mts.map` / `.d.cts.map` do not match the `{js,mjs,...}` glob above,
+  // so catch every source map explicitly as well.
   '!**/*.{js,mjs,cjs,css,ts,tsx}.map',
+  '!**/*.{d.mts,d.cts}.map',
 ];
-export function isSourceMap(name) { return /\.(?:[cm]?js|css|tsx?)\.map$/.test(name); }
+export function isSourceMap(name) { return /\.(?:[cm]?js|css|[cm]?ts|tsx)\.map$/.test(name); }
 export function exclusionReason(relative, target) {
   if (!targets.includes(target)) throw new Error('Invalid package target');
   const parts = relative.replaceAll('\\', '/').split('/');

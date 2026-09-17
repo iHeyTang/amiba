@@ -43,7 +43,16 @@ export function createExternalSessionGroup(
     }
   };
   // Retries blank logs and unavailable persistence after first-message arrival.
-  const timer = setInterval(() => { void refresh(); }, 15000);
+  // Classifying grows with every claimed session, so don't pay for it while
+  // the window is hidden; refresh immediately when it becomes visible again.
+  const onVisibility = () => {
+    if (!document.hidden) void refresh();
+  };
+  const timer = setInterval(() => {
+    if (document.hidden) return;
+    void refresh();
+  }, 15000);
+  document.addEventListener("visibilitychange", onVisibility);
   return {
     face: {
       claim: (session) => {
@@ -66,6 +75,7 @@ export function createExternalSessionGroup(
     dispose() {
       disposed = true;
       clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
       known.clear();
       listeners.clear();
     },

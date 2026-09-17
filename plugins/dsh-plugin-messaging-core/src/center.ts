@@ -346,6 +346,14 @@ function completedTurnReply(
 
 const DELIVERY_MAX_ATTEMPTS = 8;
 const RECOVERY_INTERVAL_MS = 5_000;
+/**
+ * Re-read cadence for conversations whose session is NOT live in this runtime.
+ * A cold session by definition has nothing new happening, yet the 5s sweep
+ * re-read (and fully decompressed) its whole event log for every binding,
+ * forever. Live sessions keep the 5s cadence (their snapshot read is cheap and
+ * their turns must mirror promptly); cold ones settle to this slower cadence.
+ */
+const COLD_RECOVERY_QUIET_MS = 30_000;
 
 declare module "@deepseek-ai/cordis" {
   interface Context {
@@ -990,19 +998,32 @@ export class MessageChannelCenter {
   }
 
   private syncRecovery?: Promise<void>;
+  /** Last cold-session sweep per conversation session (see COLD_RECOVERY_QUIET_MS). */
+  private readonly coldSyncAt = new Map<string, number>();
   private recoverSync(): Promise<void> {
     if (this.syncRecovery) return this.syncRecovery;
     this.syncRecovery = (async () => {
       const policies = await this.store.syncPolicies();
+      const now = Date.now();
       for (const binding of await this.store.listConversations(undefined, true)) {
         if (!policies[syncScope(binding)]?.enabled || this.isSessionArchived(binding.sessionId)) continue;
+        const live = Boolean(this.ctx.agents.get(binding.sessionId as never));
+        if (!live) {
+          const syncedAt = this.coldSyncAt.get(binding.sessionId);
+          if (syncedAt !== undefined && now - syncedAt < COLD_RECOVERY_QUIET_MS) continue;
+        }
         try {
           const events = await this.sessionEvents(binding.sessionId);
           await this.reconcileSession({ id: binding.sessionId as Session["id"], snapshotEvents: () => events });
+          if (live) this.coldSyncAt.delete(binding.sessionId);
+          else this.coldSyncAt.set(binding.sessionId, Date.now());
         } catch (error) {
           this.ctx.logger("amiba-messaging-core").warn(`Sync recovery failed for ${binding.sessionId}: ${String(error)}`);
         }
       }
+      // Sessions come and go; the map is a cadence cache, so a full reset when
+      // it grows past a sane bound is cheaper than tracking removal.
+      if (this.coldSyncAt.size > 2_000) this.coldSyncAt.clear();
     })().finally(() => { this.syncRecovery = undefined; });
     return this.syncRecovery;
   }

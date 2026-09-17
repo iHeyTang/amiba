@@ -26,6 +26,14 @@ export interface JobPresentation {
   peekOutput?: () => string | Promise<string>;
 }
 
+/**
+ * In-memory jobs kept for `current()` lookups and live output reads. Every
+ * record can hold up to 64 KiB of output, and `current()` scans the whole map,
+ * so this cache must stay bounded: without a cap a long-lived runtime kept one
+ * record per job ever tracked and every lookup degraded linearly.
+ */
+const MAX_TRACKED_RECORDS = 500;
+
 /** Presentation only. Lifecycle and authorization remain in ctx.jobs. */
 export class BackgroundJobs {
   private calls = new AsyncLocalStorage<Readonly<ToolExecution>>();
@@ -270,7 +278,22 @@ export class BackgroundJobs {
       ...(presentation ? { title: presentation.title } : {}),
     };
     this.records.set(record.recordId, record);
+    this.retain();
     this.save(record);
+  }
+
+  /**
+   * Evict the oldest COMPLETED records once the in-memory cache exceeds its
+   * cap. Running/stopping jobs are never evicted (their live output reads
+   * depend on the record). Persisted rows stay on disk for `history()`.
+   */
+  private retain() {
+    if (this.records.size <= MAX_TRACKED_RECORDS) return;
+    for (const [key, record] of this.records) {
+      if (this.records.size <= MAX_TRACKED_RECORDS) break;
+      if (record.status === "running" || record.status === "stopping") continue;
+      this.records.delete(key);
+    }
   }
   private save(record: JobRecord) {
     record.updatedAt = Date.now();

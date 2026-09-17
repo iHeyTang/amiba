@@ -132,8 +132,13 @@ export class CronService {
           continue;
         try {
           const events = await this.readSessionEvents(id);
-          if (cronSessionOrigin(events) === undefined) continue;
-          if (!cronSessionOrigin(events)) {
+          // A session whose log has NO cron provenance is cached as a
+          // negative result too. Previously only non-cron sessions that
+          // actually answered `false` were recorded, so sessions without any
+          // `user/message` (or with an empty transcript) had their whole event
+          // log re-read — decompressed fully — on every 5s poll, forever.
+          const origin = cronSessionOrigin(events);
+          if (origin === undefined || !origin) {
             this.recoveredSessions.add(id);
             continue;
           }

@@ -181,7 +181,9 @@ export async function installDesktopPetWindow(
     if (enabled) {
       const w = create();
       if (ready) w.showInactive();
+      startPointerTracking();
     } else {
+      stopPointerTracking();
       stopDrag();
       win?.hide();
     }
@@ -330,24 +332,39 @@ export async function installDesktopPetWindow(
       ]).popup({ window: win });
     },
   );
-  // Native screen coordinates continue updating outside the transparent window.
-  const pointerTimer = setInterval(() => {
-    if (!enabled || !ready || !win || win.isDestroyed() || !win.isVisible()) return;
-    try {
-      const cursor = screen.getCursorScreenPoint();
-      const bounds = { ...position!, width: size, height: size };
-      const display = screen.getDisplayMatching(win.getBounds()).bounds;
-      win.webContents.send("desktop-pet:pointer", {
-        x: Math.tanh((cursor.x - bounds.x - bounds.width / 2) / Math.max(size, display.width / 4)),
-        y: Math.tanh((cursor.y - bounds.y - bounds.height / 2) / Math.max(size, display.height / 4)),
-      });
-    } catch {
-      if (win && !win.isDestroyed()) win.webContents.send("desktop-pet:pointer", null);
-    }
-  }, 33);
-  app.on("before-quit", () => clearInterval(pointerTimer));
+  // Native screen coordinates continue updating outside the transparent
+  // window. The timer only lives while the pet is ENABLED: previously it ran
+  // unconditionally for the app's whole lifetime, waking the main process
+  // 30×/s (with an empty body) even when the pet was hidden.
+  let pointerTimer: ReturnType<typeof setInterval> | undefined;
+  const startPointerTracking = () => {
+    if (pointerTimer) return;
+    pointerTimer = setInterval(() => {
+      if (!enabled || !ready || !win || win.isDestroyed() || !win.isVisible())
+        return;
+      try {
+        const cursor = screen.getCursorScreenPoint();
+        const bounds = { ...position!, width: size, height: size };
+        const display = screen.getDisplayMatching(win.getBounds()).bounds;
+        win.webContents.send("desktop-pet:pointer", {
+          x: Math.tanh((cursor.x - bounds.x - bounds.width / 2) / Math.max(size, display.width / 4)),
+          y: Math.tanh((cursor.y - bounds.y - bounds.height / 2) / Math.max(size, display.height / 4)),
+        });
+      } catch {
+        if (win && !win.isDestroyed()) win.webContents.send("desktop-pet:pointer", null);
+      }
+    }, 33);
+  };
+  const stopPointerTracking = () => {
+    if (pointerTimer) clearInterval(pointerTimer);
+    pointerTimer = undefined;
+  };
+  app.on("before-quit", stopPointerTracking);
   screen.on("display-removed", relocate);
   screen.on("display-metrics-changed", relocate);
   app.on("before-quit", stopDrag);
-  if (enabled) create();
+  if (enabled) {
+    create();
+    startPointerTracking();
+  }
 }

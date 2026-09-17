@@ -38,6 +38,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const COMPLETE_LOOKBACK_DAYS = 7;
 /** Hard cap on the remote read window (52 weeks of heatmap). */
 const MAX_READ_DAYS = 366;
+/** Debounce window for co-locating tool-event disk flushes. */
+const FLUSH_DEBOUNCE_MS = 1500;
 
 export class ToolActivityRecorder {
   private queue: Promise<void> = Promise.resolve();
@@ -85,26 +87,49 @@ export class ToolActivityRecorder {
 
   /**
    * Read back the most recent `days` day buckets (newest first) plus the
-   * lifetime aggregate. Flushes pending writes first so a read right
-   * after a tool event sees it.
+   * lifetime aggregate. Pending in-memory mutations are flushed to disk
+   * first, so a read right after a tool event sees it AND the on-disk files
+   * are up to date — the recorder's storage contract (freshness + durability
+   * point at the read boundary).
    */
   async read(days: number): Promise<ToolActivityReadResult> {
     const capped = Math.max(1, Math.min(days, MAX_READ_DAYS));
-    await this.queue;
+    await this.flushNow();
     const out: ToolActivityReadResult = {
       days: [],
-      lifetime: await this.readLifetime(),
+      lifetime:
+        this.memLifetime ?? (await this.readLifetimeFromDisk()),
     };
     for (let i = 0; i < capped; i++) {
       const day = toolActivityDayKey(Date.now() - i * DAY_MS);
-      out.days.push({ day, rows: await this.readDay(day) });
+      out.days.push({
+        day,
+        rows:
+          this.memDays.get(day) ?? (await this.readDayFromDisk(day)),
+      });
     }
     return out;
   }
 
   // -------------------------------------------------------------------
-  // Storage
+  // Storage — memory-authoritative with a debounced disk flush.
+  //
+  // Tool activity is high-frequency telemetry (one call + one result per
+  // tool use). Previously every event did a read-modify-write of the whole
+  // day file plus lifetime.json: a run with 200 tools serialized a growing
+  // 200 KB+ array 400+ times, O(n²) write amplification and constant fsync
+  // pressure. Days and the lifetime aggregate are now authoritative in
+  // memory (lazily loaded from disk on first touch) and written once per
+  // flush window. A crash loses at most the last FLUSH_DEBOUNCE_MS of
+  // telemetry — acceptable for usage stats, and `read()` still flushes
+  // before returning.
   // -------------------------------------------------------------------
+
+  private readonly memDays = new Map<string, ToolInvocation[]>();
+  private memLifetime: ToolActivityTotals | null = null;
+  private readonly dirtyDays = new Set<string>();
+  private dirtyLifetime = false;
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   private dayPath(day: string): string {
     return join(this.root, `${day}.json`);
@@ -119,20 +144,36 @@ export class ToolActivityRecorder {
     }
   }
 
-  private async readDay(day: string): Promise<ToolInvocation[]> {
-    const v = await this.readJson<ToolInvocation[]>(this.dayPath(day), []);
+  private async readDayFromDisk(day: string): Promise<ToolInvocation[]> {
+    const v = await this.readJson<ToolInvocation[]>(
+      this.dayPath(day),
+      [],
+    );
     return Array.isArray(v) ? v : [];
   }
 
-  private async readLifetime(): Promise<ToolActivityTotals> {
+  private async readLifetimeFromDisk(): Promise<ToolActivityTotals> {
     return this.readJson<ToolActivityTotals>(
       join(this.root, "lifetime.json"),
       emptyToolActivityTotals(),
     );
   }
 
-  private async writeLifetime(totals: ToolActivityTotals): Promise<void> {
-    await writeFile(join(this.root, "lifetime.json"), JSON.stringify(totals));
+  /** Load (or fetch from memory) the authoritative row list for a day. */
+  private async ensureDay(day: string): Promise<ToolInvocation[]> {
+    let rows = this.memDays.get(day);
+    if (rows === undefined) {
+      rows = await this.readDayFromDisk(day);
+      this.memDays.set(day, rows);
+    }
+    return rows;
+  }
+
+  private async ensureLifetime(): Promise<ToolActivityTotals> {
+    if (!this.memLifetime) {
+      this.memLifetime = await this.readLifetimeFromDisk();
+    }
+    return this.memLifetime;
   }
 
   /** Serialize mutations; a failed step logs and never poisons the chain. */
@@ -142,18 +183,54 @@ export class ToolActivityRecorder {
     });
   }
 
+  private scheduleFlush(): void {
+    if (this.flushTimer !== null) return;
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      this.enqueue(() => this.flushDirty());
+    }, FLUSH_DEBOUNCE_MS);
+  }
+
+  private async flushDirty(): Promise<void> {
+    for (const day of this.dirtyDays) {
+      const rows = this.memDays.get(day);
+      if (rows) await writeFile(this.dayPath(day), JSON.stringify(rows));
+    }
+    this.dirtyDays.clear();
+    if (this.dirtyLifetime && this.memLifetime) {
+      await writeFile(
+        join(this.root, "lifetime.json"),
+        JSON.stringify(this.memLifetime),
+      );
+      this.dirtyLifetime = false;
+    }
+  }
+
+  /** Flush dirty state now (and any queued mutations) to disk. */
+  private flushNow(): Promise<void> {
+    if (this.flushTimer !== null) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    // Enqueue the flush unconditionally: the dirty flags are set *inside*
+    // the queued mutation steps, so they may not be visible yet when a read
+    // arrives right after accept(). `flushDirty` is a no-op when nothing is
+    // dirty, so the extra queued step is free.
+    this.enqueue(() => this.flushDirty());
+    return this.queue;
+  }
+
   private appendInvocation(inv: ToolInvocation): void {
     this.enqueue(async () => {
       const day = toolActivityDayKey(inv.ts);
-      const rows = await this.readDay(day);
+      const rows = await this.ensureDay(day);
       rows.push(inv);
-      await writeFile(this.dayPath(day), JSON.stringify(rows));
-      const life = await this.readLifetime();
-      await this.writeLifetime({
-        ...life,
-        calls: life.calls + 1,
-        unfinished: life.unfinished + 1,
-      });
+      const life = await this.ensureLifetime();
+      life.calls += 1;
+      life.unfinished += 1;
+      this.dirtyDays.add(day);
+      this.dirtyLifetime = true;
+      this.scheduleFlush();
     });
   }
 
@@ -169,7 +246,7 @@ export class ToolActivityRecorder {
       // callId can collide across concurrent sessions.
       for (let i = 0; i < COMPLETE_LOOKBACK_DAYS; i++) {
         const day = toolActivityDayKey(Date.now() - i * DAY_MS);
-        const rows = await this.readDay(day);
+        const rows = await this.ensureDay(day);
         const idx = rows.findIndex(
           (r) => r.toolCallId === toolCallId && r.sessionId === sessionId,
         );
@@ -177,13 +254,12 @@ export class ToolActivityRecorder {
         const row = rows[idx]!;
         if (row.completed) return;
         rows[idx] = { ...row, durationMs, completed: true };
-        await writeFile(this.dayPath(day), JSON.stringify(rows));
-        const life = await this.readLifetime();
-        await this.writeLifetime({
-          ...life,
-          totalDurationMs: life.totalDurationMs + (durationMs ?? 0),
-          unfinished: Math.max(0, life.unfinished - 1),
-        });
+        const life = await this.ensureLifetime();
+        life.totalDurationMs += durationMs ?? 0;
+        life.unfinished = Math.max(0, life.unfinished - 1);
+        this.dirtyDays.add(day);
+        this.dirtyLifetime = true;
+        this.scheduleFlush();
         return;
       }
     });
