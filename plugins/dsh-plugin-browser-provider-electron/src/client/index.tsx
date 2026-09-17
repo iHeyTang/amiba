@@ -346,6 +346,29 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
   // there; the preview holds a blurred still of its last frame.
   const workbenchShowingBrowser = pane.open && pane.mode === "preview";
 
+  // Fill the preview with a captured frame whenever the workbench owns the
+  // webview (otherwise the card would be empty/transparent until a click).
+  useEffect(() => {
+    if (
+      !workbenchShowingBrowser ||
+      !adapter ||
+      !previewTab ||
+      previewTab.url === "about:blank"
+    ) {
+      return;
+    }
+    let cancelled = false;
+    adapter
+      .command(previewTab.browserTabId, { action: "capture" })
+      .then((state) => {
+        if (!cancelled && state.screenshot) setSnapshot(state.screenshot);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [workbenchShowingBrowser, adapter, previewTab]);
+
   return (
     <div className="flex flex-col gap-2">
       {/* Transparent window over the live webview. Other tabs peek out behind
