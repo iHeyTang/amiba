@@ -151,6 +151,37 @@ async function waitUntilSubscribed(
 }
 
 /**
+ * Resolve `promise` to its settled value, or to `null` when it stays pending
+ * past `ms` (or the signal aborts). With `ms` of `0` the timeout is a
+ * macrotask, so a promise already settled by a microtask (a buffered mux
+ * frame) wins while a genuinely empty read resolves `null`. The losing timer
+ * is always cleared.
+ */
+function withQuietTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  signal: AbortSignal,
+): Promise<T | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value: T | null): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), ms);
+    const onAbort = (): void => finish(null);
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => finish(value),
+      () => finish(null),
+    );
+  });
+}
+
+/**
  * Shared DSH-native chat client. It runs in Web or Electron's renderer and
  * talks only to official DSH HTTP/WebSocket APIs plus plugin Remotes.
  */
@@ -563,6 +594,14 @@ export class DshChatEngineClient implements ChatEngineClient {
           ? { kind: "accepted", ...(response.command ? { command: response.command } : {}) }
           : { kind: "unconfirmed", error: "DSH returned no valid prompt acceptance receipt." });
         if (response.command) {
+          // A slash command runs synchronously inside prompt(), so any
+          // side-effect frames it published (compaction/*) are already
+          // buffered on this session's mux. Drain them before finalizing the
+          // command bubble so the compaction checkpoint appears live, in the
+          // same order the durable-log replay produces, instead of only after
+          // a reload. There is no turn/end for a command, so the drain is
+          // bounded by a short quiet window rather than a terminal frame.
+          await this.drainCommandEvents(sessionId, iterator, bridge, controller.signal);
           if (response.command.text) {
             this.emit(sessionId, { kind: "chunk", text: response.command.text });
           }
@@ -604,6 +643,32 @@ export class DshChatEngineClient implements ChatEngineClient {
     } finally {
       const state = this.states.get(sessionId);
       if (state?.controller === controller) delete state.controller;
+    }
+  }
+
+  /**
+   * Consume the command's already-buffered side-effect frames from the
+   * session mux. A command has no `turn/end`, so instead of waiting for a
+   * terminal frame the read races an event-loop turn: the command executed
+   * inside `prompt()` before it resolved, so its frames are already buffered
+   * and `iterator.next()` settles in a microtask, while an empty read stays
+   * pending past the macrotask and resolves `null`. Best-effort — a socket
+   * error or cancellation simply stops the drain, since the command result
+   * itself has already succeeded.
+   */
+  private async drainCommandEvents(
+    sessionId: string,
+    iterator: AsyncIterator<DshMuxEnvelope>,
+    bridge: DshAmibaEventBridge,
+    signal: AbortSignal,
+  ): Promise<void> {
+    for (;;) {
+      if (signal.aborted) return;
+      const next = await withQuietTimeout(iterator.next(), 0, signal);
+      if (next === null || next.done) return;
+      for (const mapped of bridge.accept(next.value)) {
+        if (mapped.sessionId === sessionId) this.emit(sessionId, mapped.event);
+      }
     }
   }
 

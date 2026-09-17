@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
 
 const {
@@ -10,10 +11,16 @@ const {
 test("accepts only an explicit absolute Amiba user-data directory", () => {
   assert.equal(resolveUserDataOverride(undefined), null);
   assert.equal(resolveUserDataOverride("  "), null);
-  assert.equal(
-    resolveUserDataOverride(" /tmp/amiba-dsh-fresh/user-data/../user-data "),
-    "/tmp/amiba-dsh-fresh/user-data",
+  // Build the fixture from the platform's own root and separator so the
+  // `..`-collapse assertion holds on Windows (backslashes) and POSIX (slashes).
+  const expected = path.join(
+    path.parse(process.cwd()).root,
+    "tmp",
+    "amiba-dsh-fresh",
+    "user-data",
   );
+  const input = `${expected}${path.sep}..${path.sep}user-data`;
+  assert.equal(resolveUserDataOverride(` ${input} `), expected);
   assert.throws(
     () => resolveUserDataOverride("relative/user-data"),
     /absolute/,

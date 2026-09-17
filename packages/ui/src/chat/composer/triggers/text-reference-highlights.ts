@@ -1,6 +1,7 @@
 import type { LexicalEditor } from "lexical";
 import type { ComposerTriggerController } from "./contracts";
-import { $scanDraft } from "./lexical-draft";
+import { $scanDraft, type DraftScan } from "./lexical-draft";
+import type { CommandClaimStore } from "./claim";
 
 type Lexicon = ReadonlyMap<"/" | "@", readonly string[]>;
 
@@ -21,6 +22,18 @@ export function textReferenceRanges(draft: string, lexicon: Lexicon) {
   return ranges.sort((a, b) => a.start - b.start);
 }
 
+/**
+ * The leading slash-command token of an active claim, or none. The claim is a
+ * draft prefix (`'/goal '`), so the highlight stops at the trimmed token —
+ * the trailing separator and the free-form args stay plain.
+ */
+export function commandTokenRanges(token: string | undefined): { start: number; end: number }[] {
+  if (token === undefined) return [];
+  const end = token.trimEnd().length;
+  if (end === 0) return [];
+  return [{ start: 0, end }];
+}
+
 // Structural declarations also allow older DOM type libraries. Feature-detect
 // the editor's own window: detached windows have independent registries.
 interface HighlightWindow {
@@ -29,12 +42,18 @@ interface HighlightWindow {
 }
 let nextHighlight = 0;
 
-/** Paint only. Never mutate Lexical nodes, selection, persisted draft or history. */
-export function subscribeTextReferenceHighlights(
+/**
+ * Paint text ranges with the CSS Custom Highlight API. Paint only — never
+ * mutate Lexical nodes, selection, persisted draft or history. `computeRanges`
+ * runs inside a Lexical read, so it may use the `$`-helpers freely.
+ */
+function subscribeHighlight(
   editor: LexicalEditor,
-  lexicon: NonNullable<ComposerTriggerController["lexicon"]>,
-): () => void {
-  const name = `amiba-text-reference-${++nextHighlight}`;
+  namePrefix: string,
+  computeRanges: (scan: DraftScan) => { start: number; end: number }[],
+  style: string,
+): { repaint: () => void; dispose: () => void } {
+  const name = `${namePrefix}-${++nextHighlight}`;
   let clearRoot = () => {};
   let repaint = () => {};
   const offRoot = editor.registerRootListener(root => {
@@ -47,14 +66,13 @@ export function subscribeTextReferenceHighlights(
     const registry = view?.CSS?.highlights;
     const Highlight = view?.Highlight;
     if (!registry || !Highlight) return;
-    const style = document.createElement("style");
-    // Existing theme colors; no boxes or geometry changes to the native editor.
-    style.textContent = `::highlight(${name}) { background-color: hsl(var(--muted) / .5); color: hsl(var(--foreground)); }`;
-    document.head.append(style);
+    const styleEl = document.createElement("style");
+    styleEl.textContent = `::highlight(${name}) { ${style} }`;
+    document.head.append(styleEl);
     repaint = () => editor.getEditorState().read(() => {
       const scan = $scanDraft();
       const ranges: Range[] = [];
-      for (const reference of textReferenceRanges(scan.draft, lexicon.getSnapshot())) {
+      for (const reference of computeRanges(scan)) {
         for (const leaf of scan.leaves) {
           if (!leaf.text || leaf.end <= reference.start || leaf.start >= reference.end) continue;
           const element = editor.getElementByKey(leaf.node.getKey());
@@ -77,11 +95,43 @@ export function subscribeTextReferenceHighlights(
       }
       registry.set(name, new Highlight(...ranges));
     });
-    clearRoot = () => { registry.delete(name); style.remove(); };
+    clearRoot = () => { registry.delete(name); styleEl.remove(); };
     repaint();
   });
   const offEditor = editor.registerUpdateListener(() => repaint());
-  const offLexicon = lexicon.subscribe(() => repaint());
   repaint();
-  return () => { offEditor(); offLexicon(); offRoot(); clearRoot(); };
+  return {
+    repaint: () => repaint(),
+    dispose: () => { offEditor(); offRoot(); clearRoot(); },
+  };
+}
+
+/** Paint-only highlight of the official hot reference lexicon. */
+export function subscribeTextReferenceHighlights(
+  editor: LexicalEditor,
+  lexicon: NonNullable<ComposerTriggerController["lexicon"]>,
+): () => void {
+  const highlighter = subscribeHighlight(
+    editor,
+    "amiba-text-reference",
+    (scan) => textReferenceRanges(scan.draft, lexicon.getSnapshot()),
+    "background-color: hsl(var(--muted) / .5); color: hsl(var(--foreground));",
+  );
+  const offLexicon = lexicon.subscribe(highlighter.repaint);
+  return () => { offLexicon(); highlighter.dispose(); };
+}
+
+/** Paint-only highlight of the active slash-command claim token. */
+export function subscribeCommandTokenHighlight(
+  editor: LexicalEditor,
+  claims: CommandClaimStore,
+): () => void {
+  const highlighter = subscribeHighlight(
+    editor,
+    "amiba-command-token",
+    () => commandTokenRanges(claims.get()?.token),
+    "background-color: hsl(var(--primary) / .12); color: hsl(var(--foreground));",
+  );
+  const offClaims = claims.subscribe(highlighter.repaint);
+  return () => { offClaims(); highlighter.dispose(); };
 }
