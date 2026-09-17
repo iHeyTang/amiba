@@ -20,8 +20,8 @@ export const browserMessages = {
     "embeddedBrowser.noDevServer": "No local dev server detected",
     "embeddedBrowser.agentOperating": "Agent is browsing",
     "embeddedBrowser.summary.empty": "No open tabs",
-    "embeddedBrowser.summary.expand": "Show all tabs",
-    "embeddedBrowser.summary.collapse": "Show less",
+    "embeddedBrowser.summary.expand": "All tabs",
+    "embeddedBrowser.summary.collapse": "Collapse",
   },
   "zh-CN": {
     "embeddedBrowser.title": "浏览器",
@@ -42,7 +42,7 @@ export const browserMessages = {
     "embeddedBrowser.noDevServer": "没有检测到本地开发服务器",
     "embeddedBrowser.agentOperating": "Agent 正在操作",
     "embeddedBrowser.summary.empty": "暂无标签页",
-    "embeddedBrowser.summary.expand": "展开全部标签页",
+    "embeddedBrowser.summary.expand": "全部标签页",
     "embeddedBrowser.summary.collapse": "收起",
   },
 };

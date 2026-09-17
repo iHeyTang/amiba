@@ -1,5 +1,5 @@
 import { browserMessages, useBrowserT } from "./locales.js";
-import { Globe2 } from "lucide-react";
+import { ChevronDown, Globe2 } from "lucide-react";
 import {
   BrowserAdapterContext,
   createBrowserAdapter,
@@ -15,6 +15,7 @@ import type {
   WorkbenchViewProps,
 } from "@amiba/extension-sdk";
 import {
+  cn,
   getPlatform,
   useWorkspacePane,
 } from "@amiba/dsh-plugin-ui-shell/client";
@@ -331,18 +332,14 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
     return () => summaryPreviewViewport.register(null);
   }, [previewTab, sessionId]);
 
-  // Once the workbench is actually showing the browser, the live webview lives
-  // there; the preview streams its rendered frames so it keeps following the
-  // page instead of holding a stale still.
-  const workbenchShowingBrowser = pane.open && pane.mode === "preview";
-
+  // Stream the tab's rendered frames for the preview. The frame subscription
+  // captures the page at its real size regardless of the workbench state, so
+  // the card keeps a live, correctly-scaled picture whether or not the
+  // workbench is open. The scaled live-webview fallback is unreliable (it
+  // renders blank and bleeds past the card's rounded corners), so the frame is
+  // the single source of truth for the preview.
   useEffect(() => {
-    if (
-      !workbenchShowingBrowser ||
-      !adapter ||
-      !previewTab ||
-      previewTab.url === "about:blank"
-    ) {
+    if (!adapter || !previewTab || previewTab.url === "about:blank") {
       return;
     }
     let disposed = false;
@@ -356,13 +353,13 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
       void adapter.stopFrameStream(previewTab.browserTabId).catch(() => {});
       setFrame(null);
     };
-  }, [workbenchShowingBrowser, adapter, previewTab]);
+  }, [adapter, previewTab]);
 
   return (
     <div className="flex flex-col gap-2">
       {/* Transparent window over the live webview. Other tabs peek out behind
           it as a stacked deck so multiple tabs read as one cascade. */}
-      <div className="relative" style={{ width: PREVIEW_CARD_WIDTH }}>
+      <div className="relative">
         {others.length > 0 &&
           others
             .slice(0, 2)
@@ -380,12 +377,12 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
         <button
           type="button"
           onClick={() => open(previewTab.browserTabId)}
-          className="group relative overflow-hidden rounded-xl text-left shadow-lg"
-          style={{ width: PREVIEW_CARD_WIDTH, height: PREVIEW_CARD_HEIGHT }}
+          className="group relative w-full overflow-hidden rounded-xl text-left shadow-lg"
+          style={{ height: PREVIEW_CARD_HEIGHT }}
         >
           {/* The viewport the host positions the scaled webview over. */}
           <div ref={previewRef} className="absolute inset-0" />
-          {workbenchShowingBrowser && frame ? (
+          {frame ? (
             <img
               src={`data:image/jpeg;base64,${frame}`}
               alt=""
@@ -408,11 +405,55 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
           </span>
         </button>
       </div>
-      {/* Other tabs: a bordered text card. */}
+      {/* Other tabs: an expandable list whose header hints at the content with
+          a stacked favicon row and a tab count, and toggles on a chevron. */}
       {others.length > 0 && (
-        <div className="rounded-xl border border-border/60 bg-background p-1.5">
-          {expanded ? (
-            <>
+        <div className="overflow-hidden rounded-xl border border-border/60 bg-background">
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            aria-expanded={expanded}
+            className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-muted/50"
+          >
+            <span className="flex shrink-0 -space-x-1.5" aria-hidden>
+              {others.slice(0, 3).map((tab) =>
+                tab.favicon ? (
+                  <img
+                    key={tab.browserTabId}
+                    src={tab.favicon}
+                    alt=""
+                    className="size-4 rounded-full bg-background ring-2 ring-background"
+                  />
+                ) : (
+                  <span
+                    key={tab.browserTabId}
+                    className="flex size-4 items-center justify-center rounded-full bg-muted ring-2 ring-background"
+                  >
+                    <Globe2 className="size-2.5 text-muted-foreground" />
+                  </span>
+                ),
+              )}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">
+              {expanded
+                ? t("embeddedBrowser.summary.collapse")
+                : t("embeddedBrowser.summary.expand")}
+              {!expanded && (
+                <span className="text-muted-foreground/60">
+                  {" "}
+                  · {others.length}
+                </span>
+              )}
+            </span>
+            <ChevronDown
+              className={cn(
+                "size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200",
+                expanded && "rotate-180",
+              )}
+            />
+          </button>
+          {expanded && (
+            <div className="border-t border-border/50 p-1">
               {others.map((tab) => (
                 <button
                   key={tab.browserTabId}
@@ -439,22 +480,7 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
                   </span>
                 </button>
               ))}
-              <button
-                type="button"
-                onClick={() => setExpanded(false)}
-                className="w-full px-2 py-1 text-left text-[11px] font-medium text-primary hover:underline"
-              >
-                {t("embeddedBrowser.summary.collapse")}
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setExpanded(true)}
-              className="w-full px-2 py-1 text-left text-[11px] font-medium text-primary hover:underline"
-            >
-              {t("embeddedBrowser.summary.expand")}
-            </button>
+            </div>
           )}
         </div>
       )}
