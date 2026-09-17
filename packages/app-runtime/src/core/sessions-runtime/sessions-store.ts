@@ -451,6 +451,20 @@ export class SessionsStore {
     await saveMessages(id, this.state.activeMessages as SessionMessage[]);
   }
 
+  /** Recover terminal evidence without switching tabs or replacing newer work. */
+  recoverMessages = async (id: string): Promise<void> => {
+    if (id !== this.state.activeId) return;
+    const before = this.state.activeMessages;
+    const token = this.switchToken;
+    const next = await loadMessages(id, this.state.sessions.find(session => session.id === id)?.subagentAddress);
+    if (id !== this.state.activeId || token !== this.switchToken || before !== this.state.activeMessages) return;
+    const usersBefore = before.filter(message => message.role === "user");
+    const usersAfter = next.filter(message => message.role === "user");
+    // A stale log (or a rejected prompt) must not erase the latest user turn.
+    if (usersAfter.length < usersBefore.length || usersAfter.at(-1)?.content !== usersBefore.at(-1)?.content) return;
+    if (next.length && next.at(-1)?.role === "assistant") this.commit({ activeMessages: next });
+  };
+
   switchToTab = async (id: string): Promise<void> => {
     if (!this.state.openTabIds.includes(id)) return;
     await this.activateOpen(id);
