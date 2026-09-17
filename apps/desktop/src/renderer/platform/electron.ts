@@ -39,7 +39,10 @@ export function createElectronAdapter(
       },
     },
 
-    shell: { openExternal: (url) => bridge.shell.openExternal(url) },
+    shell: {
+      openExternal: (url) => bridge.shell.openExternal(url),
+      closeWindow: () => bridge.window.close(),
+    },
 
     ...(dshClient ? createDshPlatformAdapters(dshClient) : {}),
     agentDiagnostics: bridge.agentDiagnostics,

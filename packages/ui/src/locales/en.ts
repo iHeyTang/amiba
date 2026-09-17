@@ -84,6 +84,15 @@ export const en = {
   "workspacePane.tabs": "Workbench views",
   "workspacePane.open": "Open workbench",
   "workspacePane.collapse": "Collapse workbench",
+
+  // Pinned summary
+  "summary.title": "Summary",
+  "summary.collapse": "Collapse summary",
+  "summary.expand": "Expand summary",
+  "summary.empty": "No workbench activity",
+  "summary.tabsCount": "{count} tabs",
+  "summary.newActivity": "New activity",
+  "summary.openWorkbench": "Open workbench",
   "workspacePane.resize": "Resize workbench",
   "workspacePane.emptyTitle": "Nothing open yet",
   "workspacePane.emptyBody":

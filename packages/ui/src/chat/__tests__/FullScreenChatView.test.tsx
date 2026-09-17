@@ -717,9 +717,20 @@ describe("FullScreenChatView new-chat home", () => {
     expect(workbenchToggle.parentElement?.children).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "workspacePane.openTerminal" })).toBeNull();
     act(() => requestBrowserTab?.({}));
+    // Agent-driven browser activity must NOT auto-expand the workbench: the
+    // tab is recorded (and lights the pinned-summary badge) without opening.
     expect(
       screen.queryByRole("button", { name: "workspacePane.collapse" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "workspacePane.open" }),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "New tab" })).toBeNull();
+
+    // Opening the workbench reveals the recorded browser tab.
+    await userEvent.click(
+      screen.getByRole("button", { name: "workspacePane.open" }),
+    );
     expect(
       document.querySelector("[data-embedded-browser-pane]"),
     ).not.toBeInTheDocument();
@@ -772,6 +783,12 @@ describe("FullScreenChatView new-chat home", () => {
     await userEvent.click(screen.getByRole("button", { name: "workspacePane.collapse" }));
     await userEvent.click(screen.getByRole("button", { name: "workspacePane.open" }));
     expect(screen.getAllByRole("tab", { name: "New tab" })).toHaveLength(1);
+
+    // Cmd/Ctrl+W closes the active workbench tab.
+    fireEvent.keyDown(window, { key: "w", metaKey: true });
+    await waitFor(() =>
+      expect(screen.queryByRole("tab", { name: "New tab" })).toBeNull(),
+    );
   });
 
   it("opens independent terminal resources inside the workbench", async () => {
@@ -954,6 +971,29 @@ describe("FullScreenChatView new-chat home", () => {
     expect(mocks.storageSet).toHaveBeenCalledWith({
       "settings.chat.sidebarCollapsed": false,
     });
+  });
+
+  it("toggles the sidebar with Cmd/Ctrl+B", () => {
+    mocks.useSessions.mockReturnValue(makeSessions());
+
+    render(
+      <FullScreenChatView
+        client={makeClient() as never}
+        openSettings={() => {}}
+        openAgentDestination={() => {}}
+        restoreSidebarViewOnMount={false}
+      />,
+    );
+
+    const sidebar = screen.getByTestId("main-sidebar");
+    expect(sidebar).toHaveStyle({ width: `${APP_SIDEBAR_DEFAULT_WIDTH}px` });
+
+    fireEvent.keyDown(window, { key: "b", metaKey: true });
+    expect(sidebar).toHaveAttribute("aria-hidden", "true");
+    expect(sidebar).toHaveStyle({ width: "0px" });
+
+    fireEvent.keyDown(window, { key: "b", metaKey: true });
+    expect(sidebar).toHaveStyle({ width: `${APP_SIDEBAR_DEFAULT_WIDTH}px` });
   });
 
   it("snaps sidebar resizing to the shared default width", () => {

@@ -1,4 +1,4 @@
-import { browserMessages } from "./locales.js";
+import { browserMessages, useBrowserT } from "./locales.js";
 import { Globe2 } from "lucide-react";
 import {
   BrowserAdapterContext,
@@ -6,10 +6,11 @@ import {
   useBrowserAdapter,
 } from "./adapter.js";
 import type { EmbeddedBrowserAdapter } from "../shared/browser.js";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type {
   WorkbenchResource,
+  WorkbenchSummaryContribution,
   WorkbenchViewExtension,
   WorkbenchViewProps,
 } from "@amiba/extension-sdk";
@@ -22,11 +23,25 @@ import {
   EmbeddedBrowserHost,
   EmbeddedBrowserWorkspace,
   createEmbeddedBrowserResource,
+  summaryPreviewViewport,
   type EmbeddedBrowserResource,
 } from "./EmbeddedBrowserPane.js";
 
 export const name = "amiba-browser-electron-ui";
 export const inject = ["slots"];
+
+/** Whether a key event target is an editable field, so tab shortcuts never hijack text editing. */
+function isEditableTarget(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null;
+  if (!element || typeof element.tagName !== "string") return false;
+  const tag = element.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    element.isContentEditable
+  );
+}
 
 function browserData(
   resource: WorkbenchResource,
@@ -85,22 +100,73 @@ function BrowserHost({
     getSnapshot(): HTMLElement | null;
   };
 }) {
-  const { pane, update } = useBrowserPane();
+  const { pane, update, create } = useBrowserPane();
   const { openResourceIn, focusResourceIn, sessionId } = pane;
   const adapter = useBrowserAdapter();
   useEffect(() => {
     if (!adapter) return;
     const create = adapter.onCreateRequested((event) =>
-      openResourceIn(event?.sessionId ?? sessionId, browserResource()),
+      openResourceIn(
+        event?.sessionId ?? sessionId,
+        browserResource(),
+        "automatic",
+      ),
     );
     const focus = adapter.onFocusRequested((event) =>
-      focusResourceIn(event.sessionId ?? sessionId, "browser", event.tabId),
+      focusResourceIn(
+        event.sessionId ?? sessionId,
+        "browser",
+        event.tabId,
+        "automatic",
+      ),
     );
     return () => {
       focus();
       create();
     };
   }, [adapter, openResourceIn, focusResourceIn, sessionId]);
+  // Browser tab shortcuts: Cmd/Ctrl+T opens a new tab, Cmd/Ctrl+R reloads the
+  // active tab, Cmd/Ctrl+Shift+R hard-reloads it, and Cmd/Ctrl+←/→ navigate
+  // history. The chords are left alone while focus sits in an editable field
+  // (or when another view owns the active tab).
+  useEffect(() => {
+    if (!adapter) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const cmdOrCtrl = event.metaKey || event.ctrlKey;
+      if (!cmdOrCtrl) return;
+      if (isEditableTarget(event.target)) return;
+      const key = event.key.toLowerCase();
+      if (!event.shiftKey && key === "t") {
+        if (!pane.enabled) return;
+        event.preventDefault();
+        create();
+        return;
+      }
+      if (!pane.open) return;
+      const active = pane.activeTab?.resource;
+      const data = active?.kind === "extension" ? browserData(active.resource) : null;
+      if (key === "arrowleft") {
+        if (!data) return;
+        event.preventDefault();
+        void adapter.command(data.browserTabId, { action: "back" });
+        return;
+      }
+      if (key === "arrowright") {
+        if (!data) return;
+        event.preventDefault();
+        void adapter.command(data.browserTabId, { action: "forward" });
+        return;
+      }
+      if (key === "r" && data) {
+        event.preventDefault();
+        void adapter.command(data.browserTabId, {
+          action: event.shiftKey ? "hardReload" : "reload",
+        });
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [adapter, pane.open, pane.activeTab, pane.enabled, create]);
   const active = pane.activeTab?.resource;
   const selected =
     active?.kind === "extension" ? browserData(active.resource) : null;
@@ -206,6 +272,196 @@ export function createBrowserView(
   };
 }
 
+/** Card width/height, matching the summary panel's width and a 16:10 preview. */
+const PREVIEW_CARD_WIDTH = 280;
+const PREVIEW_CARD_HEIGHT = 175;
+
+/**
+ * The browser card of the pinned summary. It does NOT host its own webview:
+ * it publishes a transparent viewport and the browser host parks the ACTIVE
+ * tab's live webview over it (scaled), so the preview stays in sync with the
+ * workbench and never reloads. Other tabs sit in a bordered text card behind
+ * an expand toggle.
+ */
+function BrowserSummary({ sessionId }: { sessionId: string }) {
+  const pane = useWorkspacePane();
+  const adapter = useBrowserAdapter();
+  const { t } = useBrowserT();
+  const [expanded, setExpanded] = useState(false);
+  const [frame, setFrame] = useState<string | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const tabs = pane.resources
+    .filter((entry) => entry.sessionId === sessionId)
+    .flatMap((entry) => {
+      const data = browserData(entry.resource);
+      return data ? [data] : [];
+    });
+  if (tabs.length === 0) {
+    return (
+      <div className="rounded-xl border border-border/60 bg-background p-3 text-xs text-muted-foreground">
+        {t("embeddedBrowser.summary.empty")}
+      </div>
+    );
+  }
+  const open = (tabId: string) =>
+    pane.focusResourceIn(sessionId, "browser", tabId);
+  const active = pane.activeTab?.resource;
+  const activeBrowserId =
+    active?.kind === "extension"
+      ? browserData(active.resource)?.browserTabId
+      : undefined;
+  const previewTab =
+    tabs.find((tab) => tab.browserTabId === activeBrowserId) ?? tabs[0];
+  const others = tabs.filter(
+    (tab) => tab.browserTabId !== previewTab.browserTabId,
+  );
+
+  // Publish the preview viewport so the host parks the active tab's live
+  // webview here (scaled); release it on unmount.
+  useEffect(() => {
+    summaryPreviewViewport.register(
+      previewRef.current && previewTab.url !== "about:blank"
+        ? {
+            element: previewRef.current,
+            sessionId,
+            tabId: previewTab.browserTabId,
+          }
+        : null,
+    );
+    return () => summaryPreviewViewport.register(null);
+  }, [previewTab, sessionId]);
+
+  // Once the workbench is actually showing the browser, the live webview lives
+  // there; the preview streams its rendered frames so it keeps following the
+  // page instead of holding a stale still.
+  const workbenchShowingBrowser = pane.open && pane.mode === "preview";
+
+  useEffect(() => {
+    if (
+      !workbenchShowingBrowser ||
+      !adapter ||
+      !previewTab ||
+      previewTab.url === "about:blank"
+    ) {
+      return;
+    }
+    let disposed = false;
+    const unsubscribe = adapter.onFrame(previewTab.browserTabId, (next) => {
+      if (!disposed) setFrame(next.data);
+    });
+    void adapter.startFrameStream(previewTab.browserTabId, PREVIEW_CARD_WIDTH * 2);
+    return () => {
+      disposed = true;
+      unsubscribe();
+      void adapter.stopFrameStream(previewTab.browserTabId).catch(() => {});
+      setFrame(null);
+    };
+  }, [workbenchShowingBrowser, adapter, previewTab]);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Transparent window over the live webview. Other tabs peek out behind
+          it as a stacked deck so multiple tabs read as one cascade. */}
+      <div className="relative" style={{ width: PREVIEW_CARD_WIDTH }}>
+        {others.length > 0 &&
+          others
+            .slice(0, 2)
+            .reverse()
+            .map((tab, index) => (
+              <div
+                key={tab.browserTabId}
+                aria-hidden
+                className="absolute inset-0 rounded-xl border border-border/40 bg-background"
+                style={{
+                  transform: `translate(${(index + 1) * 6}px, ${-(index + 1) * 5}px)`,
+                }}
+              />
+            ))}
+        <button
+          type="button"
+          onClick={() => open(previewTab.browserTabId)}
+          className="group relative overflow-hidden rounded-xl text-left shadow-lg"
+          style={{ width: PREVIEW_CARD_WIDTH, height: PREVIEW_CARD_HEIGHT }}
+        >
+          {/* The viewport the host positions the scaled webview over. */}
+          <div ref={previewRef} className="absolute inset-0" />
+          {workbenchShowingBrowser && frame ? (
+            <img
+              src={`data:image/jpeg;base64,${frame}`}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover object-top"
+            />
+          ) : null}
+          <span className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/50 via-black/15 to-transparent px-2 pb-1.5 pt-6 text-[10px] text-white">
+            {previewTab.favicon ? (
+              <img
+                src={previewTab.favicon}
+                alt=""
+                className="size-3 shrink-0 rounded-sm"
+              />
+            ) : (
+              <Globe2 className="size-3 shrink-0" />
+            )}
+            <span className="min-w-0 flex-1 truncate">
+              {previewTab.title || previewTab.url}
+            </span>
+          </span>
+        </button>
+      </div>
+      {/* Other tabs: a bordered text card. */}
+      {others.length > 0 && (
+        <div className="rounded-xl border border-border/60 bg-background p-1.5">
+          {expanded ? (
+            <>
+              {others.map((tab) => (
+                <button
+                  key={tab.browserTabId}
+                  type="button"
+                  onClick={() => open(tab.browserTabId)}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60"
+                >
+                  {tab.favicon ? (
+                    <img
+                      src={tab.favicon}
+                      alt=""
+                      className="size-4 shrink-0 rounded-sm"
+                    />
+                  ) : (
+                    <Globe2 className="size-4 shrink-0 text-muted-foreground" />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-medium">
+                      {tab.title || tab.url}
+                    </span>
+                    <span className="block truncate text-[11px] text-muted-foreground">
+                      {tab.url}
+                    </span>
+                  </span>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setExpanded(false)}
+                className="w-full px-2 py-1 text-left text-[11px] font-medium text-primary hover:underline"
+              >
+                {t("embeddedBrowser.summary.collapse")}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="w-full px-2 py-1 text-left text-[11px] font-medium text-primary hover:underline"
+            >
+              {t("embeddedBrowser.summary.expand")}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export async function apply(ctx: ClientContext): Promise<void> {
   const bridge = getPlatform().nativeExtensions;
   if (!bridge) return;
@@ -222,8 +478,18 @@ export async function apply(ctx: ClientContext): Promise<void> {
     "@amiba/dsh-plugin-browser-provider-electron",
   );
   if (disposed) return;
-  const browserView = createBrowserView(createBrowserAdapter(bridge, lease));
-  cleanup = ctx.slots.inject("amiba.workbench.view", () =>
+  const adapter = createBrowserAdapter(bridge, lease);
+  const browserView = createBrowserView(adapter);
+  const browserSummary: WorkbenchSummaryContribution = {
+    id: "amiba.browser.summary",
+    order: 100,
+    component: ({ sessionId }) => (
+      <BrowserAdapterContext.Provider value={adapter}>
+        <BrowserSummary sessionId={sessionId} />
+      </BrowserAdapterContext.Provider>
+    ),
+  };
+  const disposeView = ctx.slots.inject("amiba.workbench.view", () =>
     ctx.slots.register(
       {
         name: "amiba.workbench.view",
@@ -234,4 +500,19 @@ export async function apply(ctx: ClientContext): Promise<void> {
       () => null,
     ),
   );
+  const disposeSummary = ctx.slots.inject("amiba.workbench.summary", () =>
+    ctx.slots.register(
+      {
+        name: "amiba.workbench.summary",
+        id: browserSummary.id,
+        order: browserSummary.order,
+        inject: () => ({ extension: browserSummary }),
+      },
+      () => null,
+    ),
+  );
+  cleanup = () => {
+    disposeView();
+    disposeSummary();
+  };
 }

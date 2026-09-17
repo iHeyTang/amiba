@@ -245,6 +245,42 @@ export const BrowserViewportContext = createContext<BrowserViewportRegistry>({
   register: () => {},
 });
 
+/**
+ * A second viewport the summary popover publishes: it wants the ACTIVE tab's
+ * webview rendered small (scaled) inside its preview card, so the preview and
+ * the workbench share the one live webview instead of reloading a duplicate.
+ * Module-level (not React context) because the summary card lives outside the
+ * browser host's context tree.
+ */
+export interface SummaryPreviewViewport {
+  element: HTMLElement;
+  sessionId: string;
+  tabId: string;
+}
+let summaryPreview: SummaryPreviewViewport | null = null;
+const summaryPreviewListeners = new Set<() => void>();
+export const summaryPreviewViewport = {
+  register(next: SummaryPreviewViewport | null): void {
+    if (
+      summaryPreview?.element === next?.element &&
+      summaryPreview?.tabId === next?.tabId
+    ) {
+      return;
+    }
+    summaryPreview = next;
+    for (const listener of summaryPreviewListeners) listener();
+  },
+  subscribe(listener: () => void): () => void {
+    summaryPreviewListeners.add(listener);
+    return () => {
+      summaryPreviewListeners.delete(listener);
+    };
+  },
+  getSnapshot(): SummaryPreviewViewport | null {
+    return summaryPreview;
+  },
+};
+
 /** Where a `<webview>` parks while no workbench is showing it. */
 const OFFSCREEN_LEFT_PX = -20_000;
 const OFFSCREEN_SIZE = { width: 1280, height: 800 };
@@ -314,11 +350,19 @@ export function EmbeddedBrowserHost({
       tab.sessionId === shownSessionId &&
       tab.resource.browserTabId === shownTabId,
   );
+  const summaryPreview = useSyncExternalStore(
+    summaryPreviewViewport.subscribe,
+    summaryPreviewViewport.getSnapshot,
+    () => null as SummaryPreviewViewport | null,
+  );
   // A blank tab must not cover the workbench's own empty state.
-  const shownBrowserTabId =
-    shown && shown.resource.url !== "about:blank"
-      ? shown.resource.browserTabId
-      : null;
+  const workbenchShown =
+    shown !== undefined && shown.resource.url !== "about:blank";
+  // The workbench wins the live webview while it is actually showing the
+  // browser; otherwise the summary preview shows the active tab scaled down.
+  const shownBrowserTabId = workbenchShown
+    ? shown.resource.browserTabId
+    : (summaryPreview?.tabId ?? null);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -329,20 +373,38 @@ export function EmbeddedBrowserHost({
     // Otherwise the previous on-screen position keeps covering import UI.
     let last: string | null = null;
     const apply = () => {
-      const rect = viewport?.getBoundingClientRect();
-      const next =
-        rect && rect.width > 1 && rect.height > 1
-          ? `${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.width)},${Math.round(rect.height)}`
-          : "";
+      let left = OFFSCREEN_LEFT_PX;
+      let top = 0;
+      let width = OFFSCREEN_SIZE.width;
+      let height = OFFSCREEN_SIZE.height;
+      let scale = 1;
+      if (workbenchShown && viewport) {
+        const rect = viewport.getBoundingClientRect();
+        if (rect.width > 1 && rect.height > 1) {
+          left = rect.left;
+          top = rect.top;
+          width = rect.width;
+          height = rect.height;
+        }
+      } else if (summaryPreview) {
+        const rect = summaryPreview.element.getBoundingClientRect();
+        if (rect.width > 1 && rect.height > 1) {
+          left = rect.left;
+          top = rect.top;
+          width = OFFSCREEN_SIZE.width;
+          height = OFFSCREEN_SIZE.height;
+          scale = rect.width / OFFSCREEN_SIZE.width;
+        }
+      }
+      const next = `${Math.round(left)},${Math.round(top)},${Math.round(width)},${Math.round(height)},${scale}`;
       if (next === last) return;
       last = next;
-      const [left, top, width, height] = next
-        ? next.split(",").map(Number)
-        : [OFFSCREEN_LEFT_PX, 0, OFFSCREEN_SIZE.width, OFFSCREEN_SIZE.height];
       frame.style.left = `${left}px`;
       frame.style.top = `${top}px`;
       frame.style.width = `${width}px`;
       frame.style.height = `${height}px`;
+      frame.style.transform = scale === 1 ? "none" : `scale(${scale})`;
+      frame.style.transformOrigin = "top left";
     };
     const tick = () => {
       apply();
@@ -363,6 +425,7 @@ export function EmbeddedBrowserHost({
         ? new ResizeObserver(schedule)
         : null;
     if (viewport) observer?.observe(viewport);
+    if (summaryPreview) observer?.observe(summaryPreview.element);
     window.addEventListener("resize", schedule);
     window.addEventListener("scroll", schedule, true);
     return () => {
@@ -371,7 +434,7 @@ export function EmbeddedBrowserHost({
       window.removeEventListener("resize", schedule);
       window.removeEventListener("scroll", schedule, true);
     };
-  }, [viewport, shownBrowserTabId, tabs.length]);
+  }, [viewport, summaryPreview, workbenchShown, shownBrowserTabId, tabs.length]);
 
   return (
     <BrowserViewportContext.Provider value={registry}>

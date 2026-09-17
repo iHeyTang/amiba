@@ -48,6 +48,7 @@ function BrowserProbe() {
         {activeResource?.kind ?? ""}
       </output>
       <output aria-label="open">{String(pane.open)}</output>
+      <output aria-label="attention">{String(pane.attention)}</output>
     </>
   );
 }
@@ -107,13 +108,15 @@ describe("a browser tab belongs to the session that asked for it", () => {
     expect(screen.getByLabelText("visible active")).toHaveTextContent("");
     expect(screen.getByLabelText("open")).toHaveTextContent("false");
 
-    // The user's own "open browser" still lands in front of them.
+    // A browser call in the visible session records its tab there, but no
+    // longer auto-expands the workbench — the summary surfaces it instead.
     adapter.requestTab(undefined);
     expect(screen.getByLabelText("visible tabs")).toHaveTextContent("1");
     expect(screen.getByLabelText("visible active kind")).toHaveTextContent(
       "extension",
     );
-    expect(screen.getByLabelText("open")).toHaveTextContent("true");
+    expect(screen.getByLabelText("open")).toHaveTextContent("false");
+    expect(screen.getByLabelText("attention")).toHaveTextContent("true");
     expect(screen.getByLabelText("all tabs")).toHaveTextContent(
       "session-background,session-visible",
     );
@@ -140,7 +143,8 @@ describe("a browser tab belongs to the session that asked for it", () => {
       visibleTabId as string,
     );
 
-    // Switching to the background task finds its own browser waiting, open.
+    // Switching to the background task finds its own browser waiting — the
+    // tab is recorded there, but agent-driven activity never auto-expanded it.
     act(() => {
       rerender(
         <Harness sessionId="session-background">
@@ -149,6 +153,7 @@ describe("a browser tab belongs to the session that asked for it", () => {
       );
     });
     expect(screen.getByLabelText("visible tabs")).toHaveTextContent("1");
-    expect(screen.getByLabelText("open")).toHaveTextContent("true");
+    expect(screen.getByLabelText("open")).toHaveTextContent("false");
+    expect(screen.getByLabelText("attention")).toHaveTextContent("true");
   });
 });
