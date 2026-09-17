@@ -64,17 +64,17 @@ export interface WorkbenchShellExtension {
 }
 
 /**
- * A plugin-owned GROUP in the pinned summary popover (the floating panel that
- * summarizes workspace activity without expanding the workbench). Each
- * contribution is one collapsible group: a localized title plus its rows.
+ * A plugin-owned CARD in the pinned summary (a floating stack of cards in the
+ * top-right that summarizes workspace activity without expanding the
+ * workbench). Each contribution renders one card; the shell only orders and
+ * stacks them. Cards own their chrome: a preview card is borderless while a
+ * text-only card draws its own bordered container.
  */
 export interface WorkbenchSummaryContribution {
   id: string;
   /** Lower order wins; id breaks ties deterministically. */
   order: number;
-  /** Localized group title, e.g. "浏览器" / "Browser". */
-  label(): string;
-  /** Renders the group's rows for the addressed session. */
+  /** Renders the card's content for the addressed session. */
   component: ComponentType<{ sessionId: string }>;
 }
 declare module "@deepseek-ai/dsh-client-ui-slots" {

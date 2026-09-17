@@ -52,7 +52,7 @@ export function createSummarySource(ctx: SlotContributionsCtx) {
       const extension = face?.extension as
         | WorkbenchSummaryContribution
         | undefined;
-      return extension?.id && extension.component && typeof extension.label === "function"
+      return extension?.id && extension.component
         ? { ...extension, order: entry.options.order ?? extension.order ?? 0 }
         : null;
     },

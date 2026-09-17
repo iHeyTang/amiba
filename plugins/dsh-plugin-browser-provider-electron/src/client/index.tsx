@@ -272,44 +272,52 @@ export function createBrowserView(
 }
 
 /**
- * A small, non-interactive live `<webview>` used as a page preview inside the
- * summary popover. It reuses the workbench's partition so cookies/storage are
- * shared, but it is NOT registered with main (it is display-only). It is
- * created imperatively because the summary is outside the workbench's webview
- * host and must not double-register the tab.
+ * A small, non-interactive live `<webview>` used as a page preview. The page
+ * is rendered at a fixed virtual viewport (1280×800) and uniformly scaled down
+ * to the card width, so the layout keeps its proportions instead of re-flowing
+ * or cropping. It reuses the workbench's partition and is NOT registered with
+ * main (display-only, created imperatively to avoid double-registering the tab).
  */
-function PreviewWebview({ url }: { url: string }) {
+const PREVIEW_VIEWPORT_W = 1280;
+const PREVIEW_VIEWPORT_H = 800;
+/** Card width, matching the summary panel's width. */
+const PREVIEW_CARD_WIDTH = 320;
+
+function PreviewWebview({ url, width }: { url: string; width: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scale = width / PREVIEW_VIEWPORT_W;
+  const height = PREVIEW_VIEWPORT_H * scale;
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !url || url === "about:blank") return;
     const webview = document.createElement("webview");
     webview.setAttribute("src", url);
     webview.setAttribute("partition", "persist:amiba-browser");
-    webview.style.width = "100%";
-    webview.style.height = "100%";
-    webview.style.minWidth = "0";
-    webview.style.minHeight = "0";
+    webview.style.width = `${PREVIEW_VIEWPORT_W}px`;
+    webview.style.height = `${PREVIEW_VIEWPORT_H}px`;
     webview.style.pointerEvents = "none";
     webview.style.border = "0";
     webview.style.display = "flex";
+    webview.style.transform = `scale(${scale})`;
+    webview.style.transformOrigin = "top left";
     container.appendChild(webview);
     return () => {
       webview.remove();
     };
-  }, [url]);
+  }, [url, scale]);
   return (
     <div
       ref={containerRef}
-      className="h-40 w-full overflow-hidden rounded-t-lg bg-background"
+      className="overflow-hidden bg-background"
+      style={{ width, height }}
     />
   );
 }
 
 /**
- * The browser group of the pinned summary popover. The active tab renders as a
- * live page preview; the rest stack (favicon + title + URL) behind an expand
- * toggle. A click on any entry focuses that tab inside the workbench.
+ * The browser card of the pinned summary. The active tab renders as a
+ * borderless live page preview; any other tabs sit in a bordered text card
+ * behind an expand toggle. Clicking any entry focuses that tab in the workbench.
  */
 function BrowserSummary({ sessionId }: { sessionId: string }) {
   const pane = useWorkspacePane();
@@ -323,9 +331,9 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
     });
   if (tabs.length === 0) {
     return (
-      <p className="px-1 text-xs text-muted-foreground">
+      <div className="rounded-xl border border-border/60 bg-background p-3 text-xs text-muted-foreground">
         {t("embeddedBrowser.summary.empty")}
-      </p>
+      </div>
     );
   }
   const open = (tabId: string) =>
@@ -341,13 +349,15 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
     (tab) => tab.browserTabId !== previewTab.browserTabId,
   );
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
+      {/* Borderless live preview card (no outer frame, just rounded + shadow). */}
       <button
         type="button"
         onClick={() => open(previewTab.browserTabId)}
-        className="group relative overflow-hidden rounded-lg border border-border/60 text-left"
+        className="group relative overflow-hidden rounded-xl text-left shadow-lg"
+        style={{ width: PREVIEW_CARD_WIDTH }}
       >
-        <PreviewWebview url={previewTab.url} />
+        <PreviewWebview url={previewTab.url} width={PREVIEW_CARD_WIDTH} />
         <span className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/60 to-transparent px-2 py-1.5 text-[10px] text-white">
           {previewTab.favicon ? (
             <img
@@ -363,43 +373,55 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
           </span>
         </span>
       </button>
-      {expanded &&
-        others.map((tab) => (
-          <button
-            key={tab.browserTabId}
-            type="button"
-            onClick={() => open(tab.browserTabId)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60"
-          >
-            {tab.favicon ? (
-              <img
-                src={tab.favicon}
-                alt=""
-                className="size-4 shrink-0 rounded-sm"
-              />
-            ) : (
-              <Globe2 className="size-4 shrink-0 text-muted-foreground" />
-            )}
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-xs font-medium">
-                {tab.title || tab.url}
-              </span>
-              <span className="block truncate text-[11px] text-muted-foreground">
-                {tab.url}
-              </span>
-            </span>
-          </button>
-        ))}
+      {/* Other tabs: a bordered text card. */}
       {others.length > 0 && (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="self-start px-2 py-1 text-[11px] font-medium text-primary hover:underline"
-        >
-          {expanded
-            ? t("embeddedBrowser.summary.collapse")
-            : t("embeddedBrowser.summary.expand")}
-        </button>
+        <div className="rounded-xl border border-border/60 bg-background p-1.5">
+          {expanded ? (
+            <>
+              {others.map((tab) => (
+                <button
+                  key={tab.browserTabId}
+                  type="button"
+                  onClick={() => open(tab.browserTabId)}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60"
+                >
+                  {tab.favicon ? (
+                    <img
+                      src={tab.favicon}
+                      alt=""
+                      className="size-4 shrink-0 rounded-sm"
+                    />
+                  ) : (
+                    <Globe2 className="size-4 shrink-0 text-muted-foreground" />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-medium">
+                      {tab.title || tab.url}
+                    </span>
+                    <span className="block truncate text-[11px] text-muted-foreground">
+                      {tab.url}
+                    </span>
+                  </span>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setExpanded(false)}
+                className="w-full px-2 py-1 text-left text-[11px] font-medium text-primary hover:underline"
+              >
+                {t("embeddedBrowser.summary.collapse")}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="w-full px-2 py-1 text-left text-[11px] font-medium text-primary hover:underline"
+            >
+              {t("embeddedBrowser.summary.expand")}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -408,10 +430,6 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
 const browserSummary: WorkbenchSummaryContribution = {
   id: "amiba.browser.summary",
   order: 100,
-  label: () =>
-    browserMessages[
-      document.documentElement.lang.startsWith("zh") ? "zh-CN" : "en"
-    ]["embeddedBrowser.title"],
   component: BrowserSummary,
 };
 
