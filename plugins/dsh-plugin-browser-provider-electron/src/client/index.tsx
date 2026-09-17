@@ -358,7 +358,7 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
     <div className="flex flex-col gap-2">
       {/* Transparent window over the live webview. Other tabs peek out behind
           it as a stacked deck so multiple tabs read as one cascade. */}
-      <div className="relative" style={{ width: PREVIEW_CARD_WIDTH }}>
+      <div className="relative">
         {others.length > 0 &&
           others
             .slice(0, 2)
@@ -376,8 +376,8 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
         <button
           type="button"
           onClick={() => open(previewTab.browserTabId)}
-          className="group relative overflow-hidden rounded-xl text-left shadow-lg"
-          style={{ width: PREVIEW_CARD_WIDTH, height: PREVIEW_CARD_HEIGHT }}
+          className="group relative w-full overflow-hidden rounded-xl text-left shadow-lg"
+          style={{ height: PREVIEW_CARD_HEIGHT }}
         >
           {/* The viewport the host positions the scaled webview over. */}
           <div ref={previewRef} className="absolute inset-0" />
