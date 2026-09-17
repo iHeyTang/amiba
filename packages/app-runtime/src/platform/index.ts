@@ -455,6 +455,8 @@ export interface AgentDiagnosticsAdapter {
 
 export interface ShellAdapter {
   openExternal(url: string): Promise<void>;
+  /** Close the primary window (the Cmd/Ctrl+W "no tab to close" fallback). */
+  closeWindow?(): void | Promise<void>;
 }
 
 /**

@@ -65,6 +65,15 @@ export const zhCN: UiMessages = {
   "workspacePane.tabs": "工作台视图",
   "workspacePane.open": "打开工作台",
   "workspacePane.collapse": "收起工作台",
+
+  // 置顶摘要
+  "summary.title": "摘要",
+  "summary.collapse": "收起摘要",
+  "summary.expand": "展开摘要",
+  "summary.empty": "暂无工作台活动",
+  "summary.tabsCount": "{count} 个标签页",
+  "summary.newActivity": "有新活动",
+  "summary.openWorkbench": "打开工作台",
   "workspacePane.resize": "调整工作台宽度",
   "workspacePane.emptyTitle": "这里还没有打开的内容",
   "workspacePane.emptyBody":
