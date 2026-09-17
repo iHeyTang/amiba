@@ -214,6 +214,8 @@ interface SessionPaneState {
   mode: WorkbenchMode;
   fileTreeOpen: boolean;
   terminalOpen: boolean;
+  /** New activity arrived while the pane was closed — drives the summary badge. */
+  attention: boolean;
 }
 
 interface WorkspacePaneContextValue {
@@ -225,6 +227,8 @@ interface WorkspacePaneContextValue {
   mode: WorkbenchMode;
   fileTreeOpen: boolean;
   terminalOpen: boolean;
+  /** New activity arrived while the pane was closed — drives the summary badge. */
+  attention: boolean;
   sessionId: string;
   files?: WorkspaceFilesAdapter;
   development?: WorkspaceDevelopmentAdapter;
@@ -236,18 +240,28 @@ interface WorkspacePaneContextValue {
   setMode(mode: WorkbenchMode): void;
   setFileTreeOpen(open: boolean): void;
   setTerminalOpen(open: boolean): void;
+  clearAttention(): void;
   selectTab(id: string): void;
   closeTab(id: string): void;
   openUrl(url: string): boolean;
   resources: readonly { sessionId: string; resource: WorkbenchResource }[];
-  openResourceIn(sessionId: string, resource: WorkbenchResource): void;
+  openResourceIn(
+    sessionId: string,
+    resource: WorkbenchResource,
+    source?: "user" | "automatic",
+  ): void;
   updateResourceIn(
     sessionId: string,
     type: string,
     id: string,
     update: (resource: WorkbenchResource) => WorkbenchResource,
   ): void;
-  focusResourceIn(sessionId: string, type: string, id: string): void;
+  focusResourceIn(
+    sessionId: string,
+    type: string,
+    id: string,
+    source?: "user" | "automatic",
+  ): void;
   openResource(resource: WorkbenchResource): void;
   openFile(path: string, line?: number): void;
   openReview(resource: WorkspaceReviewResource): void;
@@ -272,6 +286,7 @@ const EMPTY_CONTEXT: WorkspacePaneContextValue = {
   mode: "preview",
   fileTreeOpen: false,
   terminalOpen: false,
+  attention: false,
   sessionId: "",
   development: undefined,
   workspaces: undefined,
@@ -282,6 +297,7 @@ const EMPTY_CONTEXT: WorkspacePaneContextValue = {
   setMode: () => {},
   setFileTreeOpen: () => {},
   setTerminalOpen: () => {},
+  clearAttention: () => {},
   selectTab: () => {},
   closeTab: () => {},
   openUrl: () => false,
@@ -662,6 +678,7 @@ function emptySessionState(): SessionPaneState {
     mode: "preview",
     fileTreeOpen: false,
     terminalOpen: false,
+    attention: false,
   };
 }
 
@@ -820,9 +837,14 @@ export function WorkspacePaneProvider({
 
   const persistOpen = useCallback(
     (next: boolean) => {
-      updateActiveSession((state) =>
-        state.open === next ? state : { ...state, open: next },
-      );
+      updateActiveSession((state) => {
+        // Opening the pane means the user is now looking at the activity, so
+        // any pending attention badge is cleared; closing leaves it untouched.
+        const attention = next ? false : state.attention;
+        return state.open === next && state.attention === attention
+          ? state
+          : { ...state, open: next, attention };
+      });
     },
     [updateActiveSession],
   );
@@ -864,19 +886,33 @@ export function WorkspacePaneProvider({
     },
     [updateActiveSession],
   );
+  const clearAttention = useCallback(
+    () =>
+      updateActiveSession((state) =>
+        state.attention ? { ...state, attention: false } : state,
+      ),
+    [updateActiveSession],
+  );
 
   useEffect(() => {
     if (!enabled) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.code !== "Backslash" ||
-        !event.shiftKey ||
-        (!event.metaKey && !event.ctrlKey)
-      ) {
+      const cmdOrCtrl = event.metaKey || event.ctrlKey;
+      // Cmd/Ctrl+J (Codex's "toggle panel") — the standard chord.
+      if (cmdOrCtrl && !event.shiftKey && event.key.toLowerCase() === "j") {
+        event.preventDefault();
+        persistOpen(!open);
         return;
       }
-      event.preventDefault();
-      persistOpen(!open);
+      // Legacy chord kept as an alias.
+      if (
+        event.code === "Backslash" &&
+        event.shiftKey &&
+        cmdOrCtrl
+      ) {
+        event.preventDefault();
+        persistOpen(!open);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -947,6 +983,7 @@ export function WorkspacePaneProvider({
               tabs,
               activeTabId: previewTab.id,
               mode: "preview",
+              attention: !state.open,
             };
           }
           return {
@@ -954,6 +991,7 @@ export function WorkspacePaneProvider({
             tabs: [...state.tabs, previewTab],
             activeTabId: previewTab.id,
             mode: "preview",
+            attention: !state.open,
           };
         }
 
@@ -965,7 +1003,7 @@ export function WorkspacePaneProvider({
         const tabs = [...state.tabs, tab];
         return { ...state, tabs, activeTabId: tab.id, mode: "preview" };
       });
-      persistOpen(true);
+      if (source === "user") persistOpen(true);
     },
     [capability, persistOpen, sessionId, updateActiveSession],
   );
@@ -994,7 +1032,7 @@ export function WorkspacePaneProvider({
   );
 
   const openResourceIn = useCallback(
-    (owner: string, resource: WorkbenchResource) => {
+    (owner: string, resource: WorkbenchResource, source: "user" | "automatic" = "user") => {
       updateSession(owner, (state) => {
         const wrapped: WorkspacePaneResource = { kind: "extension", resource };
         const id = resourceKey(wrapped);
@@ -1006,7 +1044,8 @@ export function WorkspacePaneProvider({
             : [...state.tabs, { id, resource: wrapped, pinned: true }],
           activeTabId: id,
           mode: "preview",
-          open: true,
+          open: source === "user" ? true : state.open,
+          attention: source === "automatic" ? !state.open : false,
         };
       });
     },
@@ -1045,14 +1084,20 @@ export function WorkspacePaneProvider({
   );
 
   const focusResourceIn = useCallback(
-    (owner: string, type: string, id: string) => {
+    (owner: string, type: string, id: string, source: "user" | "automatic" = "user") => {
       updateSession(owner, (state) => {
         const tab = state.tabs.find((tab) => {
           const resource = toWorkbenchResource(tab.resource);
           return resource.type === type && resource.id === id;
         });
         return tab
-          ? { ...state, activeTabId: tab.id, mode: "preview", open: true }
+          ? {
+              ...state,
+              activeTabId: tab.id,
+              mode: "preview",
+              open: source === "user" ? true : state.open,
+              attention: source === "automatic" ? !state.open : false,
+            }
           : state;
       });
     },
@@ -1231,6 +1276,7 @@ export function WorkspacePaneProvider({
       mode: activeState.mode,
       fileTreeOpen: activeState.fileTreeOpen,
       terminalOpen: activeState.terminalOpen,
+      attention: activeState.attention,
       sessionId,
       files: capability?.files,
       development: capability?.development,
@@ -1242,6 +1288,7 @@ export function WorkspacePaneProvider({
       setMode,
       setFileTreeOpen,
       setTerminalOpen,
+      clearAttention,
       selectTab: (id) =>
         updateActiveSession((state) => ({
           ...state,
@@ -1288,12 +1335,14 @@ export function WorkspacePaneProvider({
       activeState.mode,
       activeState.fileTreeOpen,
       activeState.terminalOpen,
+      activeState.attention,
       activeTab,
       beginTurn,
       beginTurnFor,
       canOpenToolEvent,
       capability,
       checkpoints,
+      clearAttention,
       deleteCheckpoint,
       enabled,
       observeToolEvent,
@@ -3551,6 +3600,19 @@ function WorkspaceRecoveryPointsView() {
   );
 }
 
+/** Whether a key event target is an editable field, so tab shortcuts never hijack text editing. */
+function isEditableTarget(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null;
+  if (!element || typeof element.tagName !== "string") return false;
+  const tag = element.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    element.isContentEditable
+  );
+}
+
 export function WorkspacePane({
   visible = true,
   renderPanel,
@@ -3599,6 +3661,98 @@ export function WorkspacePane({
     pane.setMode(previousPanelModes.current.get(pane.sessionId) ?? "preview");
     previousPanelModes.current.delete(pane.sessionId);
   }, [pane.setMode, pane.sessionId, mode]);
+  // Close one tab, awaiting its view's cleanup (e.g. the browser unregisters
+  // the tab) before dropping the row. Shared by the tab button and the
+  // Cmd/Ctrl+W shortcut so both paths honor the same lifecycle.
+  const closeTab = useCallback(
+    async (id: string) => {
+      const tab = pane.tabs.find((t) => t.id === id);
+      if (!tab) return;
+      const key = `${pane.sessionId}:${id}`;
+      if (closingTabs.current.has(key)) return;
+      closingTabs.current.add(key);
+      try {
+        const resource = toWorkbenchResource(tab.resource);
+        await selectWorkbenchView(extensions, resource.type)?.onClose?.(resource, pane.sessionId);
+        pane.closeTab(id);
+        setActionError(null);
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : String(error));
+      } finally {
+        closingTabs.current.delete(key);
+      }
+    },
+    [pane.tabs, pane.sessionId, pane.closeTab, extensions],
+  );
+  // Workbench tab keyboard shortcuts. On macOS the menu never binds these
+  // chords; on Windows/Linux the close/reload/forceReload menu roles were
+  // removed so they reach the renderer here too. Editable focus is never
+  // hijacked, and every action is gated on the pane being open.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      // Ctrl+Tab / Ctrl+Shift+Tab cycle tabs (Ctrl only, matching Codex).
+      if (event.ctrlKey && !event.metaKey && event.key === "Tab") {
+        if (!pane.open || pane.tabs.length < 2) return;
+        event.preventDefault();
+        const current = pane.activeTab;
+        const index = current
+          ? pane.tabs.findIndex((tab) => tab.id === current.id)
+          : -1;
+        const nextIndex =
+          (index + (event.shiftKey ? -1 : 1) + pane.tabs.length) %
+          pane.tabs.length;
+        pane.selectTab(pane.tabs[nextIndex].id);
+        return;
+      }
+      // Ctrl+` toggles the terminal drawer (Ctrl only, matching Codex).
+      if (event.ctrlKey && !event.metaKey && event.key === "`") {
+        if (!pane.open) return;
+        event.preventDefault();
+        pane.setTerminalOpen(!pane.terminalOpen);
+        return;
+      }
+      const cmdOrCtrl = event.metaKey || event.ctrlKey;
+      if (!cmdOrCtrl) return;
+      const key = event.key.toLowerCase();
+      if (key === "w") {
+        if (isEditableTarget(event.target)) return;
+        event.preventDefault();
+        if (pane.open && pane.activeTab) {
+          void closeTab(pane.activeTab.id);
+        } else {
+          // No workbench tab to close: fall back to closing the window.
+          void getPlatform().shell.closeWindow?.();
+        }
+        return;
+      }
+      if (event.shiftKey && key === "e") {
+        if (!pane.open) return;
+        event.preventDefault();
+        pane.setFileTreeOpen(!pane.fileTreeOpen);
+        return;
+      }
+      if (!event.shiftKey && !event.altKey && key >= "1" && key <= "9") {
+        if (!pane.open) return;
+        const tab = pane.tabs[Number(key) - 1];
+        if (!tab) return;
+        event.preventDefault();
+        pane.selectTab(tab.id);
+        return;
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    pane.open,
+    pane.activeTab,
+    pane.tabs,
+    pane.fileTreeOpen,
+    pane.terminalOpen,
+    pane.selectTab,
+    pane.setFileTreeOpen,
+    pane.setTerminalOpen,
+    closeTab,
+  ]);
   const panelOwner = {
     workbenchSessionId: pane.sessionId,
     openResource: pane.openResource,
@@ -3840,18 +3994,7 @@ export function WorkspacePane({
                       setMode("preview");
                       pane.selectTab(tab.id);
                     }}
-                    onClose={async () => {
-                      const key = `${pane.sessionId}:${tab.id}`;
-                      if (closingTabs.current.has(key)) return;
-                      closingTabs.current.add(key);
-                      try {
-                        const resource = toWorkbenchResource(tab.resource);
-                        await selectWorkbenchView(extensions, resource.type)?.onClose?.(resource, pane.sessionId);
-                        pane.closeTab(tab.id);
-                        setActionError(null);
-                      } catch (error) { setActionError(error instanceof Error ? error.message : String(error)); }
-                      finally { closingTabs.current.delete(key); }
-                    }}
+                    onClose={() => closeTab(tab.id)}
                   />
                 );
               })}
