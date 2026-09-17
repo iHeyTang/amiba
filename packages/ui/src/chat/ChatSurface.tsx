@@ -2155,7 +2155,13 @@ export default function ChatSurface({
     },
     [setWorkspaceError, t, workspacePane],
   );
-  const showTurnRail = messages.some((message) => message.role === "user");
+  // The rail marks one DOM turn per real user message; plugin notices (a
+  // background task report, a guard's reminder) render as collapsed context
+  // rows rather than turns, so they neither mount the rail nor hide the
+  // native scrollbar.
+  const showTurnRail = messages.some(
+    (message) => message.role === "user" && !message.notice,
+  );
   // The home/empty state is identified solely by the absence of a session
   // id. A persisted session with zero messages is still a real conversation
   // and therefore uses the normal chat layout.
