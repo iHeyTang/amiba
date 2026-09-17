@@ -74,6 +74,15 @@ function broadcastChange(changes: StorageChangeMap) {
   if (Object.keys(changes).length === 0) return;
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.webContents.isDestroyed()) continue;
+    // Skip windows that are not actually visible: hidden surfaces (pre-created
+    // Quick-Ask, a hidden pet window) refetch the relevant keys on demand
+    // when summoned, so broadcasting full values to them just pays
+    // serialization + IPC clone for nothing — and multiplies the cost when a
+    // change carries a large payload (e.g. a Base64 attachment). Minimized
+    // windows are still shown to the user on restore, so they keep receiving
+    // changes (a pending-prompt handoff must not be missed by the main window
+    // just because it is minimized).
+    if (!win.isVisible() && !win.isMinimized()) continue;
     win.webContents.send("storage:changed", changes);
   }
 }

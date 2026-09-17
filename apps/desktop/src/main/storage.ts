@@ -98,7 +98,11 @@ class Store extends EventEmitter {
   private async persist(): Promise<void> {
     if (!this.mem) return
     await fs.mkdir(path.dirname(storeFile()), { recursive: true })
-    await fs.writeFile(storeFile(), JSON.stringify(this.mem, null, 2), "utf8")
+    // Compact JSON: the store can carry large values (e.g. Base64 attachment
+    // payloads), and pretty-printing (`null, 2`) re-serialized the whole
+    // store with ~2x the string churn on every write. The file is edited by
+    // humans only in emergencies; keep it compact.
+    await fs.writeFile(storeFile(), JSON.stringify(this.mem), "utf8")
   }
 
   private diff(prev: Record<string, unknown>, next: Record<string, unknown>): StorageChangeMap {
@@ -131,9 +135,14 @@ class Store extends EventEmitter {
     const prev = await this.load()
     const snap = { ...prev }
     Object.assign(this.mem!, patch)
-    await this.persist()
+    // Diff BEFORE persisting: identical-content writes (the renderer's
+    // persist-effect → storage-change → setState loop can resubmit the same
+    // content) skip the disk write entirely instead of rewriting the whole
+    // file first and discovering the no-op afterward.
     const changes = this.diff(snap, this.mem!)
-    if (Object.keys(changes).length > 0) this.emit("changed", changes)
+    if (Object.keys(changes).length === 0) return
+    await this.persist()
+    this.emit("changed", changes)
   }
 
   async remove(keys: string | string[]): Promise<void> {
@@ -141,9 +150,10 @@ class Store extends EventEmitter {
     const snap = { ...prev }
     const list = Array.isArray(keys) ? keys : [keys]
     for (const k of list) delete this.mem![k]
-    await this.persist()
     const changes = this.diff(snap, this.mem!)
-    if (Object.keys(changes).length > 0) this.emit("changed", changes)
+    if (Object.keys(changes).length === 0) return
+    await this.persist()
+    this.emit("changed", changes)
   }
 
   /** Subscribe to all changes. Returns unsubscribe. */

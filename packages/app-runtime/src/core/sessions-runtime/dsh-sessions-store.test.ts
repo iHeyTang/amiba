@@ -78,7 +78,7 @@ describe("SessionsStore with DSH sessions", () => {
     mocks.history.mockClear();
     const address = { parentSessionId: "dsh-1", childSessionId: "catalog-child", mode: "one-shot" as const };
     await store.openTab("catalog-child", address);
-    expect(mocks.history.mock.calls).toEqual([["catalog-child", { subagent: address, maxMessages: 200 }]]);
+    expect(mocks.history.mock.calls).toEqual([["catalog-child", { subagent: address, maxMessages: 1000 }]]);
     address.parentSessionId = "changed-by-caller";
     expect(store.getSnapshot().sessions.find((row) => row.id === "catalog-child")?.subagentAddress?.parentSessionId).toBe("dsh-1");
     store.teardown();
@@ -128,7 +128,7 @@ describe("SessionsStore with DSH sessions", () => {
     await store.openTab("dsh-1");
     mocks.history.mockClear();
     await store.switchToTab("catalog-child");
-    expect(mocks.history.mock.calls).toEqual([["catalog-child", { subagent: address, maxMessages: 200 }]]);
+    expect(mocks.history.mock.calls).toEqual([["catalog-child", { subagent: address, maxMessages: 1000 }]]);
     store.teardown();
   });
 
@@ -188,7 +188,7 @@ describe("SessionsStore with DSH sessions", () => {
     const address = { parentSessionId: "dsh-1", childSessionId: "catalog-child", mode: "one-shot" as const };
     await expect(store.openTab("catalog-child", address)).rejects.toThrow("catalog unavailable");
     expect(store.getSnapshot().activeId).toBe("dsh-1");
-    expect(mocks.history.mock.calls).toEqual([["catalog-child", { subagent: address, maxMessages: 200 }]]);
+    expect(mocks.history.mock.calls).toEqual([["catalog-child", { subagent: address, maxMessages: 1000 }]]);
     store.teardown();
   });
 

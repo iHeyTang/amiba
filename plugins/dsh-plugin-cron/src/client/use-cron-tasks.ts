@@ -28,16 +28,28 @@ export function useCronTasks(adapter: CronAdapter, sessionIds?: string[]) {
   }, [adapter]);
   useEffect(() => {
     let disposed = false;
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // The nav row that owns this hook is mounted for the whole session, so the
+    // 5s poll previously kept running (sending every session id) while the
+    // window was hidden or minimized. Poll only while the document is visible
+    // and refresh immediately when it becomes visible again.
     const poll = async () => {
       await refresh();
-      if (!disposed) timer = setTimeout(() => void poll(), 5000);
+      if (disposed || document.hidden) return;
+      timer = setTimeout(() => void poll(), 5000);
     };
+    const onVisibility = () => {
+      clearTimeout(timer);
+      timer = undefined;
+      if (!document.hidden) void poll();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     void poll();
     return () => {
       disposed = true;
       ++revision.current;
       clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [refresh]);
   return { tasks, loading, error, setError, refresh };

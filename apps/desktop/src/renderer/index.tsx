@@ -101,7 +101,13 @@ void (async () => {
   try {
     const boot = await window.amiba.dshClient.boot();
     installDshClientTransport(boot.baseUrl);
-    installDshClientDevReload();
+    // DSH client rebuild SSE + auto-reload is a development affordance. In
+    // packaged builds the plugin bundles are frozen, so keeping the EventSource
+    // open per renderer just holds a dead long-lived connection; the main
+    // process tags packaged windows with `packaged=1` (see index.ts loadFile).
+    if (new URLSearchParams(location.search).get("packaged") !== "1") {
+      installDshClientDevReload();
+    }
     // DSH Client plugins run under the app origin here, so `location.origin`
     // never reaches the managed runtime authority. Publish it as a DOM
     // attribute contract (read by dsh-plugin-messaging-core). This is the

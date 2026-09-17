@@ -274,6 +274,41 @@ describe("WorkspacePane responsive behavior", () => {
     expect(tabbar).toHaveClass("app-no-drag");
   });
 
+  it("keeps a closed pane out of the window drag regions", async () => {
+    const capability = {
+      files: {},
+    } as WorkspaceInspectorCapability;
+
+    render(
+      <WorkspacePaneProvider capability={capability} sessionId="session-1">
+        <Probe />
+        <WorkspacePane />
+      </WorkspacePaneProvider>,
+    );
+
+    const pane = document.querySelector('[aria-label="workspacePane.title"]');
+    const handle = screen.getByRole("separator");
+    // Blink turns every laid-out box whose inherited `-webkit-app-region` is
+    // `drag`/`no-drag` and whose visibility is `visible` into a window drag
+    // region (`LayoutObject::AddDraggableRegions`) and resolves overlap by
+    // layer. The pane is painted after the chat column, so a merely transparent
+    // closed pane still lays its `no-drag` tab strip and `no-drag` resize
+    // hairline over the header's `app-drag-region`: the title bar stops dragging
+    // the window across the pane's whole width. `invisible` drops the subtree —
+    // tab strip included, since visibility is inherited — from that region list
+    // without moving it.
+    expect(pane).toHaveClass("invisible");
+    expect(pane).toHaveClass("transition-[transform,opacity,visibility]");
+    expect(handle).toHaveClass("invisible");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "toggle workspace" }),
+    );
+
+    expect(pane).not.toHaveClass("invisible");
+    expect(handle).not.toHaveClass("invisible");
+  });
+
   it("prepares and marks an addressed background checkpoint without changing the foreground pane", async () => {
     const checkpoint = { id: "background-point", sessionId: "background", label: "Before task 5", createdAt: 1,
       changedFiles: 0, kind: "turn-start" as const, turnIndex: 4, hasChanges: false, complete: true };

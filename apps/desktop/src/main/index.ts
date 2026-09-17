@@ -532,7 +532,12 @@ function createWindow() {
     }
   } else {
     win.loadFile(path.join(__dirname, "../renderer/index.html"), {
-      query: { startupTheme: startupWindowTheme },
+      query: {
+        startupTheme: startupWindowTheme,
+        // Lets the renderer skip dev-only machinery (DSH client rebuild SSE)
+        // in packaged builds while keeping it in `electron-vite preview`.
+        ...(app.isPackaged ? { packaged: "1" } : {}),
+      },
     });
   }
 }

@@ -343,14 +343,36 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
       return;
     }
     let disposed = false;
+    let streaming = false;
     const unsubscribe = adapter.onFrame(previewTab.browserTabId, (next) => {
       if (!disposed) setFrame(next.data);
     });
-    void adapter.startFrameStream(previewTab.browserTabId, PREVIEW_CARD_WIDTH * 2);
+    const start = () => {
+      if (streaming || disposed) return;
+      streaming = true;
+      void adapter.startFrameStream(
+        previewTab.browserTabId,
+        PREVIEW_CARD_WIDTH * 2,
+      );
+    };
+    const stop = () => {
+      if (!streaming || disposed) return;
+      streaming = false;
+      void adapter.stopFrameStream(previewTab.browserTabId).catch(() => {});
+    };
+    // The frame stream forces the previewed page to keep producing frames and
+    // encodes ~10 JPEGs per second in the main process. When the window is
+    // hidden or backgrounded nobody is looking at the preview, so stop the
+    // stream (and restart it on visibility) instead of paying for it for as
+    // long as the summary panel happens to stay open.
+    const onVisibility = () => (document.hidden ? stop() : start());
+    document.addEventListener("visibilitychange", onVisibility);
+    if (!document.hidden) start();
     return () => {
       disposed = true;
+      document.removeEventListener("visibilitychange", onVisibility);
       unsubscribe();
-      void adapter.stopFrameStream(previewTab.browserTabId).catch(() => {});
+      stop();
       setFrame(null);
     };
   }, [adapter, previewTab]);

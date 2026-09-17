@@ -720,6 +720,29 @@ function ProductShellInner({
     [renderSlot],
   );
 
+  // Message-list slot renderers with STABLE identities. ChatSurface renders
+  // MessageTurns on every streaming flush, and each bubble is memoized on its
+  // props — so any inline arrow rebuilt here would churn every bubble's
+  // identity and defeat that memo. `openExternal` never changes and
+  // `loadMessageImage` is a per-session stable loader, so both callbacks stay
+  // referentially stable across flushes while still updating when their real
+  // dependencies change.
+  const openAgentDestination = useCallback(
+    (url: string) => platform.shell.openExternal(url),
+    [platform],
+  );
+  const renderMessageImages = useCallback(
+    (images: NonNullable<import("@amiba/app-runtime/protocol").ChatMessage["images"]>) =>
+      loadMessageImage
+        ? renderSlot("conversation.message.images", {
+            images,
+            loadImage: loadMessageImage,
+            align: "end",
+          })
+        : null,
+    [loadMessageImage, renderSlot],
+  );
+
   const { onboardingStepId, completeOnboardingStep } = settings;
 
   const openSession = useCallback(
@@ -843,7 +866,7 @@ function ProductShellInner({
                 if (tab) window.location.hash = tab;
                 settings.openAt();
               }}
-              openAgentDestination={(url) => platform.shell.openExternal(url)}
+              openAgentDestination={openAgentDestination}
               topBarLeftInset={topBarLeftInset}
               topBarHeightPx={topBarHeightPx}
               topBarClassName={desktop ? "app-drag-region" : undefined}
@@ -907,7 +930,7 @@ function ProductShellInner({
                 timelineRows: commandRows,
                 turnTailAnchors,
                 turnTail: (runtimeTurn, openFile) => <TurnTail source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} render={owner => renderSlotChain("conversation.chat.turnTail", owner)} />,
-                messageImages: images => loadMessageImage ? renderSlot("conversation.message.images", { images, loadImage: loadMessageImage, align: "end" }) : null,
+                messageImages: renderMessageImages,
                 approvalDetail: (callId) => renderSlot("conversation.approval.detail", { callId }),
                 assistantActions: (messageId) => renderSlot("conversation.chat.assistant-actions", { messageId: messageId as import("@amiba/extension-sdk").AssistantActionOwnerProps["messageId"] }),
                 toolView: renderToolViewSeat,
