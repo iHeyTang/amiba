@@ -590,7 +590,10 @@ class EmbeddedBrowserController {
       typeof widthValue === "number" ? Math.max(96, Math.round(widthValue)) : 320;
     const FRAME_INTERVAL_MS = 100;
     let lastEmit = 0;
-    entry.contents.beginFrameSubscription(true, (image) => {
+    // `onlyDirty: false` — a parked, already-loaded page does not repaint, so
+    // a dirty-only subscription would never emit and the preview would stay
+    // blank. Capture every frame and throttle to ~10fps below.
+    entry.contents.beginFrameSubscription(false, (image) => {
       const now = Date.now();
       if (now - lastEmit < FRAME_INTERVAL_MS) return;
       lastEmit = now;

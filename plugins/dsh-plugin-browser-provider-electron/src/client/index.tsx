@@ -331,18 +331,14 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
     return () => summaryPreviewViewport.register(null);
   }, [previewTab, sessionId]);
 
-  // Once the workbench is actually showing the browser, the live webview lives
-  // there; the preview streams its rendered frames so it keeps following the
-  // page instead of holding a stale still.
-  const workbenchShowingBrowser = pane.open && pane.mode === "preview";
-
+  // Stream the tab's rendered frames for the preview. The frame subscription
+  // captures the page at its real size regardless of the workbench state, so
+  // the card keeps a live, correctly-scaled picture whether or not the
+  // workbench is open. The scaled live-webview fallback is unreliable (it
+  // renders blank and bleeds past the card's rounded corners), so the frame is
+  // the single source of truth for the preview.
   useEffect(() => {
-    if (
-      !workbenchShowingBrowser ||
-      !adapter ||
-      !previewTab ||
-      previewTab.url === "about:blank"
-    ) {
+    if (!adapter || !previewTab || previewTab.url === "about:blank") {
       return;
     }
     let disposed = false;
@@ -356,7 +352,7 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
       void adapter.stopFrameStream(previewTab.browserTabId).catch(() => {});
       setFrame(null);
     };
-  }, [workbenchShowingBrowser, adapter, previewTab]);
+  }, [adapter, previewTab]);
 
   return (
     <div className="flex flex-col gap-2">
@@ -385,7 +381,7 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
         >
           {/* The viewport the host positions the scaled webview over. */}
           <div ref={previewRef} className="absolute inset-0" />
-          {workbenchShowingBrowser && frame ? (
+          {frame ? (
             <img
               src={`data:image/jpeg;base64,${frame}`}
               alt=""
