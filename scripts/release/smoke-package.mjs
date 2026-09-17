@@ -66,8 +66,10 @@ if (process.platform === 'win32') {
 }
 if (packageManifest.macSigning === 'unsigned' && packageManifest.distributable) {
   assert.equal(packageManifest.autoUpdate, false);
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(resources, 'release-config.json'))).sources, []);
-  console.log('Verified unsigned macOS release: automatic updates disabled');
+  const releaseConfig = JSON.parse(fs.readFileSync(path.join(resources, 'release-config.json')));
+  assert.deepEqual(releaseConfig.sources, []);
+  assert.match(releaseConfig.manual?.repository ?? '', /^[\w.-]+\/[\w.-]+$/, 'Unsigned macOS release must advertise the manual update feed');
+  console.log('Verified unsigned macOS release: in-place updates disabled, manual update feed advertised');
 }
 // Older artifacts can still be installed in verify mode; new packages must satisfy pruning checks.
 if (fs.existsSync(path.join(output, 'package-footprint.json'))) verifyPackageContents(resources, target);

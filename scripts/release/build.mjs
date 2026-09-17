@@ -7,7 +7,7 @@ import { productVersion } from './version.mjs';
 import { sourceIdentity } from './provenance.mjs';
 import { preflightRelease } from './release-policy.mjs';
 import { recordArtifacts, metadataName } from './artifacts.mjs';
-import { releaseSettings, targets } from './config.mjs';
+import { releaseSettings, releaseConfigFile, targets } from './config.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const desktop = path.join(root, 'apps/desktop');
 const target = process.argv[2] || `${process.platform}-${process.arch}`;
@@ -40,7 +40,10 @@ const stagedRuntime = path.join(output, '.package-resources', 'dsh-runtime');
 const footprint = await stageRuntime(path.join(root, 'packages/app-runtime/resources/dsh-runtime'), stagedRuntime, target);
 console.log('Runtime staging:', JSON.stringify(footprint));
 const sourceFile = path.join(output, 'release-config.json');
-fs.writeFileSync(sourceFile, JSON.stringify({ sources: settings.sources }, null, 2));
+fs.writeFileSync(sourceFile, JSON.stringify(releaseConfigFile(
+  { repository: settings.repo, sources: settings.sources },
+  { distributable: !localOnly, target },
+), null, 2));
 const pkg = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json')));
 const config = {
   ...pkg.build,
