@@ -3911,7 +3911,12 @@ export function WorkspacePane({
         onPointerDown={onResizeStart}
         className={cn(
           "app-no-drag group absolute inset-y-0 left-0 z-[calc(var(--z-workbench,50)+1)] w-3 -translate-x-1/2 cursor-col-resize touch-none outline-none",
-          pane.open ? "opacity-100" : "opacity-0",
+          // `invisible`, not merely transparent: Blink turns every laid-out box
+          // whose inherited `-webkit-app-region` is `drag`/`no-drag` and whose
+          // visibility is `visible` into a window drag region
+          // (`LayoutObject::AddDraggableRegions`), and this `app-no-drag`
+          // hairline spans the title bar's height at the row's edge.
+          pane.open ? "opacity-100" : "invisible opacity-0",
         )}
       >
         <div className="absolute inset-y-0 left-1/2 w-px bg-border transition-colors group-hover:bg-primary/60 group-focus-visible:bg-primary/60 group-active:bg-primary/80" />
@@ -3928,8 +3933,23 @@ export function WorkspacePane({
         aria-label={t("workspacePane.title")}
         aria-hidden={!pane.open}
         className={cn(
-          "absolute inset-y-0 right-0 flex h-full min-h-0 flex-col overflow-hidden bg-background transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none",
-          pane.open ? "translate-x-0 opacity-100" : "translate-x-4 opacity-0",
+          // A closed pane keeps its width and geometry — opening it must start
+          // from the laid-out frame — but it must stop being a window drag
+          // region. Blink turns every laid-out box whose inherited
+          // `-webkit-app-region` is `drag`/`no-drag` and whose visibility is
+          // `visible` into a region (`LayoutObject::AddDraggableRegions`) and
+          // resolves overlap by layer. The pane is painted after the chat
+          // column, so while it is merely transparent its `no-drag` tab strip
+          // sits on top of the header's `app-drag-region` and the title bar
+          // stops dragging the window across the pane's whole width.
+          //
+          // `invisible` leaves layout, hit testing and the resize maths
+          // untouched while dropping this subtree — the tab strip included,
+          // since visibility is inherited — out of that region list.
+          // Transitioning `visibility` keeps the slide-out painted for its
+          // 200ms and only then hides it.
+          "absolute inset-y-0 right-0 flex h-full min-h-0 flex-col overflow-hidden bg-background transition-[transform,opacity,visibility] duration-200 ease-out motion-reduce:transition-none",
+          pane.open ? "translate-x-0 opacity-100" : "translate-x-4 invisible opacity-0",
         )}
         style={{
           width: renderedWidth,
@@ -3937,8 +3957,10 @@ export function WorkspacePane({
       >
         <div
           data-workspace-tabbar
-          // Electron drag regions remain active even inside transparent,
-          // pointer-events-none elements. A closed pane must release the header.
+          // An open pane's strip is a window drag region. The closed pane is
+          // `invisible` (see the `aside` note above), which already removes
+          // this `no-drag` strip from the region list; this opt-out only has
+          // to hold while the pane is still painting its slide-out.
           className={cn(
             "flex h-11 shrink-0 items-center bg-background pl-2",
             pane.open ? "app-drag-region" : "app-no-drag",
