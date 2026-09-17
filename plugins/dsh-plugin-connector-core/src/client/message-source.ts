@@ -25,7 +25,16 @@ export function createConnectorMessageSource(load: () => Promise<ConnectorMessag
     } finally { loading = false; }
   };
   void refresh();
-  const timer = setInterval(() => { void refresh(); }, 15000);
+  // Don't poll for source names while the window is hidden; refresh on
+  // visibility so the labels are current when the user comes back.
+  const onVisibility = () => {
+    if (!document.hidden) void refresh();
+  };
+  const timer = setInterval(() => {
+    if (document.hidden) return;
+    void refresh();
+  }, 15000);
+  document.addEventListener("visibilitychange", onVisibility);
   return {
     face: {
       resolve: id => {
@@ -42,6 +51,11 @@ export function createConnectorMessageSource(load: () => Promise<ConnectorMessag
       },
       subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     },
-    dispose() { disposed = true; clearInterval(timer); listeners.clear(); },
+    dispose() {
+      disposed = true;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      listeners.clear();
+    },
   };
 }
