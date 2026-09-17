@@ -1336,14 +1336,14 @@ export default function ChatSurface({
       rejectPendingTurn(sessionId, new Error(event.message));
       return;
     }
+    stream.finishCompactions();
+    stream.cancelStreamChunkFlush();
+    stream.applyVerboseToAssistant();
+    stream.cancelVerboseFlush();
+    stream.flushStreamChunksToMessages();
     const assistantUiId = stream.getCurrentAssistantUiId() ?? null;
     stream.reset();
-    if (!admission?.protectsQueue) setPendingQueue((pq) => {
-      deleteUnretainedAttachments(pq.flatMap(q => q.attachments), attachments);
-      return [];
-    });
-    // Errors wipe the queue, so the paused flag (if any) is meaningless now.
-    if (!admission?.protectsQueue) setQueuePaused(false);
+    setQueuePaused(true);
     resetApprovals();
     resetQuestions();
     setError({
@@ -1354,12 +1354,29 @@ export default function ChatSurface({
     });
     if (assistantUiId) {
       sessions.setActiveMessages((prev) =>
-        (prev as UiMessage[]).filter((m) => m.uiId !== assistantUiId),
+        settleStreamingMessage(prev as UiMessage[], assistantUiId),
       );
     }
     setBusy(false);
     inFlightTurnByIdRef.current.delete(sessionId);
     rejectPendingTurn(sessionId, new Error(event.message));
+    void sessions.recoverMessages(sessionId).catch(() => { /* Keep the locally flushed evidence if history is offline. */ });
+  }
+
+  const retryRunLocks = useRef(new Set<string>());
+  async function retryFailedRun(): Promise<void> {
+    const sessionId = sessions.activeId;
+    if (busy || readOnly || retryRunLocks.current.has(sessionId) || !sessionId) return;
+    retryRunLocks.current.add(sessionId);
+    try {
+      // A rejected submission is retained in the queue, including attachments.
+      // Accepted runs continue against native history instead of replaying input.
+      if (nativeAdmissions.current.get(sessionId)?.protectsQueue && pendingQueue[0]) {
+        await sendQueueItemNow(pendingQueue[0].queueId);
+      } else {
+        await runChatTurn({ text: t("sidepanel.retry.prompt"), attachments: [] });
+      }
+    } finally { retryRunLocks.current.delete(sessionId); }
   }
 
   function handleStreamEvent(sessionId: string, event: StreamEvent): void {
@@ -1444,6 +1461,9 @@ export default function ChatSurface({
         break;
       case "toolProgress":
         stream.onToolProgress(event.event);
+        break;
+      case "retry":
+        stream.onRetry(event.event);
         break;
       case "compaction":
         stream.onCompaction(event.event);
@@ -2385,7 +2405,7 @@ export default function ChatSurface({
                 </div>
                 <div className={cn("w-full", "max-w-2xl")}>{composerNode}</div>
                 {error && (
-                  <ErrorBlock error={error} onOpenSettings={openSettings} />
+                  <ErrorBlock error={error} onOpenSettings={openSettings} onRetry={error.source === "run" && sessions.activeId ? () => void retryFailedRun() : undefined} retryDisabled={busy} />
                 )}
               </div>
             )
@@ -2476,7 +2496,7 @@ export default function ChatSurface({
                 </MessageNoticeRendererContext.Provider>
 
                 {error && (
-                  <ErrorBlock error={error} onOpenSettings={openSettings} />
+                  <ErrorBlock error={error} onOpenSettings={openSettings} onRetry={error.source === "run" && sessions.activeId ? () => void retryFailedRun() : undefined} retryDisabled={busy} />
                 )}
               </div>
             </ScrollArea>

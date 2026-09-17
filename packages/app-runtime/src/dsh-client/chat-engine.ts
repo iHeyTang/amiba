@@ -1,3 +1,4 @@
+import { upsertRetryTimeline } from "./retry";
 import { appendAssistantText, applyAssistantTextSource } from "./assistant-text-source";
 import { upsertCompactionTimeline, interruptOpenCompactions } from "./compaction.js";
 import type {
@@ -367,6 +368,7 @@ export class DshChatEngineClient implements ChatEngineClient {
       case "reasoning":
       case "toolCalls":
       case "toolProgress":
+      case "retry":
       case "compaction":
         if (!state?.passive) return;
         this.emit(sessionId, event);
@@ -411,6 +413,9 @@ export class DshChatEngineClient implements ChatEngineClient {
         state.reasoningEndedAt = now;
         break;
       }
+      case "retry":
+        upsertRetryTimeline(state.timeline, event.event);
+        break;
       case "compaction":
         upsertCompactionTimeline(state.timeline, event.event);
         break;

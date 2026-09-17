@@ -85,6 +85,7 @@ export interface UiMessage extends ChatMessage {
  * UI can extend it later without breaking the wire protocol.
  */
 export type AssistantTimelineItem =
+  | Extract<import("@amiba/app-runtime/protocol").AssistantTimelineItem, { kind: "retry" }>
   | Extract<import("@amiba/app-runtime/core").AssistantTimelineItem, { kind: "text" }>
   | { kind: "reasoning"; id: string; text: string; startedAt?: number; endedAt?: number }
   | { kind: "tool"; id: string; toolCallId: string }

@@ -1,3 +1,4 @@
+import type { AssistantTimelineItem } from "@amiba/app-runtime/protocol";
 import { toolCallTreeContains } from "./nested-tool-calls";
 import { toolCallBlockFromProgress } from "./tool-call-block";
 import { WorkbenchViewBoundary } from "../workbench-extensions";
@@ -227,7 +228,7 @@ function hasInterleavedAssistantTimeline(message: UiMessage): boolean {
   const timeline = message.assistantTimeline ?? [];
   return (
     (timeline.length > 0 && !!message.streaming) ||
-    timeline.some(item => item.kind === "reasoning" || item.kind === "compaction") ||
+    timeline.some(item => item.kind === "reasoning" || item.kind === "compaction" || item.kind === "retry") ||
     timeline.some(
       (item) => item.kind === "text" && item.text.trim().length > 0,
     ) && timeline.some((item) => item.kind !== "text")
@@ -1192,6 +1193,7 @@ function buildTurnReplyItems(replies: UiMessage[]): TurnReplyItem[] {
 }
 
 type AssistantFlowItem =
+  | Extract<AssistantTimelineItem, {kind:"retry"}>
   | { kind: "compaction"; id: string; compaction: CompactionProgress }
   | { kind: "text"; id: string; text: string; sources: TextSourceRange[] }
   | {
@@ -1258,7 +1260,7 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
       pendingDetails.push({kind:"reasoning",id:item.id,text:item.text,reasoningMs:item.startedAt !== undefined && item.endedAt !== undefined ? Math.max(0,item.endedAt-item.startedAt) : undefined});
     } else if (item.kind === "tool") {
       appendTool(item.id, item.toolCallId);
-    } else if (item.kind === "compaction") {
+    } else if (item.kind === "compaction" || item.kind === "retry") {
       flushExecution();
       flow.push(item);
     } else {
@@ -1310,6 +1312,7 @@ function InterleavedAssistantFlow({
   suppressRunBoundary?: boolean;
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
 }) {
+  const { t } = useT();
   const executionNotices = useContext(ExecutionNoticesContext);
   const awaitingUserInput = useContext(AwaitingUserInputContext);
   const flow = buildAssistantFlow(message);
@@ -1342,12 +1345,13 @@ function InterleavedAssistantFlow({
   const resultText = resultSource.text.trim();
   const resultStreaming = !!message.streaming;
   const processStreaming = resultStreaming && resultText.length === 0;
-  const hasCompactions = flow.some(segment => segment.kind === "compaction");
+  const hasLifecycleRecords = flow.some(segment => segment.kind === "compaction" || segment.kind === "retry");
   const compacting = flow.some(segment => segment.kind === "compaction" && segment.compaction.status === "running");
   // The execution tail owns its live label or its completed row + fallback.
   // Historical disclosures above subsequent prose must not suppress it.
   const tailOwnsActivity = flow.at(-1)?.kind === "execution";
-  const showRunning = resultStreaming && !awaitingUserInput && !compacting && !tailOwnsActivity;
+  const retrying = flow.at(-1)?.kind === "retry";
+  const showRunning = !retrying && resultStreaming && !awaitingUserInput && !compacting && !tailOwnsActivity;
 
   const flowRef = useRef<HTMLDivElement>(null);
   const liveHeight = useRef(0);
@@ -1429,7 +1433,7 @@ function InterleavedAssistantFlow({
   return (
     <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
       <div ref={flowRef} className="flex min-w-0 flex-col gap-2">
-        {resultStreaming || hasCompactions ? (
+        {resultStreaming || hasLifecycleRecords ? (
           <>
             {trace.reasoningText.length > 0 &&
               !message.assistantTimeline?.some(
@@ -1445,7 +1449,11 @@ function InterleavedAssistantFlow({
                 />
               )}
             {flow.map((segment, index) =>
-              segment.kind === "compaction" ? (
+              segment.kind === "retry" ? (
+                <div key={segment.id} role="status" className="my-2 text-xs text-muted-foreground" data-retry-attempt={segment.retry.attempt}>
+                  {t(resultStreaming && index === flow.length - 1 ? (segment.retry.status === "waiting" ? "sidepanel.retry.waiting" : "sidepanel.retry.started") : "sidepanel.retry.record", { attempt: segment.retry.attempt, seconds: Math.ceil(segment.retry.delayMs / 1000) })}
+                </div>
+              ) : segment.kind === "compaction" ? (
                 <CompactionRow key={segment.id} compaction={segment.compaction} live={resultStreaming} />
               ) : segment.kind === "text" ? (
                 <div
