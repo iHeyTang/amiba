@@ -285,8 +285,10 @@ const PREVIEW_CARD_HEIGHT = 200;
  */
 function BrowserSummary({ sessionId }: { sessionId: string }) {
   const pane = useWorkspacePane();
+  const adapter = useBrowserAdapter();
   const { t } = useBrowserT();
   const [expanded, setExpanded] = useState(false);
+  const [snapshot, setSnapshot] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const tabs = pane.resources
     .filter((entry) => entry.sessionId === sessionId)
@@ -301,8 +303,19 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
       </div>
     );
   }
-  const open = (tabId: string) =>
+  // Capture a snapshot before the workbench takes the live webview, so the
+  // preview can hold a blurred still instead of going blank during the handoff.
+  const open = (tabId: string) => {
+    if (adapter) {
+      void adapter
+        .command(tabId, { action: "capture" })
+        .then((state) => {
+          if (state.screenshot) setSnapshot(state.screenshot);
+        })
+        .catch(() => {});
+    }
     pane.focusResourceIn(sessionId, "browser", tabId);
+  };
   const active = pane.activeTab?.resource;
   const activeBrowserId =
     active?.kind === "extension"
@@ -328,6 +341,10 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
     );
     return () => summaryPreviewViewport.register(null);
   }, [previewTab, sessionId]);
+
+  // Once the workbench is actually showing the browser, the live webview lives
+  // there; the preview holds a blurred still of its last frame.
+  const workbenchShowingBrowser = pane.open && pane.mode === "preview";
 
   return (
     <div className="flex flex-col gap-2">
@@ -356,6 +373,16 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
         >
           {/* The viewport the host positions the scaled webview over. */}
           <div ref={previewRef} className="absolute inset-0" />
+          {workbenchShowingBrowser && snapshot ? (
+            <>
+              <img
+                src={`data:image/png;base64,${snapshot}`}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover object-top"
+              />
+              <div className="absolute inset-0 bg-background/40 backdrop-blur-sm" />
+            </>
+          ) : null}
           <span className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/60 to-transparent px-2 py-1.5 text-[10px] text-white">
             {previewTab.favicon ? (
               <img
@@ -426,12 +453,6 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
   );
 }
 
-const browserSummary: WorkbenchSummaryContribution = {
-  id: "amiba.browser.summary",
-  order: 100,
-  component: BrowserSummary,
-};
-
 export async function apply(ctx: ClientContext): Promise<void> {
   const bridge = getPlatform().nativeExtensions;
   if (!bridge) return;
@@ -448,7 +469,17 @@ export async function apply(ctx: ClientContext): Promise<void> {
     "@amiba/dsh-plugin-browser-provider-electron",
   );
   if (disposed) return;
-  const browserView = createBrowserView(createBrowserAdapter(bridge, lease));
+  const adapter = createBrowserAdapter(bridge, lease);
+  const browserView = createBrowserView(adapter);
+  const browserSummary: WorkbenchSummaryContribution = {
+    id: "amiba.browser.summary",
+    order: 100,
+    component: ({ sessionId }) => (
+      <BrowserAdapterContext.Provider value={adapter}>
+        <BrowserSummary sessionId={sessionId} />
+      </BrowserAdapterContext.Provider>
+    ),
+  };
   const disposeView = ctx.slots.inject("amiba.workbench.view", () =>
     ctx.slots.register(
       {

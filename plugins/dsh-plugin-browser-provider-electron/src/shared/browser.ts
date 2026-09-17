@@ -5,7 +5,8 @@ export type EmbeddedBrowserCommand =
   | { action: "forward" }
   | { action: "reload" }
   | { action: "hardReload" }
-  | { action: "stop" };
+  | { action: "stop" }
+  | { action: "capture" };
 
 export interface EmbeddedBrowserPageState {
   tab_id: string;
@@ -14,6 +15,8 @@ export interface EmbeddedBrowserPageState {
   can_go_back: boolean;
   can_go_forward: boolean;
   loading: boolean;
+  /** Present for a `capture` command: a base64 PNG of the rendered page. */
+  screenshot?: string;
 }
 
 /**

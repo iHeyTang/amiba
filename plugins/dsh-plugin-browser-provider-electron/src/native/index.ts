@@ -41,7 +41,8 @@ type BrowserCommand =
   | { action: "forward" }
   | { action: "reload" }
   | { action: "hardReload" }
-  | { action: "stop" };
+  | { action: "stop" }
+  | { action: "capture" };
 
 interface ConsoleEntry {
   level: number;
@@ -68,6 +69,8 @@ interface BrowserPageState {
   can_go_back: boolean;
   can_go_forward: boolean;
   loading: boolean;
+  /** Present for a `capture` command: a base64 PNG of the rendered page. */
+  screenshot?: string;
 }
 
 function objectArguments(value: unknown): Record<string, unknown> {
@@ -559,7 +562,12 @@ class EmbeddedBrowserController {
     } else if (command.action === "stop") {
       entry.contents.stop();
     }
-    return this.pageState(entry);
+    const state = this.pageState(entry);
+    if (command.action === "capture") {
+      const image = await entry.contents.capturePage();
+      state.screenshot = image.toPNG().toString("base64");
+    }
+    return state;
   }
 
   platformOperations(): readonly DshNativeOperation[] {
