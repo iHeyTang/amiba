@@ -40,7 +40,9 @@ type BrowserCommand =
   | { action: "back" }
   | { action: "forward" }
   | { action: "reload" }
-  | { action: "stop" };
+  | { action: "hardReload" }
+  | { action: "stop" }
+  | { action: "capture" };
 
 interface ConsoleEntry {
   level: number;
@@ -67,6 +69,8 @@ interface BrowserPageState {
   can_go_back: boolean;
   can_go_forward: boolean;
   loading: boolean;
+  /** Present for a `capture` command: a base64 PNG of the rendered page. */
+  screenshot?: string;
 }
 
 function objectArguments(value: unknown): Record<string, unknown> {
@@ -238,6 +242,8 @@ class EmbeddedBrowserController {
   private disposed = false;
   private readonly pending = new Set<(error: Error) => void>();
   private readonly cleanups = new Map<string, () => void>();
+  /** Tab ids with an active frame stream (for the summary's live preview). */
+  private readonly frameStreams = new Set<string>();
   constructor(context: DesktopExtensionContext) {
     this.context = context;
   }
@@ -248,6 +254,7 @@ class EmbeddedBrowserController {
   dispose(): void {
     this.disposed = true;
     this.cookieImporter.dispose();
+    this.frameStreams.clear();
     for (const reject of [...this.pending])
       reject(new Error("Browser plugin unloaded"));
     for (const entry of [...this.tabs.values()]) {
@@ -415,6 +422,10 @@ class EmbeddedBrowserController {
           input.tabId,
           input.command as BrowserCommand,
         );
+      case "start-frame-stream":
+        return this.startFrameStream(owner, input.tabId, input.width);
+      case "stop-frame-stream":
+        return this.stopFrameStream(owner, input.tabId);
       case "detect-dev-servers":
         return detectDevServers();
       case "open-external": {
@@ -514,6 +525,7 @@ class EmbeddedBrowserController {
     const tabId = this.validateTabId(tabIdValue);
     const key = browserTabKey(owner.id, tabId);
     const entry = this.tabs.get(key);
+    this.frameStreams.delete(tabId);
     this.cleanups.get(key)?.();
     this.cleanups.delete(key);
     this.tabs.delete(key);
@@ -553,10 +565,52 @@ class EmbeddedBrowserController {
       entry.contents.navigationHistory.goForward();
     } else if (command.action === "reload") {
       entry.contents.reload();
+    } else if (command.action === "hardReload") {
+      entry.contents.reloadIgnoringCache();
     } else if (command.action === "stop") {
       entry.contents.stop();
     }
-    return this.pageState(entry);
+    const state = this.pageState(entry);
+    if (command.action === "capture") {
+      const image = await entry.contents.capturePage();
+      state.screenshot = image.toPNG().toString("base64");
+    }
+    return state;
+  }
+
+  /** Stream the tab's rendered frames to the renderer (~10fps JPEG), for the summary's live preview. */
+  private startFrameStream(
+    owner: WebContents,
+    tabIdValue: unknown,
+    widthValue: unknown,
+  ): void {
+    const entry = this.entryFor(owner, tabIdValue);
+    this.stopFrameStream(owner, tabIdValue);
+    const width =
+      typeof widthValue === "number" ? Math.max(96, Math.round(widthValue)) : 320;
+    const FRAME_INTERVAL_MS = 100;
+    let lastEmit = 0;
+    entry.contents.beginFrameSubscription(true, (image) => {
+      const now = Date.now();
+      if (now - lastEmit < FRAME_INTERVAL_MS) return;
+      lastEmit = now;
+      try {
+        const resized = image.resize({ width });
+        this.send(entry, "embedded-browser:frame", {
+          tabId: entry.tabId,
+          data: resized.toJPEG(70).toString("base64"),
+        });
+      } catch {
+        // Resize/encode failures are non-fatal for a preview.
+      }
+    });
+    this.frameStreams.add(entry.tabId);
+  }
+
+  private stopFrameStream(owner: WebContents, tabIdValue: unknown): void {
+    const entry = this.entryFor(owner, tabIdValue);
+    if (!this.frameStreams.delete(entry.tabId)) return;
+    if (!entry.contents.isDestroyed()) entry.contents.endFrameSubscription();
   }
 
   platformOperations(): readonly DshNativeOperation[] {

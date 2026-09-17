@@ -178,6 +178,9 @@ export function registerIpcHandlers() {
   ipcMain.handle("shell:open-external", (_e, url: string) =>
     shell.openExternal(url),
   );
+  ipcMain.handle("window:close", (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
+  });
 
   ipcMain.handle("agent-diagnostics:status", () => dshDiagnostics.status());
   ipcMain.handle("agent-diagnostics:restart", () => dshDiagnostics.restart());

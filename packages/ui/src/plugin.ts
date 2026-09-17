@@ -166,6 +166,7 @@ export { MarkdownCodeView, MarkdownTableView } from "./primitives/markdown-block
 
 export { WorkbenchExtensionsProvider, WorkbenchViewBoundary } from "./chat/workbench-extensions";
 export { WorkspacePane, WorkspacePaneToggle, builtinWorkbenchViews, WorkspaceFileWorkspace, CodeEditor, PreviewHeader, useWorkspacePane, type FileResource } from "./chat/WorkspacePane";
+export { SummaryHeaderAction, SummaryContributionsProvider, useSummaryContributions } from "./chat/SummaryHeaderAction";
 
 export { ModelDetailsDialog } from "./models/ModelDetailsDialog";
 

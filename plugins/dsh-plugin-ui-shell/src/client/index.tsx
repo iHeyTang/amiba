@@ -36,8 +36,9 @@ export { cn } from "@amiba/ui/plugin";
 export { getPlatform } from "@amiba/app-runtime/platform";
 export { createSlotContributionsSource } from "./session-list-sources.js";
 import { WorkbenchExtensionsProvider } from "@amiba/ui/plugin";
-import type { WorkbenchShellExtension, WorkbenchViewExtension } from "@amiba/extension-sdk";
-import { createWorkbenchSource, createWorkbenchShellSource } from "./workbench-source.js";
+import { SummaryContributionsProvider, SummaryHeaderAction } from "@amiba/ui/plugin";
+import type { WorkbenchShellExtension, WorkbenchSummaryContribution, WorkbenchViewExtension } from "@amiba/extension-sdk";
+import { createWorkbenchSource, createWorkbenchShellSource, createSummarySource } from "./workbench-source.js";
 import type { NoticeReference } from "@amiba/app-runtime/protocol";
 import { MARKDOWN_REMOTE } from "../markdown-remote.js";
 import { createMarkdownReporter } from "./markdown-reporter.js";
@@ -291,6 +292,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     mainPanelList: ContributionsSource<MainPanelRow>;
     workbenchSource: ContributionsSource<WorkbenchViewExtension>;
     workbenchShellSource: ContributionsSource<WorkbenchShellExtension>;
+    summarySource: ContributionsSource<WorkbenchSummaryContribution>;
     directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
     conversationViews: ContributionsSource<ConversationViewEntry>;
     cordisPackages: import("./cordis-business.js").CordisPackages;
@@ -332,6 +334,7 @@ function AmibaRoot({
   markdownSource,
   workbenchSource,
   workbenchShellSource,
+  summarySource,
   directoryFlows,
   conversationViews,
   cordisPackages,
@@ -353,6 +356,7 @@ function AmibaRoot({
 }: AmibaRootProps): ReactNode {
   const workbenchShells = useSyncExternalStore(workbenchShellSource.subscribe, workbenchShellSource.getSnapshot, workbenchShellSource.getSnapshot);
   const workbench = useSyncExternalStore(workbenchSource.subscribe, workbenchSource.getSnapshot, workbenchSource.getSnapshot);
+  const summary = useSyncExternalStore(summarySource.subscribe, summarySource.getSnapshot, summarySource.getSnapshot);
   const markdown = useSyncExternalStore(markdownSource.subscribe, markdownSource.getSnapshot, markdownSource.getSnapshot);
   useEffect(() => {
     // Boot handshake: the desktop renderer waits for this (or for the
@@ -361,7 +365,7 @@ function AmibaRoot({
   }, []);
 
   return (
-    <ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench} shells={workbenchShells}><MarkdownProvider extensions={markdown} report={reportMarkdown}><AmibaProductShell
+    <ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench} shells={workbenchShells}><MarkdownProvider extensions={markdown} report={reportMarkdown}><SummaryContributionsProvider contributions={summary}><AmibaProductShell
       mainPanelList={mainPanelList}
       mainPanels={mainPanels}
       dshClient={dshClient}
@@ -391,7 +395,7 @@ function AmibaRoot({
       messageSources={messageSources}
       useOfficialSessions={useSessions}
       useOfficialWorkspaces={useWorkspaces}
-    /></MarkdownProvider></WorkbenchExtensionsProvider></ConversationSubmitProvider>
+    /></SummaryContributionsProvider></MarkdownProvider></WorkbenchExtensionsProvider></ConversationSubmitProvider>
   );
 }
 
@@ -763,6 +767,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     const markdownSource = createMarkdownSource(ctx.slots);
     const workbenchSource = createWorkbenchSource(ctx.slots);
     const workbenchShellSource = createWorkbenchShellSource(ctx.slots);
+    const summarySource = createSummarySource(ctx.slots);
     const conversationViews = createConversationViewSource(ctx.slots);
     const adoptDirectory = async (path: string) => {
       const workspaces = ctx.get("workspaces");
@@ -868,6 +873,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "amiba.workbench.panel": { kind: "list", scope: "session" },
           "amiba.workbench.view": { kind: "list", scope: "root" },
           "amiba.workbench.shell": { kind: "list", scope: "root" },
+          "amiba.workbench.summary": { kind: "list", scope: "root" },
           // Official vocabulary: the composer's floating overlay anchor,
           // from @deepseek-ai/dsh-client-ui-input-trigger (list, session
           // scope, NO owner share at all — every occupant reads its own
@@ -978,6 +984,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           markdownSource,
           workbenchSource,
           workbenchShellSource,
+          summarySource,
           directoryFlows,
           conversationViews,
           fileMentions: (...args: Parameters<import("@deepseek-ai/dsh-client-ui-chat/client").ChatFileMentions["forClosing"]>) => ctx.get("chatFileMentions")?.forClosing(...args),
@@ -1096,6 +1103,12 @@ export async function apply(ctx: ClientContext): Promise<void> {
       { name: "conversation.session.header.actions", id: "amiba-transcript", order: 10 },
       TrajectoryHeaderAction,
     );
+    // The pinned-summary popover rides the same header-action seat as the
+    // transcript, ordering after it so its icon sits to the transcript's right.
+    const disposeSummaryAction = ctx.slots.register(
+      { name: "conversation.session.header.actions", id: "amiba-summary", order: 20 },
+      SummaryHeaderAction,
+    );
     // CELL SHADOW of the official locale plugin's LanguageRow. The service,
     // persistence, dictionaries, and framework `t` seat remain official;
     // only the DSH-Menu-based pixels are replaced with @amiba/ui's Select.
@@ -1151,6 +1164,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       void languageRowFiber.dispose();
       void sessionExportFiber.dispose();
       disposeTrajectoryAction();
+      disposeSummaryAction();
       disposeCommandPopup();
       disposeSurfaceSettings();
       disposeSlashMenu();

@@ -34,6 +34,15 @@ export function createBrowserAdapter(
       call<EmbeddedBrowserPageState>("set-active-tab", { tabId }),
     command: (tabId, command) =>
       call<EmbeddedBrowserPageState>("command", { tabId, command }),
+    startFrameStream: (tabId, width) =>
+      call<void>("start-frame-stream", { tabId, width }),
+    stopFrameStream: (tabId) =>
+      call<void>("stop-frame-stream", { tabId }),
+    onFrame: (tabId, listener) =>
+      subscribe("embedded-browser:frame", (payload) => {
+        const frame = payload as { tabId: string; data: string };
+        if (frame.tabId === tabId) listener(frame);
+      }),
     detectDevServers: () => call("detect-dev-servers"),
     openExternal: (url) => call<void>("open-external", { url }),
     onCreateRequested: (listener) =>
