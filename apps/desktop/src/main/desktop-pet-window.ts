@@ -167,7 +167,12 @@ export async function installDesktopPetWindow(
       void w.loadURL(u.href);
     } else
       void w.loadFile(path.join(directory, "../renderer/index.html"), {
-        query: { desktopPet: "1" },
+        query: {
+          desktopPet: "1",
+          // Same flag as the main window: the pet renderer must not run the
+          // DSH client rebuild SSE in packaged builds either.
+          ...(app.isPackaged ? { packaged: "1" } : {}),
+        },
       });
     return w;
   };

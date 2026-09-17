@@ -63,7 +63,14 @@ interface TerminalRecord {
   title: string;
   cwd: string;
   process: IPty;
-  output: string;
+  /**
+   * Output retained as a chunk ring rather than one concatenated string:
+   * appending is amortized O(1) regardless of buffer size (previously every
+   * chunk re-concatenated the whole ~1 MB buffer, i.e. O(n²) under output
+   * storms). The snapshot string is materialized only on explicit reads.
+   */
+  chunks: string[];
+  chunksSize: number;
   sequence: number;
   startedAt: number;
   exited: boolean;
@@ -109,14 +116,29 @@ function broadcast(channel: string, payload: unknown): void {
 }
 
 function appendTerminal(record: TerminalRecord, chunk: string): void {
-  record.output = `${record.output}${chunk}`.slice(-MAX_TERMINAL_BUFFER);
+  record.chunks.push(chunk);
+  record.chunksSize += chunk.length;
+  // Trim the head while the ring exceeds the cap. Each chunk is pushed once
+  // and shifted at most once, so the append path stays amortized O(1).
+  while (record.chunksSize > MAX_TERMINAL_BUFFER && record.chunks.length > 1) {
+    record.chunksSize -= record.chunks.shift()!.length;
+  }
+  // A single chunk larger than the whole cap (pathological writes) keeps only
+  // its tail, mirroring the old `(output + chunk).slice(-MAX)` semantics.
+  if (record.chunks.length === 1 && record.chunksSize > MAX_TERMINAL_BUFFER) {
+    record.chunks[0] = record.chunks[0].slice(-MAX_TERMINAL_BUFFER);
+    record.chunksSize = record.chunks[0].length;
+  }
   record.sequence += 1;
+  // Live updates carry only the delta — the full snapshot is materialized on
+  // demand via `workspace:terminal:get` (terminalGet). Previously every chunk
+  // re-serialized up to 1 MB of output and broadcast it to every window, which
+  // saturated the main process under high-output commands.
   broadcast("workspace-terminal:data", {
     sessionId: record.sessionId,
     terminalId: record.terminalId,
     chunk,
     sequence: record.sequence,
-    snapshot: terminalSnapshot(record),
   });
 }
 
@@ -126,7 +148,7 @@ function terminalSnapshot(record: TerminalRecord): WorkspaceTerminalSnapshot {
     terminalId: record.terminalId,
     title: record.title,
     cwd: record.cwd,
-    output: record.output,
+    output: record.chunks.join(""),
     sequence: record.sequence,
     running: !record.exited,
     startedAt: record.startedAt,
@@ -1009,7 +1031,8 @@ export async function startWorkspaceTerminal(
     title: `${process.env.USER || process.env.USERNAME || "shell"}@${hostname().split(".")[0] || "local"}`,
     cwd,
     process: child,
-    output: "",
+    chunks: [],
+    chunksSize: 0,
     sequence: 0,
     startedAt: Date.now(),
     exited: false,

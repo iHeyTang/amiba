@@ -32,9 +32,11 @@ import {
 } from "lucide-react";
 import {
   createContext,
+  memo,
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -246,7 +248,7 @@ function hasInterleavedAssistantTimeline(message: UiMessage): boolean {
  *                   audit trail, and "Open in my browser →" chip.
  *  - other roles  — minimal grey monospace box for visibility.
  */
-export function Bubble({
+function BubbleUnmemoized({
   m,
   messageImages,
   suppressTrace = false,
@@ -991,7 +993,7 @@ function ExecutionDisclosure({
 }
 
 /** Collapses adjacent execution-only messages that lack per-tool details. */
-function TurnExecutionDisclosure({ messages }: { messages: UiMessage[] }) {
+function TurnExecutionDisclosureUnmemoized({ messages }: { messages: UiMessage[] }) {
   const awaitingUserInput = useContext(AwaitingUserInputContext);
   const notices = useContext(ExecutionNoticesContext);
   const details: TurnTraceDetail[] = [];
@@ -1057,6 +1059,20 @@ function TurnExecutionDisclosure({ messages }: { messages: UiMessage[] }) {
     </div>
   );
 }
+
+/**
+ * Memoized with a reference-level messages check: the `messages` array passed
+ * in is rebuilt on every render, but its elements keep their identity for
+ * completed turns, so unchanged execution disclosures skip re-rendering
+ * (including their per-message `resolveAssistantTrace` work) during a live
+ * stream flush.
+ */
+const TurnExecutionDisclosure = memo(
+  TurnExecutionDisclosureUnmemoized,
+  (prev, next) =>
+    prev.messages.length === next.messages.length &&
+    prev.messages.every((message, index) => message === next.messages[index]),
+);
 
 type TurnReplyItem =
   | {
@@ -1537,13 +1553,31 @@ function InterleavedAssistantFlow({
 }
 
 /**
+ * Memoized bubble. The comparator is React's default shallow compare, so a
+ * bubble re-renders only when its message identity, its structural flags, or
+ * one of the shell's render-prop capabilities actually changes.
+ *
+ * What this buys: any ChatSurface render that is NOT caused by the message
+ * list (composer typing, busy/error toggles, layout state) now leaves every
+ * completed bubble untouched instead of re-running each bubble body.
+ *
+ * What it does not buy yet: a streaming flush also re-renders the shell above
+ * ChatSurface, which rebuilds the inline slot arrows (e.g. `messageImages` in
+ * product-shell) with a fresh identity — that churn defeats the compare for
+ * that render path. Stabilizing those slot identities at the shell is the
+ * follow-up; deliberately ignoring them here is not an option because the
+ * slot can legitimately change or disappear (MessageChrome covers that).
+ */
+export const Bubble = memo(BubbleUnmemoized);
+
+/**
  * Sticky user-question strip with a static height cap.
  *
  * Long bubbles are always capped; a fade overlay + a "more" button appear at
  * the bottom when content overflows the cap. Short bubbles render unmodified.
  * No scroll listener, no layout feedback loop, no flicker.
  */
-export function UserStickyBubble({
+function UserStickyBubbleUnmemoized({
   m,
   messageImages,
   onOpenAgentDestination,
@@ -1700,6 +1734,15 @@ export function UserStickyBubble({
 }
 
 /**
+ * Memoized sticky user bubble. Default shallow compare: the user message
+ * reference is stable for every turn except the one being updated, so renders
+ * that do not touch that turn (composer typing, layout state) skip its body
+ * entirely. A streaming flush still rebuilds the shell's slot arrows, so that
+ * path bails only once those identities are stabilized at the shell.
+ */
+export const UserStickyBubble = memo(UserStickyBubbleUnmemoized);
+
+/**
  * Group the flat message list into "turns" (one user message + the assistant
  * replies that follow it, up to the next user message) and pin each user
  * bubble to the top of the scroll viewport via `position: sticky`. While the
@@ -1752,63 +1795,73 @@ export function MessageTurns({
     replies: UiMessage[];
     userOrdinal: number;
   };
-  // Presentation-only anchors never enter the session store or submission history.
-  const replacedMessages = new Set((timelineRows ?? []).flatMap(row => row.replaceMessageId ? [row.replaceMessageId] : []));
-  const anchoredMessages = messages.filter(message => !replacedMessages.has(message.uiId));
-  const presentTurns = new Set(messages.filter(message => message.role === "assistant").map(message => message.runtimeTurn));
-  for (const anchor of [...(turnTailAnchors ?? [])].sort((a, b) => a.endSeq - b.endSeq)) {
-    if (presentTurns.has(anchor.runtimeTurn)) continue;
-    presentTurns.add(anchor.runtimeTurn);
-    const next = anchoredMessages.findIndex(message => message.runtimeSeq !== undefined && message.runtimeSeq > anchor.endSeq);
-    anchoredMessages.splice(next < 0 ? anchoredMessages.length : next, 0, {
-      uiId: `turn-tail-anchor:${anchor.runtimeTurn}`, role: "assistant", content: "",
-      runtimeTurn: anchor.runtimeTurn, runtimeSeq: anchor.endSeq,
-    });
-  }
-  const extensionRows = new Map<string, ReactNode>();
-  for (const row of [...(timelineRows ?? [])].sort((a, b) => a.seq - b.seq)) {
-    const id = `extension-row:${row.id}`;
-    extensionRows.set(id, row.content);
-    const next = anchoredMessages.findIndex(message => message.runtimeSeq !== undefined && message.runtimeSeq > row.seq);
-    anchoredMessages.splice(next < 0 ? anchoredMessages.length : next, 0, {
-      uiId: id, role: "assistant", content: "", runtimeSeq: row.seq,
-    });
-  }
-  const lastMessageForTurn = new Map<number, string>();
-  for (const message of anchoredMessages) {
-    if (message.role === "assistant" && message.runtimeTurn !== undefined)
-      lastMessageForTurn.set(message.runtimeTurn, message.uiId);
-  }
-  const turns: Turn[] = [];
-  let cur: Turn | null = null;
-  let userOrdinal = 0;
-  const executionNotices = new Map<string, UiMessage[]>();
-  const callOwners = new Map<string, UiMessage>();
-  for (const message of messages) {
-    if (message.role !== "assistant") continue;
-    for (const event of message.toolProgress ?? []) callOwners.set(event.toolCallId, message);
-  }
-  const visibleMessages = anchoredMessages.filter(message => {
-    const placement = message.notice?.placement;
-    if (placement?.kind !== "execution" || !sessionId || placement.sessionId !== sessionId) return true;
-    const target = callOwners.get(placement.callId);
-    if (!target) return true; // Missing history remains visible; never guess a nearby run.
-    executionNotices.set(target.uiId, [...(executionNotices.get(target.uiId) ?? []), message]);
-    return false;
-  });
-  for (const m of visibleMessages) {
-    // Plugin notices use the wire's user role, but do not start a user turn.
-    if (m.role === "user" && !m.notice) {
-      cur = { user: m, replies: [], userOrdinal };
-      userOrdinal += 1;
-      turns.push(cur);
-    } else if (cur) {
-      cur.replies.push(m);
-    } else {
-      cur = { user: null, replies: [m], userOrdinal: -1 };
-      turns.push(cur);
+  // The turn-grouping derivation (filters, sorts, splices, map building) was
+  // previously recomputed from scratch on every render. During a streaming
+  // flush ChatSurface re-renders at up to 60 fps, so this O(message-count)
+  // work is memoized here; only `messages` / presentation-anchor inputs
+  // trigger a rebuild, and the memoized Bubble components below bail for
+  // every turn whose message references are unchanged.
+  const derived = useMemo(() => {
+    // Presentation-only anchors never enter the session store or submission history.
+    const replacedMessages = new Set((timelineRows ?? []).flatMap(row => row.replaceMessageId ? [row.replaceMessageId] : []));
+    const anchoredMessages = messages.filter(message => !replacedMessages.has(message.uiId));
+    const presentTurns = new Set(messages.filter(message => message.role === "assistant").map(message => message.runtimeTurn));
+    for (const anchor of [...(turnTailAnchors ?? [])].sort((a, b) => a.endSeq - b.endSeq)) {
+      if (presentTurns.has(anchor.runtimeTurn)) continue;
+      presentTurns.add(anchor.runtimeTurn);
+      const next = anchoredMessages.findIndex(message => message.runtimeSeq !== undefined && message.runtimeSeq > anchor.endSeq);
+      anchoredMessages.splice(next < 0 ? anchoredMessages.length : next, 0, {
+        uiId: `turn-tail-anchor:${anchor.runtimeTurn}`, role: "assistant", content: "",
+        runtimeTurn: anchor.runtimeTurn, runtimeSeq: anchor.endSeq,
+      });
     }
-  }
+    const extensionRows = new Map<string, ReactNode>();
+    for (const row of [...(timelineRows ?? [])].sort((a, b) => a.seq - b.seq)) {
+      const id = `extension-row:${row.id}`;
+      extensionRows.set(id, row.content);
+      const next = anchoredMessages.findIndex(message => message.runtimeSeq !== undefined && message.runtimeSeq > row.seq);
+      anchoredMessages.splice(next < 0 ? anchoredMessages.length : next, 0, {
+        uiId: id, role: "assistant", content: "", runtimeSeq: row.seq,
+      });
+    }
+    const lastMessageForTurn = new Map<number, string>();
+    for (const message of anchoredMessages) {
+      if (message.role === "assistant" && message.runtimeTurn !== undefined)
+        lastMessageForTurn.set(message.runtimeTurn, message.uiId);
+    }
+    const turns: Turn[] = [];
+    let cur: Turn | null = null;
+    let userOrdinal = 0;
+    const executionNotices = new Map<string, UiMessage[]>();
+    const callOwners = new Map<string, UiMessage>();
+    for (const message of messages) {
+      if (message.role !== "assistant") continue;
+      for (const event of message.toolProgress ?? []) callOwners.set(event.toolCallId, message);
+    }
+    const visibleMessages = anchoredMessages.filter(message => {
+      const placement = message.notice?.placement;
+      if (placement?.kind !== "execution" || !sessionId || placement.sessionId !== sessionId) return true;
+      const target = callOwners.get(placement.callId);
+      if (!target) return true; // Missing history remains visible; never guess a nearby run.
+      executionNotices.set(target.uiId, [...(executionNotices.get(target.uiId) ?? []), message]);
+      return false;
+    });
+    for (const m of visibleMessages) {
+      // Plugin notices use the wire's user role, but do not start a user turn.
+      if (m.role === "user" && !m.notice) {
+        cur = { user: m, replies: [], userOrdinal };
+        userOrdinal += 1;
+        turns.push(cur);
+      } else if (cur) {
+        cur.replies.push(m);
+      } else {
+        cur = { user: null, replies: [m], userOrdinal: -1 };
+        turns.push(cur);
+      }
+    }
+    return { turns, extensionRows, lastMessageForTurn, executionNotices };
+  }, [messages, timelineRows, turnTailAnchors, sessionId]);
+  const { turns, extensionRows, lastMessageForTurn, executionNotices } = derived;
 
   return (
     <>
