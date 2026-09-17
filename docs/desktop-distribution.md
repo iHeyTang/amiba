@@ -45,7 +45,7 @@ ONNX 1.24.3 的 npm 包缺少 Darwin x64 原生绑定（上游 microsoft/onnxrun
 
 Apple Silicon 上的 Intel 构建可在独立 checkout 中，通过 Rosetta 运行 x64 Node 和 pnpm；不要复用 ARM 的 node_modules、运行时目录或输出目录。Windows 请使用本地 Windows x64 机器或 VM；当前没有验证 Mac 上 Wine 交叉编译原生依赖。
 
-如果只想在配置发布服务前验证本地安装包，可运行 `pnpm release:build <target> --local-only`。此模式禁用更新源与 macOS 签名，产物不可通过发布脚本上传。本地默认正式构建要求签名。使用 `pnpm release:build <target> --allow-unsigned` 可生成未签名发布包：Windows 保留更新功能；Mac 关闭更新源、签名和公证，允许手动下载安装。`--local-only` 仍是不可发布的测试包。未签名 Mac 发布不上传 Mac latest 清单和 blockmap，避免向客户端声明可自动安装的更新。
+如果只想在配置发布服务前验证本地安装包，可运行 `pnpm release:build <target> --local-only`。此模式禁用更新源与 macOS 签名，产物不可通过发布脚本上传。本地默认正式构建要求签名。使用 `pnpm release:build <target> --allow-unsigned` 可生成未签名发布包：Windows 保留更新功能；Mac 关闭更新源、签名和公证，改为写入用于应用内检测与下载的 `manual.repository`。`--local-only` 仍是不可发布的测试包。未签名 Mac 发布不上传 Mac latest 清单和 blockmap，避免向客户端声明可自动安装的更新。
 
 Rosetta 下使用 Intel Node 的示例（`/path/to/node-darwin-x64` 换为已校验的官方 x64 Node 解压目录，在独立 checkout 内运行）：
 
@@ -218,9 +218,11 @@ gh workflow run desktop-build.yml --ref main -f mode=verify -f target=all -f run
 
 ### 未签名发布
 
-当前默认允许未签名发布。Mac 使用无需账号、证书和网络的 ad-hoc 本地签名封装完整应用，不提供 Apple Developer ID 身份认证，也不进行公证。运行时命令链接转换为包内相对路径；构建和成品检查执行 codesign 严格校验。Mac 包的 `release-config.json` 更新源为空，运行检查会验证这一点；公开 Release 只提供 Mac DMG/ZIP，不提供 Mac 自动更新清单。Windows 保留 EXE、blockmap 和更新清单。Release 说明自动提示 Mac 安装限制。
+当前默认允许未签名发布。Mac 使用无需账号、证书和网络的 ad-hoc 本地签名封装完整应用，不提供 Apple Developer ID 身份认证，也不进行公证。运行时命令链接转换为包内相对路径；构建和成品检查执行 codesign 严格校验。Mac 包的 `release-config.json` 更新源为空，改为写入 `manual.repository`，运行检查会同时验证这两点；公开 Release 只提供 Mac DMG/ZIP，不提供 Mac 自动更新清单。Windows 保留 EXE、blockmap 和更新清单。Release 说明自动提示 Mac 安装限制。
 
-用户从网络下载 Mac 包后，系统可能拦截启动；可根据 [Apple 官方说明](https://support.apple.com/102445) 在“系统设置 → 隐私与安全性”中手动允许该应用。后续 Mac 版本暂时需要手动下载安装，切换到签名版时也需要安排一次手动安装。
+未签名 Mac 包因此走「检测 + 下载 + 手动安装」通道：应用按 `manual.repository` 读取该仓库最新 Release，发现更高版本后在更新弹窗里给出下载按钮；下载完成并比对 Release 公布的 sha256 后提示安装包就绪，点击即退出应用并由系统打开 DMG 安装窗口，由用户拖拽完成替换。未签名包没有可校验的签名身份，因此该通道只做检测与下载，绝不自动安装；完整性完全依赖 HTTPS 与 Release 公布的摘要。`manual.repository` 只在未签名 Mac 构建中写入，本地测试包（`--local-only`）不写。
+
+用户从网络下载 Mac 包后，系统可能拦截启动；可根据 [Apple 官方说明](https://support.apple.com/102445) 在“系统设置 → 隐私与安全性”中手动允许该应用。后续 Mac 版本由应用内检测并下载安装包，退出后打开安装窗口由用户拖拽安装，无需再自行寻找下载地址；切换到签名版时仍需要安排一次手动安装。
 
 
 ### 首次公开发布验证（2026-09-13）

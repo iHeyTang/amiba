@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { releaseSettings, githubRepository } from './config.mjs';
+import { releaseSettings, releaseConfigFile, githubRepository } from './config.mjs';
 test('CDN first and GitHub fallback with architecture-isolated channels', () => {
   const env = { AMIBA_GITHUB_REPOSITORY: 'owner/amiba', AMIBA_UPDATE_URLS: 'https://cdn.example/stable' };
   assert.deepEqual(releaseSettings(env, 'darwin-arm64').sources, ['https://cdn.example/stable/', 'https://github.com/owner/amiba/releases/latest/download/']);
@@ -17,4 +17,15 @@ test('rejects insecure or credential-bearing sources and unsupported targets', (
 test('infers GitHub repository from HTTPS and SSH remotes', () => {
   for (const remote of ['https://github.com/iHeyTang/amiba.git', 'git@github.com:iHeyTang/amiba.git', 'ssh://git@github.com/iHeyTang/amiba.git']) assert.equal(githubRepository(remote), 'iHeyTang/amiba');
   assert.equal(githubRepository('https://other.example/iHeyTang/amiba.git'), undefined);
+});
+
+test('advertises the manual update feed only where in-place updates are impossible', () => {
+  const unsignedMac = { repository: 'owner/amiba', sources: [] };
+  assert.deepEqual(releaseConfigFile(unsignedMac, { distributable: true, target: 'darwin-arm64' }), { sources: [], manual: { repository: 'owner/amiba' } });
+  // Signed macOS and Windows keep electron-updater; the manual feed would be dead weight.
+  assert.deepEqual(releaseConfigFile({ repository: 'owner/amiba', sources: ['https://cdn/'] }, { distributable: true, target: 'darwin-x64' }), { sources: ['https://cdn/'] });
+  assert.deepEqual(releaseConfigFile(unsignedMac, { distributable: true, target: 'win32-x64' }), { sources: [] });
+  // Local test packages must never reach out to a release feed.
+  assert.deepEqual(releaseConfigFile({ repository: 'owner/amiba', sources: [] }, { distributable: false, target: 'darwin-arm64' }), { sources: [] });
+  assert.deepEqual(releaseConfigFile({ repository: undefined, sources: [] }, { distributable: true, target: 'darwin-arm64' }), { sources: [] });
 });
