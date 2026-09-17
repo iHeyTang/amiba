@@ -386,7 +386,7 @@ function SessionRow({
       ) : (
         <div
           className={cn(
-            "flex items-center gap-0.5 opacity-0 transition-opacity",
+            "flex items-center gap-0.5 opacity-0",
             active ? "opacity-100" : "group-hover:opacity-100",
           )}
         >

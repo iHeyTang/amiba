@@ -595,7 +595,7 @@ function SessionRow({
   return (
     <div
       className={cn(
-        "group relative mx-0.5 flex h-8 items-center rounded-md transition-colors",
+        "group relative mx-0.5 flex h-8 items-center rounded-md",
         active
           ? "bg-secondary text-secondary-foreground"
           : "text-foreground/80 hover:bg-accent/70 hover:text-foreground",
@@ -644,7 +644,7 @@ function SessionRow({
       {allowActions && !selecting ? (
         <span
           className={cn(
-            "pointer-events-none absolute inset-y-0 right-1 flex items-center gap-0.5 bg-gradient-to-l from-45% via-70% to-transparent pl-8 opacity-0 transition-opacity",
+            "pointer-events-none absolute inset-y-0 right-1 flex items-center gap-0.5 bg-gradient-to-l from-45% via-70% to-transparent pl-8 opacity-0",
             "group-hover:opacity-100 group-focus-within:opacity-100",
             active
               ? "from-secondary via-secondary/95"
@@ -661,7 +661,7 @@ function SessionRow({
               <button
                 type="button"
                 onClick={(event) => event.stopPropagation()}
-                className="pointer-events-none inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground group-hover:pointer-events-auto group-focus-within:pointer-events-auto"
+                className="pointer-events-none inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 hover:bg-foreground/10 hover:text-foreground group-hover:pointer-events-auto group-focus-within:pointer-events-auto"
                 title={t("workspacePane.moreActions")}
                 aria-label={t("workspacePane.moreActions")}
               >
