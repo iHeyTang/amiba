@@ -70,6 +70,11 @@ export const en = {
   "sidepanel.runBoundary.stopped": "Stopped",
 
   // Chat error recovery
+  "sidepanel.retry.action": "Retry",
+  "sidepanel.retry.prompt": "Continue the interrupted task using the saved execution history in this conversation. Check completed operations first to avoid repeating them.",
+  "sidepanel.retry.waiting": "Request interrupted. Retry {attempt} in {seconds}s. Use Stop to cancel.",
+  "sidepanel.retry.started": "Retrying (attempt {attempt})…",
+  "sidepanel.retry.record": "Retry record: attempt {attempt}",
   "sidepanel.runError.credentials.title": "Model credentials aren't working",
   "sidepanel.runError.credentials.action": "Review credentials",
   "sidepanel.runError.modelService.title": "The model service is unavailable",

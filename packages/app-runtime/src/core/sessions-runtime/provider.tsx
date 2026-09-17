@@ -155,6 +155,7 @@ export function useSessions(): SessionsController {
     touchSession: store.touchSession,
     applyAutoTitle: store.applyAutoTitle,
     flushPersist: store.flushPersist,
+    recoverMessages: store.recoverMessages,
     refresh: store.refresh,
   };
 }

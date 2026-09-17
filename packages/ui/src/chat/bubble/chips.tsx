@@ -67,9 +67,11 @@ export function EmptyState({ onNew, onOpenHistory, hasHistory }: EmptyStateProps
 export interface ErrorBlockProps {
   error: ChatError
   onOpenSettings: (tab?: string) => void
+  onRetry?: () => void
+  retryDisabled?: boolean
 }
 
-export function ErrorBlock({ error, onOpenSettings }: ErrorBlockProps) {
+export function ErrorBlock({ error, onOpenSettings, onRetry, retryDisabled }: ErrorBlockProps) {
   const { t } = useT()
   const presentation = resolveChatErrorPresentation(error)
   return (
@@ -106,6 +108,7 @@ export function ErrorBlock({ error, onOpenSettings }: ErrorBlockProps) {
               {error.hint}
             </p>
           )}
+          {onRetry && <Button size="sm" variant="outline" className="mr-2 mt-2" onClick={onRetry} disabled={retryDisabled}>{t("sidepanel.retry.action")}</Button>}
           <button
             type="button"
             onClick={() => onOpenSettings(presentation.settingsTarget)}
