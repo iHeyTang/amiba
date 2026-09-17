@@ -95,21 +95,6 @@ export function SummaryHeaderAction({ sessionId }: { sessionId: string }) {
     };
   }, [open]);
 
-  // Outside-click dismiss (the trigger itself is excluded so its own onClick
-  // toggles cleanly).
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (panelRef.current?.contains(target)) return;
-      if (triggerRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open]);
-
   // Escape dismiss.
   useEffect(() => {
     if (!open) return;
