@@ -1,0 +1,20 @@
+diff --git a/lib/index.js b/lib/index.js
+index 1fa97d377f8e6ccc63883c10f2c27169fe7d2dac..cfe3ceeb9477adf127d8684ecfe5478c1b34dd00 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -150,6 +150,15 @@ function apply(ctx, config = {}, internals = {}) {
+ 	}
+ 	async function recover({ agent, turn, step, provider, failure, retryPolicy: policy, signal }, next) {
+ 		if (policy === void 0) return next();
++		// A transient network outage suspends this model request until connectivity
++		// returns or the user stops the turn. Never replay the whole tool loop.
++		// Explicitly disabled/excluded retries and non-network failures keep the
++		// provider policy (including its finite retry budget).
++		if (policy.mode === "normal" && policy.maxRetries > 0 &&
++			policy.retryableCodes.includes(failure.code) &&
++			(failure.code === "TRANSPORT" || failure.code === "TIMEOUT")) {
++			policy = { ...policy, mode: "always" };
++		}
+ 		if (policy.mode === "always") {
+ 			if (signal.aborted || lifetime.signal.aborted) return;
+ 			const fusedSignal = AbortSignal.any([signal, lifetime.signal]);

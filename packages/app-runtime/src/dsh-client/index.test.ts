@@ -96,9 +96,50 @@ describe("DSH 0.1.5 Remote transport", () => {
     expect(await history).toEqual({ events: [], hasMore: false, projections: snapshot.projections })
     expect(sockets[0]!.closes).toHaveLength(1)
   })
-  it.each(["error", "close"])("releases a carrier when %s occurs before readiness", async type => {
+  it.each(["error", "close"])("re-follows after a carrier %s before the opening snapshot", async type => {
     const { client, sockets } = harness(); const opening = client.openEvents(undefined, address)
-    sockets[0]!.emit(type); await expect(opening).rejects.toThrow("WebSocket"); expect(sockets[0]!.closes).toHaveLength(1)
+    sockets[0]!.emit("open"); sockets[0]!.emit(type)
+    await vi.waitFor(() => expect(sockets).toHaveLength(2), { timeout: 2000 })
+    expect(sockets[0]!.closes).toHaveLength(1)
+    sockets[1]!.emit("open"); sockets[1]!.item(snapshot)
+    const stream = await opening
+    expect((await stream.next()).value.payload).toEqual({ type: "session/subscribed", sessionId: "s-1", lastSeq: 7 })
+    await stream.return!()
+  })
+  it("re-follows after a mid-stream drop and replays the durable gap", async () => {
+    const { client, sockets } = harness()
+    const stream = client.events(undefined, undefined, address)
+    const first = stream.next()
+    sockets[0]!.emit("open"); sockets[0]!.item(snapshot)
+    expect((await first).value.payload).toEqual({ type: "session/subscribed", sessionId: "s-1", lastSeq: 7 })
+
+    const second = stream.next()
+    sockets[0]!.item({ type: "event", event: { type: "turn/start", seq: 8, time: 1, data: { turn: 0 } } })
+    expect((await second).value.payload).toMatchObject({ type: "session/event", event: { type: "turn/start" } })
+
+    const third = stream.next()
+    sockets[0]!.emit("close")
+    await vi.waitFor(() => expect(sockets).toHaveLength(2), { timeout: 2000 })
+
+    sockets[1]!.emit("open")
+    sockets[1]!.item({
+      type: "snapshot", cursor: 10, hasMore: false, projections: { asOfSeq: 10, values: {} },
+      records: [
+        { event: { type: "turn/start", seq: 8, time: 1, data: { turn: 0 } } },
+        { event: { type: "assistant/message", seq: 9, time: 2, data: { message: { content: [{ type: "text", text: "hi" }] } }, surfaceOp: "append" } },
+      ],
+    })
+    expect((await third).value.payload).toMatchObject({ type: "session/event", event: { type: "assistant/message", seq: 9 } })
+    expect((await stream.next()).value.payload).toEqual({ type: "session/subscribed", sessionId: "s-1", lastSeq: 10 })
+    await stream.return!(undefined)
+  })
+  it("surfaces a logical follow failure instead of retrying", async () => {
+    const { client, sockets } = harness()
+    const stream = client.events(undefined, undefined, address)
+    const first = stream.next()
+    sockets[0]!.emit("open")
+    sockets[0]!.message({ type: "error", streamId: sockets[0]!.sent[0]!.streamId, error: { code: "session/not-found", message: "gone" } })
+    await expect(first).rejects.toMatchObject({ name: "DshRpcError", code: "session/not-found" })
   })
   it("cancels an opening and does not lose a registration-time abort", async () => {
     const controller = new AbortController(); const socket = new FakeWebSocket()

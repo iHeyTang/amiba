@@ -1,3 +1,4 @@
+import { retryProgress, upsertRetryTimeline } from "../dsh-client/retry";
 import { appendAssistantText, applyAssistantTextSource } from "../dsh-client/assistant-text-source";
 import { ClosingAssistant } from "../dsh-client/closing-assistant";
 import { compactionUpdate, upsertCompactionTimeline, interruptOpenCompactions } from "../dsh-client/compaction";
@@ -249,6 +250,16 @@ export function projectRuntimeSessionHistory(
 
   for (const entry of [...entries].sort((a, b) => a.event.seq - b.event.seq)) {
     const event = entry.event;
+    const retry = retryProgress(event);
+    if (retry) {
+      if (!turn) turn = beginTurn(event);
+      turn.closing.apply(event);
+      upsertRetryTimeline(turn.timeline!, retry);
+      if (event.type === "llm/retry" && Number.isSafeInteger(event.data.step)) {
+        applyAssistantTextSource(turn.draftTimeline, {kind:"assistantTextSource",phase:"reset",runtimeStep:event.data.step as number});
+      }
+      continue;
+    }
     const compact = compactionUpdate(event);
     if (compact) {
       if (!turn) turn = beginTurn(event);

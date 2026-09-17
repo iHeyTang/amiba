@@ -209,6 +209,11 @@ function rpcMethodPath(method: string): string {
   return segments.join("/")
 }
 
+/** Initial backoff before re-following after a transient carrier drop. */
+const FOLLOW_RECONNECT_INITIAL_MS = 500
+/** Ceiling for the re-follow backoff (doubles on each consecutive drop). */
+const FOLLOW_RECONNECT_MAX_MS = 5000
+
 export class DshApiClient {
   readonly baseUrl: string
   private readonly fetchImpl: typeof globalThis.fetch
@@ -835,19 +840,55 @@ export class DshApiClient {
       | { type: "assistant-stream"; frame: { type: "start"; step: number; startedAfterSeq: number } | { type: "chunk"; time: number; chunk: unknown } | { type: "end" } }
     let step: number | undefined
     let lastSeq = -1
-    for await (const frame of this.stream<Follow>("session/follow", { request: { address, assistantStream: true } }, signal)) {
-      if (frame.type === "snapshot") {
-        lastSeq = frame.cursor
-        yield { rpcId: "", payload: { type: "session/subscribed", sessionId, lastSeq } }
-        onOpen?.()
-      } else if (frame.type === "event") {
-        lastSeq = frame.event.seq
-        yield { rpcId: "", payload: { type: "session/event", sessionId, event: frame.event } }
-      } else if (frame.frame.type === "start") {
-        step = frame.frame.step
-      } else if (frame.frame.type === "chunk") {
-        yield { rpcId: "", payload: { type: "session/event", sessionId, event: { type: "assistant/chunk", seq: lastSeq, time: frame.frame.time, data: { step, chunk: frame.frame.chunk } } } }
+    let firstSnapshot = true
+    let delay = FOLLOW_RECONNECT_INITIAL_MS
+    // A dropped `session/follow` carrier is NOT a terminal run failure: the DSH
+    // Session (and any in-flight attempt) survives server-side, so the client
+    // re-follows, replays the durable events committed while it was away, and
+    // keeps the live assistant stream going. A transient network blip must not
+    // surface "the run couldn't continue" when the run is in fact still moving.
+    for (;;) {
+      if (signal?.aborted) return
+      try {
+        for await (const frame of this.stream<Follow>("session/follow", { request: { address, assistantStream: true } }, signal)) {
+          if (frame.type === "snapshot") {
+            // An in-flight attempt resumes from its baseline step, since the
+            // reconnect never re-sends the `start` frame that preceded the cut.
+            const attempt = frame.assistantStream?.activeAttempt
+            if (attempt) step = attempt.step
+            if (firstSnapshot) {
+              firstSnapshot = false
+            } else {
+              // Replay the durable gap so committed messages, tool results and
+              // the turn's terminal event survive the reconnect.
+              for (const record of frame.records) {
+                if (record.event.seq <= lastSeq) continue
+                lastSeq = record.event.seq
+                yield { rpcId: "", payload: { type: "session/event", sessionId, event: record.event } }
+              }
+            }
+            lastSeq = frame.cursor
+            delay = FOLLOW_RECONNECT_INITIAL_MS
+            yield { rpcId: "", payload: { type: "session/subscribed", sessionId, lastSeq } }
+            onOpen?.()
+          } else if (frame.type === "event") {
+            lastSeq = frame.event.seq
+            yield { rpcId: "", payload: { type: "session/event", sessionId, event: frame.event } }
+          } else if (frame.frame.type === "start") {
+            step = frame.frame.step
+          } else if (frame.frame.type === "chunk") {
+            yield { rpcId: "", payload: { type: "session/event", sessionId, event: { type: "assistant/chunk", seq: lastSeq, time: frame.frame.time, data: { step, chunk: frame.frame.chunk } } } }
+          }
+        }
+      } catch (error) {
+        if (signal?.aborted) return
+        // A logical RPC failure (e.g. session/not-found) is not transient.
+        if (error instanceof DshRpcError) throw error
+        // Transport loss — fall through and re-follow.
       }
+      if (signal?.aborted) return
+      await new Promise<void>(resolve => { setTimeout(resolve, delay) })
+      delay = Math.min(delay * 2, FOLLOW_RECONNECT_MAX_MS)
     }
   }
 
@@ -912,3 +953,5 @@ export * from "./amiba-event-bridge"
 export * from "./assistant-text-source";
 
 export { durableContentImages } from "./content-images";
+
+export { retryProgress, upsertRetryTimeline } from "./retry";

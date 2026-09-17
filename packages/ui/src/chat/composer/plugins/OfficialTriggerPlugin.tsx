@@ -1,4 +1,4 @@
-import { subscribeTextReferenceHighlights } from "../triggers/text-reference-highlights";
+import { subscribeCommandTokenHighlight, subscribeTextReferenceHighlights } from "../triggers/text-reference-highlights";
 import { $readComposerParts } from "../composer-parts";
 /**
  * THE DRIVER. Everything upstream's ui-conversation InputBar supplies to the
@@ -47,6 +47,11 @@ export function OfficialTriggerPlugin({
   useEffect(() => controller?.lexicon
     ? subscribeTextReferenceHighlights(editor, controller.lexicon)
     : undefined, [editor, controller]);
+
+  // Paint-only highlight of the active slash-command claim token, so a picked
+  // (or typed) command reads as visually distinct — the same affordance the
+  // reference lexicon gives `/skill` and `@session` hot names.
+  useEffect(() => subscribeCommandTokenHighlight(editor, claims), [editor, claims]);
 
   // The four scoped bail listeners, for as long as this editor is mounted.
   useEffect(() => {

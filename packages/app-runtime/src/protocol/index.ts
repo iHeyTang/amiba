@@ -356,6 +356,14 @@ export interface AssistantTextSourceRange {
   runtimeSeq?: number;
 }
 
+export interface RetryProgress {
+  id: string;
+  attempt: number;
+  delayMs: number;
+  startedAt: number;
+  status: "waiting" | "started";
+}
+
 export type AssistantTimelineItem =
   | {
       kind: "text";
@@ -369,6 +377,7 @@ export type AssistantTimelineItem =
   | { kind: "reasoning"; id: string; text: string; startedAt?: number; endedAt?: number }
   | { kind: "tool"; id: string; toolCallId: string }
   | { kind: "approval"; id: string; approvalId: string }
+  | { kind: "retry"; id: string; retry: RetryProgress }
   | { kind: "compaction"; id: string; compaction: CompactionProgress };
 
 export interface ChatRuntimeError {
@@ -475,6 +484,7 @@ export type StreamEvent =
   | { kind: "reasoning"; text: string }
   | { kind: "toolCalls"; calls: ToolCall[] }
   | { kind: "toolProgress"; event: ToolProgress }
+  | { kind: "retry"; event: RetryProgress }
   | { kind: "compaction"; event: CompactionUpdate }
   | { kind: "session"; sessionId: string }
   | { kind: "turn"; turnId: string; runtimeTurn?: number }

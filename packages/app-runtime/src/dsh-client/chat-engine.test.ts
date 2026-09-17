@@ -538,6 +538,59 @@ describe("compaction event delivery", () => {
     expect(events.filter(event => event.kind === "compaction")).toHaveLength(2);
     engine.dispose();
   });
+
+  it("shows the compaction checkpoint for a slash command without a reload", async () => {
+    const script = [
+      { rpcId: "sub", payload: { type: "session/subscribed", sessionId: "session-1", lastSeq: 0 } } as DshMuxEnvelope,
+      sessionFrame("compaction/start", { compactionId: "compact-1" }, 2),
+      sessionFrame("compaction/summary", {
+        compactionId: "compact-1",
+        summary: [{ type: "text", text: "checkpoint" }],
+        shadowedSeqs: [1, 2],
+        shadowedTokenCount: 1234,
+      }, 3),
+      sessionFrame("compaction/end", { compactionId: "compact-1" }, 4),
+    ];
+    const prompt = vi.fn(async () => ({
+      command: { kind: "success" as const, text: "Compacted 2 history items (~1234 tokens)." },
+    }));
+    const engine = new DshChatEngineClient({
+      client: { ...scriptedClient(script), prompt } as unknown as DshApiClient,
+    });
+    const events: StreamEvent[] = [];
+    const snapshots: SnapshotFrame[] = [];
+    engine.onStreamEvent((sessionId, event) => {
+      if (sessionId === "session-1") events.push(event);
+    });
+    engine.onSnapshot((frame) => snapshots.push(frame));
+
+    engine.submit(payload({ history: [{ role: "user", content: "/compact" }] }));
+    await eventually(() =>
+      expect(events.map((event) => event.kind)).toEqual([
+        "begin",
+        "compaction",
+        "compaction",
+        "compaction",
+        "chunk",
+        "done",
+      ]),
+    );
+    engine.requestSnapshot("session-1");
+    const last = snapshots.at(-1) as Extract<SnapshotFrame, { kind: "completed" }>;
+    expect(last.kind).toBe("completed");
+    expect(last.state.timeline.map((item) => item.kind)).toEqual(["compaction", "text"]);
+    expect(last.state.timeline[0]).toMatchObject({
+      kind: "compaction",
+      compaction: {
+        compactionId: "compact-1",
+        status: "completed",
+        summary: "checkpoint",
+        shadowedItemCount: 2,
+        shadowedTokenCount: 1234,
+      },
+    });
+    engine.dispose();
+  });
 });
 
 

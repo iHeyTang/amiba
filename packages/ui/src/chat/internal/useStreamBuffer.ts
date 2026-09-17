@@ -1,4 +1,4 @@
-import { appendAssistantText, applyAssistantTextSource } from "@amiba/app-runtime/dsh-client";
+import { upsertRetryTimeline, appendAssistantText, applyAssistantTextSource } from "@amiba/app-runtime/dsh-client";
 import type { StreamEvent } from "@amiba/app-runtime/protocol";
 import { upsertCompactionTimeline, interruptOpenCompactions } from "@amiba/app-runtime/dsh-client";
 import type { CompactionUpdate } from "@amiba/app-runtime/protocol";
@@ -90,6 +90,7 @@ export interface UseStreamBufferResult {
   onToolCalls: (calls: ToolCall[]) => void;
   /** Record a runtime tool-progress event in stable order. */
   onToolProgress: (ev: ToolProgress) => void;
+  onRetry: (update: Extract<StreamEvent, {kind:"retry"}>["event"]) => void;
   onCompaction: (update: CompactionUpdate) => void;
   finishCompactions: () => void;
   /** Push an approval marker into the verbose timeline so the chip
@@ -418,6 +419,12 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     [appendToolToVerboseTimeline, scheduleVerboseFlush],
   );
 
+  const onRetry = useCallback((update: Extract<StreamEvent, {kind:"retry"}>["event"]): void => {
+    const v = verboseStateRef.current;
+    if (v) upsertRetryTimeline(v.timeline, update);
+    scheduleVerboseFlush();
+  }, [scheduleVerboseFlush]);
+
   const onCompaction = useCallback((update: CompactionUpdate): void => {
     const v = verboseStateRef.current;
     if (v) upsertCompactionTimeline(v.timeline, update);
@@ -447,6 +454,7 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     onReasoning,
     onToolCalls,
     onToolProgress,
+    onRetry,
     onCompaction,
     finishCompactions,
     onApprovalToTimeline: appendApprovalToVerboseTimeline,
