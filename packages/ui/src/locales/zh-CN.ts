@@ -50,7 +50,7 @@ export const zhCN: UiMessages = {
   "sidepanel.retry.prompt": "请根据当前对话中已保存的执行记录，继续完成刚才中断的任务。先核对已完成的操作，避免重复执行。",
   "sidepanel.retry.waiting": "请求暂时失败，{seconds} 秒后进行第 {attempt} 次重试，可点击停止取消。",
   "sidepanel.retry.started": "正在进行第 {attempt} 次重试…",
-  "sidepanel.retry.record": "重试记录：第 {attempt} 次",
+  "sidepanel.retry.record": "已重试 {attempt} 次",
   "sidepanel.runError.credentials.title": "模型凭据不可用",
   "sidepanel.runError.credentials.action": "检查模型凭据",
   "sidepanel.runError.modelService.title": "模型服务暂不可用",
