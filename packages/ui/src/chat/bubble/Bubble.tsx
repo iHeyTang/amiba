@@ -1450,7 +1450,7 @@ function InterleavedAssistantFlow({
               )}
             {flow.map((segment, index) =>
               segment.kind === "retry" ? (
-                <div key={segment.id} role="status" className="my-2 text-xs text-muted-foreground" data-retry-attempt={segment.retry.attempt}>
+                <div key={segment.id} role="status" className="px-1.5 text-xs text-muted-foreground" data-retry-attempt={segment.retry.attempt}>
                   {t(resultStreaming && index === flow.length - 1 ? (segment.retry.status === "waiting" ? "sidepanel.retry.waiting" : "sidepanel.retry.started") : "sidepanel.retry.record", { attempt: segment.retry.attempt, seconds: Math.ceil(segment.retry.delayMs / 1000) })}
                 </div>
               ) : segment.kind === "compaction" ? (
