@@ -111,7 +111,7 @@ export function SummaryHeaderAction({ sessionId }: { sessionId: string }) {
     <div
       ref={panelRef}
       data-summary-panel
-      className="fixed flex flex-col gap-2"
+      className="fixed flex flex-col gap-2 py-3"
       style={{
         right: geometry.right,
         top: geometry.top,
