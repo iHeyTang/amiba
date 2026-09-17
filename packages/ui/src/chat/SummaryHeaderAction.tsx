@@ -110,21 +110,6 @@ export function SummaryHeaderAction({ sessionId }: { sessionId: string }) {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
 
-  // Focus dismissal: like a native popover, close once focus leaves both the
-  // panel and its trigger (Tab away, click into the composer, …).
-  useEffect(() => {
-    if (!open) return;
-    const onFocusIn = (event: FocusEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (panelRef.current?.contains(target)) return;
-      if (triggerRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    document.addEventListener("focusin", onFocusIn);
-    return () => document.removeEventListener("focusin", onFocusIn);
-  }, [open]);
-
   // Escape dismiss.
   useEffect(() => {
     if (!open) return;
