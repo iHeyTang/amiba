@@ -66,6 +66,9 @@ const QUICK_ASK_STAGE_EDGE_MARGIN = 12;
 
 let quickAskWindow: BrowserWindow | null = null;
 let quickAskResizeAnchor: QuickAskResizeAnchor = "center";
+/** Reclaim the hidden Quick-Ask renderer after this long without a summon. */
+const QUICK_ASK_IDLE_DESTROY_MS = 10 * 60 * 1000;
+let quickAskIdleTimer: ReturnType<typeof setTimeout> | undefined;
 
 export interface QuickAskPrefill {
   text?: string;
@@ -220,6 +223,10 @@ export function createQuickAskWindow(): BrowserWindow {
 
   win.on("closed", () => {
     if (quickAskWindow === win) quickAskWindow = null;
+    if (quickAskIdleTimer !== undefined) {
+      clearTimeout(quickAskIdleTimer);
+      quickAskIdleTimer = undefined;
+    }
   });
 
   if (isDev && RENDERER_DEV_URL) {
@@ -241,6 +248,10 @@ export function createQuickAskWindow(): BrowserWindow {
  * a stray second double-tap dismisses rather than refocusing.
  */
 export function summonQuickAsk(prefill: QuickAskPrefill = {}): void {
+  if (quickAskIdleTimer !== undefined) {
+    clearTimeout(quickAskIdleTimer);
+    quickAskIdleTimer = undefined;
+  }
   let win = quickAskWindow;
   if (!win || win.isDestroyed()) {
     win = createQuickAskWindow();
@@ -330,6 +341,17 @@ export function hideQuickAsk(): void {
   const win = quickAskWindow;
   if (!win || win.isDestroyed()) return;
   if (win.isVisible()) win.hide();
+  // A Quick-Ask that stays hidden is dead weight (a full renderer + chat
+  // engine). Reclaim it after a quiet period; the next summon recreates it
+  // (the first summon after a long idle pays a one-time boot).
+  if (quickAskIdleTimer !== undefined) clearTimeout(quickAskIdleTimer);
+  quickAskIdleTimer = setTimeout(() => {
+    quickAskIdleTimer = undefined;
+    const current = quickAskWindow;
+    if (!current || current.isDestroyed() || current.isVisible()) return;
+    current.destroy();
+  }, QUICK_ASK_IDLE_DESTROY_MS);
+  quickAskIdleTimer.unref?.();
 }
 
 export function setQuickAskIgnoreMouseEvents(ignore: boolean): void {
