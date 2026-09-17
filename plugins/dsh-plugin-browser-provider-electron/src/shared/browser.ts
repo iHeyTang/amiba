@@ -46,6 +46,13 @@ export interface EmbeddedBrowserAdapter {
     tabId: string,
     command: EmbeddedBrowserCommand,
   ): Promise<EmbeddedBrowserPageState>;
+  /** Stream the tab's rendered frames (~10fps JPEG) for a live preview. */
+  startFrameStream(tabId: string, width?: number): Promise<void>;
+  stopFrameStream(tabId: string): Promise<void>;
+  onFrame(
+    tabId: string,
+    listener: (frame: { tabId: string; data: string }) => void,
+  ): () => void;
   detectDevServers(): Promise<Array<{ url: string; port: number }>>;
   /**
    * Main needs a tab for a browser call and has none it can use. `sessionId`

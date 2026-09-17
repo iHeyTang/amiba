@@ -288,7 +288,7 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
   const adapter = useBrowserAdapter();
   const { t } = useBrowserT();
   const [expanded, setExpanded] = useState(false);
-  const [snapshot, setSnapshot] = useState<string | null>(null);
+  const [frame, setFrame] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const tabs = pane.resources
     .filter((entry) => entry.sessionId === sessionId)
@@ -303,19 +303,8 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
       </div>
     );
   }
-  // Capture a snapshot before the workbench takes the live webview, so the
-  // preview can hold a blurred still instead of going blank during the handoff.
-  const open = (tabId: string) => {
-    if (adapter) {
-      void adapter
-        .command(tabId, { action: "capture" })
-        .then((state) => {
-          if (state.screenshot) setSnapshot(state.screenshot);
-        })
-        .catch(() => {});
-    }
+  const open = (tabId: string) =>
     pane.focusResourceIn(sessionId, "browser", tabId);
-  };
   const active = pane.activeTab?.resource;
   const activeBrowserId =
     active?.kind === "extension"
@@ -343,11 +332,10 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
   }, [previewTab, sessionId]);
 
   // Once the workbench is actually showing the browser, the live webview lives
-  // there; the preview holds a blurred still of its last frame.
+  // there; the preview streams its rendered frames so it keeps following the
+  // page instead of holding a stale still.
   const workbenchShowingBrowser = pane.open && pane.mode === "preview";
 
-  // Fill the preview with a captured frame whenever the workbench owns the
-  // webview (otherwise the card would be empty/transparent until a click).
   useEffect(() => {
     if (
       !workbenchShowingBrowser ||
@@ -357,15 +345,16 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
     ) {
       return;
     }
-    let cancelled = false;
-    adapter
-      .command(previewTab.browserTabId, { action: "capture" })
-      .then((state) => {
-        if (!cancelled && state.screenshot) setSnapshot(state.screenshot);
-      })
-      .catch(() => {});
+    let disposed = false;
+    const unsubscribe = adapter.onFrame(previewTab.browserTabId, (next) => {
+      if (!disposed) setFrame(next.data);
+    });
+    void adapter.startFrameStream(previewTab.browserTabId, PREVIEW_CARD_WIDTH * 2);
     return () => {
-      cancelled = true;
+      disposed = true;
+      unsubscribe();
+      void adapter.stopFrameStream(previewTab.browserTabId).catch(() => {});
+      setFrame(null);
     };
   }, [workbenchShowingBrowser, adapter, previewTab]);
 
@@ -396,15 +385,12 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
         >
           {/* The viewport the host positions the scaled webview over. */}
           <div ref={previewRef} className="absolute inset-0" />
-          {workbenchShowingBrowser && snapshot ? (
-            <>
-              <img
-                src={`data:image/png;base64,${snapshot}`}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover object-top"
-              />
-              <div className="absolute inset-0 bg-background/40 backdrop-blur-sm" />
-            </>
+          {workbenchShowingBrowser && frame ? (
+            <img
+              src={`data:image/jpeg;base64,${frame}`}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover object-top"
+            />
           ) : null}
           <span className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/50 via-black/15 to-transparent px-2 pb-1.5 pt-6 text-[10px] text-white">
             {previewTab.favicon ? (
