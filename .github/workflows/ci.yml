@@ -22,11 +22,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.22.0
+      - name: Cache release test dependencies
+        id: cache-pr-deps
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/amiba-pr-deps/node_modules
+          key: amiba-pr-deps-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
       - name: Install release test dependency
+        if: steps.cache-pr-deps.outputs.cache-hit != 'true'
+        run: npm install --prefix "$RUNNER_TEMP/amiba-pr-deps" --ignore-scripts --no-audit --no-fund yaml@2.8.1 electron-builder@25.1.8
+      - name: Link release test dependencies
         run: |
-          npm install --prefix "$RUNNER_TEMP/amiba-pr-deps" --ignore-scripts --no-audit --no-fund yaml@2.8.1 electron-builder@25.1.8
-          ln -s "$RUNNER_TEMP/amiba-pr-deps/node_modules" node_modules
-          ln -s "$RUNNER_TEMP/amiba-pr-deps/node_modules" apps/desktop/node_modules
+          ln -sfn "$RUNNER_TEMP/amiba-pr-deps/node_modules" node_modules
+          ln -sfn "$RUNNER_TEMP/amiba-pr-deps/node_modules" apps/desktop/node_modules
       - run: node scripts/release/version.mjs --check
       - run: node --test scripts/release/*.test.mjs
       - name: Validate committed runtime distribution locks
