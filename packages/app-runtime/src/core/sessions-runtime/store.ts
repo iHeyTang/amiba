@@ -17,6 +17,9 @@ import {
 
 export { SOURCE_LOCAL };
 
+/** History page size used when loading a session's full event log. */
+const SESSION_HISTORY_PAGE_SIZE = 1000;
+
 let lastSavedIndex: Map<string, SessionMeta> | null = null;
 let lastSavedLocalMeta: Record<string, SessionLocalMeta> = {};
 
@@ -220,6 +223,9 @@ export async function saveIndex(index: SessionMeta[]): Promise<void> {
   const local = { ...lastSavedLocalMeta };
   const retryRename = new Set<string>();
   let localChanged = false;
+  // One Set instead of `index.some(...)` inside the cleanup loop below —
+  // with hundreds of sessions that was an O(n·m) scan on every index write.
+  const indexIds = new Set(index.map((session) => session.id));
 
   for (const current of index) {
     const before = previous.get(current.id);
@@ -256,7 +262,7 @@ export async function saveIndex(index: SessionMeta[]): Promise<void> {
   }
 
   for (const id of previous.keys()) {
-    if (!index.some((session) => session.id === id) && local[id]) {
+    if (!indexIds.has(id) && local[id]) {
       delete local[id];
       localChanged = true;
     }
@@ -283,7 +289,11 @@ export async function loadMessages(id: string, subagent?: AgentSubagentAddress):
     const page = await sessionsAdapter().history(id, {
       ...(subagent ? { subagent } : {}),
       ...(beforeSeq === undefined ? {} : { beforeSeq }),
-      maxMessages: 200,
+      // Large pages: the DSH history endpoint accepts any positive integer
+      // and paginates the full (decompressed) log per call, so a bigger page
+      // directly cuts the number of full-log decodes. A long session that
+      // previously needed ~19 sequential round trips now needs ~4.
+      maxMessages: SESSION_HISTORY_PAGE_SIZE,
     });
     events.push(...page.events);
     if (!page.hasMore || page.events.length === 0) break;

@@ -67,9 +67,12 @@ it("retains the same direct-parent address for every child history page", async 
     hasMore: true,
   }).mockResolvedValueOnce({ events: [], hasMore: false });
   await loadMessages("child", address);
+  // Assert the paging contract shape with the current page size
+  // (`SESSION_HISTORY_PAGE_SIZE` in store.ts, not exported).
+  const pageSize = 1000;
   expect(mocks.history.mock.calls).toEqual([
-    ["child", { subagent: address, maxMessages: 200 }],
-    ["child", { subagent: address, beforeSeq: 20, maxMessages: 200 }],
+    ["child", { subagent: address, maxMessages: pageSize }],
+    ["child", { subagent: address, beforeSeq: 20, maxMessages: pageSize }],
   ]);
 });
 
