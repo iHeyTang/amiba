@@ -737,7 +737,7 @@ export interface WorkspaceDevelopmentAdapter {
 }
 
 export type AppUpdateState = {
-  status: "idle" | "disabled" | "checking" | "available" | "downloading" | "downloaded" | "error";
+  status: "idle" | "disabled" | "checking" | "available" | "offered" | "downloading" | "downloaded" | "ready" | "error";
   currentVersion: string;
   version?: string;
   percent?: number;
@@ -748,6 +748,11 @@ export interface PlatformAdapter {
   appUpdates?: {
     getState(): Promise<AppUpdateState>;
     check(): Promise<AppUpdateState>;
+    /**
+     * Download an offered update. Hosts that install in place fetch their own
+     * update and never emit `offered`, so they may omit this.
+     */
+    download?(): Promise<AppUpdateState>;
     install(): Promise<void>;
     onChanged(listener: (state: AppUpdateState) => void): () => void;
   };

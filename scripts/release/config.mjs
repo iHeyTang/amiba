@@ -24,3 +24,20 @@ export function releaseSettings(env, target) {
   sources.push(`https://github.com/${repo}/releases/latest/download`);
   return { repo, sources: [...new Set(sources.map(s => s.replace(/\/$/, '') + '/'))], channel: `latest-${target.split('-')[1]}` };
 }
+
+/**
+ * Contents of the packaged `release-config.json`.
+ *
+ * `sources` drives electron-updater. Unsigned macOS builds have none, because
+ * Squirrel.Mac verifies the signature of the bundle it replaces and an ad-hoc
+ * signature gives it nothing to verify — so instead of leaving those users with
+ * a dead end, the app is told which repository to watch so it can offer the
+ * download and open the installer for a manual drag-install.
+ */
+export function releaseConfigFile({ repository, sources }, { distributable, target }) {
+  const config = { sources };
+  if (distributable && !sources.length && repository && target.startsWith('darwin')) {
+    config.manual = { repository };
+  }
+  return config;
+}

@@ -1,5 +1,9 @@
 export type UpdateState = {
-  status: "idle" | "disabled" | "checking" | "available" | "downloading" | "downloaded" | "error";
+  // `available`/`downloaded` belong to the electron-updater path, which
+  // downloads as soon as it sees a release. Builds that cannot install in place
+  // (unsigned macOS) use `offered → downloading → ready` instead: detection and
+  // downloading are still ours, installing is handed to the user.
+  status: "idle" | "disabled" | "checking" | "available" | "offered" | "downloading" | "downloaded" | "ready" | "error";
   currentVersion: string;
   version?: string;
   percent?: number;

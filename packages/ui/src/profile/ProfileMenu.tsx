@@ -254,7 +254,12 @@ export function ProfileMenu({
           )}
           {update.status === "error" && <p role="alert" className="break-words text-xs text-muted-foreground">{update.error}</p>}
           <DialogFooter>
-            {update.status === "downloaded" ? (
+            {update.status === "ready" ? (
+              // The installer is on disk and verified; quitting is the user's move.
+              <Button onClick={() => { void updater?.install().catch(updateError); }}>{t("options.personal.update.reveal")}</Button>
+            ) : update.status === "offered" ? (
+              <Button onClick={() => { void updater?.download?.().catch(updateError); }}>{t("options.personal.update.download")}</Button>
+            ) : update.status === "downloaded" ? (
               <Button onClick={() => { void updater?.install().catch(updateError); }}>{t("options.personal.update.install")}</Button>
             ) : updater && update.status !== "disabled" && (
               <Button disabled={["checking", "available", "downloading"].includes(update.status)} onClick={checkUpdates}>{t("options.personal.checkUpdates")}</Button>

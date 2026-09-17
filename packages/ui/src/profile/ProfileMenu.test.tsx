@@ -8,6 +8,7 @@ import desktopPackage from "../../../../apps/desktop/package.json";
 const updateHost = vi.hoisted(() => ({ bridge: undefined as undefined | {
   getState: ReturnType<typeof vi.fn>;
   check: ReturnType<typeof vi.fn>;
+  download: ReturnType<typeof vi.fn>;
   install: ReturnType<typeof vi.fn>;
   onChanged: ReturnType<typeof vi.fn>;
 } }));
@@ -98,6 +99,7 @@ it("checks from the existing menu and installs only once the host reports ready"
   updateHost.bridge = {
     getState: vi.fn().mockResolvedValue({ status: "idle", currentVersion: "1.0.0" }),
     check: vi.fn().mockResolvedValue({ status: "downloading", currentVersion: "1.0.0", version: "1.1.0", percent: 50 }),
+    download: vi.fn().mockResolvedValue({ status: "downloading", currentVersion: "1.0.0", version: "1.1.0", percent: 50 }),
     install: vi.fn().mockResolvedValue(undefined),
     onChanged: vi.fn(listener => { changed = listener; return () => {}; }),
   };
@@ -109,5 +111,29 @@ it("checks from the existing menu and installs only once the host reports ready"
   expect(screen.queryByRole("button", { name: "Restart and install" })).not.toBeInTheDocument();
   act(() => changed({ status: "downloaded", currentVersion: "1.0.0", version: "1.1.0", percent: 100 }));
   await userEvent.click(screen.getByRole("button", { name: "Restart and install" }));
+  expect(updateHost.bridge.install).toHaveBeenCalledTimes(1);
+});
+
+it("downloads on request and hands a verified installer over for manual installation", async () => {
+  let changed: (state: any) => void = () => {};
+  updateHost.bridge = {
+    getState: vi.fn().mockResolvedValue({ status: "idle", currentVersion: "1.0.0" }),
+    check: vi.fn().mockResolvedValue({ status: "offered", currentVersion: "1.0.0", version: "1.1.0" }),
+    download: vi.fn().mockResolvedValue({ status: "downloading", currentVersion: "1.0.0", version: "1.1.0", percent: 0 }),
+    install: vi.fn().mockResolvedValue(undefined),
+    onChanged: vi.fn(listener => { changed = listener; return () => {}; }),
+  };
+  await openMenu();
+  await userEvent.click(screen.getByRole("menuitem", { name: "Current version v1.0.0" }));
+  // An offered update must not download itself; the user spends the bandwidth.
+  expect(updateHost.bridge.download).not.toHaveBeenCalled();
+  act(() => changed({ status: "offered", currentVersion: "1.0.0", version: "1.1.0" }));
+  expect(screen.getByText("Version 1.1.0 is available. Download the installer to install it yourself.")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Download installer" }));
+  expect(updateHost.bridge.download).toHaveBeenCalledTimes(1);
+  act(() => changed({ status: "ready", currentVersion: "1.0.0", version: "1.1.0", percent: 100 }));
+  expect(screen.getByText("Version 1.1.0 has downloaded. Amiba will quit and open the installer window.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Check for updates" })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Quit and open installer" }));
   expect(updateHost.bridge.install).toHaveBeenCalledTimes(1);
 });
