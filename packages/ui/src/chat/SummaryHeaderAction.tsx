@@ -21,7 +21,7 @@ import { useWorkspacePane } from "./WorkspacePane";
  * card draws its own bordered container — so the shell adds no outer frame.
  */
 
-const SUMMARY_CARD_WIDTH = 320;
+const SUMMARY_CARD_WIDTH = 280;
 const SUMMARY_RIGHT_GUTTER = 8;
 
 const SummaryContributionsContext = createContext<
@@ -53,7 +53,7 @@ export function SummaryHeaderAction({ sessionId }: { sessionId: string }) {
   const contributions = useSummaryContributions();
   const { t } = useT();
   const [open, setOpen] = useState(false);
-  const [top, setTop] = useState(0);
+  const [geometry, setGeometry] = useState({ top: 0, right: SUMMARY_RIGHT_GUTTER });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -63,11 +63,36 @@ export function SummaryHeaderAction({ sessionId }: { sessionId: string }) {
     if (pane.attention) setOpen(true);
   }, [pane.attention]);
 
-  // Measure the trigger's bottom so the panel opens right below the header.
+  // Anchor the panel to the conversation column's right edge (not the window),
+  // so it follows the chat flow left when the sidebar or workbench resizes it.
   useLayoutEffect(() => {
-    if (open && triggerRef.current) {
-      setTop(triggerRef.current.getBoundingClientRect().bottom + 6);
-    }
+    if (!open) return;
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const chatColumn = trigger.closest(
+      ".amiba-chat-column",
+    ) as HTMLElement | null;
+    const measure = () => {
+      const triggerRect = trigger.getBoundingClientRect();
+      const columnRight = chatColumn
+        ? chatColumn.getBoundingClientRect().right
+        : window.innerWidth;
+      setGeometry({
+        top: triggerRect.bottom + 6,
+        right: Math.max(
+          SUMMARY_RIGHT_GUTTER,
+          window.innerWidth - columnRight + SUMMARY_RIGHT_GUTTER,
+        ),
+      });
+    };
+    measure();
+    const observer = chatColumn ? new ResizeObserver(measure) : null;
+    if (chatColumn) observer?.observe(chatColumn);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
   }, [open]);
 
   // Outside-click dismiss (the trigger itself is excluded so its own onClick
@@ -103,8 +128,8 @@ export function SummaryHeaderAction({ sessionId }: { sessionId: string }) {
       data-summary-panel
       className="fixed flex flex-col gap-2"
       style={{
-        right: SUMMARY_RIGHT_GUTTER,
-        top,
+        right: geometry.right,
+        top: geometry.top,
         width: SUMMARY_CARD_WIDTH,
         maxHeight: "calc(100vh - 24px)",
         overflowY: "auto",

@@ -273,8 +273,8 @@ export function createBrowserView(
 }
 
 /** Card width/height, matching the summary panel's width and a 16:10 preview. */
-const PREVIEW_CARD_WIDTH = 320;
-const PREVIEW_CARD_HEIGHT = 200;
+const PREVIEW_CARD_WIDTH = 280;
+const PREVIEW_CARD_HEIGHT = 175;
 
 /**
  * The browser card of the pinned summary. It does NOT host its own webview:
@@ -383,7 +383,7 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
               <div className="absolute inset-0 bg-background/40 backdrop-blur-sm" />
             </>
           ) : null}
-          <span className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/60 to-transparent px-2 py-1.5 text-[10px] text-white">
+          <span className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/50 via-black/15 to-transparent px-2 pb-1.5 pt-6 text-[10px] text-white">
             {previewTab.favicon ? (
               <img
                 src={previewTab.favicon}
