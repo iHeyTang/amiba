@@ -350,29 +350,46 @@ function BrowserSummary({ sessionId }: { sessionId: string }) {
   );
   return (
     <div className="flex flex-col gap-2">
-      {/* Borderless live preview card (no outer frame, just rounded + shadow). */}
-      <button
-        type="button"
-        onClick={() => open(previewTab.browserTabId)}
-        className="group relative overflow-hidden rounded-xl text-left shadow-lg"
-        style={{ width: PREVIEW_CARD_WIDTH }}
-      >
-        <PreviewWebview url={previewTab.url} width={PREVIEW_CARD_WIDTH} />
-        <span className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/60 to-transparent px-2 py-1.5 text-[10px] text-white">
-          {previewTab.favicon ? (
-            <img
-              src={previewTab.favicon}
-              alt=""
-              className="size-3 shrink-0 rounded-sm"
-            />
-          ) : (
-            <Globe2 className="size-3 shrink-0" />
-          )}
-          <span className="min-w-0 flex-1 truncate">
-            {previewTab.title || previewTab.url}
+      {/* Borderless live preview card. Other tabs peek out behind it as a
+          stacked deck so multiple tabs read as one cascade. */}
+      <div className="relative" style={{ width: PREVIEW_CARD_WIDTH }}>
+        {others.length > 0 &&
+          others
+            .slice(0, 2)
+            .reverse()
+            .map((tab, index) => (
+              <div
+                key={tab.browserTabId}
+                aria-hidden
+                className="absolute inset-0 rounded-xl border border-border/40 bg-background"
+                style={{
+                  transform: `translate(${(index + 1) * 6}px, ${-(index + 1) * 5}px)`,
+                }}
+              />
+            ))}
+        <button
+          type="button"
+          onClick={() => open(previewTab.browserTabId)}
+          className="group relative overflow-hidden rounded-xl text-left shadow-lg"
+          style={{ width: PREVIEW_CARD_WIDTH }}
+        >
+          <PreviewWebview url={previewTab.url} width={PREVIEW_CARD_WIDTH} />
+          <span className="absolute inset-x-0 bottom-0 flex items-center gap-1.5 bg-gradient-to-t from-black/60 to-transparent px-2 py-1.5 text-[10px] text-white">
+            {previewTab.favicon ? (
+              <img
+                src={previewTab.favicon}
+                alt=""
+                className="size-3 shrink-0 rounded-sm"
+              />
+            ) : (
+              <Globe2 className="size-3 shrink-0" />
+            )}
+            <span className="min-w-0 flex-1 truncate">
+              {previewTab.title || previewTab.url}
+            </span>
           </span>
-        </span>
-      </button>
+        </button>
+      </div>
       {/* Other tabs: a bordered text card. */}
       {others.length > 0 && (
         <div className="rounded-xl border border-border/60 bg-background p-1.5">
