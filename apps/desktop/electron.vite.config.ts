@@ -25,12 +25,14 @@ export default defineConfig({
     build: {
       outDir: "out/main",
       lib: { entry: "src/main/index.ts" },
+      minify: "esbuild",
     },
   },
   preload: {
     plugins: [externalizeDepsPlugin({ exclude: WORKSPACE_PKGS })],
     build: {
       outDir: "out/preload",
+      minify: "esbuild",
       rollupOptions: {
         input: {
           // Desktop bridge (window.amiba for the main renderer).
@@ -53,6 +55,7 @@ export default defineConfig({
     plugins: [react()],
     build: {
       outDir: "out/renderer",
+      minify: "esbuild",
       rollupOptions: {
         input: {
           index: resolve(__dirname, "src/renderer/index.html"),

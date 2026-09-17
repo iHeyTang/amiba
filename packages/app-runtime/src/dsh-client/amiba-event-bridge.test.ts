@@ -216,4 +216,59 @@ describe("DshAmibaEventBridge", () => {
       request: { requestId: "approval-rpc", approvalId: "a", sessionId: "s", toolCallId: "actual-call" },
     })
   })
+
+  it("drops the previous turn's tool records at the next turn/start", () => {
+    const bridge = new DshAmibaEventBridge()
+    const sessionEvent = (event: unknown): DshMuxEnvelope => ({
+      rpcId: "rpc",
+      payload: {
+        type: "session/event",
+        sessionId: "s",
+        event,
+      },
+    })
+    bridge.accept(
+      sessionEvent({
+        type: "tool/call",
+        seq: 1,
+        time: 10,
+        data: { callId: "c", name: "bash", arguments: '{"command":"pwd"}' },
+      }),
+    )
+    const completed = bridge.accept(
+      sessionEvent({
+        type: "tool/result",
+        seq: 2,
+        time: 30,
+        data: { message: { toolCallId: "c", content: [{ type: "text", text: "out" }] } },
+      }),
+    )[0]?.event
+    // The result correlated with its prior call within the same turn.
+    expect(completed).toMatchObject({
+      kind: "toolProgress",
+      event: { toolCallId: "c", status: "completed", args: { command: "pwd" } },
+    })
+
+    bridge.accept(sessionEvent({ type: "turn/end", seq: 3, time: 40, data: {} }))
+    bridge.accept(
+      sessionEvent({ type: "turn/start", seq: 4, time: 50, data: { turn: 2 } }),
+    )
+
+    // A straggler result for the previous turn's call arrives after the new
+    // turn began: the prior call record has been cleared, so the projection
+    // falls back to defaults rather than resurrecting stale args.
+    const straggler = bridge.accept(
+      sessionEvent({
+        type: "tool/result",
+        seq: 5,
+        time: 60,
+        data: { message: { toolCallId: "c", content: [{ type: "text", text: "late" }] } },
+      }),
+    )[0]?.event
+    expect(straggler).toMatchObject({
+      kind: "toolProgress",
+      event: { toolCallId: "c", tool: "tool", status: "completed" },
+    })
+    expect((straggler as { event: { args?: unknown } }).event.args).toBeUndefined()
+  })
 })

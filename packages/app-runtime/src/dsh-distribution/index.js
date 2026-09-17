@@ -72,6 +72,12 @@ export function amibaDshProfileManifest(surface, current) {
       profile: {
         ...profile,
         bundles: amibaDshProfileBundles(surface, configured ?? []),
+        // Patch lifecycle is reload-on-startup, not live HMR. DSH's default
+        // for custom profiles is `"live"`, which loads cordis-plugin-hmr and
+        // chokidar watchers into every production runtime for no benefit
+        // (plugin patches are frozen in packaged builds). `"startup"` applies
+        // managed patches once at boot and drops the watchers.
+        patchReload: "startup",
       },
     },
   };

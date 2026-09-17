@@ -368,7 +368,13 @@ export class DshRuntimeController {
       pluginToken,
     }
     this.handle = handle
-    if (!this.developmentServer) {
+    // The plugin-development discovery server is only useful while authoring
+    // local plugins (`amiba plugin dev` + hot reload). It was previously
+    // started unconditionally, so packaged releases ran a loopback HTTP
+    // server + 5s lease timer + discovery-file writes for nothing. Gate it on
+    // an actual development profile (only created when
+    // `!app.isPackaged && AMIBA_DSH_DEV_PROJECTS` is set).
+    if (developmentProfile && !this.developmentServer) {
       this.developmentServer = await servePluginDevelopment({
         home: installedDshPaths().home,
         change: directories => this.changeDevelopmentProjects(directories),

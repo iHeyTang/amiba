@@ -211,6 +211,17 @@ export class DshAmibaEventBridge {
       ]
     }
     if (source.type === "turn/start") {
+      // A new turn begins: the previous turn's tool records are dead (the
+      // code-dispatch tree is reset below), and each ToolProgress record
+      // carries full args/results. Without this, a long-lived window kept
+      // every tool call of every turn it ever followed in memory. In the
+      // normal wire order (tool/result → turn/end → turn/start) nothing from
+      // the finished turn is still needed; a straggler result after a brand
+      // new turn/start is as degraded as a cold reconnect (progress without
+      // the prior call's args) — acceptable, and the UI renders its own live
+      // state regardless.
+      tools.clear();
+      this.closingAssistants.delete(sessionId);
       this.dispatches.set(sessionId, new CodeDispatchTree())
       const turn = typeof data.turn === "number" ? data.turn : source.seq
       return [{ sessionId, event: { kind: "turn", turnId: `${sessionId}:${turn}`, ...(Number.isSafeInteger(data.turn) && (data.turn as number) >= 0 ? { runtimeTurn: data.turn as number } : {}) } }]

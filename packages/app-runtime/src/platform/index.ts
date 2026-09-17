@@ -729,7 +729,9 @@ export interface WorkspaceDevelopmentAdapter {
       terminalId: string;
       chunk: string;
       sequence: number;
-      snapshot: WorkspaceTerminalSnapshot;
+      /** Full output materialization; only present when the main process
+       *  opts into snapshot delivery (not sent on every chunk). */
+      snapshot?: WorkspaceTerminalSnapshot;
     }) => void,
   ): () => void;
 }
