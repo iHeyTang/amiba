@@ -1902,7 +1902,16 @@ export function MessageTurns({
             key={turn.user?.uiId ?? `turn-${i}`}
             data-conversation-user-turn={turn.user?.uiId}
             // The user action row already separates the prompt from the first reply.
-            className={turn.user ? "[&>:nth-child(n+3)]:mt-2" : "space-y-2"}
+            className={cn(
+              turn.user ? "[&>:nth-child(n+3)]:mt-2" : "space-y-2",
+              "amiba-message-turn-cvi",
+            )}
+            // Long sessions rendered hundreds of fully laid-out turns; the
+            // browser now skips layout/paint of turns entirely outside the
+            // viewport. The sticky user bubble still works: a partially
+            // visible turn is rendered (not skipped), so the pin re-establishes
+            // as soon as its container enters the viewport.
+            style={{ contentVisibility: "auto", containIntrinsicSize: "auto 160px" }}
           >
             {turn.user && (
               <UserStickyBubble

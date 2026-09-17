@@ -35,7 +35,6 @@ process.on("uncaughtException", (err) => {
 
 import { buildAppMenuTemplate } from "./app-menu";
 import {
-  createQuickAskWindow,
   destroyQuickAskWindow,
   hideQuickAsk,
   resizeQuickAsk,
@@ -683,11 +682,9 @@ if (!gotSingleInstanceLock) {
     }
     createWindow();
     await installDesktopPetWindow(() => mainWindow, summonWindow, (sessionId) => { openSessionInMainWindow(sessionId, summonWindow); });
-    // Pre-create the Quick-Ask popup so the first double-tap doesn't
-    // pay BrowserWindow construction + renderer boot latency (~400ms
-    // cold). Hidden by default; surfaces via `summonQuickAsk` on
-    // hotkey.
-    createQuickAskWindow();
+    // Quick-Ask is created lazily on first summon and reclaimed after 10
+    // minutes hidden (see quick-ask-window.ts) instead of keeping a full
+    // renderer + chat engine resident for the whole session.
     // macOS dock icon. We pin it twice:
     //   1. NOW — after panel + main windows have all been
     //      created and any activation-policy transitions have flushed.

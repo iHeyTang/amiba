@@ -5,6 +5,16 @@ import type { SessionGroupContribution } from "@amiba/dsh-plugin-ui-shell/client
 export function createExternalSessionGroup(
   classify: (ids: string[]) => Promise<ExternalSessionInfo[]>,
 ): { face: SessionGroupContribution; dispose(): void } {
+  /** Cap on remembered session ids that feed the periodic classification. */
+  const MAX_KNOWN_SESSIONS = 200;
+  /**
+   * An entry must be idle (not re-claimed) for this long before the cap may
+   * evict it. Sessions are re-claimed every time the UI renders them, so a
+   * recently-seen session is never dropped — only long-dead ones are, and a
+   * dropped entry is re-added if the session is claimed again later.
+   */
+  const KNOWN_EVICT_IDLE_MS = 5 * 60 * 1000;
+  const knownAt = new Map<string, number>();
   let members = new Map<string, ExternalSessionInfo>();
   const known = new Set<string>();
   let queued = false;
@@ -56,7 +66,25 @@ export function createExternalSessionGroup(
   return {
     face: {
       claim: (session) => {
-        if (!known.has(session.id)) { known.add(session.id); schedule(); }
+        if (!known.has(session.id)) {
+          known.add(session.id);
+          knownAt.set(session.id, Date.now());
+          // `known` grew without bound as sessions were claimed, so the 15s
+          // classification re-classified every session the user ever opened.
+          // Evict the oldest entries that are NOT currently grouped AND have
+          // been idle long enough that dropping them cannot cost a pending
+          // first-message retry; a dropped entry is re-added on the next claim.
+          if (known.size > MAX_KNOWN_SESSIONS) {
+            for (const id of known) {
+              if (known.size <= MAX_KNOWN_SESSIONS) break;
+              if (members.has(id)) continue;
+              if (Date.now() - (knownAt.get(id) ?? 0) < KNOWN_EVICT_IDLE_MS) continue;
+              known.delete(id);
+              knownAt.delete(id);
+            }
+          }
+          schedule();
+        }
         return members.has(session.id);
       },
       title: (session) => {
@@ -77,6 +105,7 @@ export function createExternalSessionGroup(
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
       known.clear();
+      knownAt.clear();
       listeners.clear();
     },
   };

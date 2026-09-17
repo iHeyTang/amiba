@@ -37,3 +37,31 @@ it("batches large histories and retries sessions whose first message has not arr
   expect(group.face.claim({ id: "0", title: "" })).toBe(true);
   group.dispose();
 });
+it("caps idle claimed sessions so the periodic classification stays bounded", async () => {
+  vi.useFakeTimers();
+  const classify = vi.fn().mockResolvedValue([]);
+  const group = createExternalSessionGroup(classify);
+  // Burst-claim far more than the 200 cap: nothing is idle yet, so nothing is
+  // evicted and every claimed session still gets classified.
+  for (let i = 0; i < 205; i++) group.face.claim({ id: String(i), title: "" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(classify.mock.calls[0][0]).toHaveLength(100);
+  expect(group.face.claim({ id: "200", title: "" })).toBe(false);
+
+  // Wait past the idle threshold and claim one more session: the cap now
+  // evicts the oldest idle non-members, so the next classification stays
+  // within the cap instead of growing with every historical session.
+  await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+  classify.mockClear();
+  group.face.claim({ id: "999", title: "" });
+  await vi.advanceTimersByTimeAsync(0);
+  const total = classify.mock.calls.reduce((sum, call) => sum + call[0].length, 0);
+  expect(total).toBeLessThanOrEqual(200);
+  expect(classify.mock.calls[0][0]).not.toContain("999");
+
+  // A dropped entry is re-added by the next claim and classified again.
+  group.face.claim({ id: "0", title: "" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(classify.mock.calls.at(-1)![0]).toContain("0");
+  group.dispose();
+});
