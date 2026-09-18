@@ -33,7 +33,6 @@ import { cn } from "@amiba/ui";
 import type { PendingPromptResult, ChatSurfaceCapabilities } from "@amiba/ui";
 import { useT } from "@amiba/i18n";
 import { getPlatform } from "@amiba/app-runtime/platform";
-import type { DshApiClient } from "@amiba/app-runtime/dsh-client";
 import { ArrowUpRight, SquarePen } from "lucide-react";
 import {
   useCallback,
@@ -44,7 +43,6 @@ import {
   useState,
 } from "react";
 
-import { createDesktopDshChatClient } from "../chat/dsh-chat-client";
 import {
   resolveQuickAskCardLayout,
   resolveQuickAskSurfaceLayout,
@@ -55,7 +53,7 @@ type QuickAskPrefill = { text?: string; sourceApp?: string };
 /** Shadow-safe room inside the transparent BrowserWindow stage. */
 const SHADOW_GUTTER_X_PX = 16;
 
-export function QuickAskView({ dshClient }: { dshClient: DshApiClient }) {
+export function QuickAskView() {
   // Each BrowserWindow is its own renderer process, so the theme hook
   // must run here too — without it the dark BrowserWindow background
   // bleeds through any transparent area while the card paints with
@@ -63,10 +61,13 @@ export function QuickAskView({ dshClient }: { dshClient: DshApiClient }) {
   useResolvedTheme();
   const sessions = useSessions();
   const { t } = useT();
-  const client = useMemo(
-    () => createDesktopDshChatClient(dshClient),
-    [dshClient],
-  );
+  const client = useMemo(() => {
+    // The chat engine lives in the MAIN process; this window consumes it as
+    // a pure view. There is no local engine on desktop.
+    const hosted = getPlatform().chatEngine;
+    if (!hosted) throw new Error("The desktop chat engine is unavailable.");
+    return hosted;
+  }, []);
   const bridge = useMemo(() => window.amiba, []);
   const openExternal = useCallback(
     (url: string) => getPlatform().shell.openExternal(url),

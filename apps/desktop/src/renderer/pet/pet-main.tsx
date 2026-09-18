@@ -4,7 +4,8 @@
  * Boots a minimal page instead of the DSH shell: installs the Electron
  * platform adapter (from the preload bridge — no DSH client needed) and
  * renders the same `DesktopPet` surface as the old shell-hosted slot, fed by
- * snapshots the main window's pets plugin forwards over IPC.
+ * the MAIN-PROCESS DSH state subscription layer's snapshot (`dshState`),
+ * which keeps producing data even when the main window is closed.
  */
 import { createRoot } from "react-dom/client";
 import { setPlatform } from "@amiba/app-runtime/platform";
@@ -23,10 +24,12 @@ setPlatform(createElectronAdapter());
 
 const root = document.getElementById("root");
 if (!root) throw new Error("pet root element missing");
-const bridge = window.amiba.desktopPet;
+// Single shared contract: the pet page subscribes to the same main-process
+// snapshot every other Amiba window renders.
+const dshState = window.amiba.dshState;
 createRoot(root).render(
   <DesktopPet
-    library={createPetPageLibrary(bridge)}
-    notifications={createPetPageFeed(bridge)}
+    library={createPetPageLibrary(dshState)}
+    notifications={createPetPageFeed(dshState)}
   />,
 );

@@ -25,6 +25,12 @@ type WorkspaceChange =
 interface AmibaBridgeApi {
   appUpdates: NonNullable<import("@amiba/app-runtime/platform").PlatformAdapter["appUpdates"]>;
   desktopPet: import("../shared/desktop-pet").DesktopPetBridge;
+  /**
+   * Main-process DSH state subscription layer contract. Every window
+   * subscribes to the same snapshot (pet library / notification feed /
+   * session activity); see `shared/dsh-state.ts`.
+   */
+  dshState: import("../shared/dsh-state").DshStateBridge;
   embeddedPage: {
     request(
       input: import("../shared/embedded-page").EmbeddedPageRequest,
@@ -75,6 +81,19 @@ interface AmibaBridgeApi {
       headers: Record<string, string>;
       body: Uint8Array;
     }>;
+  };
+  /**
+   * Hosted chat engine surface (`ChatEngineIpcSurface`). The MAIN process
+   * runs the app's single DshChatEngineClient; windows subscribe to sessions
+   * and receive routed snapshots/events over IPC.
+   */
+  chatEngine: import("@amiba/app-runtime/dsh-client").ChatEngineIpcSurface;
+  /**
+   * Conversation data plane proxy (main-process adapters). See
+   * `renderer/platform/ipc-platform-adapters.ts`.
+   */
+  dshApis: {
+    call(adapter: string, method: string, args?: unknown[]): Promise<unknown>;
   };
   dshPlugins: import("@amiba/extension-sdk").AmibaDshPluginManagerBridge;
   storage: {

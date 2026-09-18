@@ -188,6 +188,8 @@ function withQuietTimeout<T>(
 export class DshChatEngineClient implements ChatEngineClient {
   private readonly states = new Map<string, SessionState>();
   private readonly activities = new Map<string, { source: DshSessionActivitySource; running: boolean; off(): void }>();
+  /** Passive per-session journal follows owned by `follow()`/`unfollow()`. */
+  private readonly follows = new Map<string, { controller: AbortController; promise: Promise<void> }>();
   private readonly snapshotListeners = new Set<SnapshotListener>();
   private readonly streamListeners = new Set<StreamListener>();
   // Host-owned interaction waits, keyed session → requestId/approvalId.
@@ -679,6 +681,94 @@ export class DshChatEngineClient implements ChatEngineClient {
     this.emitSnapshot(sessionId);
   }
 
+  /**
+   * Watch one session's durable journal WITHOUT submitting — the passive
+   * half of a shared (main-process) engine.
+   *
+   * A renderer-owned engine only ever saw live frames for turns IT submitted
+   * (its `run()` owns the journal); a window opening someone else's in-flight
+   * turn had to re-enter the conversation to observe progress. Hosting one
+   * engine in the main process and following every session a window views
+   * makes those frames flow to every viewer, through the same
+   * `observePassiveFrame` projection the global watcher already uses (which
+   * stays out while a local `run()` owns the session).
+   *
+   * Follows are refcounted by the host: `follow` is idempotent per session
+   * and `unfollow` releases it. Re-following after a carrier loss is handled
+   * inside `client.events`; a not-yet-created session is retried here.
+   */
+  follow(sessionId: string, address?: AgentSubagentAddress): void {
+    if (this.disposed || !sessionId || this.follows.has(sessionId)) return;
+    this.bindActivity(sessionId);
+    this.ensureInteractionWatcher();
+    const controller = new AbortController();
+    const follow = {
+      controller,
+      promise: this.runFollow(sessionId, address, controller.signal),
+    };
+    this.follows.set(sessionId, follow);
+    void follow.promise.finally(() => {
+      if (this.follows.get(sessionId) === follow) this.follows.delete(sessionId);
+    });
+  }
+
+  /** Release a `follow`; the host calls this when the last viewer leaves. */
+  unfollow(sessionId: string): void {
+    const follow = this.follows.get(sessionId);
+    if (!follow) return;
+    this.follows.delete(sessionId);
+    follow.controller.abort();
+    this.activities.get(sessionId)?.off();
+    this.activities.delete(sessionId);
+  }
+
+  private async runFollow(
+    sessionId: string,
+    address: AgentSubagentAddress | undefined,
+    signal: AbortSignal,
+  ): Promise<void> {
+    let delay = 500;
+    while (!this.disposed && !signal.aborted) {
+      const bridge = new DshAmibaEventBridge();
+      try {
+        const iterator = address
+          ? await this.options.client.openEvents(signal, {
+              ...address,
+              kind: "subagent",
+            })
+          : this.options.client.events(signal, undefined, {
+              kind: "session",
+              sessionId,
+            })[Symbol.asyncIterator]();
+        try {
+          for (;;) {
+            const next = await iterator.next();
+            if (next.done) break;
+            // A local run owns this session's journal and already emits every
+            // frame; processing the follow's copy too would duplicate the
+            // turn's bubble. Frames are still consumed (not buffered) so the
+            // follow resumes at the live edge.
+            if (this.states.get(sessionId)?.controller) continue;
+            for (const mapped of bridge.accept(next.value)) {
+              if (mapped.sessionId !== sessionId) continue;
+              this.observePassiveFrame(mapped.sessionId, mapped.event);
+            }
+          }
+        } finally {
+          await iterator.return?.(undefined);
+        }
+      } catch {
+        // A session that does not exist yet (a fresh id whose create has not
+        // landed) and a dropped carrier both land here; retry with backoff.
+        // `client.events` reconnects internally for transport losses, so this
+        // loop exists for the logical not-found case.
+      }
+      if (this.disposed || signal.aborted) return;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay = Math.min(delay * 2, 5_000);
+    }
+  }
+
   requestSnapshot(sessionId: string): void {
     if (this.disposed) return;
     this.bindActivity(sessionId);
@@ -867,6 +957,8 @@ export class DshChatEngineClient implements ChatEngineClient {
   dispose(): void {
     this.disposed = true;
     this.watchController.abort();
+    for (const follow of this.follows.values()) follow.controller.abort();
+    this.follows.clear();
     for (const state of this.states.values()) state.controller?.abort();
     this.states.clear();
     for (const activity of this.activities.values()) activity.off();

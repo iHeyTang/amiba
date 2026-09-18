@@ -1,4 +1,3 @@
-import { getPlatform, hasPlatform } from "@amiba/app-runtime/platform";
 import { createPresentationCoordinator } from "./presentation-coordinator";
 import {
   createContext,
@@ -98,9 +97,8 @@ export const useSurfaceInteraction = () => useContext(Context);
 export function InteractionRegion({
   children,
   activity,
-  activityTitle,
   ...props
-}: HTMLAttributes<HTMLDivElement> & { activity?: SurfaceActivity; activityTitle?: string }) {
+}: HTMLAttributes<HTMLDivElement> & { activity?: SurfaceActivity }) {
   const [store] = useState(createSurfaceInteraction);
   const root = useContext(RootContext);
   const [election] = useState(() =>
@@ -127,15 +125,7 @@ export function InteractionRegion({
       election.setVisible(false);
     };
   }, [element, election]);
-  useEffect(() => {
-    const desktop = hasPlatform() ? getPlatform().desktopPet : undefined;
-    if (!desktop || !activity) return;
-    const update = () => {
-      void desktop.publishActivity({ ...activity.getSnapshot(), title: activityTitle }).catch(() => {});
-    };
-    update();
-    return activity.subscribe(update);
-  }, [activity, activityTitle]);
+
   useEffect(() => () => store.dispose(), [store]);
   const editor = (target: EventTarget | null) =>
     target instanceof Element &&

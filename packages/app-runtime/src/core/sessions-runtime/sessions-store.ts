@@ -194,7 +194,7 @@ export class SessionsStore {
     });
 
     this.storageWatchUnsubscribe = getPlatform().storage.watch(
-      [SESSION_KEYS.index],
+      [SESSION_KEYS.index, SESSION_KEYS.revision],
       this.onStorageChange,
     );
 
@@ -321,12 +321,24 @@ export class SessionsStore {
   // -------------------------------------------------------------------------
 
   /**
-   * Only ``sessions.index`` is cross-window. When another window mints
-   * a new session, renames one, or deletes one, the broadcast lands
-   * here. We reflect history changes without letting a partial index
-   * discard this window's open drafts or selection.
+   * Cross-window change handling.
+   *
+   * `sessions.index` is the historical broadcast channel: when another
+   * window mints a new session, renames one, or deletes one, the broadcast
+   * lands here and we reflect history changes without letting a partial
+   * index discard this window's open drafts or selection.
+   *
+   * `sessions.revision` is the MAIN-process DSH state layer's marker: the
+   * shared DSH `session/list` index changed somewhere (Quick-Ask created a
+   * session, a plugin or cron touched the runtime), so this window re-fetches
+   * its index immediately instead of waiting for its next surface refresh
+   * tick — that was the "Quick-Ask 建会话后主窗口历史要等下个刷新 tick" lag.
    */
   private onStorageChange = (changes: StorageChangeMap): void => {
+    const revision = changes[SESSION_KEYS.revision];
+    if (revision && revision.newValue !== undefined) {
+      void this.refresh();
+    }
     const indexChange = changes[SESSION_KEYS.index];
     if (!indexChange) return;
     const v = indexChange.newValue;

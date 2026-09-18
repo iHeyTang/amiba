@@ -398,9 +398,6 @@ const api = {
     ready: () => ipcRenderer.invoke("desktop-pet:ready"),
     menu: (pets: { id: string; name: string }[], activeId: string | null) =>
       ipcRenderer.invoke("desktop-pet:menu", pets, activeId),
-    publishActivity: (
-      activity: import("../shared/desktop-pet").DesktopPetActivity,
-    ) => ipcRenderer.invoke("desktop-pet:activity", activity),
     onState: (
       listener: (
         state: import("../shared/desktop-pet").DesktopPetState,
@@ -413,18 +410,6 @@ const api = {
       ipcRenderer.on("desktop-pet:state", handler);
       return () => ipcRenderer.off("desktop-pet:state", handler);
     },
-    onActivity: (
-      listener: (
-        state: import("../shared/desktop-pet").DesktopPetActivity,
-      ) => void,
-    ) => {
-      const handler = (
-        _: Electron.IpcRendererEvent,
-        state: import("../shared/desktop-pet").DesktopPetActivity,
-      ) => listener(state);
-      ipcRenderer.on("desktop-pet:activity", handler);
-      return () => ipcRenderer.off("desktop-pet:activity", handler);
-    },
     onPointer: (listener: (point: { x: number; y: number } | null) => void) => {
       const handler = (_: Electron.IpcRendererEvent, point: { x: number; y: number } | null) => listener(point);
       ipcRenderer.on("desktop-pet:pointer", handler);
@@ -436,47 +421,132 @@ const api = {
       ipcRenderer.on("desktop-pet:select", handler);
       return () => ipcRenderer.off("desktop-pet:select", handler);
     },
-    // The standalone pet page (renderer/pet) has no DSH shell, so the MAIN
-    // window's pets plugin forwards its live pet library + notification feed
-    // here; the pet page routes pet activation and bubble dismissal back to
-    // the same plugin through the main process.
-    forwardData: (data: import("@amiba/app-runtime/platform").DesktopPetData) =>
-      ipcRenderer.invoke("desktop-pet:data", data),
-    onData: (
-      listener: (data: import("@amiba/app-runtime/platform").DesktopPetData) => void,
+  },
+  /**
+   * Single shared state contract for every Amiba window. The MAIN process
+   * owns the DSH subscriptions (pet library / notification feed / session
+   * activity) and broadcasts one snapshot; windows only subscribe and route
+   * mutations back. Replaces the old "main window's pets plugin forwards
+   * DesktopPetData over desktop-pet:*" pipeline.
+   */
+  dshState: {
+    get: () => ipcRenderer.invoke("dsh-state:get"),
+    subscribe: (
+      listener: (snapshot: import("../shared/dsh-state").DshStateSnapshot) => void,
     ) => {
       const handler = (
         _: Electron.IpcRendererEvent,
-        data: import("@amiba/app-runtime/platform").DesktopPetData,
-      ) => listener(data);
-      ipcRenderer.on("desktop-pet:data", handler);
-      return () => { ipcRenderer.off("desktop-pet:data", handler); };
+        snapshot: import("../shared/dsh-state").DshStateSnapshot,
+      ) => listener(snapshot);
+      ipcRenderer.on("dsh-state:snapshot", handler);
+      // Deliver the current snapshot on subscribe so a fresh window does not
+      // wait for the next source tick (this replaces the old
+      // `desktop-pet:data-request` mount handshake).
+      void ipcRenderer
+        .invoke("dsh-state:get")
+        .then((snapshot) => {
+          if (snapshot) listener(snapshot as import("../shared/dsh-state").DshStateSnapshot);
+        })
+        .catch(() => {});
+      return () => { ipcRenderer.off("dsh-state:snapshot", handler); };
     },
-    requestData: () => ipcRenderer.invoke("desktop-pet:data-request"),
-    onDataRequest: (listener: () => void) => {
-      const handler = () => listener();
-      ipcRenderer.on("desktop-pet:data-request", handler);
-      return () => { ipcRenderer.off("desktop-pet:data-request", handler); };
+    activatePet: (id: string | null) =>
+      ipcRenderer.invoke("dsh-state:activate-pet", id),
+    dismissNotification: (id: string) =>
+      ipcRenderer.invoke("dsh-state:dismiss", id),
+    markSessionsRead: (
+      reads: import("../shared/dsh-state").DshStateReadMarker[],
+    ) => ipcRenderer.invoke("dsh-state:mark-read", reads),
+    resyncNotifications: () => ipcRenderer.invoke("dsh-state:resync"),
+  },
+  /**
+   * Hosted chat engine surface. The MAIN process runs the app's one
+   * DshChatEngineClient (its single set of DSH runtime connections); every
+   * window talks to it through this namespace instead of building its own
+   * client + engine. Commands mirror the protocol `ChatEngineClient` verbs,
+   * `onMessage` receives the engine's routed pushes for THIS window's
+   * subscribed sessions, and the serialize hooks let the hosted engine ask
+   * this window to resolve its local attachment drafts.
+   */
+  chatEngine: {
+    subscribe: (
+      sessionId: string,
+      subagent?: import("@amiba/app-runtime/platform").AgentSubagentAddress,
+    ) => ipcRenderer.invoke("chat-engine:subscribe", sessionId, subagent),
+    unsubscribe: (sessionId: string) =>
+      ipcRenderer.invoke("chat-engine:unsubscribe", sessionId),
+    requestSnapshot: (sessionId: string) =>
+      ipcRenderer.invoke("chat-engine:snapshot", sessionId),
+    submit: (
+      payload: import("@amiba/app-runtime/protocol").SubmitPayload,
+    ) => ipcRenderer.invoke("chat-engine:submit", payload),
+    submitWithReceipt: (
+      payload: import("@amiba/app-runtime/protocol").SubmitPayload,
+    ): Promise<import("@amiba/app-runtime/protocol").SubmitReceipt> =>
+      ipcRenderer.invoke("chat-engine:submit-receipt", payload),
+    abort: (sessionId: string) =>
+      ipcRenderer.invoke("chat-engine:abort", sessionId),
+    clear: (sessionId: string) =>
+      ipcRenderer.invoke("chat-engine:clear", sessionId),
+    clearApproval: (sessionId: string, approvalId: string) =>
+      ipcRenderer.invoke("chat-engine:clear-approval", sessionId, approvalId),
+    respondToApproval: (
+      request: import("@amiba/app-runtime/protocol").ApprovalRequest,
+      decision: import("@amiba/app-runtime/protocol").ApprovalDecision,
+    ): Promise<import("@amiba/app-runtime/protocol").RuntimeActionResult> =>
+      ipcRenderer.invoke("chat-engine:respond-approval", request, decision),
+    respondToQuestions: (
+      request: import("@amiba/app-runtime/protocol").UserQuestionRequest,
+      answers: import("@amiba/app-runtime/protocol").UserQuestionAnswerItem[],
+    ): Promise<import("@amiba/app-runtime/protocol").RuntimeActionResult> =>
+      ipcRenderer.invoke("chat-engine:respond-questions", request, answers),
+    cancelQuestions: (
+      request: import("@amiba/app-runtime/protocol").UserQuestionRequest,
+    ): Promise<import("@amiba/app-runtime/protocol").RuntimeActionResult> =>
+      ipcRenderer.invoke("chat-engine:cancel-questions", request),
+    onMessage: (
+      listener: (msg: import("@amiba/app-runtime/protocol").EngineToClientMessage) => void,
+    ) => {
+      const handler = (
+        _: Electron.IpcRendererEvent,
+        msg: import("@amiba/app-runtime/protocol").EngineToClientMessage,
+      ) => listener(msg);
+      ipcRenderer.on("chat-engine:message", handler);
+      return () => ipcRenderer.off("chat-engine:message", handler);
     },
-    activate: (id: string | null) =>
-      ipcRenderer.invoke("desktop-pet:activate", id),
-    onActivateRequest: (listener: (id: string | null) => void) => {
-      const handler = (_: Electron.IpcRendererEvent, id: string | null) =>
-        listener(id);
-      ipcRenderer.on("desktop-pet:activate-request", handler);
-      return () => {
-        ipcRenderer.off("desktop-pet:activate-request", handler);
-      };
+    onSerializeRequest: (
+      listener: (request: import("@amiba/app-runtime/dsh-client").ChatEngineBridgeRequest) => void,
+    ) => {
+      const handler = (
+        _: Electron.IpcRendererEvent,
+        request: import("@amiba/app-runtime/dsh-client").ChatEngineBridgeRequest,
+      ) => listener(request);
+      ipcRenderer.on("chat-engine:serialize-request", handler);
+      return () => ipcRenderer.off("chat-engine:serialize-request", handler);
     },
-    dismiss: (id: string) => ipcRenderer.invoke("desktop-pet:dismiss", id),
-    onDismissRequest: (listener: (id: string) => void) => {
-      const handler = (_: Electron.IpcRendererEvent, id: string) =>
-        listener(id);
-      ipcRenderer.on("desktop-pet:dismiss-request", handler);
-      return () => {
-        ipcRenderer.off("desktop-pet:dismiss-request", handler);
-      };
-    },
+    respondSerialize: (
+      requestId: string,
+      ok: boolean,
+      parts: import("@amiba/app-runtime/dsh-client").DshPromptContentPart[],
+      error?: string,
+    ) =>
+      ipcRenderer.send("chat-engine:serialize-response", {
+        requestId,
+        ok,
+        parts,
+        ...(error === undefined ? {} : { error }),
+      }),
+  },
+  /**
+   * Conversation data plane proxy. Adapter calls (`agentSessions`,
+   * `agentWorkspaces`, `agentModels`, presets/settings/credentials/
+   * permissions/skills/commands) are executed by the MAIN process on the
+   * app's single DshApiClient; windows dispatch JSON args and receive JSON
+   * results — no window-local DSH connection for conversation data.
+   */
+  dshApis: {
+    call: (adapter: string, method: string, args: unknown[] = []) =>
+      ipcRenderer.invoke("dsh-api:call", { adapter, method, args }),
   },
   quickAsk: {
     onPrefill: (cb: (payload: { text: string; sourceApp: string }) => void) => {

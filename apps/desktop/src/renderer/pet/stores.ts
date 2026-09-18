@@ -1,18 +1,20 @@
 /**
  * Synthetic stores for the standalone desktop pet page.
  *
- * The pet page never boots the DSH shell, so it cannot call the pets remote
- * service or subscribe to the notification feed directly. Instead the MAIN
- * window's pets plugin forwards live snapshots (`DesktopPetData`) over IPC;
- * these tiny stores present those snapshots with the same surface
- * (`PetLibraryClient`, `NotificationClient`) the shell-hosted `DesktopPet`
- * component expects, and route the few interactions the pet page needs
- * (activate pet, dismiss bubble) back through the bridge.
+ * The pet page never boots the DSH shell AND no longer depends on the main
+ * window's pets plugin: pet library, notification feed and session activity
+ * are produced by the MAIN-PROCESS DSH state subscription layer
+ * (`window.amiba.dshState`) and broadcast as one snapshot. These tiny stores
+ * present that snapshot with the same surface (`PetLibraryClient`,
+ * `NotificationClient`) the shell-hosted `DesktopPet` component expects, and
+ * route the few interactions the pet page needs (activate pet, dismiss
+ * bubble, read markers) back through the same contract — they work whether or
+ * not the main window exists.
  */
 import type {
-  DesktopPetBridge,
-  DesktopPetData,
-} from "@amiba/app-runtime/platform";
+  DshStateBridge,
+  DshStateSnapshot,
+} from "../../shared/dsh-state";
 import type { NotificationClient } from "@amiba/dsh-plugin-notification-hub/client";
 import type { AmibaNotification, SessionRead } from "@amiba/dsh-plugin-notification-hub/model";
 import type { PetLibrary, PetRecord } from "@amiba/dsh-plugin-pets/model";
@@ -23,7 +25,7 @@ type LibrarySnapshot = {
   error: string | null;
 };
 
-export function createPetPageLibrary(api: DesktopPetBridge) {
+export function createPetPageLibrary(api: DshStateBridge) {
   let state: LibrarySnapshot = {
     loading: true,
     library: { version: 1, activeId: null, pets: [] },
@@ -31,13 +33,13 @@ export function createPetPageLibrary(api: DesktopPetBridge) {
   };
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((fn) => fn());
-  const accept = (data: DesktopPetData) => {
+  const accept = (snapshot: DshStateSnapshot) => {
     const next: LibrarySnapshot = {
       loading: false,
       library: {
         version: 1,
-        activeId: data.activeId,
-        pets: data.pets as PetRecord[],
+        activeId: snapshot.activeId,
+        pets: snapshot.pets as PetRecord[],
       },
       error: null,
     };
@@ -50,10 +52,7 @@ export function createPetPageLibrary(api: DesktopPetBridge) {
       emit();
     }
   };
-  const offData = api.onData(accept);
-  // Ask the source for a snapshot immediately; the main window's plugin also
-  // pushes on every change, so this only matters for the mount race.
-  void api.requestData();
+  const offData = api.subscribe(accept);
   return {
     getSnapshot: () => state,
     subscribe: (fn: () => void) => {
@@ -62,9 +61,16 @@ export function createPetPageLibrary(api: DesktopPetBridge) {
         listeners.delete(fn);
       };
     },
-    refresh: () => api.requestData(),
+    refresh: async () => {
+      // Pull the layer's latest snapshot immediately (it is pushed on every
+      // source change; this is the mount/lazy-surface re-pull path).
+      const snapshot = await api.get();
+      if (snapshot) accept(snapshot);
+    },
     activate: async (id: string | null) => {
-      await api.activate(id);
+      // The layer applies `amibaPets/activate` and broadcasts the refreshed
+      // library; the next snapshot lands through `accept`.
+      await api.activatePet(id);
       return state.library;
     },
     // The pet page never edits the library; keep the surface complete so
@@ -79,17 +85,17 @@ export function createPetPageLibrary(api: DesktopPetBridge) {
   };
 }
 
-export function createPetPageFeed(api: DesktopPetBridge) {
+export function createPetPageFeed(api: DshStateBridge) {
   let rows: AmibaNotification[] = [];
   let connection: "loading" | "connected" | "reconnecting" = "loading";
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((fn) => fn());
-  const accept = (data: DesktopPetData) => {
-    rows = data.notifications as AmibaNotification[];
-    connection = data.connection;
+  const accept = (snapshot: DshStateSnapshot) => {
+    rows = snapshot.notifications as AmibaNotification[];
+    connection = snapshot.connection;
     emit();
   };
-  const offData = api.onData(accept);
+  const offData = api.subscribe(accept);
   return {
     getSnapshot: () => rows,
     getConnectionSnapshot: () => connection,
@@ -99,11 +105,12 @@ export function createPetPageFeed(api: DesktopPetBridge) {
         listeners.delete(fn);
       };
     },
-    dismiss: (id: string) => api.dismiss(id),
-    // Read-mark sync is handled by the main window's plugin (it owns the real
-    // feed); the pet page needs no-op stubs to match NotificationClient.
-    markSessionsRead: (_reads: readonly SessionRead[]) => {},
-    resync: () => {},
+    dismiss: (id: string) => api.dismissNotification(id),
+    // The layer owns the real feed (and the DSH hub is the read ledger), so
+    // read markers now flow all the way to the hub instead of being no-ops.
+    markSessionsRead: (reads: readonly SessionRead[]) =>
+      api.markSessionsRead(reads.map(({ sessionId, readAt }) => ({ sessionId, readAt }))),
+    resync: () => api.resyncNotifications(),
     dispose: () => {
       offData();
       listeners.clear();

@@ -1,3 +1,7 @@
+import {
+  ensureSessionWorkspaceWith,
+  resolveSessionCreationWorkspaceWith,
+} from "./session-workspace.js";
 export interface DesktopPetState {
   enabled: boolean;
 }
@@ -26,11 +30,12 @@ export interface DesktopPetLayout {
   visual: { x: number; y: number; width: number; height: number };
 }
 /**
- * Snapshot the main window's pets plugin pushes to the standalone pet page.
- * The pet page never boots the DSH shell; the main window's own plugin
- * instance already holds the pet library and the notification feed, so the
- * live state is forwarded over IPC instead. The notification shape mirrors
- * the card fields the pet UI reads (structural subset of the hub model).
+ * Snapshot shape the MAIN PROCESS's DSH state subscription layer publishes
+ * to every window via `window.amiba.dshState`. The main process owns the DSH
+ * runtime connection, so it is the single producer of the pet library and
+ * the notification feed; windows (pet page, main window, Quick-Ask) only
+ * subscribe. The notification shape mirrors the card fields the pet UI reads
+ * (structural subset of the hub model).
  */
 export interface DesktopPetData {
   pets: { id: string; name: string; config: unknown; updatedAt?: number }[];
@@ -69,21 +74,8 @@ export interface DesktopPetBridge {
     activeId: string | null,
   ): Promise<void>;
   onSelect(listener: (id: string) => void): () => void;
-  publishActivity(activity: DesktopPetActivity): Promise<void>;
-  onActivity(listener: (activity: DesktopPetActivity) => void): () => void;
   onPointer(listener: (point: { x: number; y: number } | null) => void): () => void;
   ready(): Promise<void>;
-  // Pet-page data source. The MAIN window's pets plugin forwards its live
-  // pet library + notification feed here; the pet page routes activation
-  // and bubble dismissal back to the same plugin.
-  forwardData(data: DesktopPetData): Promise<void>;
-  onData(listener: (data: DesktopPetData) => void): () => void;
-  requestData(): Promise<void>;
-  onDataRequest(listener: () => void): () => void;
-  activate(id: string | null): Promise<void>;
-  onActivateRequest(listener: (id: string | null) => void): () => void;
-  dismiss(id: string): Promise<void>;
-  onDismissRequest(listener: (id: string) => void): () => void;
 }
 
 /**
@@ -797,6 +789,14 @@ export interface PlatformAdapter {
   desktopPet?: DesktopPetBridge;
   kind: "desktop" | "web";
   /**
+   * Hosted chat engine (protocol `ChatEngineClient`). When the host runs the
+   * engine OUTSIDE the renderer (the desktop main process), surfaces consume
+   * this instead of constructing their own `DshChatEngineClient`; hosts
+   * without a hosted engine leave it undefined and the surface builds a local
+   * one. See `@amiba/app-runtime/dsh-client` → `createIpcChatEngineClient`.
+   */
+  chatEngine?: import("../protocol/index.js").ChatEngineClient;
+  /**
    * Host-owned window chrome geometry. Product UI uses this to keep its
    * controls clear of native title-bar affordances such as macOS traffic
    * lights without guessing the operating system from browser user-agent
@@ -872,28 +872,40 @@ export function hasPlatform(): boolean {
 export async function ensureSessionWorkspace(sessionId: string, platform = getPlatform()): Promise<string | undefined> {
   const workspaces = platform.workspaces;
   if (!workspaces) return undefined;
-  const bound = (await workspaces.listBindings())[sessionId];
-  if (bound) return bound;
-  const existing = (await platform.agentSessions?.list())?.find(session => session.sessionId === sessionId);
-  if (existing?.cwd && workspaces.bindIfUnbound) {
-    return (await workspaces.bindIfUnbound(sessionId, existing.cwd)) ?? undefined;
-  }
-  return await workspaces.getDefaultRoot();
+  return ensureSessionWorkspaceWith(sessionId, {
+    listBindings: () => workspaces.listBindings(),
+    listSessions: async () => (await platform.agentSessions?.list()) ?? [],
+    bindIfUnbound: async (id, cwd) =>
+      (await workspaces.bindIfUnbound?.(id, cwd)) ?? undefined,
+    getDefaultRoot: async () => (await workspaces.getDefaultRoot?.()) ?? undefined,
+  });
 }
 
-
-/** Shared session.create directory policy for the main shell and Quick Ask. */
+/**
+ * Shared session.create directory policy for the main shell and Quick Ask.
+ * The same strategy runs in the main process for the hosted engine
+ * (`resolveSessionCreationWorkspaceWith` + main surfaces) — one implementation.
+ */
 export async function resolveSessionCreationWorkspace(sessionId: string, platform = getPlatform()): Promise<{ cwd?: string; workspaceId?: string }> {
-  const cwd = await ensureSessionWorkspace(sessionId, platform);
-  if (!cwd) return {};
-  const existing = (await platform.agentSessions?.list())?.find(session => session.sessionId === sessionId);
-  if (existing?.cwd && platform.workspaces?.resolveRuntimeCwd) {
-    return { cwd: await platform.workspaces.resolveRuntimeCwd(sessionId, existing.cwd) };
-  }
-  const explicitlyBound = Object.hasOwn((await platform.workspaces?.listBindings()) ?? {}, sessionId);
-  if (explicitlyBound && platform.agentWorkspaces) {
-    const { workspace } = await platform.agentWorkspaces.create(cwd);
-    return { workspaceId: workspace.workspaceId };
-  }
-  return { cwd };
+  return resolveSessionCreationWorkspaceWith(sessionId, {
+    listBindings: async () => (await platform.workspaces?.listBindings()) ?? {},
+    listSessions: async () => (await platform.agentSessions?.list()) ?? [],
+    bindIfUnbound: async (id, cwd) =>
+      (await platform.workspaces?.bindIfUnbound?.(id, cwd)) ?? undefined,
+    resolveRuntimeCwd: async (id, cwd) =>
+      (await platform.workspaces?.resolveRuntimeCwd?.(id, cwd)) ?? undefined,
+    getDefaultRoot: async () =>
+      (await platform.workspaces?.getDefaultRoot?.()) ?? undefined,
+    ...(platform.agentWorkspaces
+      ? { createWorkspace: (cwd) => platform.agentWorkspaces!.create(cwd) }
+      : {}),
+  });
 }
+
+// Shared policy functions (workspace strategy + subagent retained addresses).
+export {
+  ensureSessionWorkspaceWith,
+  resolveSessionCreationWorkspaceWith,
+  retainedAddress,
+} from "./session-workspace.js";
+export type { SessionWorkspaceSurfaces } from "./session-workspace.js";

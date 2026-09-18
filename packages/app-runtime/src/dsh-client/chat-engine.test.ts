@@ -769,3 +769,64 @@ it("keeps desktop workspace creation for a genuinely new session", async () => {
   );
   engine.dispose();
 });
+
+describe("DshChatEngineClient follow/unfollow (main-process host)", () => {
+  /**
+   * A client whose journal (`events(address)`) replays `script`, while the
+   * GLOBAL events stream (the interaction-wait watcher) stays silent — the
+   * real runtime delivers session journals only to `session/follow`
+   * subscribers, not to the `$events` watcher.
+   */
+  function followClient(script: DshMuxEnvelope[]): DshApiClient {
+    return {
+      listSessions: vi.fn(async () => ({ items: [] })),
+      async *events(_signal?: unknown, _onOpen?: unknown, address?: unknown) {
+        if (address) {
+          for (const envelope of script) yield envelope;
+        }
+        await new Promise(() => {});
+      },
+    } as unknown as DshApiClient;
+  }
+
+  it("streams a host-driven turn to observers through a durable journal follow", async () => {
+    const engine = new DshChatEngineClient({
+      client: followClient([TURN_START, CHUNK, TURN_END]),
+    });
+    const events: StreamEvent[] = [];
+    engine.onStreamEvent((sessionId, event) => {
+      if (sessionId === "session-1") events.push(event);
+    });
+
+    // The host follows the session for every viewer; no window submits.
+    engine.follow("session-1");
+    await eventually(() =>
+      expect(events.map((event) => event.kind)).toEqual([
+        "begin",
+        "turn",
+        "chunk",
+        "done",
+      ]),
+    );
+    engine.unfollow("session-1");
+    engine.dispose();
+  });
+
+  it("is idempotent per session and releases the journal on unfollow", async () => {
+    const events: StreamEvent[] = [];
+    const engine = new DshChatEngineClient({
+      client: followClient([TURN_START]),
+    });
+    engine.onStreamEvent((sessionId, event) => {
+      if (sessionId === "session-1") events.push(event);
+    });
+
+    engine.follow("session-1");
+    engine.follow("session-1"); // second viewer joins — no second journal
+    await eventually(() => expect(events.map((e) => e.kind)).toContain("turn"));
+    engine.unfollow("session-1");
+    // Unfollow is idempotent too; dispose aborts outstanding follows.
+    engine.unfollow("session-1");
+    engine.dispose();
+  });
+});
