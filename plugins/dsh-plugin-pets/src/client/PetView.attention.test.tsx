@@ -6,6 +6,18 @@ import { PetView } from "./PetView.js";
 import type { DesktopPetBridge } from "@amiba/app-runtime/platform";
 import type { PetConfig } from "@mofli/core";
 
+// jsdom does not expose the PointerEvent global; the pet handlers only read
+// button/pointerId/screenX/screenY, which a MouseEvent subclass covers.
+const PointerEventShim =
+  globalThis.PointerEvent ??
+  class PointerEventShim extends MouseEvent {
+    pointerId: number;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+    }
+  };
+
 const { handle } = vi.hoisted(() => ({ handle: vi.fn() }));
 vi.mock("../model.js", () => ({
   registry: {
@@ -165,3 +177,49 @@ for (const source of ["surface", "desktop", "local"] as const) {
     );
   });
 }
+
+it("desktop drag always terminates, even when the pointer-up lands outside the pet", () => {
+  const drag = vi.fn();
+  let nativePointer: (p: { x: number; y: number }) => void = () => {};
+  const desktop = {
+    menu() {},
+    api: {
+      onPointer: (cb: typeof nativePointer) => {
+        nativePointer = cb;
+        return () => {};
+      },
+      setVisualBounds: vi.fn(),
+      setIgnoreMouse: vi.fn(),
+      drag,
+    } as unknown as DesktopPetBridge,
+  };
+  act(() =>
+    root.render(<PetView config={{} as PetConfig} name="Pet" desktop={desktop} />),
+  );
+  const svg = host.querySelector("svg")!;
+  act(() => {
+    svg.dispatchEvent(
+      new PointerEventShim("pointerdown", {
+        bubbles: true,
+        button: 0,
+        pointerId: 7,
+        screenX: 10,
+        screenY: 10,
+      }),
+    );
+  });
+  expect(drag).toHaveBeenNthCalledWith(1, true);
+  drag.mockClear();
+  // The pet lags behind the cursor while dragging, so the pointer-up lands on
+  // the window/container instead of the SVG. The window-level listener must
+  // still end the drag, otherwise the main process keeps chasing the mouse.
+  act(() => {
+    window.dispatchEvent(new PointerEventShim("pointerup", { pointerId: 7 }));
+  });
+  expect(drag).toHaveBeenNthCalledWith(1, false);
+  // A second release is a no-op: the listeners were removed on the first.
+  act(() => {
+    window.dispatchEvent(new PointerEventShim("pointerup", { pointerId: 7 }));
+  });
+  expect(drag).toHaveBeenCalledTimes(1);
+});

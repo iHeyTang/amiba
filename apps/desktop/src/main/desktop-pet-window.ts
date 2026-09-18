@@ -71,6 +71,14 @@ export async function installDesktopPetWindow(
     if (dragTimer) {
       clearInterval(dragTimer);
       dragTimer = undefined;
+      // Drag/resize flip the full-screen transparent window into interactive
+      // mode (`setIgnoreMouseEvents(false)`). Restore pass-through the moment
+      // the gesture ends — otherwise the pet window keeps swallowing clicks
+      // across the whole display, and if the renderer missed the pointer-up
+      // (it can, while it lags behind the cursor) the interval would keep
+      // chasing the mouse with no way to stop it.
+      if (win && !win.isDestroyed())
+        win.setIgnoreMouseEvents(true, { forward: true });
       void save();
     }
   };
@@ -336,7 +344,16 @@ export async function installDesktopPetWindow(
   // window. The timer only lives while the pet is ENABLED: previously it ran
   // unconditionally for the app's whole lifetime, waking the main process
   // 30×/s (with an empty body) even when the pet was hidden.
+  //
+  // Even while enabled, the gaze value only changes when the cursor moves —
+  // and the renderer animates toward the last value it saw. Send a message
+  // only when the value actually changed, plus a sparse keep-alive so a
+  // stationary cursor keeps the pet looking at it (the renderer resets the
+  // look when the native stream goes silent). Idle cost drops from 30 Hz to
+  // a handful of messages per second.
   let pointerTimer: ReturnType<typeof setInterval> | undefined;
+  let lastPointer: { x: number; y: number } | null = null;
+  let lastPointerSentAt = 0;
   const startPointerTracking = () => {
     if (pointerTimer) return;
     pointerTimer = setInterval(() => {
@@ -346,11 +363,20 @@ export async function installDesktopPetWindow(
         const cursor = screen.getCursorScreenPoint();
         const bounds = { ...position!, width: size, height: size };
         const display = screen.getDisplayMatching(win.getBounds()).bounds;
-        win.webContents.send("desktop-pet:pointer", {
+        const point = {
           x: Math.tanh((cursor.x - bounds.x - bounds.width / 2) / Math.max(size, display.width / 4)),
           y: Math.tanh((cursor.y - bounds.y - bounds.height / 2) / Math.max(size, display.height / 4)),
-        });
+        };
+        const now = performance.now();
+        const unchanged = lastPointer &&
+          Math.abs(point.x - lastPointer.x) < 1e-4 &&
+          Math.abs(point.y - lastPointer.y) < 1e-4;
+        if (unchanged && now - lastPointerSentAt < 200) return;
+        lastPointer = point;
+        lastPointerSentAt = now;
+        win.webContents.send("desktop-pet:pointer", point);
       } catch {
+        lastPointer = null;
         if (win && !win.isDestroyed()) win.webContents.send("desktop-pet:pointer", null);
       }
     }, 33);
@@ -364,7 +390,32 @@ export async function installDesktopPetWindow(
   screen.on("display-metrics-changed", relocate);
   app.on("before-quit", stopDrag);
   if (enabled) {
-    create();
-    startPointerTracking();
+    // The pet renderer boots the full DSH shell, so creating its window
+    // during app startup makes two complete renderer boots compete for CPU
+    // right at first paint and visibly stalls the launch. Start it only once
+    // the main window has finished loading; the pet still appears as soon as
+    // its own renderer calls `desktop-pet:ready`.
+    const startPet = () => {
+      if (!enabled) return;
+      create();
+      startPointerTracking();
+    };
+    const startWhenMainIsInteractive = () => {
+      const host = main();
+      if (!host || host.isDestroyed()) {
+        setTimeout(startWhenMainIsInteractive, 250);
+        return;
+      }
+      if (host.webContents.isLoadingMainFrame()) {
+        const finish = () => startPet();
+        host.webContents.once("did-finish-load", finish);
+        host.webContents.once("did-fail-load", finish);
+      } else {
+        // Main window already interactive: still give its first paint a head
+        // start before paying for the second renderer boot.
+        setTimeout(startPet, 350);
+      }
+    };
+    startWhenMainIsInteractive();
   }
 }
