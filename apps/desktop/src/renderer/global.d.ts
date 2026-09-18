@@ -25,6 +25,12 @@ type WorkspaceChange =
 interface AmibaBridgeApi {
   appUpdates: NonNullable<import("@amiba/app-runtime/platform").PlatformAdapter["appUpdates"]>;
   desktopPet: import("../shared/desktop-pet").DesktopPetBridge;
+  /**
+   * Main-process DSH state subscription layer contract. Every window
+   * subscribes to the same snapshot (pet library / notification feed /
+   * session activity); see `shared/dsh-state.ts`.
+   */
+  dshState: import("../shared/dsh-state").DshStateBridge;
   embeddedPage: {
     request(
       input: import("../shared/embedded-page").EmbeddedPageRequest,

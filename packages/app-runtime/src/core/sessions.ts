@@ -84,6 +84,16 @@ export interface SessionLocalMeta {
 export const SESSION_KEYS = {
   /** Cross-window projection of the DSH index and local presentation fields. */
   index: "sessions.index",
+  /**
+   * Revision bump written by the MAIN-process DSH state layer whenever the
+   * DSH `session/list` index changes (a session minted by Quick-Ask, a
+   * plugin, cron, …). Every window's SessionsStore refreshes its index on
+   * this marker without waiting for its own next refresh tick. The literal
+   * mirrors `SESSIONS_REVISION_KEY` in
+   * `apps/desktop/src/main/dsh-state/index.ts` (the main bundle cannot
+   * import this module — it pulls React).
+   */
+  revision: "sessions.revision",
 } as const
 
 /** Storage key for local-only UI metadata (unread / titleManual / agent). */

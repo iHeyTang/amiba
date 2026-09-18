@@ -3,7 +3,6 @@ import { GuideCompanion } from "./GuideCompanion.js";
 import type {} from "@amiba/dsh-plugin-notification-hub/client";
 import { DesktopPet } from "./desktop.js";
 import type { Context as ClientContext } from "@deepseek-ai/cordis";
-import { getPlatform } from "@amiba/dsh-plugin-ui-shell/client";
 import type {} from "@amiba/dsh-plugin-ui-shell/client";
 import type { SurfaceVisualOwner } from "@amiba/extension-sdk";
 import { PawPrint } from "lucide-react";
@@ -59,40 +58,11 @@ export async function apply(ctx: ClientContext) {
     ["slots", "remote.amibaPets", "layout", "amibaNotificationFeed"],
     (c) => {
       const library = createPetLibrary(c.remote.amibaPets);
-      // The desktop pet window is a standalone page that never boots the DSH
-      // shell. This plugin instance (the main window) already holds the live
-      // pet library + notification feed, so it forwards snapshots over IPC;
-      // pet activation and bubble dismissal come back the same way.
-      const bridge = getPlatform().desktopPet;
-      const forwarders: (() => void)[] = [];
-      if (bridge) {
-        const push = () => {
-          const snapshot = library.getSnapshot().library;
-          void bridge.forwardData({
-            pets: snapshot.pets.map(({ id, name, config, updatedAt }) => ({
-              id,
-              name,
-              config,
-              updatedAt,
-            })),
-            activeId: snapshot.activeId,
-            notifications: c.amibaNotificationFeed.getSnapshot(),
-            connection: c.amibaNotificationFeed.getConnectionSnapshot(),
-          });
-        };
-        forwarders.push(library.subscribe(push));
-        forwarders.push(c.amibaNotificationFeed.subscribe(push));
-        forwarders.push(
-          bridge.onActivateRequest((id) => void library.activate(id)),
-        );
-        forwarders.push(bridge.onDataRequest(() => push()));
-        forwarders.push(
-          bridge.onDismissRequest(
-            (id) => void c.amibaNotificationFeed.dismiss(id),
-          ),
-        );
-        push();
-      }
+      // The standalone pet window used to be fed over IPC by this plugin
+      // instance (the MAIN window). That data now comes from the
+      // MAIN-PROCESS DSH state subscription layer (`dsh-state:*`), which
+      // polls `amibaPets/list` and `amibaNotifications/watch` directly, so
+      // the pet window no longer depends on any renderer plugin instance.
       const off = [
         c.slots.inject("amiba.onboarding.companion", () => c.slots.register({
           name: "amiba.onboarding.companion", inject: () => ({library}),
@@ -152,7 +122,6 @@ export async function apply(ctx: ClientContext) {
       ];
       return () => {
         off.reverse().forEach((f) => f());
-        forwarders.forEach((f) => f());
         library.dispose();
       };
     },

@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu, screen } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
-import type { DesktopPetActivity, DesktopPetData } from "../shared/desktop-pet";
+import type { DesktopPetActivity } from "../shared/desktop-pet";
 const directory = path.dirname(fileURLToPath(import.meta.url));
 export function clampPetPosition(
   point: { x: number; y: number },
@@ -290,48 +290,11 @@ export async function installDesktopPetWindow(
     }, 16);
   });
   // -- Standalone pet page data source ------------------------------
-  // The pet page (renderer/pet) has no DSH shell: the MAIN window's pets
-  // plugin forwards its live pet library + notification feed here, and the
-  // pet page routes pet activation / bubble dismissal back to the plugin.
-  let petData: DesktopPetData | undefined;
-  const isPetData = (value: unknown): value is DesktopPetData => {
-    if (!value || typeof value !== "object") return false;
-    const v = value as Record<string, unknown>;
-    return (
-      Array.isArray(v.pets) &&
-      v.pets.every(
-        (p) =>
-          !!p && typeof p === "object" && typeof (p as { id?: unknown }).id === "string",
-      ) &&
-      (v.activeId === null || typeof v.activeId === "string") &&
-      Array.isArray(v.notifications) &&
-      ["loading", "connected", "reconnecting"].includes(String(v.connection))
-    );
-  };
-  const sendToPetPage = (data: DesktopPetData) => {
-    if (win && !win.isDestroyed()) win.webContents.send("desktop-pet:data", data);
-  };
-  const sendToSource = (channel: string, ...args: unknown[]) =>
-    contents(main())?.send(channel, ...args);
-  ipcMain.handle("desktop-pet:data", (event, data: unknown) => {
-    // Only the main window's pets plugin may publish pet-page snapshots.
-    if (event.sender !== contents(main()) || !isPetData(data)) return;
-    petData = data;
-    sendToPetPage(data);
-  });
-  ipcMain.handle("desktop-pet:data-request", (event) => {
-    if (!own(event.sender)) return;
-    sendToSource("desktop-pet:data-request");
-    if (petData) sendToPetPage(petData);
-  });
-  ipcMain.handle("desktop-pet:activate", (event, id: unknown) => {
-    if (!own(event.sender) || (id !== null && typeof id !== "string") || (typeof id === "string" && id.length > 200)) return;
-    sendToSource("desktop-pet:activate-request", id ?? null);
-  });
-  ipcMain.handle("desktop-pet:dismiss", (event, id: unknown) => {
-    if (!own(event.sender) || typeof id !== "string" || id.length > 200) return;
-    sendToSource("desktop-pet:dismiss-request", id);
-  });
+  // The pet page (renderer/pet) has no DSH shell. Pet library, notification
+  // feed and session activity now come from the MAIN-PROCESS DSH state
+  // subscription layer (`dsh-state:*`), which owns the DSH runtime client and
+  // broadcasts one snapshot to every window — the pet page no longer depends
+  // on the main window's plugin instance for its data.
   ipcMain.handle("desktop-pet:visual", (event, box) => {
     if (!own(event.sender) || !box || ![box.x, box.y, box.width, box.height].every(Number.isFinite)
       || box.width <= 0 || box.height <= 0 || Math.max(...Object.values(box).map(Number).map(Math.abs)) > 4) return;

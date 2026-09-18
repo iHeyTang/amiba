@@ -57,6 +57,7 @@ import { startWorkspaceManager, stopWorkspaceManager } from "./workspace";
 import { disposeWorkspaceDevelopment } from "./workspace-development";
 import { mainStore } from "./storage";
 import { dshRuntime, managedDshPaths } from "./dsh-runtime";
+import { dshState } from "./dsh-state";
 import {
   startDshNativeGateway,
   type DshNativeGateway,
@@ -599,6 +600,12 @@ if (!gotSingleInstanceLock) {
     installDshClientWebSocketHeaders();
     installPermissionRequestHandler();
     registerIpcHandlers();
+    // Start the shared DSH state subscription layer (pet library /
+    // notification feed / session activity / session-index revision). It owns
+    // the cross-window snapshot in the main process, so every window — the
+    // standalone pet page included — renders it without any window hosting
+    // the DSH plugin graph for it.
+    dshState.start();
     registerAppUpdates();
     const assertExtensionSender = (event: Electron.IpcMainInvokeEvent) => {
       if (
@@ -785,6 +792,7 @@ app.on("before-quit", async (event) => {
 app.on("will-quit", () => {
   stopHotkeyManager();
   destroyQuickAskWindow();
+  dshState.dispose();
   void disposeWorkspaceDevelopment();
   void stopWorkspaceManager();
 });

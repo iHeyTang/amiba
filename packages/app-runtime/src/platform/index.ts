@@ -26,11 +26,12 @@ export interface DesktopPetLayout {
   visual: { x: number; y: number; width: number; height: number };
 }
 /**
- * Snapshot the main window's pets plugin pushes to the standalone pet page.
- * The pet page never boots the DSH shell; the main window's own plugin
- * instance already holds the pet library and the notification feed, so the
- * live state is forwarded over IPC instead. The notification shape mirrors
- * the card fields the pet UI reads (structural subset of the hub model).
+ * Snapshot shape the MAIN PROCESS's DSH state subscription layer publishes
+ * to every window via `window.amiba.dshState`. The main process owns the DSH
+ * runtime connection, so it is the single producer of the pet library and
+ * the notification feed; windows (pet page, main window, Quick-Ask) only
+ * subscribe. The notification shape mirrors the card fields the pet UI reads
+ * (structural subset of the hub model).
  */
 export interface DesktopPetData {
   pets: { id: string; name: string; config: unknown; updatedAt?: number }[];
@@ -73,17 +74,6 @@ export interface DesktopPetBridge {
   onActivity(listener: (activity: DesktopPetActivity) => void): () => void;
   onPointer(listener: (point: { x: number; y: number } | null) => void): () => void;
   ready(): Promise<void>;
-  // Pet-page data source. The MAIN window's pets plugin forwards its live
-  // pet library + notification feed here; the pet page routes activation
-  // and bubble dismissal back to the same plugin.
-  forwardData(data: DesktopPetData): Promise<void>;
-  onData(listener: (data: DesktopPetData) => void): () => void;
-  requestData(): Promise<void>;
-  onDataRequest(listener: () => void): () => void;
-  activate(id: string | null): Promise<void>;
-  onActivateRequest(listener: (id: string | null) => void): () => void;
-  dismiss(id: string): Promise<void>;
-  onDismissRequest(listener: (id: string) => void): () => void;
 }
 
 /**

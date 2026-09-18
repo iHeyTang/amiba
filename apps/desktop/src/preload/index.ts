@@ -436,47 +436,43 @@ const api = {
       ipcRenderer.on("desktop-pet:select", handler);
       return () => ipcRenderer.off("desktop-pet:select", handler);
     },
-    // The standalone pet page (renderer/pet) has no DSH shell, so the MAIN
-    // window's pets plugin forwards its live pet library + notification feed
-    // here; the pet page routes pet activation and bubble dismissal back to
-    // the same plugin through the main process.
-    forwardData: (data: import("@amiba/app-runtime/platform").DesktopPetData) =>
-      ipcRenderer.invoke("desktop-pet:data", data),
-    onData: (
-      listener: (data: import("@amiba/app-runtime/platform").DesktopPetData) => void,
+  },
+  /**
+   * Single shared state contract for every Amiba window. The MAIN process
+   * owns the DSH subscriptions (pet library / notification feed / session
+   * activity) and broadcasts one snapshot; windows only subscribe and route
+   * mutations back. Replaces the old "main window's pets plugin forwards
+   * DesktopPetData over desktop-pet:*" pipeline.
+   */
+  dshState: {
+    get: () => ipcRenderer.invoke("dsh-state:get"),
+    subscribe: (
+      listener: (snapshot: import("../shared/dsh-state").DshStateSnapshot) => void,
     ) => {
       const handler = (
         _: Electron.IpcRendererEvent,
-        data: import("@amiba/app-runtime/platform").DesktopPetData,
-      ) => listener(data);
-      ipcRenderer.on("desktop-pet:data", handler);
-      return () => { ipcRenderer.off("desktop-pet:data", handler); };
+        snapshot: import("../shared/dsh-state").DshStateSnapshot,
+      ) => listener(snapshot);
+      ipcRenderer.on("dsh-state:snapshot", handler);
+      // Deliver the current snapshot on subscribe so a fresh window does not
+      // wait for the next source tick (this replaces the old
+      // `desktop-pet:data-request` mount handshake).
+      void ipcRenderer
+        .invoke("dsh-state:get")
+        .then((snapshot) => {
+          if (snapshot) listener(snapshot as import("../shared/dsh-state").DshStateSnapshot);
+        })
+        .catch(() => {});
+      return () => { ipcRenderer.off("dsh-state:snapshot", handler); };
     },
-    requestData: () => ipcRenderer.invoke("desktop-pet:data-request"),
-    onDataRequest: (listener: () => void) => {
-      const handler = () => listener();
-      ipcRenderer.on("desktop-pet:data-request", handler);
-      return () => { ipcRenderer.off("desktop-pet:data-request", handler); };
-    },
-    activate: (id: string | null) =>
-      ipcRenderer.invoke("desktop-pet:activate", id),
-    onActivateRequest: (listener: (id: string | null) => void) => {
-      const handler = (_: Electron.IpcRendererEvent, id: string | null) =>
-        listener(id);
-      ipcRenderer.on("desktop-pet:activate-request", handler);
-      return () => {
-        ipcRenderer.off("desktop-pet:activate-request", handler);
-      };
-    },
-    dismiss: (id: string) => ipcRenderer.invoke("desktop-pet:dismiss", id),
-    onDismissRequest: (listener: (id: string) => void) => {
-      const handler = (_: Electron.IpcRendererEvent, id: string) =>
-        listener(id);
-      ipcRenderer.on("desktop-pet:dismiss-request", handler);
-      return () => {
-        ipcRenderer.off("desktop-pet:dismiss-request", handler);
-      };
-    },
+    activatePet: (id: string | null) =>
+      ipcRenderer.invoke("dsh-state:activate-pet", id),
+    dismissNotification: (id: string) =>
+      ipcRenderer.invoke("dsh-state:dismiss", id),
+    markSessionsRead: (
+      reads: import("../shared/dsh-state").DshStateReadMarker[],
+    ) => ipcRenderer.invoke("dsh-state:mark-read", reads),
+    resyncNotifications: () => ipcRenderer.invoke("dsh-state:resync"),
   },
   quickAsk: {
     onPrefill: (cb: (payload: { text: string; sourceApp: string }) => void) => {
