@@ -787,6 +787,14 @@ export interface PlatformAdapter {
   desktopPet?: DesktopPetBridge;
   kind: "desktop" | "web";
   /**
+   * Hosted chat engine (protocol `ChatEngineClient`). When the host runs the
+   * engine OUTSIDE the renderer (the desktop main process), surfaces consume
+   * this instead of constructing their own `DshChatEngineClient`; hosts
+   * without a hosted engine leave it undefined and the surface builds a local
+   * one. See `@amiba/app-runtime/dsh-client` → `createIpcChatEngineClient`.
+   */
+  chatEngine?: import("../protocol/index.js").ChatEngineClient;
+  /**
    * Host-owned window chrome geometry. Product UI uses this to keep its
    * controls clear of native title-bar affordances such as macOS traffic
    * lights without guessing the operating system from browser user-agent

@@ -24,6 +24,7 @@ import {
   DshChatEngineClient,
   type DshApiClient,
 } from "@amiba/app-runtime/dsh-client";
+import type { ChatEngineClient } from "@amiba/app-runtime/protocol";
 import {
   getPlatform,
   resolveSessionCreationWorkspace,
@@ -345,7 +346,12 @@ function productCapabilities(): ChatSurfaceCapabilities {
 
 function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string) => AgentSubagentAddress | undefined,
   sessionActivity: ProductShellProps["conversationSource"],
-  uploadFile: import("@amiba/app-runtime/dsh-client").DshChatEngineOptions["uploadFile"]): DshChatEngineClient {
+  uploadFile: import("@amiba/app-runtime/dsh-client").DshChatEngineOptions["uploadFile"]): ChatEngineClient {
+  // A hosted (main-process) engine takes precedence: windows are pure views,
+  // the host owns the app's single engine + DSH connection set. The fallback
+  // keeps the runtime-less / web composition working with a local engine.
+  const hosted = getPlatform().chatEngine;
+  if (hosted) return hosted;
   return new DshChatEngineClient({
     client: dshClient,
     resolveSubagent,

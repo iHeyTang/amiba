@@ -8,7 +8,11 @@ export interface DshRpcErrorShape {
   details?: unknown
 }
 
-export { DshChatEngineClient, type DshChatEngineOptions } from "./chat-engine.js"
+export {
+  DshChatEngineClient,
+  type DshChatEngineOptions,
+  type DshSessionActivitySource,
+} from "./chat-engine.js"
 export { createWebPlatformAdapter } from "./web-platform.js"
 
 export {
@@ -953,5 +957,11 @@ export * from "./amiba-event-bridge"
 export * from "./assistant-text-source";
 
 export { durableContentImages } from "./content-images";
+
+export {
+  createIpcChatEngineClient,
+  type ChatEngineBridgeRequest,
+  type ChatEngineIpcSurface,
+} from "./ipc-chat-engine";
 
 export { retryProgress, upsertRetryTimeline } from "./retry";

@@ -474,6 +474,84 @@ const api = {
     ) => ipcRenderer.invoke("dsh-state:mark-read", reads),
     resyncNotifications: () => ipcRenderer.invoke("dsh-state:resync"),
   },
+  /**
+   * Hosted chat engine surface. The MAIN process runs the app's one
+   * DshChatEngineClient (its single set of DSH runtime connections); every
+   * window talks to it through this namespace instead of building its own
+   * client + engine. Commands mirror the protocol `ChatEngineClient` verbs,
+   * `onMessage` receives the engine's routed pushes for THIS window's
+   * subscribed sessions, and the serialize hooks let the hosted engine ask
+   * this window to resolve its local attachment drafts.
+   */
+  chatEngine: {
+    subscribe: (
+      sessionId: string,
+      subagent?: import("@amiba/app-runtime/platform").AgentSubagentAddress,
+    ) => ipcRenderer.invoke("chat-engine:subscribe", sessionId, subagent),
+    unsubscribe: (sessionId: string) =>
+      ipcRenderer.invoke("chat-engine:unsubscribe", sessionId),
+    requestSnapshot: (sessionId: string) =>
+      ipcRenderer.invoke("chat-engine:snapshot", sessionId),
+    submit: (
+      payload: import("@amiba/app-runtime/protocol").SubmitPayload,
+    ) => ipcRenderer.invoke("chat-engine:submit", payload),
+    submitWithReceipt: (
+      payload: import("@amiba/app-runtime/protocol").SubmitPayload,
+    ): Promise<import("@amiba/app-runtime/protocol").SubmitReceipt> =>
+      ipcRenderer.invoke("chat-engine:submit-receipt", payload),
+    abort: (sessionId: string) =>
+      ipcRenderer.invoke("chat-engine:abort", sessionId),
+    clear: (sessionId: string) =>
+      ipcRenderer.invoke("chat-engine:clear", sessionId),
+    clearApproval: (sessionId: string, approvalId: string) =>
+      ipcRenderer.invoke("chat-engine:clear-approval", sessionId, approvalId),
+    respondToApproval: (
+      request: import("@amiba/app-runtime/protocol").ApprovalRequest,
+      decision: import("@amiba/app-runtime/protocol").ApprovalDecision,
+    ): Promise<import("@amiba/app-runtime/protocol").RuntimeActionResult> =>
+      ipcRenderer.invoke("chat-engine:respond-approval", request, decision),
+    respondToQuestions: (
+      request: import("@amiba/app-runtime/protocol").UserQuestionRequest,
+      answers: import("@amiba/app-runtime/protocol").UserQuestionAnswerItem[],
+    ): Promise<import("@amiba/app-runtime/protocol").RuntimeActionResult> =>
+      ipcRenderer.invoke("chat-engine:respond-questions", request, answers),
+    cancelQuestions: (
+      request: import("@amiba/app-runtime/protocol").UserQuestionRequest,
+    ): Promise<import("@amiba/app-runtime/protocol").RuntimeActionResult> =>
+      ipcRenderer.invoke("chat-engine:cancel-questions", request),
+    onMessage: (
+      listener: (msg: import("@amiba/app-runtime/protocol").EngineToClientMessage) => void,
+    ) => {
+      const handler = (
+        _: Electron.IpcRendererEvent,
+        msg: import("@amiba/app-runtime/protocol").EngineToClientMessage,
+      ) => listener(msg);
+      ipcRenderer.on("chat-engine:message", handler);
+      return () => ipcRenderer.off("chat-engine:message", handler);
+    },
+    onSerializeRequest: (
+      listener: (request: import("@amiba/app-runtime/dsh-client").ChatEngineBridgeRequest) => void,
+    ) => {
+      const handler = (
+        _: Electron.IpcRendererEvent,
+        request: import("@amiba/app-runtime/dsh-client").ChatEngineBridgeRequest,
+      ) => listener(request);
+      ipcRenderer.on("chat-engine:serialize-request", handler);
+      return () => ipcRenderer.off("chat-engine:serialize-request", handler);
+    },
+    respondSerialize: (
+      requestId: string,
+      ok: boolean,
+      parts: import("@amiba/app-runtime/dsh-client").DshPromptContentPart[],
+      error?: string,
+    ) =>
+      ipcRenderer.send("chat-engine:serialize-response", {
+        requestId,
+        ok,
+        parts,
+        ...(error === undefined ? {} : { error }),
+      }),
+  },
   quickAsk: {
     onPrefill: (cb: (payload: { text: string; sourceApp: string }) => void) => {
       const handler = (

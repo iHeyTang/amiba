@@ -64,7 +64,10 @@ export function QuickAskView({ dshClient }: { dshClient: DshApiClient }) {
   const sessions = useSessions();
   const { t } = useT();
   const client = useMemo(
-    () => createDesktopDshChatClient(dshClient),
+    // Preference: the main-process hosted engine (windows are pure views —
+    // no per-window engine or DSH connection set). Fall back to a local
+    // engine only when no hosted engine is exposed.
+    () => getPlatform().chatEngine ?? createDesktopDshChatClient(dshClient),
     [dshClient],
   );
   const bridge = useMemo(() => window.amiba, []);

@@ -1,22 +1,56 @@
 import {
   createDshPlatformAdapters,
+  createIpcChatEngineClient,
+  type ChatEngineIpcSurface,
   type DshApiClient,
 } from "@amiba/app-runtime/dsh-client";
 import type {
   PlatformAdapter,
   StorageChangeMap,
 } from "@amiba/app-runtime/platform";
+import { getPlatform } from "@amiba/app-runtime/platform";
 
 export function createElectronAdapter(
   dshClient?: DshApiClient,
 ): PlatformAdapter {
   const bridge = window.amiba;
+  const chatEngine = bridge.chatEngine as ChatEngineIpcSurface | undefined;
+
+  // The hosted engine (main process) serializes this window's local
+  // attachment drafts through the official renderer adapter; resolve the
+  // requests against the platform at request time (the official draft
+  // registry is bound by the shell after this adapter is constructed).
+  if (chatEngine?.onSerializeRequest) {
+    chatEngine.onSerializeRequest((request) => {
+      void (async () => {
+        try {
+          const parts =
+            (await getPlatform().agentAttachments?.serialize?.(
+              request.sessionId,
+              request.ids,
+            )) ?? [];
+          chatEngine.respondSerialize(request.requestId, true, parts);
+        } catch (error) {
+          chatEngine.respondSerialize(
+            request.requestId,
+            false,
+            [],
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      })();
+    });
+  }
 
   return {
     kind: "desktop",
     appUpdates: bridge.appUpdates,
     desktopPet: bridge.desktopPet,
     windowChrome: bridge.windowChrome,
+    // The main process hosts the app's one chat engine; surfaces consume it
+    // instead of building their own. (The ui-shell plugin falls back to a
+    // local engine when this is absent, e.g. a web host.)
+    ...(chatEngine ? { chatEngine: createIpcChatEngineClient(chatEngine) } : {}),
 
     storage: {
       get: (keys) => bridge.storage.get(keys),

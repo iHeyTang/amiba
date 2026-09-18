@@ -58,6 +58,7 @@ import { disposeWorkspaceDevelopment } from "./workspace-development";
 import { mainStore } from "./storage";
 import { dshRuntime, managedDshPaths } from "./dsh-runtime";
 import { dshState } from "./dsh-state";
+import { chatEngineHost } from "./chat-engine-host";
 import {
   startDshNativeGateway,
   type DshNativeGateway,
@@ -600,12 +601,12 @@ if (!gotSingleInstanceLock) {
     installDshClientWebSocketHeaders();
     installPermissionRequestHandler();
     registerIpcHandlers();
-    // Start the shared DSH state subscription layer (pet library /
-    // notification feed / session activity / session-index revision). It owns
-    // the cross-window snapshot in the main process, so every window — the
-    // standalone pet page included — renders it without any window hosting
-    // the DSH plugin graph for it.
+    // Main process owns all heavy, resident state: the shared DSH state
+    // subscription layer (pet library / notification feed / session activity)
+    // and the app's ONE chat engine. Windows are pure views that subscribe
+    // through IPC; closing any window keeps state alive in the main process.
     dshState.start();
+    chatEngineHost.start();
     registerAppUpdates();
     const assertExtensionSender = (event: Electron.IpcMainInvokeEvent) => {
       if (
@@ -792,7 +793,8 @@ app.on("before-quit", async (event) => {
 app.on("will-quit", () => {
   stopHotkeyManager();
   destroyQuickAskWindow();
-  dshState.dispose();
+dshState.dispose();
+  chatEngineHost.dispose();
   void disposeWorkspaceDevelopment();
   void stopWorkspaceManager();
 });

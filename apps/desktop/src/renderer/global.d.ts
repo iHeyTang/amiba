@@ -82,6 +82,12 @@ interface AmibaBridgeApi {
       body: Uint8Array;
     }>;
   };
+  /**
+   * Hosted chat engine surface (`ChatEngineIpcSurface`). The MAIN process
+   * runs the app's single DshChatEngineClient; windows subscribe to sessions
+   * and receive routed snapshots/events over IPC.
+   */
+  chatEngine: import("@amiba/app-runtime/dsh-client").ChatEngineIpcSurface;
   dshPlugins: import("@amiba/extension-sdk").AmibaDshPluginManagerBridge;
   storage: {
     get(keys?: string | string[]): Promise<Record<string, unknown>>;
