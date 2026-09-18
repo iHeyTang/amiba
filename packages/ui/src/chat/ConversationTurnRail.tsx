@@ -21,8 +21,8 @@ import {
 } from "./internal/helpers";
 import type { UiMessage } from "./internal/types";
 
-const RAIL_LEFT_PX = 8;
-const RAIL_WIDTH_PX = 32;
+const RAIL_LEFT_PX = 8; // matches `left-2` on the rail nav
+const RAIL_WIDTH_PX = 24; // matches `w-6` on the rail nav
 const MIN_CONTENT_GAP_PX = 16;
 
 function visibleMessageText(content: unknown): string {
@@ -52,10 +52,10 @@ function markerOpacity(distanceFromActive: number): number {
 }
 
 function markerWidthClass(distanceFromHover: number | null): string {
-  if (distanceFromHover === 0) return "w-6";
-  if (distanceFromHover === 1) return "w-5";
-  if (distanceFromHover === 2) return "w-4";
-  return "w-3";
+  if (distanceFromHover === 0) return "w-4";
+  if (distanceFromHover === 1) return "w-3.5";
+  if (distanceFromHover === 2) return "w-3";
+  return "w-2.5";
 }
 
 export function ConversationTurnRail({
@@ -71,7 +71,17 @@ export function ConversationTurnRail({
 }) {
   const { t } = useT();
   const userMessages = useMemo(
-    () => messages.filter((message) => message.role === "user"),
+    () =>
+      messages.filter(
+        // Only messages that actually START a user turn belong on the rail.
+        // The bubble renderer starts a turn for a user-role message unless it
+        // carries a `notice` — a plugin's one-off account of something that
+        // just happened (a background task report, a guard's reminder), which
+        // renders as a collapsed context row instead of a user bubble. The
+        // rail must mirror that rule or its markers — and their 1:1 alignment
+        // with the DOM turns below — drift.
+        (message) => message.role === "user" && !message.notice,
+      ),
     [messages],
   );
   const [activeIndex, setActiveIndex] = useState(0);
@@ -189,18 +199,32 @@ export function ConversationTurnRail({
     [contentRef, viewportRef],
   );
 
+  const markersRef = useRef<HTMLDivElement | null>(null);
+
+  // When the marker list outgrows the rail it scrolls on its own; keep the
+  // row for the current reading position visible instead of letting it slip
+  // out of the clipped window. `block: "nearest"` never jumps the list for a
+  // marker that is already in view.
+  useEffect(() => {
+    const marker = markersRef.current?.children[activeIndex];
+    if (marker instanceof HTMLElement) {
+      marker.scrollIntoView?.({ block: "nearest" });
+    }
+  }, [activeIndex]);
+
   if (userMessages.length === 0 || !hasContentClearance) return null;
 
   return (
     <nav
       data-conversation-turn-rail
       aria-label={t("conversationRail.label")}
-      className="pointer-events-none absolute inset-y-3 left-2 z-30 flex w-8 flex-col justify-center"
+      className="pointer-events-none absolute inset-y-3 left-2 z-30 flex w-6 flex-col"
     >
       <TooltipProvider delayDuration={120} skipDelayDuration={80}>
         <div
+          ref={markersRef}
           data-conversation-turn-markers
-          className="flex w-full flex-col gap-0.5"
+          className="m-auto flex max-h-full w-full flex-col gap-px overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {userMessages.map((message, index) => {
             const active = index === activeIndex;
@@ -226,13 +250,13 @@ export function ConversationTurnRail({
                     onPointerLeave={() => setHoveredIndex(null)}
                     onFocus={() => setHoveredIndex(index)}
                     onBlur={() => setHoveredIndex(null)}
-                    className="pointer-events-auto relative flex h-3 w-8 shrink-0 items-center rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                    className="pointer-events-auto relative flex h-2 w-6 shrink-0 items-center rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                   >
                     <span
                       aria-hidden
                       data-conversation-turn-stroke
                       className={cn(
-                        "h-[3px] rounded-full bg-foreground transition-[width,opacity] duration-200 ease-out motion-reduce:transition-none",
+                        "h-[2px] rounded-full bg-foreground transition-[width,opacity] duration-200 ease-out motion-reduce:transition-none",
                         markerWidthClass(distanceFromHover),
                       )}
                       style={{ opacity: markerOpacity(distanceFromActive) }}
