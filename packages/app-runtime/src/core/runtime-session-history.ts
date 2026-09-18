@@ -2,7 +2,7 @@ import { retryProgress, upsertRetryTimeline } from "../dsh-client/retry";
 import { appendAssistantText, applyAssistantTextSource } from "../dsh-client/assistant-text-source";
 import { ClosingAssistant } from "../dsh-client/closing-assistant";
 import { compactionUpdate, upsertCompactionTimeline, interruptOpenCompactions } from "../dsh-client/compaction";
-import type { AssistantTimelineItem } from "../protocol";
+import type { AssistantTimelineItem, MessageAttachment } from "../protocol";
 import type {
   AgentSessionHistoryEntry,
   AgentSessionEvent,
@@ -30,6 +30,8 @@ type RuntimeSessionMessage = SessionMessage & {
   reasoning?: string;
   /** Rebuilt from the message's `<file-attachment>` envelope on reload. */
   attachmentBadges?: AttachmentBadge[];
+  /** Attachments in their original content order — see `UserMessageText`. */
+  attachments?: readonly MessageAttachment[];
   /** Wall-clock duration of the reasoning stream, from durable event times. */
   reasoningMs?: number;
   /** Wall-clock span of the process phase, from durable event times. */
@@ -337,11 +339,12 @@ export function projectRuntimeSessionHistory(
       // Words and attachment envelopes are separated by the same shared
       // helper the live bridge uses, so a message reads identically whether
       // it arrived on the wire or was reloaded from the durable log.
-      const { text, badges, images } = userMessageText(message?.content);
+      const { text, badges, images, attachments } = userMessageText(message?.content);
       output.push({
         role: "user",
         content: text,
         ...(images.length ? { images } : {}),
+        ...(attachments.length ? { attachments } : {}),
         ...(visible.origin ? { origin: visible.origin } : {}),
         ...(visible.notice ? { notice: visible.notice } : {}),
         ...(badges.length ? { attachmentBadges: badges } : {}),

@@ -1,4 +1,5 @@
 import type {
+  MessageAttachment,
   MessageImage,
   MessageNotice,
   PluginMessageOrigin,
@@ -134,6 +135,12 @@ export interface UserMessageText {
   badges: AttachmentBadge[]
   /** Valid durable image blocks in their original content order. */
   images: MessageImage[]
+  /**
+   * File and image attachments in the message's ORIGINAL content order, so
+   * the surface can interleave file capsules and image previews exactly as
+   * the model saw them instead of grouping by type.
+   */
+  attachments: MessageAttachment[]
 }
 
 /**
@@ -188,7 +195,73 @@ export function userMessageText(content: unknown): UserMessageText {
       size: file.bytes, mime: "application/octet-stream", kind: "binary" })
   })
   const images = durableContentImages(content)
-  return { text: texts.join("\n"), badges, images }
+  return { text: texts.join("\n"), badges, images, attachments: orderedAttachments(content, badges) }
+}
+
+/**
+ * Rebuild the attachment list in the message's original content order.
+ *
+ * Both `badges` and `images` are extracted per-type; this walk re-interleaves
+ * them from the raw content so a message that carried 图、文件、图 keeps that
+ * sequence on screen. A file that has BOTH a legacy envelope badge and a
+ * native file part renders once, at the position of the first representation
+ * (the envelope reads first). A plain-string legacy content has no native
+ * parts, so its envelope badges in text order are the whole list.
+ */
+function orderedAttachments(
+  content: unknown,
+  badges: readonly AttachmentBadge[],
+): MessageAttachment[] {
+  if (!Array.isArray(content)) {
+    return badges.map((badge) => ({ kind: "file" as const, badge }))
+  }
+  const attachments: MessageAttachment[] = []
+  const images = durableContentImages(content)
+  let imageIndex = 0
+  const placed = new Set<string>()
+  const keyOf = (name: string, size: number) => `${name}\u0000${size}`
+  const pushFile = (badge: AttachmentBadge) => {
+    placed.add(keyOf(badge.name, badge.size))
+    attachments.push({ kind: "file", badge })
+  }
+  for (const part of content) {
+    const item = record(part)
+    if (!item) continue
+    if (item.type === "text" && typeof item.text === "string") {
+      const split = splitFileAttachmentsFromPrompt(item.text)
+      for (const badge of split.badges) pushFile(badge)
+      continue
+    }
+    if (item.type === "image") {
+      const image = images[imageIndex]
+      if (image) {
+        imageIndex += 1
+        attachments.push({ kind: "image", image })
+      }
+      continue
+    }
+    if (item.type === "file") {
+      const file = record(item.attachment)
+      if (!file || typeof file.attachmentId !== "string" || !file.attachmentId
+        || typeof file.name !== "string" || !file.name || typeof file.bytes !== "number"
+        || !Number.isSafeInteger(file.bytes) || file.bytes < 0) continue
+      // A legacy envelope for the same file already placed it.
+      if (placed.has(keyOf(file.name, file.bytes))) continue
+      pushFile({
+        uiId: `dsh-file:${file.attachmentId}:${attachments.length}`,
+        name: file.name,
+        size: file.bytes,
+        mime: "application/octet-stream",
+        kind: "binary",
+      })
+    }
+  }
+  // Defensive: any badge the walk did not reach (unexpected shape) still
+  // appears, trailing, rather than vanishing from the transcript.
+  for (const badge of badges) {
+    if (!placed.has(keyOf(badge.name, badge.size))) pushFile(badge)
+  }
+  return attachments
 }
 
 /**

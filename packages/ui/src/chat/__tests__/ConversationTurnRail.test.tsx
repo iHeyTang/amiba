@@ -57,8 +57,11 @@ function Harness({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
+  // DOM turns mirror the bubble renderer's turn grouping: a user-role
+  // message starts a turn unless it carries a `notice` (a plugin's account
+  // of a background task, rendered as a collapsed context row instead).
   const userMessages = railMessages.filter(
-    (message) => message.role === "user",
+    (message) => message.role === "user" && !message.notice,
   );
   return (
     <div
@@ -112,10 +115,11 @@ describe("ConversationTurnRail", () => {
       name: "conversationRail.label",
     });
     expect(rail).toBeInTheDocument();
-    expect(rail).toHaveClass("justify-center");
-    expect(rail.querySelector("[data-conversation-turn-markers]")).toHaveClass(
-      "gap-0.5",
-    );
+    const markersHost = rail.querySelector("[data-conversation-turn-markers]");
+    expect(markersHost).toHaveClass("m-auto");
+    expect(markersHost).toHaveClass("max-h-full");
+    expect(markersHost).toHaveClass("overflow-y-auto");
+    expect(markersHost).toHaveClass("gap-px");
     expect(screen.getAllByRole("button", { name: /^Jump/ })).toHaveLength(2);
     for (const marker of screen.getAllByRole("button", { name: /^Jump/ })) {
       expect(marker).not.toHaveAttribute("style");
@@ -231,7 +235,7 @@ describe("ConversationTurnRail", () => {
       marker.querySelector<HTMLElement>("[data-conversation-turn-stroke]"),
     );
 
-    for (const stroke of strokes) expect(stroke).toHaveClass("w-3");
+    for (const stroke of strokes) expect(stroke).toHaveClass("w-2.5");
     expect(strokes.map((stroke) => stroke?.style.opacity)).toEqual([
       "0.36",
       "0.54",
@@ -241,13 +245,70 @@ describe("ConversationTurnRail", () => {
     ]);
 
     await userEvent.hover(markers[2]!);
-    expect(strokes[0]).toHaveClass("w-4");
-    expect(strokes[1]).toHaveClass("w-5");
-    expect(strokes[2]).toHaveClass("w-6");
-    expect(strokes[3]).toHaveClass("w-5");
-    expect(strokes[4]).toHaveClass("w-4");
+    expect(strokes[0]).toHaveClass("w-3");
+    expect(strokes[1]).toHaveClass("w-3.5");
+    expect(strokes[2]).toHaveClass("w-4");
+    expect(strokes[3]).toHaveClass("w-3.5");
+    expect(strokes[4]).toHaveClass("w-3");
 
     await userEvent.unhover(markers[2]!);
-    for (const stroke of strokes) expect(stroke).toHaveClass("w-3");
+    for (const stroke of strokes) expect(stroke).toHaveClass("w-2.5");
+  });
+
+  it("ignores plugin notices (background task rows) and keeps markers aligned to real turns", async () => {
+    const railMessages = [
+      {
+        uiId: "user-1",
+        role: "user",
+        content: "First prompt",
+      },
+      {
+        uiId: "notice-1",
+        role: "user",
+        content: "",
+        notice: { summary: "任务汇报：写周报 — 完成" },
+      },
+      {
+        uiId: "assistant-1",
+        role: "assistant",
+        content: "Done.",
+      },
+      {
+        uiId: "user-2",
+        role: "user",
+        content: "Second prompt",
+      },
+      {
+        uiId: "notice-2",
+        role: "user",
+        content: "",
+        notice: { summary: "guarded reminder" },
+      },
+    ] as UiMessage[];
+    render(<Harness railMessages={railMessages} />);
+
+    const markers = await screen.findAllByRole("button", { name: /^Jump/ });
+    // Only the two real user messages become markers; the notices do not.
+    expect(markers).toHaveLength(2);
+    expect(markers[0]).toHaveAttribute("aria-label", "Jump 1: First prompt");
+    expect(markers[1]).toHaveAttribute("aria-label", "Jump 2: Second prompt");
+
+    // Marker N still addresses DOM turn N — the notice rows never shift the
+    // alignment, because the same rule feeds both sides.
+    const viewport = screen.getByTestId("viewport");
+    const turn = document.querySelectorAll<HTMLElement>(
+      "[data-conversation-user-turn]",
+    )[1]!;
+    Object.defineProperty(turn, "offsetTop", {
+      configurable: true,
+      value: 640,
+    });
+    const scrollTo = vi.fn();
+    viewport.scrollTo = scrollTo;
+    await userEvent.click(markers[1]!);
+    expect(scrollTo).toHaveBeenCalledWith({
+      top: 632,
+      behavior: "smooth",
+    });
   });
 });

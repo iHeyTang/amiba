@@ -40,10 +40,11 @@ The group receives the actual sidebar rows through `claim`, batches new ids for
 classification, and retries every 15 seconds; unloading removes the group and timer. Steward-adopted sessions take precedence
 through the existing slot order, so no session appears in both groups.
 
-
 Each task keeps a durable `runs` ledger (session ID, start time, and idle time).
-The task row expands to show every recorded run, newest first; selecting a run
-uses the shell's open-session route. `list(sessionIds?)` also recovers earlier
+Selecting a task opens its recorded runs in a side panel, newest first; selecting
+a run uses the shell's open-session route. The panel is a master–detail sidebar
+inside the plugin page — history no longer expands inline in the document flow.
+`list(sessionIds?)` also recovers earlier
 runs from the persisted first-message provenance of known sessions, while
 retaining the legacy `lastSessionId` entry. Idle time does not imply success;
 the conversation remains the source for the run's outcome.

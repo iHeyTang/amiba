@@ -814,9 +814,10 @@ describe("chat message chrome", () => {
     expect(narrationExecution!.contains(narration)).toBeTruthy();
   });
 
-  it("keeps streamed narration mounted across tools and folds it only on completion", () => {
+  it("folds mid-turn narration into the execution series as soon as a later tool proves it mid-turn", () => {
     const before = "I will inspect the directory.";
     const after = "Here is the final summary.";
+    const done = "All done.";
     let message: UiMessage = {
       uiId: "stable-flow", role: "assistant", streaming: true, content: before,
       assistantTimeline: [{ kind: "text", id: "before", text: before }],
@@ -829,6 +830,7 @@ describe("chat message chrome", () => {
       assistantTimeline: [...message.assistantTimeline!, { kind: "tool", id: "tool", toolCallId: "search" }],
     };
     rerender(<Bubble m={message} />);
+    // Leading prose stays a standalone paragraph even once a tool follows.
     expect(screen.getByText(before)).toBe(narration);
     expect(narration.closest("[data-execution-summary]")).toBeNull();
     const execution = container.querySelector("[data-execution-summary]")!;
@@ -839,6 +841,7 @@ describe("chat message chrome", () => {
       assistantTimeline: [...message.assistantTimeline!, { kind: "text", id: "after", text: after }],
     };
     rerender(<Bubble m={message} />);
+    // Still no following tool: the text is the live trailing result, visible.
     expect(screen.getByText(before)).toBe(narration);
     expect(screen.getByText(after)).toBeVisible();
     const intermediate = screen.getByText(after);
@@ -848,21 +851,29 @@ describe("chat message chrome", () => {
       assistantTimeline: [...message.assistantTimeline!, { kind: "tool", id: "tool-again", toolCallId: "search-again" }],
     };
     rerender(<Bubble m={message} />);
+    // A tool AFTER the text proves it mid-turn narration: it joins the
+    // (streaming-expanded) execution series instead of standing alone.
     expect(screen.getByText(before)).toBe(narration);
-    expect(screen.getByText(after)).toBe(intermediate);
+    const folded = screen.getByText(after);
+    expect(folded.closest("[data-execution-summary]")).not.toBeNull();
     message = {
-      ...message, content: before + after + "All done.",
-      assistantTimeline: [...message.assistantTimeline!, { kind: "text", id: "final", text: "All done." }],
+      ...message, content: before + after + done,
+      assistantTimeline: [...message.assistantTimeline!, { kind: "text", id: "final", text: done }],
     };
     rerender(<Bubble m={message} />);
-    expect(screen.getByText(after)).toBe(intermediate);
+    // The newest text has no following tool yet: it is the live result.
+    expect(screen.getByText(done)).toBeVisible();
+    expect(screen.getByText(after).closest("[data-execution-summary]")).not.toBeNull();
     rerender(<Bubble m={{ ...message, streaming: false }} />);
+    // On completion the whole series folds into one disclosure; only the
+    // result prose remains visible until it is opened.
     expect(screen.queryByText(before)).not.toBeInTheDocument();
     expect(screen.queryByText(after)).not.toBeInTheDocument();
-    expect(screen.getByText("All done.")).toBeVisible();
+    expect(screen.getByText(done)).toBeVisible();
     expect(container.querySelectorAll("[data-execution-summary]")).toHaveLength(1);
     fireEvent.click(container.querySelector("[data-execution-summary] button")!);
     expect(screen.getByText(before)).toBeVisible();
+    expect(screen.getByText(after)).toBeVisible();
   });
 
   it.each([false, true])("respects reduced motion (%s) when completing a live turn", (reducedMotion) => {
@@ -1433,14 +1444,51 @@ describe("chat message chrome", () => {
   });
 });
 
-it("renders reasoning-tool-reasoning in timeline order without a merged first thought",async()=>{
- const {container}=render(<Bubble m={{uiId:"split",role:"assistant",content:"",reasoning:"before toolafter tool",toolProgress:[{tool:"bash",toolCallId:"c",status:"completed",args:{command:"echo ok"},durationMs:7}],assistantTimeline:[{kind:"reasoning",id:"r1",text:"before tool"},{kind:"tool",id:"t",toolCallId:"c"},{kind:"reasoning",id:"r2",text:"after tool"}]} as UiMessage}/>);
- fireEvent.click(container.querySelector('button[aria-expanded="false"]')!);
- for(const button of Array.from(container.querySelectorAll('button[aria-expanded="false"]'))){if(!button.textContent?.includes("echo ok"))fireEvent.click(button);}
- const before=screen.getAllByText("before tool").at(-1)!;const after=screen.getAllByText("after tool").at(-1)!;const tool=screen.getByText("echo ok");
- expect(before.compareDocumentPosition(tool)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
- expect(tool.compareDocumentPosition(after)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
- expect(screen.queryByText("before toolafter tool")).toBeNull();
+it("aggregates every reasoning item into one top-level thinking fold", () => {
+  const { container } = render(<Bubble m={{uiId:"split",role:"assistant",content:"",reasoning:"before toolafter tool",toolProgress:[{tool:"bash",toolCallId:"c",status:"completed",args:{command:"echo ok"},durationMs:7}],assistantTimeline:[{kind:"reasoning",id:"r1",text:"before tool"},{kind:"tool",id:"t",toolCallId:"c"},{kind:"reasoning",id:"r2",text:"after tool"}]} as UiMessage}/>);
+  // Reasoning fragments no longer sprinkle the execution series: one fold
+  // holds BOTH fragments and sits above the tool disclosure (whose default
+  // label is the tool count, not a second thought).
+  const thoughtFold = Array.from(
+    container.querySelectorAll("[data-execution-summary]"),
+  ).find((node) =>
+    /sidepanel\.trace\.thoughtFor|sidepanel\.trace\.thoughtProcess/.test(
+      node.textContent ?? "",
+    ),
+  );
+  expect(thoughtFold).toBeTruthy();
+  fireEvent.click(thoughtFold!.querySelector("button")!);
+  const before = screen.getByText(/before tool/);
+  const after = screen.getByText(/after tool/);
+  expect(thoughtFold!.contains(before)).toBeTruthy();
+  expect(thoughtFold!.contains(after)).toBeTruthy();
+});
+
+it("aggregates the thinking time across every reasoning item, not one fragment", () => {
+  render(
+    <Bubble
+      m={
+        {
+          uiId: "thinking-total",
+          role: "assistant",
+          content: "answer",
+          assistantTimeline: [
+            { kind: "reasoning", id: "r1", text: "first fragment", startedAt: 1000, endedAt: 21000 },
+            { kind: "reasoning", id: "r2", text: "second fragment", startedAt: 30000, endedAt: 80000 },
+          ],
+        } as UiMessage
+      }
+    />,
+  );
+  // 20s + 50s = 70s → the single fold reads "思考了 1 分 10 秒". A label
+  // computed from only the first fragment would still show "思考了 20 秒"
+  // (thoughtForSeconds).
+  expect(
+    screen.getByRole("button", { name: /sidepanel\.trace\.thoughtForMinutes/ }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /sidepanel\.trace\.thoughtForSeconds/ }),
+  ).not.toBeInTheDocument();
 });
 
 
@@ -1694,5 +1742,87 @@ describe("durable image extension rendering", () => {
       expect(screen.getByText("Original text")).toBeInTheDocument();
       expect(screen.getByText("notes.txt")).toBeInTheDocument();
     } finally { errors.mockRestore(); }
+  });
+});
+
+describe("ordered attachment row (files + images in original order)", () => {
+  const imageA = { attachment: { attachmentId: "img-a", mediaType: "image/png", bytes: 1, width: 1, height: 1 } };
+  const imageB = { attachment: { attachmentId: "img-b", mediaType: "image/jpeg", bytes: 1, width: 1, height: 1 } };
+  const fileA = { uiId: "f-a", name: "a.pdf", mime: "application/pdf", size: 10, kind: "pdf" as const };
+  const fileB = { uiId: "f-b", name: "b.txt", mime: "text/plain", size: 20, kind: "text" as const };
+
+  it("renders one attachment row with files and images interleaved in message order", () => {
+    const renderImages = vi.fn((images: unknown[]) => <div data-gallery>{images.length}</div>);
+    const { container } = render(
+      <Bubble
+        m={
+          {
+            uiId: "ordered",
+            role: "user",
+            content: "check",
+            attachments: [
+              { kind: "file", badge: fileA },
+              { kind: "image", image: imageA },
+              { kind: "file", badge: fileB },
+              { kind: "image", image: imageB },
+            ],
+          } as UiMessage
+        }
+        messageImages={renderImages}
+      />,
+    );
+    // ONE shared row, official-style; no detached image block below the text.
+    const row = container.querySelector("[data-message-attachments]")!;
+    expect(row).not.toBeNull();
+    expect(row.textContent).toContain("a.pdf");
+    expect(row.textContent).toContain("b.txt");
+    // Every image item rides the official slot as a PER-ITEM call, exactly
+    // like the official chat view invokes it.
+    expect(renderImages).toHaveBeenCalledTimes(2);
+    expect(renderImages).toHaveBeenNthCalledWith(1, [imageA]);
+    expect(renderImages).toHaveBeenNthCalledWith(2, [imageB]);
+    expect(container.querySelectorAll("[data-gallery]")).toHaveLength(2);
+  });
+
+  it("falls back to file badges then images when no ordered attachments exist", () => {
+    const renderImages = vi.fn(() => <div data-gallery />);
+    const { container } = render(
+      <Bubble
+        m={
+          {
+            uiId: "legacy",
+            role: "user",
+            content: "t",
+            attachmentBadges: [fileA],
+            images: [imageA],
+          } as UiMessage
+        }
+        messageImages={renderImages}
+      />,
+    );
+    const row = container.querySelector("[data-message-attachments]")!;
+    expect(row.textContent).toContain("a.pdf");
+    expect(renderImages).toHaveBeenCalledWith([imageA]);
+  });
+
+  it("omits image items when no messageImages renderer is provided, keeping file capsules", () => {
+    const { container } = render(
+      <Bubble
+        m={
+          {
+            uiId: "no-slot",
+            role: "user",
+            content: "t",
+            attachments: [
+              { kind: "file", badge: fileA },
+              { kind: "image", image: imageA },
+            ],
+          } as UiMessage
+        }
+      />,
+    );
+    const row = container.querySelector("[data-message-attachments]")!;
+    expect(row.textContent).toContain("a.pdf");
+    expect(row.textContent).not.toContain("img-a");
   });
 });

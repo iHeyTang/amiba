@@ -26,6 +26,6 @@ it("uses official file references without generating custom metadata", () => {
 });
 it("ignores malformed references without hiding readable text", () => {
   for (const bad of [{ bytes: -1 }, { bytes: NaN }, { bytes: 1.5 }, { name: null }, { attachmentId: "" }]) {
-    expect(userMessageText([{ ...file, attachment: { ...file.attachment, ...bad } }, { type: "text", text: "keep" }])).toEqual({ text: "keep", badges: [], images: [] });
+    expect(userMessageText([{ ...file, attachment: { ...file.attachment, ...bad } }, { type: "text", text: "keep" }])).toEqual({ text: "keep", badges: [], images: [], attachments: [] });
   }
 });

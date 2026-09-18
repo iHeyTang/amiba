@@ -1,4 +1,8 @@
 import { TrajectoryHeaderAction } from "./trajectory-header-action.js";
+import {
+  CapsuleMessageImages,
+  type CapsuleMessageImagesOwner,
+} from "./capsule-message-images.js";
 import { conversationSnapshotSource } from "./conversation-snapshot.js";
 import { UiConversation, ConversationController } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type { UiSession } from "@deepseek-ai/dsh-client-ui-session/client";
@@ -1103,6 +1107,23 @@ export async function apply(ctx: ClientContext): Promise<void> {
       { name: "conversation.session.header.actions", id: "amiba-transcript", order: 10 },
       TrajectoryHeaderAction,
     );
+    // Amiba's default presence for the OFFICIAL `conversation.message.images`
+    // slot: a capsule that matches the native file capsules, so the
+    // attachment row shows files and images uniformly while the official
+    // seat and payload stay intact. Registered at priority 100 because cell
+    // shadowing elects the LOWEST priority occupant — a plugin registering
+    // at the conventional 0 (or lower) takes over this seat and replaces the
+    // capsule with its own image presentation inside the same attachment row.
+    const disposeMessageImagesDefault = ctx.slots.register(
+      // This official slot's occupant spec takes no `id` — the seat is a
+      // single cell, and shadowing is decided purely by priority (lowest
+      // renders), so Amiba's default sits at 100 and a plugin registering
+      // at the conventional 0 (or lower) replaces it.
+      { name: "conversation.message.images", priority: 100 },
+      (owner: unknown) => (
+        <CapsuleMessageImages owner={owner as CapsuleMessageImagesOwner} />
+      ),
+    );
     // The pinned-summary popover rides the same header-action seat as the
     // transcript, ordering after it so its icon sits to the transcript's right.
     const disposeSummaryAction = ctx.slots.register(
@@ -1165,6 +1186,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       void sessionExportFiber.dispose();
       disposeTrajectoryAction();
       disposeSummaryAction();
+      disposeMessageImagesDefault();
       disposeCommandPopup();
       disposeSurfaceSettings();
       disposeSlashMenu();

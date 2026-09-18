@@ -5,6 +5,12 @@ Initial branch: `feat/dsh-extension-compat-isolated` (merged).
 Continued from main `99e8f93` on `feat/dsh-extension-compat-next` in the same isolated worktree.
 Main and the other task's personal menu, external-message and update changes are preserved.
 
+## 最新进展：消息附件统一为胶囊附件行，conversation.message.images 改为 per-item 调用（2026-09-18）
+
+用户消息改为官方同构的附件行：文件与图片按消息原始内容顺序交错排布（新增 `attachments` 顺序字段，由 userMessageText 一次性产出，live 桥与历史投影共用）。文件项继续用 Amiba 原生胶囊；图片项按官方 ChatView 的 per-item 用法逐项调用 conversation.message.images（每次 owner.images 为单张），Amiba 提供默认 occupant（priority 100，胶囊样式，与文件胶囊同款；cell shadowing 按最低 priority 渲染，第三方以 0 或更低注册即可接管，接管后仍渲染在附件行内、位置由宿主决定）。原有"文本之后的右下角图片区"移除。
+
+兼容性：conversation.message.images 的声明、single/session、owner 载荷（images/loadImage/align）与调用时机保持官方契约；per-item 调用即官方 ChatView 的固有用法。附件行布局与官方 attachmentRow（右对齐 flex 行）同构，Amiba 采用左对齐胶囊形态，属宿主呈现策略，不在槽位契约内。
+
 ## 进行中：main 的 conversation 保留入口（2026-09-14）
 
 将 layout.selectPanel('conversation') 映射到原生会话入口，与 null 使用同一 canonical panelInfo 状态；此保留名称不再按普通插件全局页面派发，即使插件注册同名 main 贡献，也不会接管原聊天。其他 main key 仍严格检查注册并保持原有卸载回退。sidebar.panellist 的 conversation 入口无需替换组件即可使用，active 结合实际原生 sidebarView，避免其他工作区显示时误亮；其渲染移至已有 workspaceNavigation 回调末尾，DOM 顺序保持不变，没有改 NavigationRow 或 CSS。完整替换会话界面仍属于有条件适配，不因这个别名就宣称支持原样接管。
