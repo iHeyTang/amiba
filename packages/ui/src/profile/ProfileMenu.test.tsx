@@ -107,7 +107,10 @@ it("checks from the existing menu and installs only once the host reports ready"
   await userEvent.click(screen.getByRole("menuitem", { name: "Current version v1.0.0" }));
   expect(updateHost.bridge.check).toHaveBeenCalledTimes(1);
   act(() => changed({ status: "downloading", currentVersion: "1.0.0", version: "1.1.0", percent: 50 }));
-  expect(screen.getByRole("progressbar")).toHaveAttribute("value", "50");
+  expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "50");
+  expect(screen.getByText("50%")).toBeInTheDocument();
+  expect(screen.getByText("v1.0.0")).toBeInTheDocument();
+  expect(screen.getByText("v1.1.0")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Restart and install" })).not.toBeInTheDocument();
   act(() => changed({ status: "downloaded", currentVersion: "1.0.0", version: "1.1.0", percent: 100 }));
   await userEvent.click(screen.getByRole("button", { name: "Restart and install" }));
