@@ -1744,3 +1744,85 @@ describe("durable image extension rendering", () => {
     } finally { errors.mockRestore(); }
   });
 });
+
+describe("ordered attachment row (files + images in original order)", () => {
+  const imageA = { attachment: { attachmentId: "img-a", mediaType: "image/png", bytes: 1, width: 1, height: 1 } };
+  const imageB = { attachment: { attachmentId: "img-b", mediaType: "image/jpeg", bytes: 1, width: 1, height: 1 } };
+  const fileA = { uiId: "f-a", name: "a.pdf", mime: "application/pdf", size: 10, kind: "pdf" as const };
+  const fileB = { uiId: "f-b", name: "b.txt", mime: "text/plain", size: 20, kind: "text" as const };
+
+  it("renders one attachment row with files and images interleaved in message order", () => {
+    const renderImages = vi.fn((images: unknown[]) => <div data-gallery>{images.length}</div>);
+    const { container } = render(
+      <Bubble
+        m={
+          {
+            uiId: "ordered",
+            role: "user",
+            content: "check",
+            attachments: [
+              { kind: "file", badge: fileA },
+              { kind: "image", image: imageA },
+              { kind: "file", badge: fileB },
+              { kind: "image", image: imageB },
+            ],
+          } as UiMessage
+        }
+        messageImages={renderImages}
+      />,
+    );
+    // ONE shared row, official-style; no detached image block below the text.
+    const row = container.querySelector("[data-message-attachments]")!;
+    expect(row).not.toBeNull();
+    expect(row.textContent).toContain("a.pdf");
+    expect(row.textContent).toContain("b.txt");
+    // Every image item rides the official slot as a PER-ITEM call, exactly
+    // like the official chat view invokes it.
+    expect(renderImages).toHaveBeenCalledTimes(2);
+    expect(renderImages).toHaveBeenNthCalledWith(1, [imageA]);
+    expect(renderImages).toHaveBeenNthCalledWith(2, [imageB]);
+    expect(container.querySelectorAll("[data-gallery]")).toHaveLength(2);
+  });
+
+  it("falls back to file badges then images when no ordered attachments exist", () => {
+    const renderImages = vi.fn(() => <div data-gallery />);
+    const { container } = render(
+      <Bubble
+        m={
+          {
+            uiId: "legacy",
+            role: "user",
+            content: "t",
+            attachmentBadges: [fileA],
+            images: [imageA],
+          } as UiMessage
+        }
+        messageImages={renderImages}
+      />,
+    );
+    const row = container.querySelector("[data-message-attachments]")!;
+    expect(row.textContent).toContain("a.pdf");
+    expect(renderImages).toHaveBeenCalledWith([imageA]);
+  });
+
+  it("omits image items when no messageImages renderer is provided, keeping file capsules", () => {
+    const { container } = render(
+      <Bubble
+        m={
+          {
+            uiId: "no-slot",
+            role: "user",
+            content: "t",
+            attachments: [
+              { kind: "file", badge: fileA },
+              { kind: "image", image: imageA },
+            ],
+          } as UiMessage
+        }
+      />,
+    );
+    const row = container.querySelector("[data-message-attachments]")!;
+    expect(row.textContent).toContain("a.pdf");
+    expect(row.textContent).not.toContain("img-a");
+  });
+});

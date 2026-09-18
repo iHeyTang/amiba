@@ -7,6 +7,7 @@ import { useConversationSubmitHandoff } from "./useConversationSubmitHandoff";
 import { createResidentTurnSender, waitForResidentReady, type ResidentTurnSenderDeps } from "./internal/resident-turn-sender";
 import { createResidentQueueDrainer, type ResidentQueueDrainerDeps } from "./internal/resident-queue-drainer";
 import { sessionPendingQueue } from "./internal/pending-queue-store";
+import { mergeDurableUserMessages } from "./internal/durable-user-reconcile";
 import { usePrepareConversationSubmit } from "./conversation-submit";
 import { createSurfaceActivity } from "../primitives/surface-activity";
 import { InteractionRegion } from "../primitives/interaction-region";
@@ -1195,6 +1196,51 @@ export default function ChatSurface({
     }
   }
 
+  /**
+   * Deterministic version of the next reload for a just-finished turn: read
+   * the engine's committed event log and upgrade the still-optimistic user
+   * bubble(s) to their durable projection — durable identity and, for image
+   * attachments, the native image previews a reload would show. Without
+   * this, an attached image rendered as a composer-style capsule chip until
+   * any tab switch reloaded history, then flipped to the image gallery: the
+   * same message, two presentations, depending on whether a reload happened.
+   *
+   * Best-effort by design: a history read that fails or races the commit
+   * leaves the optimistic bubble untouched (a later reload resolves it), and
+   * the merge never touches assistant bubbles, notices or plugin rows.
+   */
+  async function reconcileOptimisticUserMessages(
+    sessionId: string,
+  ): Promise<void> {
+    if (!sessionId || sessionId !== sessions.activeId) return;
+    let durable: ChatMessage[];
+    try {
+      const known = sessions
+        .getSnapshot()
+        .sessions.find((item) => item.id === sessionId);
+      const session = await loadSessionMeta(
+        sessionId,
+        known?.subagentAddress,
+      );
+      if (!session) return;
+      durable = await loadMessages(sessionId, session.subagentAddress);
+    } catch {
+      return;
+    }
+    // The user may have switched sessions while the read was in flight; only
+    // reconcile the session that is still on screen.
+    if (sessions.activeId !== sessionId) return;
+    sessions.setActiveMessages((prev) => {
+      const { messages, changed } = mergeDurableUserMessages(
+        prev as UiMessage[],
+        durable as UiMessage[],
+      );
+      if (!changed) return prev;
+      void sessions.touchSession(sessionId, messages);
+      return messages;
+    });
+  }
+
   function handleStreamDone(
     sessionId: string,
     agentFinalUrl?: string,
@@ -1236,6 +1282,10 @@ export default function ChatSurface({
     inFlightTurnByIdRef.current.delete(sessionId);
     resolvePendingTurn(sessionId);
     residentQueueDrainer.completed(sessionId);
+    // Upgrade the completed turn's optimistic user bubble to its durable
+    // projection (native image previews, durable id) so the live view shows
+    // the same attachment presentation the next reload would.
+    void reconcileOptimisticUserMessages(sessionId);
   }
 
   /**
@@ -1319,6 +1369,10 @@ export default function ChatSurface({
     markCurrentAssistantStopped();
     rejectPendingTurn(sessionId, new DOMException("aborted", "AbortError"));
     residentQueueDrainer.interrupted(sessionId);
+    // The engine still committed the user message before the abort; upgrade
+    // it to the durable form so the attachment presentation stops depending
+    // on whether a reload happens to have occurred.
+    void reconcileOptimisticUserMessages(sessionId);
   }
 
   function handleStreamError(
@@ -1430,13 +1484,14 @@ export default function ChatSurface({
         // the durable-log projection derives, so re-reading history (a tab
         // switch, a reload) lands on the same bubble instead of a second
         // one — and an event that arrives after the read is a no-op.
-        const { uiId, content, images, attachmentBadges, sentAt, origin, notice } = event;
+        const { uiId, content, images, attachments, attachmentBadges, sentAt, origin, notice } = event;
         sessions.setActiveMessages((prev) => {
           const arr = prev as UiMessage[];
           const next = withHostUserMessage(arr, {
             uiId,
             content,
             images,
+            attachments,
             attachmentBadges,
             sentAt,
             origin,
