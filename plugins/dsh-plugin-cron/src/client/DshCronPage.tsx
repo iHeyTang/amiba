@@ -457,8 +457,8 @@ function HistorySidebar({
 }) {
   const { t, language } = useT();
   const runs = taskRuns(task);
-  const subtitle = [
-    ruleLabel(task.rule, t, language),
+  const rule = ruleLabel(task.rule, t, language);
+  const status = [
     !task.enabled
       ? t("cron.row.disabled")
       : task.nextRunAt === null
@@ -466,7 +466,14 @@ function HistorySidebar({
         : t("cron.row.nextRunIn", {
             when: relativeTime(task.nextRunAt, now, t),
           }),
-  ];
+    ...(task.lastRunAt
+      ? [
+          t("cron.row.lastRunAt", {
+            when: relativeTime(task.lastRunAt, now, t),
+          }),
+        ]
+      : []),
+  ].join(" · ");
   return (
     <aside
       id={id}
@@ -486,14 +493,14 @@ function HistorySidebar({
               />
             )}
           </div>
-          <p className="mt-0.5 flex flex-wrap text-xs leading-5 text-muted-foreground">
-            {subtitle.map((fragment, index) => (
-              <span key={index} className="whitespace-nowrap">
-                {fragment}
-                {index < subtitle.length - 1 ? " ·" : ""}
-              </span>
-            ))}
+          <p className="mt-0.5 truncate text-xs text-muted-foreground" title={rule}>
+            {rule}
           </p>
+          {status ? (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground" title={status}>
+              {status}
+            </p>
+          ) : null}
         </div>
         <Tooltip>
           <TooltipTrigger asChild>
