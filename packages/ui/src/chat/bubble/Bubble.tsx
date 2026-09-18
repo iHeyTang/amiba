@@ -281,7 +281,17 @@ function BubbleUnmemoized({
     }
     const bodyText = stripManagedResourceContext(bubbleTextContent(m.content));
     const fileBadges = m.attachmentBadges ?? [];
-    const hasReferences = fileBadges.length > 0;
+    // The attachment row mirrors the official user message: one container,
+    // attachments in their ORIGINAL content order, files and images
+    // interleaved as the message carried them. Every image item rides the
+    // official `conversation.message.images` slot (per-item, exactly as the
+    // official chat view invokes it), so Amiba's default capsule rendering
+    // and any plugin takeover both stay inside the same row.
+    const attachments = m.attachments ?? [
+      ...fileBadges.map((badge) => ({ kind: "file" as const, badge })),
+      ...(m.images ?? []).map((image) => ({ kind: "image" as const, image })),
+    ];
+    const hasReferences = attachments.length > 0;
     const hasContent = bodyText.length > 0;
     // A message a plugin dispatched on the user's behalf (a relayed task
     // brief, an inbound IM message) reads as a user turn but did not come
@@ -308,24 +318,31 @@ function BubbleUnmemoized({
         )}
         {hasReferences && (
           <div
+            data-message-attachments
             className={cn(
               "flex flex-wrap items-center gap-1.5",
               hasContent && "mb-2",
             )}
           >
-            {fileBadges.map((b) => (
-              <AttachmentBadgeView key={b.uiId} badge={b} />
-            ))}
+            {attachments.map((item, index) =>
+              item.kind === "file" ? (
+                <AttachmentBadgeView key={item.badge.uiId} badge={item.badge} />
+              ) : messageImages ? (
+                <WorkbenchViewBoundary
+                  key={`image:${item.image.attachment.attachmentId}`}
+                  fallback={null}
+                >
+                  <MessageImages images={[item.image]} render={messageImages} />
+                </WorkbenchViewBoundary>
+              ) : (
+                <Fragment key={`image:${index}`} />
+              ),
+            )}
           </div>
         )}
         {hasContent && (
           <div className="whitespace-pre-wrap break-words"><ReferenceText text={bodyText} /></div>
         )}
-        {m.images?.length && messageImages ? (
-          <WorkbenchViewBoundary key={m.uiId} fallback={null}>
-            <MessageImages images={m.images} render={messageImages} />
-          </WorkbenchViewBoundary>
-        ) : null}
       </div>
     );
   }

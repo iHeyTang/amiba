@@ -8,6 +8,27 @@ import type { ImageAttachmentRef } from "@amiba/extension-sdk";
 
 export type MessageImage = { readonly attachment: ImageAttachmentRef };
 
+/** Presentation metadata for one non-image attachment on a user message. */
+export interface MessageAttachmentBadge {
+  uiId: string;
+  name: string;
+  mime: string;
+  size: number;
+  kind: "image" | "text" | "pdf" | "binary";
+  attachmentId?: string;
+  thumbDataUrl?: string;
+}
+
+/**
+ * One attachment of a user message, in the ORIGINAL content order. The
+ * surface's attachment row renders these items in sequence — a file capsule
+ * natively, an image through the official `conversation.message.images`
+ * slot — so files and images keep the interleaving the model actually saw.
+ */
+export type MessageAttachment =
+  | { kind: "file"; badge: MessageAttachmentBadge }
+  | { kind: "image"; image: MessageImage };
+
 export type ChatRole = "system" | "user" | "assistant" | "tool";
 
 /**
@@ -506,7 +527,13 @@ export type StreamEvent =
       uiId: string;
       content: string;
       images?: ChatMessage["images"];
-      attachmentBadges?: Array<Omit<RuntimeAttachment, "attachmentId"> & { uiId: string; attachmentId?: string; thumbDataUrl?: string }>;
+      attachmentBadges?: Array<MessageAttachmentBadge>;
+      /**
+       * Attachments in the message's original content order, when the
+       * producer's message carried them; the surface interleaves file and
+       * image items from this list.
+       */
+      attachments?: readonly MessageAttachment[];
       /** Wall-clock time of the durable user-message event. */
       sentAt: number;
       origin?: ChatMessage["origin"];

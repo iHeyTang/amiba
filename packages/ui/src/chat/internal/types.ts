@@ -19,6 +19,7 @@ import type {
   ApprovalRecord,
   AttachmentBadge,
   ChatMessage,
+  MessageAttachment,
   ToolProgress
 } from "@amiba/app-runtime/core"
 
@@ -37,6 +38,13 @@ export interface UiMessage extends ChatMessage {
    * preview survives panel reloads without storing the full payload.
    */
   attachmentBadges?: AttachmentBadge[]
+  /**
+   * Attachments in their original content order — files and images
+   * interleaved as the message carried them. The attachment row renders
+   * these in sequence (files natively as capsules, images through the
+   * official `conversation.message.images` slot).
+   */
+  attachments?: readonly MessageAttachment[]
   /**
    * URL/title the agent's tab ended up on after this assistant turn.
    * Surfaced as an "Open in my browser →" chip on the assistant bubble.

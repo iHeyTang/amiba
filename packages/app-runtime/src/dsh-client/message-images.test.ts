@@ -30,7 +30,7 @@ describe("durable message image projection", () => {
       { type: "image", mediaType: "image/png", data: "AAAA" },
       { type: "image", attachment: { attachmentId: "staging-id" } },
       { type: "text", text: "literal attachmentId=durable-image" },
-    ])).toEqual({ text: "literal attachmentId=durable-image", badges: [], images: [] });
+    ])).toEqual({ text: "literal attachmentId=durable-image", badges: [], images: [], attachments: [] });
   });
   it.each([
     { width: 0 }, { height: -1 }, { bytes: NaN }, { bytes: 1.5 },
@@ -56,4 +56,21 @@ describe("durable message image projection", () => {
     expect(projectRuntimeSessionHistory([{ event }])[0]?.images).toEqual([{ attachment: image }]);
     expect(new DshAmibaEventBridge().accept({ rpcId: "r", payload: { type: "session/event", sessionId: "s", event } })).toEqual([]);
   });
+});
+
+it("keeps file and image attachments interleaved in original content order", () => {
+  const result = userMessageText([
+    { type: "text", text: "hello" },
+    { type: "image", attachment: { attachmentId: "a", mediaType: "image/png", bytes: 1, width: 1, height: 1 } },
+    { type: "file", attachment: { attachmentId: "f1", name: "one.pdf", bytes: 4 } },
+    { type: "image", attachment: { attachmentId: "b", mediaType: "image/png", bytes: 2, width: 2, height: 2 } },
+    { type: "file", attachment: { attachmentId: "f2", name: "two.txt", bytes: 5 } },
+  ]);
+  expect(result.attachments.map(item => item.kind + ":" + (item.kind === "image" ? item.image.attachment.attachmentId : item.badge.name))).toEqual([
+    "image:a",
+    "file:one.pdf",
+    "image:b",
+    "file:two.txt",
+  ]);
+  expect(result.images.map(image => image.attachment.attachmentId)).toEqual(["a", "b"]);
 });
