@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en" style="background: transparent !important">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https:; script-src 'self'"
+    />
+    <title>Amiba Desktop Pet</title>
+    <!--
+      Standalone pet page. Unlike the main renderer this page does NOT boot
+      the DSH shell: it renders the pet from snapshots the main window's pets
+      plugin forwards over IPC, so a second multi-megabyte shell + plugin
+      graph never starts on the pet's behalf.
+    -->
+    <style>
+      html,
+      body {
+        background: transparent !important;
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+      }
+      #root {
+        height: 100%;
+        width: 100%;
+        background: transparent !important;
+      }
+    </style>
+  </head>
+  <body class="text-foreground">
+    <div id="root"></div>
+    <script type="module" src="./pet-main.tsx"></script>
+  </body>
+</html>

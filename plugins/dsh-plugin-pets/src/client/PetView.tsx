@@ -116,7 +116,10 @@ export function PetView({
       }
       lookingAt = next ? { ...next } : null;
     };
-    let lastBoundsAt = -1, lastHitMapAt = -1;
+    let lastBoundsAt = -1,
+      lastHitMapAt = -1,
+      lastRenderedAt = -1;
+    let lastVisualBounds: { x: number; y: number; width: number; height: number } | null = null;
     const draw = () => {
       let followsPointer = true;
       if (businessDriven) {
@@ -137,6 +140,14 @@ export function PetView({
         svg.dataset.companionAction = pose.action;
       }
       syncLook(followsPointer);
+      // The pet animates continuously (skin playback), so a dirty check can't
+      // skip frames — but a desktop mascot does not need 60 fps of SVG/WebGL
+      // repaint in a full-screen transparent window. Cap the visual refresh
+      // near 30 fps for the desktop pet; input (look, activity, drag) still
+      // lands on the next frame and is perceptually identical at this size.
+      const now = performance.now();
+      if (desktop && now - lastRenderedAt < 1000 / 30) return;
+      lastRenderedAt = now;
       if (spatialRenderer) renderSpatial(spatialRenderer, pet, time, media.matches);
       else renderer!.render(pet.sample(time, media.matches));
       if (hitMap && time - lastHitMapAt > .08) {
@@ -147,9 +158,24 @@ export function PetView({
         lastBoundsAt = time;
         const box = hitMap ? hitMap.bounds() : visibleSvgBounds(renderer!.svg), rect = ref.current!.getBoundingClientRect();
         if (box && rect.width > 0 && rect.height > 0) {
-          void desktop.api.setVisualBounds({ x: (box.x - rect.x) / rect.width,
-            y: (box.y - rect.y) / rect.height, width: box.width / rect.width,
-            height: box.height / rect.height });
+          const next = {
+            x: (box.x - rect.x) / rect.width,
+            y: (box.y - rect.y) / rect.height,
+            width: box.width / rect.width,
+            height: box.height / rect.height,
+          };
+          // The silhouette moves with every animation frame; only tell the
+          // main process when the anchor actually shifted.
+          if (
+            !lastVisualBounds ||
+            Math.abs(next.x - lastVisualBounds.x) > 1e-3 ||
+            Math.abs(next.y - lastVisualBounds.y) > 1e-3 ||
+            Math.abs(next.width - lastVisualBounds.width) > 1e-3 ||
+            Math.abs(next.height - lastVisualBounds.height) > 1e-3
+          ) {
+            lastVisualBounds = next;
+            void desktop.api.setVisualBounds(next);
+          }
         }
       }
     };
@@ -226,7 +252,8 @@ export function PetView({
       dragged = false,
       startX = 0,
       startY = 0,
-      ignored = true;
+      ignored = true,
+      pointerId = -1;
     const move = (e: PointerEvent) => {
       if (desktop) {
         if (pressing && Math.hypot(e.screenX - startX, e.screenY - startY) > 4)
@@ -275,14 +302,33 @@ export function PetView({
         return;
       pressing = true;
       dragged = false;
+      pointerId = e.pointerId;
       startX = e.screenX;
       startY = e.screenY;
-      svg.setPointerCapture(e.pointerId);
+      try {
+        svg.setPointerCapture(e.pointerId);
+      } catch {
+        /* Pointer may already have ended. */
+      }
+      // While dragging, the whole transparent window is mouse-interactive and
+      // the pet lags behind the cursor, so the pointer-up often lands on the
+      // window/container instead of the SVG — and when the renderer is
+      // overloaded it may not reach the SVG at all. Listen at the window level
+      // (capture phase) so the drag ALWAYS terminates and the main process
+      // stops chasing the cursor; a missed pointer-up would otherwise leave
+      // the pet stuck following the mouse with no way to release it.
+      window.addEventListener("pointerup", up, true);
+      window.addEventListener("pointercancel", up, true);
       void desktop.api.drag(true);
     };
     const up = () => {
       if (pressing) {
         pressing = false;
+        if (pointerId !== -1) {
+          window.removeEventListener("pointerup", up, true);
+          window.removeEventListener("pointercancel", up, true);
+          pointerId = -1;
+        }
         void desktop?.api.drag(false);
       }
     };
@@ -295,7 +341,9 @@ export function PetView({
       clearTimeout(pointerTimeout);
       applyDesktopLook(point);
       // Reset if the native stream stops, instead of keeping the last pose.
-      pointerTimeout = setTimeout(() => applyDesktopLook(null), 250);
+      // The main process keeps a sparse keep-alive while the cursor is still,
+      // so this only fires when the stream genuinely goes away.
+      pointerTimeout = setTimeout(() => applyDesktopLook(null), 600);
     });
     const leave = () => {
       if (!desktop && !interaction) {

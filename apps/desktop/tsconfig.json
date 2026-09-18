@@ -15,7 +15,26 @@
     "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
-      "~/*": ["src/renderer/*"]
+      "~/*": ["src/renderer/*"],
+      // The standalone pet page compiles the pets plugin's client UI and the
+      // notification-hub model/client sources directly into its bundle; these
+      // paths keep the plugin packages' fragmentary exports (built app
+      // bundles, not libraries) out of the desktop build.
+      "@amiba/dsh-plugin-pets/model": [
+        "../../plugins/dsh-plugin-pets/src/model.ts"
+      ],
+      "@amiba/dsh-plugin-pets/pet": [
+        "../../plugins/dsh-plugin-pets/src/client/desktop.tsx"
+      ],
+      "@amiba/dsh-plugin-notification-hub/model": [
+        "../../plugins/dsh-plugin-notification-hub/src/model.ts"
+      ],
+      "@amiba/dsh-plugin-notification-hub/client": [
+        "../../plugins/dsh-plugin-notification-hub/src/client/index.tsx"
+      ],
+      "@amiba/dsh-plugin-ui-shell/client": [
+        "src/renderer/pet/ui-shell-client-shim.ts"
+      ]
     },
     "types": ["vite/client"]
   },
