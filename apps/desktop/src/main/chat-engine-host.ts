@@ -41,6 +41,7 @@ import type {
 import { mainStore } from "./storage";
 import { workspaceManager } from "./workspace";
 import { dshRuntimeClient, sessionIndex } from "./session-index";
+import { ChatEngineRouter } from "./chat-engine/router";
 
 /** Storage key the renderer sessions runtime keeps subagent addresses under. */
 const LOCAL_META_KEY = "sessions.local-meta";
@@ -57,11 +58,8 @@ export class ChatEngineHost {
   private engine: DshChatEngineClient | null = null;
   private started = false;
   private registered = false;
-  /** sessionId → subscribed webContents ids (per-window view routing). */
-  private readonly subscribers = new Map<string, Set<number>>();
-  private readonly addresses = new Map<string, AgentSubagentAddress>();
-  /** sessionId → webContents id of the window that last submitted a turn. */
-  private readonly submitters = new Map<string, number>();
+  /** Pure window-subscription ledger (electrode-independent, unit-tested). */
+  private readonly router = new ChatEngineRouter();
   private readonly pendingSerializes = new Map<
     string,
     (response: {
@@ -88,9 +86,7 @@ export class ChatEngineHost {
     this.started = false;
     this.metaWatchOff?.();
     this.metaWatchOff = undefined;
-    this.subscribers.clear();
-    this.addresses.clear();
-    this.submitters.clear();
+    this.router.clear();
     this.pendingSerializes.clear();
     this.engine?.dispose();
     this.engine = null;
@@ -129,7 +125,7 @@ export class ChatEngineHost {
     });
     ipcMain.handle("chat-engine:submit", (event, payload: SubmitPayload) => {
       if (!payload || typeof payload.sessionId !== "string") return;
-      this.submitters.set(payload.sessionId, event.sender.id);
+      this.router.declareSubmitter(payload.sessionId, event.sender.id);
       void this.withEngine((engine) => engine.submit(payload));
     });
     ipcMain.handle(
@@ -141,7 +137,7 @@ export class ChatEngineHost {
             error: "Invalid submit payload.",
           } as SubmitReceipt;
         }
-        this.submitters.set(payload.sessionId, event.sender.id);
+        this.router.declareSubmitter(payload.sessionId, event.sender.id);
         return this.withEngineReceipt((engine) =>
           engine.submitWithReceipt(payload),
         );
@@ -305,23 +301,14 @@ export class ChatEngineHost {
     sessionId: string,
     subagent?: AgentSubagentAddress,
   ): void {
-    let set = this.subscribers.get(sessionId);
-    if (!set) {
-      set = new Set();
-      this.subscribers.set(sessionId, set);
-    }
-    const first = set.size === 0;
-    set.add(webContentsId);
-    if (subagent) this.addresses.set(sessionId, subagent);
+    const first = this.router.subscribe(webContentsId, sessionId, subagent);
     if (!this.engine) {
       // Subscribers race the runtime; attach everything once the engine is
       // live. The snapshot is re-emitted to every listener at that point, so
       // windows that joined while the engine was cold still get their state.
       void this.ensureEngine().then((engine) => {
-        if (!engine || !this.subscribers.get(sessionId)?.size) return;
-        if (this.subscribers.get(sessionId)?.size === 1) {
-          engine.follow(sessionId, this.addresses.get(sessionId));
-        }
+        if (!engine || !this.router.hasSubscribers(sessionId)) return;
+        engine.follow(sessionId, this.router.address(sessionId));
         engine.subscribe(sessionId);
       });
       return;
@@ -330,30 +317,23 @@ export class ChatEngineHost {
     // `engine.subscribe` stays idempotent and re-emits the current snapshot
     // to every listener, so a later viewer joining a followed session also
     // receives the run state it needs to render.
-    if (first) this.engine.follow(sessionId, this.addresses.get(sessionId));
+    if (first) this.engine.follow(sessionId, this.router.address(sessionId));
     this.engine.subscribe(sessionId);
   }
 
   private unsubscribe(webContentsId: number, sessionId: string): void {
-    const set = this.subscribers.get(sessionId);
-    if (!set) return;
-    set.delete(webContentsId);
-    this.addresses.delete(sessionId);
-    if (set.size > 0) return;
-    this.subscribers.delete(sessionId);
-    this.submitters.delete(sessionId);
-    this.engine?.unfollow(sessionId);
+    if (this.router.unsubscribe(webContentsId, sessionId)) {
+      this.engine?.unfollow(sessionId);
+    }
   }
 
   private route(sessionId: string, message: EngineToClientMessage): void {
-    const set = this.subscribers.get(sessionId);
-    if (!set) return;
-    for (const id of set) {
+    this.router.route(sessionId, message, (id, msg) => {
       const contents = contentsOf(id);
       if (contents && !contents.isDestroyed()) {
-        contents.send("chat-engine:message", message);
+        contents.send("chat-engine:message", msg);
       }
-    }
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -419,7 +399,7 @@ export class ChatEngineHost {
     ids: string[],
     signal?: AbortSignal,
   ): Promise<DshPromptContentPart[]> {
-    const submitter = this.submitters.get(sessionId);
+    const submitter = this.router.submitter(sessionId);
     const contents = submitter === undefined ? null : contentsOf(submitter);
     if (!contents || contents.isDestroyed()) {
       throw new Error(
