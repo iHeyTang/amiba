@@ -436,6 +436,47 @@ const api = {
       ipcRenderer.on("desktop-pet:select", handler);
       return () => ipcRenderer.off("desktop-pet:select", handler);
     },
+    // The standalone pet page (renderer/pet) has no DSH shell, so the MAIN
+    // window's pets plugin forwards its live pet library + notification feed
+    // here; the pet page routes pet activation and bubble dismissal back to
+    // the same plugin through the main process.
+    forwardData: (data: import("@amiba/app-runtime/platform").DesktopPetData) =>
+      ipcRenderer.invoke("desktop-pet:data", data),
+    onData: (
+      listener: (data: import("@amiba/app-runtime/platform").DesktopPetData) => void,
+    ) => {
+      const handler = (
+        _: Electron.IpcRendererEvent,
+        data: import("@amiba/app-runtime/platform").DesktopPetData,
+      ) => listener(data);
+      ipcRenderer.on("desktop-pet:data", handler);
+      return () => { ipcRenderer.off("desktop-pet:data", handler); };
+    },
+    requestData: () => ipcRenderer.invoke("desktop-pet:data-request"),
+    onDataRequest: (listener: () => void) => {
+      const handler = () => listener();
+      ipcRenderer.on("desktop-pet:data-request", handler);
+      return () => { ipcRenderer.off("desktop-pet:data-request", handler); };
+    },
+    activate: (id: string | null) =>
+      ipcRenderer.invoke("desktop-pet:activate", id),
+    onActivateRequest: (listener: (id: string | null) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, id: string | null) =>
+        listener(id);
+      ipcRenderer.on("desktop-pet:activate-request", handler);
+      return () => {
+        ipcRenderer.off("desktop-pet:activate-request", handler);
+      };
+    },
+    dismiss: (id: string) => ipcRenderer.invoke("desktop-pet:dismiss", id),
+    onDismissRequest: (listener: (id: string) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, id: string) =>
+        listener(id);
+      ipcRenderer.on("desktop-pet:dismiss-request", handler);
+      return () => {
+        ipcRenderer.off("desktop-pet:dismiss-request", handler);
+      };
+    },
   },
   quickAsk: {
     onPrefill: (cb: (payload: { text: string; sourceApp: string }) => void) => {

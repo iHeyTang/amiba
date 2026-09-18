@@ -50,6 +50,32 @@ export default defineConfig({
     resolve: {
       alias: {
         "~": resolve(__dirname, "src/renderer"),
+        // Pet page sources (see tsconfig paths): compile the pets client and
+        // notification-hub model/client straight from source instead of the
+        // plugins' built app bundles.
+        "@amiba/dsh-plugin-pets/model": resolve(
+          __dirname,
+          "../../plugins/dsh-plugin-pets/src/model.ts",
+        ),
+        "@amiba/dsh-plugin-pets/pet": resolve(
+          __dirname,
+          "../../plugins/dsh-plugin-pets/src/client/desktop.tsx",
+        ),
+        "@amiba/dsh-plugin-notification-hub/model": resolve(
+          __dirname,
+          "../../plugins/dsh-plugin-notification-hub/src/model.ts",
+        ),
+        "@amiba/dsh-plugin-notification-hub/client": resolve(
+          __dirname,
+          "../../plugins/dsh-plugin-notification-hub/src/client/index.tsx",
+        ),
+        // The pets client reaches the platform singleton via the ui-shell
+        // specifier (a plugin build rule); the pet bundle resolves it to a
+        // one-line shim instead of pulling the ui-shell plugin.
+        "@amiba/dsh-plugin-ui-shell/client": resolve(
+          __dirname,
+          "src/renderer/pet/ui-shell-client-shim.ts",
+        ),
       },
     },
     plugins: [react()],
@@ -60,6 +86,7 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, "src/renderer/index.html"),
           "quick-ask": resolve(__dirname, "src/renderer/quick-ask/index.html"),
+          pet: resolve(__dirname, "src/renderer/pet/index.html"),
         },
       },
     },

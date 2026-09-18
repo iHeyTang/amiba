@@ -1,4 +1,4 @@
-import type { AmibaNotification } from "@amiba/dsh-plugin-notification-hub";
+import type { AmibaNotification } from "@amiba/dsh-plugin-notification-hub/model";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePluginT } from "@amiba/ui/plugin";
 import { Check, CircleAlert, LoaderCircle, MessageCircle } from "lucide-react";

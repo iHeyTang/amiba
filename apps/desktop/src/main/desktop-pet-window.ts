@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu, screen } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
-import type { DesktopPetActivity } from "../shared/desktop-pet";
+import type { DesktopPetActivity, DesktopPetData } from "../shared/desktop-pet";
 const directory = path.dirname(fileURLToPath(import.meta.url));
 export function clampPetPosition(
   point: { x: number; y: number },
@@ -82,6 +82,54 @@ export async function installDesktopPetWindow(
       void save();
     }
   };
+  // A full-screen transparent always-on-top window forces the window server
+  // to composite the whole display every frame — the dominant cost of both
+  // idle and drag animation. Keep the window to a canvas around the pet
+  // square plus the message-bubble stack, and follow the pet when it is
+  // dragged (the window is invisible, so moving it is indistinguishable from
+  // moving the pet). The bubble is at most 240px wide and stacks upward from
+  // the pet, so a fixed generous canvas works at any pet position.
+  const SIDE_MARGIN = 24; // horizontal cushion around the pet square
+  const BUBBLE_HEADROOM = 320; // message stack space above the pet
+  const BOTTOM_CUSHION = 48; // room for a bubble below the pet
+  const MIN_WINDOW_WIDTH = 264; // 240 bubble + 12 px margins each side
+  const windowGeometry = (display: Electron.Display) => {
+    const area = display.bounds;
+    return {
+      width: Math.min(
+        area.width,
+        Math.max(size + SIDE_MARGIN * 2, MIN_WINDOW_WIDTH),
+      ),
+      height: Math.min(area.height, size + BUBBLE_HEADROOM + BOTTOM_CUSHION),
+    };
+  };
+  const windowOrigin = (display: Electron.Display) => {
+    const area = display.bounds, g = windowGeometry(display);
+    if (!position) return { x: area.x, y: area.y };
+    return {
+      x: Math.max(
+        area.x,
+        Math.min(position.x - SIDE_MARGIN, area.x + area.width - g.width),
+      ),
+      y: Math.max(
+        area.y,
+        Math.min(position.y - BUBBLE_HEADROOM, area.y + area.height - g.height),
+      ),
+    };
+  };
+  const syncWindow = (display: Electron.Display) => {
+    if (!win) return;
+    displayId = display.id;
+    const g = windowGeometry(display), o = windowOrigin(display);
+    const b = win.getBounds();
+    if (
+      b.x !== o.x ||
+      b.y !== o.y ||
+      b.width !== g.width ||
+      b.height !== g.height
+    )
+      win.setBounds({ ...o, ...g });
+  };
   const layout = () => {
     if (!win || !position) return;
     const host = win.getBounds();
@@ -100,10 +148,7 @@ export async function installDesktopPetWindow(
         Math.min(point.x, area.x + area.width - (visual.x + visual.width) * size - gap)),
       y: Math.max(area.y - visual.y * size + gap, Math.min(point.y, maxY)),
     };
-    if (win && displayId !== display.id) {
-      displayId = display.id;
-      win.setBounds(area);
-    }
+    if (win) syncWindow(display);
     if (updateAnchor) messageAnchor = { ...position, size };
     layout();
     return point.y >= maxY;
@@ -128,8 +173,12 @@ export async function installDesktopPetWindow(
       size,
     );
     messageAnchor = { ...position, size };
+    const g = windowGeometry(display), o = windowOrigin(display);
     const w = (win = new BrowserWindow({
-      ...display.bounds,
+      x: o.x,
+      y: o.y,
+      width: g.width,
+      height: g.height,
       // Dragging is handled by cursor deltas, never by the native window manager.
       movable: false,
       ...(process.platform === "darwin" ? { type: "panel" } : {}),
@@ -168,20 +217,14 @@ export async function installDesktopPetWindow(
     });
     w.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     w.webContents.on("will-navigate", (event) => event.preventDefault());
+    // The pet window now boots a small standalone page (renderer/pet) that
+    // renders the pet from data forwarded by the main window's pets plugin —
+    // it does not run the DSH shell at all.
     const url = process.env.ELECTRON_RENDERER_URL;
     if (url) {
-      const u = new URL(url);
-      u.searchParams.set("desktopPet", "1");
-      void w.loadURL(u.href);
-    } else
-      void w.loadFile(path.join(directory, "../renderer/index.html"), {
-        query: {
-          desktopPet: "1",
-          // Same flag as the main window: the pet renderer must not run the
-          // DSH client rebuild SSE in packaged builds either.
-          ...(app.isPackaged ? { packaged: "1" } : {}),
-        },
-      });
+      const base = url.endsWith("/") ? url : `${url}/`;
+      void w.loadURL(new URL("pet/index.html", base).href);
+    } else void w.loadFile(path.join(directory, "../renderer/pet/index.html"));
     return w;
   };
   const setEnabled = async (value: boolean) => {
@@ -245,6 +288,49 @@ export async function installDesktopPetWindow(
         screen.getDisplayNearestPoint(p),
       );
     }, 16);
+  });
+  // -- Standalone pet page data source ------------------------------
+  // The pet page (renderer/pet) has no DSH shell: the MAIN window's pets
+  // plugin forwards its live pet library + notification feed here, and the
+  // pet page routes pet activation / bubble dismissal back to the plugin.
+  let petData: DesktopPetData | undefined;
+  const isPetData = (value: unknown): value is DesktopPetData => {
+    if (!value || typeof value !== "object") return false;
+    const v = value as Record<string, unknown>;
+    return (
+      Array.isArray(v.pets) &&
+      v.pets.every(
+        (p) =>
+          !!p && typeof p === "object" && typeof (p as { id?: unknown }).id === "string",
+      ) &&
+      (v.activeId === null || typeof v.activeId === "string") &&
+      Array.isArray(v.notifications) &&
+      ["loading", "connected", "reconnecting"].includes(String(v.connection))
+    );
+  };
+  const sendToPetPage = (data: DesktopPetData) => {
+    if (win && !win.isDestroyed()) win.webContents.send("desktop-pet:data", data);
+  };
+  const sendToSource = (channel: string, ...args: unknown[]) =>
+    contents(main())?.send(channel, ...args);
+  ipcMain.handle("desktop-pet:data", (event, data: unknown) => {
+    // Only the main window's pets plugin may publish pet-page snapshots.
+    if (event.sender !== contents(main()) || !isPetData(data)) return;
+    petData = data;
+    sendToPetPage(data);
+  });
+  ipcMain.handle("desktop-pet:data-request", (event) => {
+    if (!own(event.sender)) return;
+    sendToSource("desktop-pet:data-request");
+    if (petData) sendToPetPage(petData);
+  });
+  ipcMain.handle("desktop-pet:activate", (event, id: unknown) => {
+    if (!own(event.sender) || (id !== null && typeof id !== "string") || (typeof id === "string" && id.length > 200)) return;
+    sendToSource("desktop-pet:activate-request", id ?? null);
+  });
+  ipcMain.handle("desktop-pet:dismiss", (event, id: unknown) => {
+    if (!own(event.sender) || typeof id !== "string" || id.length > 200) return;
+    sendToSource("desktop-pet:dismiss-request", id);
   });
   ipcMain.handle("desktop-pet:visual", (event, box) => {
     if (!own(event.sender) || !box || ![box.x, box.y, box.width, box.height].every(Number.isFinite)
