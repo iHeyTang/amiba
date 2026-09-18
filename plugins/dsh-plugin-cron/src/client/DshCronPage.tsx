@@ -1,6 +1,5 @@
 import {
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   Loader2,
   MessageSquarePlus,
@@ -376,7 +375,7 @@ function TaskRow({
           size="sm"
           className={cn(
             "h-7 gap-1 text-xs text-muted-foreground",
-            selected && "text-foreground",
+            selected && "bg-secondary text-foreground",
           )}
           aria-expanded={selected}
           aria-controls={historyPanelId}
@@ -384,11 +383,7 @@ function TaskRow({
         >
           {t("cron.history")}{" "}
           <span className="tabular-nums">{runs.length}</span>
-          {selected ? (
-            <ChevronLeft className="h-3.5 w-3.5" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5" />
-          )}
+          <ChevronRight className="h-3.5 w-3.5" />
         </Button>
         <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/task:opacity-100 group-focus-within/task:opacity-100">
           <Tooltip>
@@ -529,11 +524,11 @@ function HistorySidebar({
       <h3 className="px-5 pt-4 text-xs text-muted-foreground">
         {t("cron.detail.section")}
       </h3>
-      <div className="mx-5 mt-2 divide-y divide-border/50 overflow-hidden rounded-lg border border-border/50">
+      <div className="mx-5 mt-2 divide-y divide-border/60 overflow-hidden rounded-lg border border-border/60">
         {rows.map(([key, value]) => (
           <div
             key={key}
-            className="flex items-baseline justify-between gap-3 px-3 py-2"
+            className="flex items-center justify-between gap-3 px-3 py-2"
           >
             <span className="text-xs text-muted-foreground">{key}</span>
             <span className="flex min-w-0 items-center gap-1 text-xs text-foreground">
