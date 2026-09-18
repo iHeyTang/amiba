@@ -818,6 +818,7 @@ function ExecutionDisclosure({
   latestProgress = "",
   liveReasoning = "",
   processMs,
+  defaultExpanded = false,
 }: {
   details: TurnTraceDetail[];
   tools: ToolProgress[];
@@ -826,9 +827,12 @@ function ExecutionDisclosure({
   /** Full accumulated reasoning while streaming; renders the live pane. */
   liveReasoning?: string;
   processMs?: number;
+  /** Open on mount — used by streamed execution so merged narration rows
+   * stay visible live, matching the settled series after completion. */
+  defaultExpanded?: boolean;
 }) {
   const { t } = useT();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
 
   const navigation = useToolCallSeat()?.navigation;
   const navigationRequest = useSyncExternalStore(navigation?.subscribe ?? noNavigationSubscribe, navigation?.getSnapshot ?? noNavigationRequest);
@@ -1236,6 +1240,29 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
   let pendingDetails: TurnTraceDetail[] = [];
   let pendingTools: ToolProgress[] = [];
 
+  // Reasoning never joins the execution series: it is aggregated into ONE
+  // thinking fold by the caller. A text item is MID-TURN narration (folds
+  // into the series beside its tools) when a tool call both precedes and
+  // follows it; leading intro prose and the trailing result stay
+  // standalone paragraphs. The model emits working narration with two
+  // different wire types (reasoning vs text), so placement is decided by
+  // position rather than type — otherwise near-identical lines would
+  // inconsistently render as timed rows or detached paragraphs.
+  const midTurnTextIds = new Set<string>();
+  {
+    const textIndexes = timeline
+      .map((item, index) => (item.kind === "text" ? index : -1))
+      .filter((index) => index >= 0);
+    const toolIndexes = timeline
+      .map((item, index) => (item.kind === "tool" ? index : -1))
+      .filter((index) => index >= 0);
+    for (const index of textIndexes) {
+      const preceded = toolIndexes.some((toolIndex) => toolIndex < index);
+      const followed = toolIndexes.some((toolIndex) => toolIndex > index);
+      if (preceded && followed) midTurnTextIds.add(timeline[index]!.id);
+    }
+  }
+
   const flushExecution = () => {
     if (pendingDetails.length === 0) return;
     flow.push({
@@ -1250,8 +1277,21 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
   const appendText = (id: string, text: string, sources: TextSourceRange[] = []) => {
     const body = splitThinkingFromBody(text).body;
     if (!body.trim()) return;
+    const resolved = sliceTextSources(thinkingBodySource({text,sources}),body);
+    if (midTurnTextIds.has(id) && pendingDetails.length > 0) {
+      // Middle-of-execution narration stays inside the series with the
+      // tools it accompanied instead of being pulled out into its own
+      // paragraph.
+      pendingDetails.push({
+        kind: "narration",
+        id,
+        text: body,
+        sources: resolved,
+      });
+      return;
+    }
     flushExecution();
-    flow.push({ kind: "text", id, text: body, sources: sliceTextSources(thinkingBodySource({text,sources}),body) });
+    flow.push({ kind: "text", id, text: body, sources: resolved });
   };
   const appendTool = (id: string, toolCallId: string) => {
     if (seenTools.has(toolCallId)) return;
@@ -1273,7 +1313,10 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
     if (item.kind === "text") {
       appendText(item.id, item.text, timelineTextSource(item).sources);
     } else if (item.kind === "reasoning") {
-      pendingDetails.push({kind:"reasoning",id:item.id,text:item.text,reasoningMs:item.startedAt !== undefined && item.endedAt !== undefined ? Math.max(0,item.endedAt-item.startedAt) : undefined});
+      // Collected by the caller into the single top-level thinking fold;
+      // a per-segment "思考了 X 秒" row would fragment one thinking phase
+      // into many mistimed rows and mix it with tool activity.
+      continue;
     } else if (item.kind === "tool") {
       appendTool(item.id, item.toolCallId);
     } else if (item.kind === "compaction" || item.kind === "retry") {
@@ -1361,13 +1404,40 @@ function InterleavedAssistantFlow({
   const resultText = resultSource.text.trim();
   const resultStreaming = !!message.streaming;
   const processStreaming = resultStreaming && resultText.length === 0;
+  // ONE thinking fold for the whole turn: every reasoning item is
+  // aggregated here — at the top of the message, with the total thinking
+  // time, containing nothing but thought — instead of being sprinkled
+  // across the execution rows as per-chunk "思考了 X 秒" fragments that
+  // also carried tool activity and sat at odd mid-message positions.
+  const thinkingItems = (message.assistantTimeline ?? []).filter(
+    (item): item is Extract<AssistantTimelineItem, { kind: "reasoning" }> =>
+      item.kind === "reasoning",
+  );
+  const thinkingText =
+    thinkingItems
+      .map((item) => item.text)
+      .filter((text) => text.length > 0)
+      .join("\n\n") || message.reasoning?.trim() || "";
+  const thinkingMs = thinkingItems.some(
+    (item) => item.startedAt !== undefined && item.endedAt !== undefined,
+  )
+    ? thinkingItems.reduce((total, item) => {
+        if (item.startedAt === undefined || item.endedAt === undefined) {
+          return total;
+        }
+        return total + Math.max(0, item.endedAt - item.startedAt);
+      }, 0)
+    : message.reasoningMs;
   const hasLifecycleRecords = flow.some(segment => segment.kind === "compaction" || segment.kind === "retry");
   const compacting = flow.some(segment => segment.kind === "compaction" && segment.compaction.status === "running");
   // The execution tail owns its live label or its completed row + fallback.
   // Historical disclosures above subsequent prose must not suppress it.
   const tailOwnsActivity = flow.at(-1)?.kind === "execution";
   const retrying = flow.at(-1)?.kind === "retry";
-  const showRunning = !retrying && resultStreaming && !awaitingUserInput && !compacting && !tailOwnsActivity;
+  // A turn whose only content so far is the thinking fold needs no separate
+  // "working" tail — the fold itself is the activity.
+  const hasPostThoughtContent = flow.length > 0 || resultText.length > 0;
+  const showRunning = !retrying && resultStreaming && !awaitingUserInput && !compacting && !tailOwnsActivity && hasPostThoughtContent;
 
   const flowRef = useRef<HTMLDivElement>(null);
   const liveHeight = useRef(0);
@@ -1449,6 +1519,24 @@ function InterleavedAssistantFlow({
   return (
     <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
       <div ref={flowRef} className="flex min-w-0 flex-col gap-2">
+        {thinkingItems.length > 0 && (
+          <ExecutionDisclosure
+            details={[
+              {
+                kind: "reasoning",
+                id: `${message.uiId}:thinking`,
+                text: thinkingText,
+                reasoningMs: thinkingMs,
+              },
+            ]}
+            tools={[]}
+            streaming={resultStreaming && !awaitingUserInput}
+            latestProgress={
+              resultStreaming ? compactProgressNote(thinkingText) : ""
+            }
+            liveReasoning={resultStreaming ? thinkingText : ""}
+          />
+        )}
         {resultStreaming || hasLifecycleRecords ? (
           <>
             {trace.reasoningText.length > 0 &&
@@ -1496,6 +1584,7 @@ function InterleavedAssistantFlow({
                   details={segment.details}
                   tools={segment.tools}
                   streaming={resultStreaming && index === flow.length - 1 && !awaitingUserInput}
+                  defaultExpanded={resultStreaming}
                 />
               ),
             )}
