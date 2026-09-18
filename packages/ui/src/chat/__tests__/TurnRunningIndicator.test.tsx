@@ -87,32 +87,43 @@ describe("one activity owner", () => {
     </AwaitingUserInputContext.Provider>
   );
 
-  it("hands the same disclosure from reasoning to a tool and then a quiet wait", () => {
+  it("keeps thinking in its own fold while the tool disclosure tracks the call", () => {
     const { rerender, container } = render(view(thought));
+    // The reasoning owns one fold, labeled as live thinking; no separate
+    // working tail while the fold itself is the only activity.
     expect(screen.getAllByText("sidepanel.trace.thinking")).toHaveLength(1);
     expect(screen.queryByText(WORKING)).not.toBeInTheDocument();
-    const disclosure = container.querySelector("[data-execution-summary]");
+    const thinkingDisclosure = container.querySelector(
+      "[data-execution-summary]",
+    )!;
     const running: UiMessage = {
       ...thought,
       assistantTimeline: [...thought.assistantTimeline!, { kind: "tool", id: "t1", toolCallId: "call-1" }],
       toolProgress: [{ tool: "read_file", toolCallId: "call-1", status: "running" }],
     };
     rerender(view(running));
-    expect(container.querySelector("[data-execution-summary]")).toBe(disclosure);
+    // The tool call gets its own disclosure below the persistent thinking fold.
+    const disclosures = container.querySelectorAll("[data-execution-summary]");
+    expect(disclosures).toHaveLength(2);
+    expect(disclosures[0]).toBe(thinkingDisclosure);
     expect(screen.queryByText(WORKING)).not.toBeInTheDocument();
     const waiting: UiMessage = {
       ...running, toolProgress: [{ ...running.toolProgress![0]!, status: "completed" }],
     };
     rerender(view(waiting));
-    expect(container.querySelector("[data-execution-summary]")).toBe(disclosure);
+    // The tool disclosure reports the completed action (with the working
+    // tail on the open stream); the thought fold still opens to the text.
     expect(screen.getAllByText(WORKING)).toHaveLength(1);
-    expect(screen.getByTestId("turn-running")).toBeInTheDocument();
-    const summaryButton = disclosure!.querySelector("button")!;
-    expect(summaryButton).toHaveTextContent("sidepanel.trace.actionStatus.completed");
-    expect(summaryButton.querySelector(".agent-thinking-text")).toBeNull();
-    fireEvent.click(disclosure!.querySelector("button")!);
-    expect(screen.getByText("Inspecting the request")).toBeInTheDocument();
-    expect(screen.getAllByText(WORKING)).toHaveLength(1);
+    const toolDisclosure = container.querySelectorAll(
+      "[data-execution-summary]",
+    )[1]!;
+    const toolButton = toolDisclosure.querySelector("button")!;
+    expect(toolButton).toHaveTextContent("sidepanel.trace.actionStatus.completed");
+    expect(toolButton.querySelector(".agent-thinking-text")).toBeNull();
+    fireEvent.click(thinkingDisclosure.querySelector("button")!);
+    expect(thinkingDisclosure.textContent ?? "").toContain(
+      "Inspecting the request",
+    );
     rerender(view(waiting, true));
     expect(screen.queryByText(WORKING)).not.toBeInTheDocument();
     rerender(view({ ...waiting, streaming: false }));
@@ -133,6 +144,8 @@ describe("one activity owner", () => {
     ] }));
     expect(screen.getByText(PROSE)).toBeInTheDocument();
     expect(screen.getAllByText(WORKING)).toHaveLength(1);
-    expect(screen.queryByText("sidepanel.trace.thinking")).not.toBeInTheDocument();
+    // Historical reasoning sits in its own top-level fold; it neither
+    // fragments the series nor hides the still-streaming prose wait.
+    expect(screen.getAllByText("sidepanel.trace.thinking")).toHaveLength(1);
   });
 });
