@@ -105,6 +105,27 @@ describe("cron history and navigation", () => {
     );
     expect(open).toHaveBeenCalledWith("old");
   });
+  it("shows the basic-details card when a task is selected", async () => {
+    await act(async () =>
+      root.render(
+        <DshCronPage
+          adapter={adapter}
+          onOpenSession={() => {}}
+          onStartChat={() => {}}
+        />,
+      ),
+    );
+    await act(async () =>
+      buttons()
+        .find((button) => button.textContent?.includes("Daily digest"))!
+        .click(),
+    );
+    const panel = container.querySelector("[data-cron-history-panel]")!;
+    expect(panel.textContent).toContain("Details");
+    expect(panel.textContent).toContain("Every 5 min");
+    expect(panel.textContent).toContain("New chat on every run");
+    expect(panel.textContent).toContain("Off"); // catch-up off
+  });
   it("keeps the list visible while the side panel is open, and closes it again", async () => {
     await act(async () =>
       root.render(

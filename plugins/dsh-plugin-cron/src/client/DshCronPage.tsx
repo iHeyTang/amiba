@@ -2,7 +2,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  MessageSquare,
   Loader2,
   MessageSquarePlus,
   Newspaper,
@@ -439,6 +438,10 @@ function TaskRow({
 /**
  * Master–detail side panel: the selected task's run history, docked on the
  * right of the list instead of expanding inline in the document flow.
+ *
+ * Codex-style spec sheet: value rows in a bordered card under a muted
+ * section label; groups are separated by whitespace + micro-headings, and
+ * nothing spans the full panel width except the row hairlines inside a card.
  */
 function HistorySidebar({
   id,
@@ -458,74 +461,102 @@ function HistorySidebar({
   const { t, language } = useT();
   const runs = taskRuns(task);
   const rule = ruleLabel(task.rule, t, language);
-  const status = [
-    !task.enabled
-      ? t("cron.row.disabled")
-      : task.nextRunAt === null
-        ? t("cron.row.exhausted")
-        : t("cron.row.nextRunIn", {
-            when: relativeTime(task.nextRunAt, now, t),
-          }),
-    ...(task.lastRunAt
-      ? [
-          t("cron.row.lastRunAt", {
-            when: relativeTime(task.lastRunAt, now, t),
-          }),
-        ]
-      : []),
-  ].join(" · ");
+  const rows: Array<[string, string]> = [
+    [t("cron.detail.runsOn"), t("cron.detail.runsOnValue")],
+    [t("cron.detail.rule"), rule],
+    [
+      t("cron.detail.nextRun"),
+      !task.enabled
+        ? t("cron.row.disabled")
+        : task.nextRunAt === null
+          ? t("cron.row.exhausted")
+          : relativeTime(task.nextRunAt, now, t),
+    ],
+    [
+      t("cron.detail.lastRun"),
+      task.lastRunAt
+        ? relativeTime(task.lastRunAt, now, t)
+        : t("cron.detail.never"),
+    ],
+    [
+      t("cron.detail.catchUp"),
+      task.catchUp ? t("cron.detail.on") : t("cron.detail.off"),
+    ],
+  ];
   return (
     <aside
       id={id}
       aria-label={t("cron.history")}
       data-cron-history-panel
-      className="flex w-80 shrink-0 flex-col border-l border-border/50 bg-background"
+      className="flex w-96 shrink-0 flex-col border-l border-border/50 bg-background"
     >
-      <div className="flex items-start gap-2 border-b border-border/40 px-4 py-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <span className="truncate">{task.name}</span>
-            {runs.some((run) => runUnread(run, sessionActivity)) && (
-              <span
-                role="status"
-                aria-label={t("cron.unread")}
-                className="h-1.5 w-1.5 shrink-0 rounded-full bg-[hsl(var(--status-session))]"
-              />
-            )}
+      <div className="px-5 pt-4">
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <span className="truncate">{task.name}</span>
+              {runs.some((run) => runUnread(run, sessionActivity)) && (
+                <span
+                  role="status"
+                  aria-label={t("cron.unread")}
+                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-[hsl(var(--status-session))]"
+                />
+              )}
+            </div>
           </div>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground" title={rule}>
-            {rule}
-          </p>
-          {status ? (
-            <p className="mt-0.5 truncate text-xs text-muted-foreground" title={status}>
-              {status}
-            </p>
-          ) : null}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 -mr-1 text-muted-foreground [&_svg]:size-3.5"
+                aria-label={t("cron.history.close")}
+                onClick={onClose}
+              >
+                <X />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {t("cron.history.close")}
+            </TooltipContent>
+          </Tooltip>
         </div>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground [&_svg]:size-3.5"
-              aria-label={t("cron.history.close")}
-              onClick={onClose}
-            >
-              <X />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            {t("cron.history.close")}
-          </TooltipContent>
-        </Tooltip>
+        <p className="mt-1.5 line-clamp-3 text-xs leading-5 text-muted-foreground">
+          {task.prompt}
+        </p>
       </div>
+
+      <h3 className="px-5 pt-4 text-xs text-muted-foreground">
+        {t("cron.detail.section")}
+      </h3>
+      <div className="mx-5 mt-2 divide-y divide-border/50 overflow-hidden rounded-lg border border-border/50">
+        {rows.map(([key, value]) => (
+          <div
+            key={key}
+            className="flex items-baseline justify-between gap-3 px-3 py-2"
+          >
+            <span className="text-xs text-muted-foreground">{key}</span>
+            <span className="flex min-w-0 items-center gap-1 text-xs text-foreground">
+              <span className="truncate text-right">{value}</span>
+              <ChevronRight
+                aria-hidden
+                className="h-3 w-3 shrink-0 rotate-90 text-muted-foreground"
+              />
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <h3 className="px-5 pb-2 pt-5 text-xs text-muted-foreground">
+        {t("cron.history.section")}
+      </h3>
       <ScrollArea className="min-h-0 flex-1">
         {runs.length === 0 ? (
-          <p className="px-4 py-3 text-xs text-muted-foreground">
+          <p className="px-5 py-2 text-xs text-muted-foreground">
             {t("cron.history.empty")}
           </p>
         ) : (
-          <ul aria-label={t("cron.history")} className="p-1.5">
+          <ul aria-label={t("cron.history")} className="px-3 pb-4">
             {[...runs]
               .sort((a, b) => b.startedAt - a.startedAt)
               .map((run) => (
@@ -534,12 +565,8 @@ function HistorySidebar({
                     type="button"
                     onClick={() => onOpenSession(run.sessionId)}
                     title={t("cron.history.open")}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="flex w-full items-center gap-2 px-2 py-2 text-left text-xs hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   >
-                    <MessageSquare
-                      aria-hidden
-                      className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                    />
                     <time
                       dateTime={new Date(run.startedAt).toISOString()}
                       className="tabular-nums"
