@@ -407,3 +407,11 @@
 
 :root.light.accent-graphite { --primary: 240 6% 12%; --primary-foreground: 0 0% 98%; --ring: 240 6% 12%; }
 :root.dark.accent-graphite { --primary: 0 0% 92%; --primary-foreground: 240 6% 12%; --ring: 0 0% 92%; }
+
+/* ── Motion ──────────────────────────────────────────────────────────────── */
+/* Indeterminate sweep for the brand Progress primitive; animated through
+ * Tailwind's arbitrary `animate-[progress-indeterminate_…]` utility. */
+@keyframes progress-indeterminate {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(320%); }
+}

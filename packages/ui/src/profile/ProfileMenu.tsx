@@ -1,19 +1,26 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  ArrowRight,
   ChevronRight,
   ChevronsUpDown,
+  CircleAlert,
+  CircleCheckBig,
+  CloudDownload,
   ExternalLink,
   Github,
+  Info,
+  LoaderCircle,
   RefreshCw,
+  Sparkles,
 } from "lucide-react";
 import { type AppUpdateState, getPlatform } from "@amiba/app-runtime/platform";
 import { useT } from "@amiba/i18n";
 import {
+  Badge,
   Button,
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -21,6 +28,7 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
+  Progress,
 } from "../primitives";
 import { APP_VERSION } from "../app-version";
 import { SettingsTriggerContent } from "../settings/SettingsTriggerContent";
@@ -234,42 +242,180 @@ export function ProfileMenu({
       </Popover>
       <Dialog open={updatesOpen} onOpenChange={setUpdatesOpen}>
         <DialogContent
-          size="sm"
+          size="compact"
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             menuTrigger.current?.focus();
           }}
         >
-          <DialogHeader>
-            <DialogTitle>{t("options.personal.checkUpdates")}</DialogTitle>
-            <p className="pt-1 text-sm text-muted-foreground">
-              {t("options.personal.currentVersion")} · v{update.currentVersion}
-            </p>
-            <DialogDescription>
-              {t(`options.personal.update.${update.status}`, { version: update.version ?? "", percent: String(Math.round(update.percent ?? 0)) })}
-            </DialogDescription>
+          <DialogHeader className="text-left">
+            <div className="flex items-start gap-3.5">
+              <span
+                className={cn(
+                  "grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary",
+                  (update.status === "downloaded" || update.status === "ready") && "bg-success/10 text-success",
+                  update.status === "error" && "bg-destructive/10 text-destructive",
+                )}
+              >
+                {updateStatusIcon(update.status, "h-5 w-5")}
+              </span>
+              <div className="min-w-0 pt-0.5">
+                <DialogTitle>{t("options.personal.checkUpdates")}</DialogTitle>
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <Badge
+                    variant="outline"
+                    className="rounded-full px-2 py-0 font-mono text-[11px] font-semibold"
+                  >
+                    v{update.currentVersion}
+                  </Badge>
+                  {update.version && update.status !== "error" && ["available", "offered", "downloading", "downloaded", "ready"].includes(update.status) && (
+                    <>
+                      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                      <Badge className="rounded-full px-2 py-0 font-mono text-[11px] font-semibold">
+                        v{update.version}
+                      </Badge>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           </DialogHeader>
-          {update.status === "downloading" && (
-            <progress aria-label={t("options.personal.update.progress")} className="h-2 w-full accent-primary" max={100} value={update.percent ?? 0} />
-          )}
-          {update.status === "error" && <p role="alert" className="break-words text-xs text-muted-foreground">{update.error}</p>}
+          <div className="flex flex-col gap-3.5">
+            <div
+              role="status"
+              className={cn(
+                "flex items-start gap-2.5 rounded-xl border border-border/60 bg-muted/40 px-3.5 py-3",
+                (update.status === "downloaded" || update.status === "ready") && "border-success/25 bg-success/5",
+                update.status === "error" && "border-destructive/25 bg-destructive/5",
+              )}
+            >
+              <span
+                className={cn(
+                  "mt-0.5 shrink-0 text-primary",
+                  (update.status === "downloaded" || update.status === "ready") && "text-success",
+                  update.status === "error" && "text-destructive",
+                  (update.status === "idle" || update.status === "disabled") && "text-muted-foreground",
+                )}
+              >
+                {updateStatusIcon(update.status, "h-4 w-4")}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium leading-snug text-foreground">
+                  {updateStatusTitle(update.status, update, t)}
+                </p>
+                {updateStatusDetail(update.status, t) && (
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    {updateStatusDetail(update.status, t)}
+                  </p>
+                )}
+              </div>
+            </div>
+            {update.status === "downloading" && (
+              <div className="flex items-center gap-3">
+                <Progress
+                  value={update.percent}
+                  className="h-2.5 flex-1"
+                  label={t("options.personal.update.progress")}
+                />
+                <span className="w-10 shrink-0 text-right text-sm font-semibold tabular-nums text-foreground">
+                  {Math.round(update.percent ?? 0)}%
+                </span>
+              </div>
+            )}
+            {update.status === "error" && update.error && (
+              <p
+                role="alert"
+                className="break-words rounded-lg bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive"
+              >
+                {update.error}
+              </p>
+            )}
+          </div>
           <DialogFooter>
-            {update.status === "ready" ? (
+            {update.status === "downloaded" ? (
+              <Button onClick={() => { void updater?.install().catch(updateError); }}>{t("options.personal.update.install")}</Button>
+            ) : update.status === "ready" ? (
               // The installer is on disk and verified; quitting is the user's move.
               <Button onClick={() => { void updater?.install().catch(updateError); }}>{t("options.personal.update.reveal")}</Button>
             ) : update.status === "offered" ? (
               <Button onClick={() => { void updater?.download?.().catch(updateError); }}>{t("options.personal.update.download")}</Button>
-            ) : update.status === "downloaded" ? (
-              <Button onClick={() => { void updater?.install().catch(updateError); }}>{t("options.personal.update.install")}</Button>
-            ) : updater && update.status !== "disabled" && (
+            ) : updater && update.status !== "disabled" ? (
               <Button disabled={["checking", "available", "downloading"].includes(update.status)} onClick={checkUpdates}>{t("options.personal.checkUpdates")}</Button>
-            )}
+            ) : null}
             <DialogClose asChild>
-              <Button>{t("common.close")}</Button>
+              <Button variant="outline">{t("common.close")}</Button>
             </DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
   );
+}
+
+/** Icon for a given update status; used in the header tile and status card. */
+function updateStatusIcon(status: AppUpdateState["status"], size: string) {
+  switch (status) {
+    case "available":
+      return <Sparkles className={size} aria-hidden="true" />;
+    case "offered":
+    case "downloading":
+      return <CloudDownload className={size} aria-hidden="true" />;
+    case "downloaded":
+    case "ready":
+      return <CircleCheckBig className={size} aria-hidden="true" />;
+    case "error":
+      return <CircleAlert className={size} aria-hidden="true" />;
+    case "checking":
+      return <LoaderCircle className={cn(size, "animate-spin")} aria-hidden="true" />;
+    default:
+      return <Info className={size} aria-hidden="true" />;
+  }
+}
+
+/** Headline for the status card, per state. */
+function updateStatusTitle(
+  status: AppUpdateState["status"],
+  update: AppUpdateState,
+  t: ReturnType<typeof useT>["t"],
+) {
+  const version = update.version ?? "";
+  switch (status) {
+    case "available":
+      return t("options.personal.update.available", { version });
+    case "offered":
+      return t("options.personal.update.offered", { version });
+    case "downloading":
+      return t("options.personal.update.downloadingTitle", { version });
+    case "downloaded":
+      return t("options.personal.update.downloadedTitle", { version });
+    case "ready":
+      return t("options.personal.update.ready", { version });
+    case "checking":
+      return t("options.personal.update.checking");
+    case "error":
+      return t("options.personal.update.error");
+    case "idle":
+      return t("options.personal.update.idle");
+    case "disabled":
+      return t("options.personal.update.disabled");
+  }
+}
+
+/** Supporting line under the status headline, where one exists. */
+function updateStatusDetail(
+  status: AppUpdateState["status"],
+  t: ReturnType<typeof useT>["t"],
+) {
+  switch (status) {
+    case "checking":
+      return t("options.personal.update.checkingDetail");
+    case "available":
+    case "offered":
+      return t("options.personal.update.availableDetail");
+    case "downloaded":
+      return t("options.personal.update.readyToInstall");
+    default:
+      // `error` carries the raw host message in its own alert box below the card.
+      return undefined;
+  }
 }
