@@ -2,7 +2,6 @@ import { app, BrowserWindow, ipcMain, Menu, screen } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
-import type { DesktopPetActivity } from "../shared/desktop-pet";
 const directory = path.dirname(fileURLToPath(import.meta.url));
 export function clampPetPosition(
   point: { x: number; y: number },
@@ -44,12 +43,6 @@ export async function installDesktopPetWindow(
   }
   let win: BrowserWindow | null = null,
     ready = false;
-  let activity: DesktopPetActivity = {
-    phase: "idle",
-    restored: true,
-    sessionId: "",
-    revision: 0,
-  };
   let dragTimer: ReturnType<typeof setInterval> | undefined;
   let writing = Promise.resolve();
   const save = () => {
@@ -266,7 +259,6 @@ export async function installDesktopPetWindow(
     if (own(event.sender)) {
       ready = true;
       layout();
-      event.sender.send("desktop-pet:activity", { ...activity, restored: true });
       if (enabled) win?.showInactive();
     }
   });
@@ -328,31 +320,6 @@ export async function installDesktopPetWindow(
       place({ x: anchorX - (shape.x + (west ? shape.width : 0)) * size,
         y: anchorY - (shape.y + (north ? shape.height : 0)) * size });
     }, 16);
-  });
-  ipcMain.handle("desktop-pet:activity", (event, next: DesktopPetActivity) => {
-    if (
-      event.sender !== contents(main()) ||
-      !next ||
-      ![
-        "idle",
-        "thinking",
-        "responding",
-        "tooling",
-        "waiting",
-        "completed",
-        "failed",
-        "interrupted",
-      ].includes(next.phase)
-    )
-      return;
-    activity = {
-      phase: next.phase,
-      title: typeof next.title === "string" ? next.title.trim().slice(0, 500) : undefined,
-      restored: next.restored === true,
-      sessionId: String(next.sessionId).slice(0, 200),
-      revision: Number.isFinite(next.revision) ? next.revision : 0,
-    };
-    win?.webContents.send("desktop-pet:activity", activity);
   });
   ipcMain.handle(
     "desktop-pet:menu",

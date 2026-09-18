@@ -1,4 +1,11 @@
-import { getPlatform, type AgentSessionHistoryEntry, type AgentSubagentAddress } from "@amiba/app-runtime/platform";
+import {
+  getPlatform,
+  type AgentSessionHistoryEntry,
+  type AgentSubagentAddress,
+} from "@amiba/app-runtime/platform";
+// Shared policy module (not the mocked platform surface, so unit tests keep
+// the real implementation).
+import { retainedAddress } from "../../platform/session-workspace.js";
 import { shortId } from "@amiba/app-runtime/utils";
 
 import {
@@ -103,16 +110,6 @@ function localMetaEqual(a: SessionLocalMeta, b: SessionLocalMeta): boolean {
     JSON.stringify(a.subagentAddress ?? null) === JSON.stringify(b.subagentAddress ?? null) &&
     a.branchMessageId === b.branchMessageId
   );
-}
-
-/** Persisted addresses are hints, never authority to resume a root Agent. */
-function retainedAddress(id: string, value: unknown): AgentSubagentAddress | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const address = value as Partial<AgentSubagentAddress>;
-  if (address.childSessionId !== id || typeof address.parentSessionId !== "string" ||
-      !address.parentSessionId || address.parentSessionId === id ||
-      (address.mode !== "one-shot" && address.mode !== "continuable")) return undefined;
-  return { parentSessionId: address.parentSessionId, childSessionId: id, mode: address.mode };
 }
 
 type SessionSummaryLike = Awaited<

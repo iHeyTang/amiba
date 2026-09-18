@@ -60,6 +60,7 @@ import { dshRuntime, managedDshPaths } from "./dsh-runtime";
 import { dshState } from "./dsh-state";
 import { chatEngineHost } from "./chat-engine-host";
 import { dshApiProxy } from "./dsh-api-proxy";
+import { sessionIndex } from "./session-index";
 import {
   startDshNativeGateway,
   type DshNativeGateway,
@@ -607,6 +608,9 @@ if (!gotSingleInstanceLock) {
     // the app's ONE chat engine, and the conversation data plane (session /
     // workspace / model adapters). Windows are pure views that subscribe
     // through IPC; closing any window keeps state alive in the main process.
+    // ONE `session/list` poll serves the state layer, the activity tracker
+    // and the hosted engine (hostRunning / subagent parents).
+    sessionIndex.start();
     dshState.start();
     chatEngineHost.start();
     dshApiProxy.start();

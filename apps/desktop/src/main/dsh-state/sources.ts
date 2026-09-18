@@ -17,7 +17,6 @@ import type {
   DshNotificationRow,
   DshNotificationUpdate,
   DshPetLibrary,
-  DshSessionRow,
 } from "./types";
 
 /** Poll `amibaPets/list` on the same cadence the plugin client uses. */
@@ -240,94 +239,5 @@ export class NotificationSource {
         }),
       )
       .catch(() => {});
-  }
-}
-
-/** Poll `session/list`; the layer uses it for the revision broadcast. */
-export class SessionsSource {
-  private rows: DshSessionRow[] = [];
-  private signature = "";
-  private timer: ReturnType<typeof setInterval> | undefined;
-  private pending: Promise<void> | undefined;
-  private disposed = false;
-  private readonly listeners = new Set<(rows: DshSessionRow[]) => void>();
-
-  constructor(private readonly client: () => Promise<DshApiClient>) {}
-
-  start(): void {
-    if (this.timer) return;
-    void this.poll();
-    this.timer = setInterval(() => void this.poll(), 2_000);
-    this.timer.unref?.();
-  }
-
-  onChange(listener: (rows: DshSessionRow[]) => void): () => void {
-    this.listeners.add(listener);
-    if (this.rows.length) listener(this.rows);
-    return () => this.listeners.delete(listener);
-  }
-
-  getSnapshot(): DshSessionRow[] {
-    return this.rows;
-  }
-
-  /**
-   * Change signature for the revision broadcast. Titles are excluded (the
-   * runtime flips them on every auto-title write) but running flags and the
-   * session set are included, so a session created anywhere (Quick-Ask,
-   * plugins, cron) or a run starting elsewhere triggers a cross-window
-   * refresh immediately instead of on the next surface refresh tick.
-   */
-  private static signatureFor(rows: DshSessionRow[]): string {
-    return rows
-      .filter((row) => !row.blank)
-      .map((row) => `${row.sessionId}:${row.running ? 1 : 0}`)
-      .sort()
-      .join("|");
-  }
-
-  private async poll(): Promise<void> {
-    if (this.disposed || this.pending) return;
-    this.pending = this.run().finally(() => {
-      this.pending = undefined;
-    });
-  }
-
-  private async run(): Promise<void> {
-    try {
-      const client = await this.client();
-      const result = await client.listSessions();
-      const rows: DshSessionRow[] = result.items.map((item) => ({
-        sessionId: item.sessionId,
-        updatedAt: item.updatedAt,
-        running: item.running,
-        blank: item.blank,
-        ...(item.parentSessionId === undefined
-          ? {}
-          : { parentSessionId: item.parentSessionId }),
-        ...(item.agentPreset === undefined
-          ? {}
-          : { agentPreset: item.agentPreset }),
-        ...(typeof item.projections?.values?.title === "string"
-          ? { title: item.projections.values.title as string }
-          : {}),
-      }));
-      const signature = SessionsSource.signatureFor(rows);
-      const changed = signature !== this.signature;
-      this.rows = rows;
-      this.signature = signature;
-      if (changed || this.rows.length === 0) {
-        for (const listener of this.listeners) listener(rows);
-      }
-    } catch {
-      // Runtime not ready / transient — keep the last index.
-    }
-  }
-
-  dispose(): void {
-    this.disposed = true;
-    if (this.timer) clearInterval(this.timer);
-    this.timer = undefined;
-    this.listeners.clear();
   }
 }

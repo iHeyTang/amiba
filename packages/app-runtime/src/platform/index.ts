@@ -1,3 +1,7 @@
+import {
+  ensureSessionWorkspaceWith,
+  resolveSessionCreationWorkspaceWith,
+} from "./session-workspace.js";
 export interface DesktopPetState {
   enabled: boolean;
 }
@@ -70,8 +74,6 @@ export interface DesktopPetBridge {
     activeId: string | null,
   ): Promise<void>;
   onSelect(listener: (id: string) => void): () => void;
-  publishActivity(activity: DesktopPetActivity): Promise<void>;
-  onActivity(listener: (activity: DesktopPetActivity) => void): () => void;
   onPointer(listener: (point: { x: number; y: number } | null) => void): () => void;
   ready(): Promise<void>;
 }
@@ -870,28 +872,40 @@ export function hasPlatform(): boolean {
 export async function ensureSessionWorkspace(sessionId: string, platform = getPlatform()): Promise<string | undefined> {
   const workspaces = platform.workspaces;
   if (!workspaces) return undefined;
-  const bound = (await workspaces.listBindings())[sessionId];
-  if (bound) return bound;
-  const existing = (await platform.agentSessions?.list())?.find(session => session.sessionId === sessionId);
-  if (existing?.cwd && workspaces.bindIfUnbound) {
-    return (await workspaces.bindIfUnbound(sessionId, existing.cwd)) ?? undefined;
-  }
-  return await workspaces.getDefaultRoot();
+  return ensureSessionWorkspaceWith(sessionId, {
+    listBindings: () => workspaces.listBindings(),
+    listSessions: async () => (await platform.agentSessions?.list()) ?? [],
+    bindIfUnbound: async (id, cwd) =>
+      (await workspaces.bindIfUnbound?.(id, cwd)) ?? undefined,
+    getDefaultRoot: async () => (await workspaces.getDefaultRoot?.()) ?? undefined,
+  });
 }
 
-
-/** Shared session.create directory policy for the main shell and Quick Ask. */
+/**
+ * Shared session.create directory policy for the main shell and Quick Ask.
+ * The same strategy runs in the main process for the hosted engine
+ * (`resolveSessionCreationWorkspaceWith` + main surfaces) — one implementation.
+ */
 export async function resolveSessionCreationWorkspace(sessionId: string, platform = getPlatform()): Promise<{ cwd?: string; workspaceId?: string }> {
-  const cwd = await ensureSessionWorkspace(sessionId, platform);
-  if (!cwd) return {};
-  const existing = (await platform.agentSessions?.list())?.find(session => session.sessionId === sessionId);
-  if (existing?.cwd && platform.workspaces?.resolveRuntimeCwd) {
-    return { cwd: await platform.workspaces.resolveRuntimeCwd(sessionId, existing.cwd) };
-  }
-  const explicitlyBound = Object.hasOwn((await platform.workspaces?.listBindings()) ?? {}, sessionId);
-  if (explicitlyBound && platform.agentWorkspaces) {
-    const { workspace } = await platform.agentWorkspaces.create(cwd);
-    return { workspaceId: workspace.workspaceId };
-  }
-  return { cwd };
+  return resolveSessionCreationWorkspaceWith(sessionId, {
+    listBindings: async () => (await platform.workspaces?.listBindings()) ?? {},
+    listSessions: async () => (await platform.agentSessions?.list()) ?? [],
+    bindIfUnbound: async (id, cwd) =>
+      (await platform.workspaces?.bindIfUnbound?.(id, cwd)) ?? undefined,
+    resolveRuntimeCwd: async (id, cwd) =>
+      (await platform.workspaces?.resolveRuntimeCwd?.(id, cwd)) ?? undefined,
+    getDefaultRoot: async () =>
+      (await platform.workspaces?.getDefaultRoot?.()) ?? undefined,
+    ...(platform.agentWorkspaces
+      ? { createWorkspace: (cwd) => platform.agentWorkspaces!.create(cwd) }
+      : {}),
+  });
 }
+
+// Shared policy functions (workspace strategy + subagent retained addresses).
+export {
+  ensureSessionWorkspaceWith,
+  resolveSessionCreationWorkspaceWith,
+  retainedAddress,
+} from "./session-workspace.js";
+export type { SessionWorkspaceSurfaces } from "./session-workspace.js";

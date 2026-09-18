@@ -2,8 +2,8 @@
  * Window-independent session-activity tracker.
  *
  * The pet window used to receive conversation activity published by the MAIN
- * window's chat surface (`desktop.publishActivity`), which dies with the main
- * window. This source derives the same presentation signal directly from the
+ * window's chat surface, which died with the main window (that channel is
+ * gone). This source derives the same presentation signal directly from the
  * DSH runtime so any window can reflect "what is Amiba doing right now":
  *
  *   1. Follows the global events mux for interaction waits (approvals /
@@ -19,7 +19,7 @@
 
 import type { DshApiClient } from "@amiba/app-runtime/dsh-client";
 import type { DesktopPetActivity } from "@amiba/app-runtime/platform";
-import type { SessionsSource } from "./sources";
+import type { SessionIndex } from "../session-index";
 import type { DshSessionRow } from "./types";
 
 interface RawSessionEvent {
@@ -95,7 +95,7 @@ export class ActivitySource {
 
   constructor(
     private readonly client: () => Promise<DshApiClient>,
-    sessions: SessionsSource,
+    sessions: SessionIndex,
   ) {
     this.offSessions = sessions.onChange((rows) => this.onSessions(rows));
   }

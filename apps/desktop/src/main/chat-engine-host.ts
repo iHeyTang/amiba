@@ -22,9 +22,12 @@ import {
   DshApiClient,
   DshChatEngineClient,
   type DshPromptContentPart,
-  type DshSessionActivitySource,
 } from "@amiba/app-runtime/dsh-client";
-import type { AgentSubagentAddress } from "@amiba/app-runtime/platform";
+import {
+  retainedAddress,
+  resolveSessionCreationWorkspaceWith,
+  type AgentSubagentAddress,
+} from "@amiba/app-runtime/platform";
 import type {
   ApprovalDecision,
   ApprovalRequest,
@@ -35,9 +38,9 @@ import type {
   UserQuestionAnswerItem,
   UserQuestionRequest,
 } from "@amiba/app-runtime/protocol";
-import { dshRuntime } from "./dsh-runtime";
 import { mainStore } from "./storage";
 import { workspaceManager } from "./workspace";
+import { dshRuntimeClient, sessionIndex } from "./session-index";
 
 /** Storage key the renderer sessions runtime keeps subagent addresses under. */
 const LOCAL_META_KEY = "sessions.local-meta";
@@ -48,29 +51,6 @@ function contentsOf(id: number): WebContents | null {
     if (contents.id === id) return contents;
   }
   return null;
-}
-
-/** Retained-address semantics identical to the renderer sessions store. */
-function retainedAddress(
-  sessionId: string,
-  value: unknown,
-): AgentSubagentAddress | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const address = value as Partial<AgentSubagentAddress>;
-  if (
-    address.childSessionId !== sessionId ||
-    typeof address.parentSessionId !== "string" ||
-    !address.parentSessionId ||
-    address.parentSessionId === sessionId ||
-    (address.mode !== "one-shot" && address.mode !== "continuable")
-  ) {
-    return undefined;
-  }
-  return {
-    parentSessionId: address.parentSessionId,
-    childSessionId: sessionId,
-    mode: address.mode,
-  };
 }
 
 export class ChatEngineHost {
@@ -91,11 +71,7 @@ export class ChatEngineHost {
       error?: string;
     }) => void
   >();
-  private readonly activityListeners = new Map<string, Set<() => void>>();
-  private runningBySession = new Map<string, boolean>();
-  private parentBySession = new Map<string, string>();
   private addressBySession = new Map<string, AgentSubagentAddress>();
-  private runningTimer: ReturnType<typeof setInterval> | undefined;
   private metaWatchOff: (() => void) | undefined;
 
   /** Start the host and register its IPC surface. Idempotent. */
@@ -112,9 +88,6 @@ export class ChatEngineHost {
     this.started = false;
     this.metaWatchOff?.();
     this.metaWatchOff = undefined;
-    if (this.runningTimer) clearInterval(this.runningTimer);
-    this.runningTimer = undefined;
-    this.activityListeners.clear();
     this.subscribers.clear();
     this.addresses.clear();
     this.submitters.clear();
@@ -123,8 +96,8 @@ export class ChatEngineHost {
     this.engine = null;
   }
 
-  private async client(): Promise<DshApiClient> {
-    return (await dshRuntime.ensureStarted()).client;
+  private client(): Promise<DshApiClient> {
+    return dshRuntimeClient();
   }
 
   // ---------------------------------------------------------------------
@@ -299,7 +272,14 @@ export class ChatEngineHost {
             );
           },
         },
-        sessionActivity: (sessionId) => this.activitySource(sessionId),
+        // Session facts come from the shared main-process session index —
+        // one `session/list` poll serves this engine, the dsh-state layer and
+        // the activity tracker.
+        sessionActivity: (sessionId) => ({
+          getSnapshot: () => ({ running: sessionIndex.running(sessionId) }),
+          subscribe: (listener: () => void) =>
+            sessionIndex.onChange(() => listener()),
+        }),
       });
       engine.onSnapshot((frame) => {
         if (frame.type !== "snapshot") return;
@@ -309,7 +289,6 @@ export class ChatEngineHost {
         this.route(sessionId, { type: "event", sessionId, event });
       });
       this.engine = engine;
-      this.startRunningPoller();
       return engine;
     } catch {
       // Runtime not ready yet; a later request retries.
@@ -364,7 +343,6 @@ export class ChatEngineHost {
     this.subscribers.delete(sessionId);
     this.submitters.delete(sessionId);
     this.engine?.unfollow(sessionId);
-    this.activityListeners.delete(sessionId);
   }
 
   private route(sessionId: string, message: EngineToClientMessage): void {
@@ -388,7 +366,7 @@ export class ChatEngineHost {
     // watcher — the same two sources the renderer store derives them from.
     const retained = this.addressBySession.get(sessionId);
     if (retained) return retained;
-    const parent = this.parentBySession.get(sessionId);
+    const parent = sessionIndex.parent(sessionId);
     if (parent) {
       return {
         parentSessionId: parent,
@@ -418,85 +396,22 @@ export class ChatEngineHost {
     sessionId: string,
     signal?: AbortSignal,
   ): Promise<{ cwd?: string; workspaceId?: string }> {
-    // Mirror `resolveSessionCreationWorkspace` with main-process surfaces.
-    const bindings = workspaceManager.listBindings();
-    const bound = bindings[sessionId];
-    const existing = (
-      await this.client()
-        .then((client) => client.listSessions(signal))
-        .catch(() => ({ items: [] }))
-    ).items.find((session) => session.sessionId === sessionId);
-    const boundOrExisting = bound
-      ? bound
-      : existing?.cwd
-        ? ((await workspaceManager.bindIfUnbound(sessionId, existing.cwd).catch(() => null)) ??
-          undefined)
-        : undefined;
-    const cwd = boundOrExisting ?? (await workspaceManager.getDefaultRoot().catch(() => undefined));
-    if (!cwd) return {};
-    if (existing?.cwd) {
-      const runtimeCwd = await workspaceManager
-        .resolveRuntimeCwd(sessionId, existing.cwd)
-        .catch(() => undefined);
-      if (runtimeCwd !== undefined) return { cwd: runtimeCwd };
-    }
-    if (Object.hasOwn(bindings, sessionId)) {
-      try {
-        const client = await this.client();
-        const { workspace } = await client.createWorkspace(cwd, signal);
-        return { workspaceId: workspace.workspaceId };
-      } catch {
-        // Workspace creation can fail transiently; fall back to the cwd.
-      }
-    }
-    return { cwd };
-  }
-
-  private activitySource(sessionId: string): DshSessionActivitySource {
-    return {
-      getSnapshot: () => {
-        this.startRunningPoller();
-        return { running: this.runningBySession.get(sessionId) ?? false };
-      },
-      subscribe: (listener) => {
-        let set = this.activityListeners.get(sessionId);
-        if (!set) {
-          set = new Set();
-          this.activityListeners.set(sessionId, set);
-        }
-        set.add(listener);
-        return () => {
-          set?.delete(listener);
-        };
-      },
-    };
-  }
-
-  private startRunningPoller(): void {
-    if (this.runningTimer) return;
-    this.runningTimer = setInterval(() => void this.pollRunning(), 2_000);
-    this.runningTimer.unref?.();
-    void this.pollRunning();
-  }
-
-  private async pollRunning(): Promise<void> {
-    try {
-      const client = await this.client();
-      const { items } = await client.listSessions();
-      const next = new Map<string, boolean>();
-      const parents = new Map<string, string>();
-      for (const item of items) {
-        next.set(item.sessionId, item.running);
-        if (item.parentSessionId) parents.set(item.sessionId, item.parentSessionId);
-      }
-      this.runningBySession = next;
-      this.parentBySession = parents;
-      for (const listeners of this.activityListeners.values()) {
-        for (const listener of listeners) listener();
-      }
-    } catch {
-      // Runtime not ready — keep the last running map.
-    }
+    // The SAME session.create directory policy the renderer surfaces use
+    // (`resolveSessionCreationWorkspace`), served by main-process bindings —
+    // see packages/app-runtime/src/platform/session-workspace.ts.
+    return resolveSessionCreationWorkspaceWith(sessionId, {
+      listBindings: () => workspaceManager.listBindings(),
+      listSessions: async () =>
+        (await this.client()
+          .then((client) => client.listSessions(signal))
+          .catch(() => ({ items: [] }))).items,
+      bindIfUnbound: (id, cwd) => workspaceManager.bindIfUnbound(id, cwd),
+      resolveRuntimeCwd: (id, cwd) =>
+        workspaceManager.resolveRuntimeCwd(id, cwd),
+      getDefaultRoot: () => workspaceManager.getDefaultRoot(),
+      createWorkspace: async (cwd) =>
+        (await this.client()).createWorkspace(cwd, signal),
+    });
   }
 
   private async serializeDrafts(

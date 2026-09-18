@@ -398,9 +398,6 @@ const api = {
     ready: () => ipcRenderer.invoke("desktop-pet:ready"),
     menu: (pets: { id: string; name: string }[], activeId: string | null) =>
       ipcRenderer.invoke("desktop-pet:menu", pets, activeId),
-    publishActivity: (
-      activity: import("../shared/desktop-pet").DesktopPetActivity,
-    ) => ipcRenderer.invoke("desktop-pet:activity", activity),
     onState: (
       listener: (
         state: import("../shared/desktop-pet").DesktopPetState,
@@ -412,18 +409,6 @@ const api = {
       ) => listener(state);
       ipcRenderer.on("desktop-pet:state", handler);
       return () => ipcRenderer.off("desktop-pet:state", handler);
-    },
-    onActivity: (
-      listener: (
-        state: import("../shared/desktop-pet").DesktopPetActivity,
-      ) => void,
-    ) => {
-      const handler = (
-        _: Electron.IpcRendererEvent,
-        state: import("../shared/desktop-pet").DesktopPetActivity,
-      ) => listener(state);
-      ipcRenderer.on("desktop-pet:activity", handler);
-      return () => ipcRenderer.off("desktop-pet:activity", handler);
     },
     onPointer: (listener: (point: { x: number; y: number } | null) => void) => {
       const handler = (_: Electron.IpcRendererEvent, point: { x: number; y: number } | null) => listener(point);

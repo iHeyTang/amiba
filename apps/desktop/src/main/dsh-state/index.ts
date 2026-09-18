@@ -20,15 +20,13 @@
  */
 
 import { BrowserWindow, ipcMain } from "electron";
-import type { DshApiClient } from "@amiba/app-runtime/dsh-client";
 import { mainStore } from "../storage";
-import { dshRuntime } from "../dsh-runtime";
 import { ActivitySource } from "./activity";
 import {
   NotificationSource,
   PetsSource,
-  SessionsSource,
 } from "./sources";
+import { dshRuntimeClient, sessionIndex } from "../session-index";
 import type { DshStateSnapshot } from "../../shared/dsh-state";
 
 /**
@@ -40,16 +38,13 @@ import type { DshStateSnapshot } from "../../shared/dsh-state";
  */
 export const SESSIONS_REVISION_KEY = "sessions.revision";
 
-function clientProvider(): Promise<DshApiClient> {
-  return dshRuntime.ensureStarted().then((handle) => handle.client);
-}
-
 export class DshStateLayer {
   /** Content key of the last broadcast snapshot (dedupe gate). */
   private lastContentKey = "";
-  private readonly pets = new PetsSource(clientProvider);
-  private readonly notifications = new NotificationSource(clientProvider);
-  private readonly sessions = new SessionsSource(clientProvider);
+  private lastSessionSignature = "";
+  private readonly pets = new PetsSource(dshRuntimeClient);
+  private readonly notifications = new NotificationSource(dshRuntimeClient);
+  private readonly sessions = sessionIndex;
   private readonly activity: ActivitySource;
 
   private snapshot: DshStateSnapshot | null = null;
@@ -61,15 +56,25 @@ export class DshStateLayer {
   private readonly offSessions: () => void;
 
   constructor() {
-    this.activity = new ActivitySource(clientProvider, this.sessions);
+    this.activity = new ActivitySource(dshRuntimeClient, this.sessions);
     this.offPets = this.pets.onChange(() => this.rebroadcast());
     this.offNotifications = this.notifications.onChange(() => this.rebroadcast());
     this.offActivity = this.activity.onChange(() => this.rebroadcast());
     // Session-index changes trigger the cross-window `sessions.revision`
     // bump so every window's SessionsStore refreshes without waiting for its
     // next surface refresh tick (Quick-Ask minting a session used to leave
-    // the main window's history stale until the next manual refresh).
-    this.offSessions = this.sessions.onChange(() => {
+    // the main window's history stale until the next manual refresh). The
+    // bump is signature-gated: the shared poller emits every cycle, but the
+    // storage marker only fires when the visible session set / running flags
+    // actually changed.
+    this.offSessions = this.sessions.onChange((rows) => {
+      const signature = rows
+        .filter((row) => !row.blank)
+        .map((row) => `${row.sessionId}:${row.running ? 1 : 0}`)
+        .sort()
+        .join("|");
+      if (signature === this.lastSessionSignature) return;
+      this.lastSessionSignature = signature;
       void mainStore.set({ [SESSIONS_REVISION_KEY]: Date.now() }).catch(() => {});
     });
   }
@@ -80,7 +85,6 @@ export class DshStateLayer {
     this.started = true;
     this.pets.start();
     this.notifications.start();
-    this.sessions.start();
     this.activity.start();
     this.registerIpc();
   }
@@ -182,7 +186,6 @@ export class DshStateLayer {
     this.offSessions();
     this.pets.dispose();
     this.notifications.dispose();
-    this.sessions.dispose();
     this.activity.dispose();
     this.started = false;
   }

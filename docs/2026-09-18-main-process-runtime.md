@@ -76,13 +76,20 @@ Shell 插件图（官方插件机制，主窗口）与渲染进程内附件草�
   解析；工作区策略镜像渲染层 `resolveSessionCreationWorkspace`。
 - Quick-Ask 不再 boot/transport/自建 DshApiClient；主窗口渲染层也不再为聊天自建
   client（仅插件图按 DSH 机制保留）。
+- `session/list` 由**单一** `SessionIndex` 轮询器供给（dsh-state 签名广播 /
+  activity 选会话 / 引擎 hostRunning 与子代理 parent）——一处轮询，三处消费。
+- 会话创建目录策略（`session-workspace.ts`）与子代理 retainedAddress 是**共享纯
+  函数**（渲染层与主进程同一实现，`resolveSessionCreationWorkspace` 只是薄包装）。
+- 旧 `desktop-pet:activity` 发布管道已删除（宠物页早不消费；订阅层提供活动）。
 
 ## 验证
 
 - desktop typecheck（renderer + node）✅
-- desktop build（electron-vite + verify-desktop-bundle）✅
+- desktop build（electron-vite + verify-desktop-bundle；完整 `pnpm build` 被已知
+  runtime:prepare 补丁重放环境漂移挡住——与代码无关）✅
 - desktop 主进程测试（110/110）✅
 - app-runtime vitest（255/255，含 follow/unfollow 单测）✅
+- ui-shell 插件 build ✅
 - pets 插件 typecheck ✅；test 21 通过 + 1 skip + 1 环境漂移失败（`remote.test.ts`
   `registerGenerationSource`，在未改动 dev worktree 同样复现，与本次无关）
 - ui-shell 插件 build ✅（其 typecheck 基线坏在测试/脚本文件的环境漂移，同源复现）
