@@ -466,7 +466,7 @@ function HistorySidebar({
         : t("cron.row.nextRunIn", {
             when: relativeTime(task.nextRunAt, now, t),
           }),
-  ].join(" · ");
+  ];
   return (
     <aside
       id={id}
@@ -486,7 +486,14 @@ function HistorySidebar({
               />
             )}
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
+          <p className="mt-0.5 flex flex-wrap text-xs leading-5 text-muted-foreground">
+            {subtitle.map((fragment, index) => (
+              <span key={index} className="whitespace-nowrap">
+                {fragment}
+                {index < subtitle.length - 1 ? " ·" : ""}
+              </span>
+            ))}
+          </p>
         </div>
         <Tooltip>
           <TooltipTrigger asChild>
