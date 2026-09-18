@@ -75,7 +75,7 @@ afterEach(async () => {
 });
 
 describe("cron history and navigation", () => {
-  it("expands all runs without acknowledging them, and opens the selected conversation", async () => {
+  it("opens the run history in the side panel and opens the selected conversation", async () => {
     const open = vi.fn();
     await act(async () =>
       root.render(
@@ -92,6 +92,8 @@ describe("cron history and navigation", () => {
     )!;
     expect(toggle).toBeDefined();
     await act(async () => toggle.click());
+    const panel = container.querySelector("[data-cron-history-panel]")!;
+    expect(panel).not.toBeNull();
     const history = container.querySelector('ul[aria-label="Run history"]')!;
     expect(history.querySelectorAll("li")).toHaveLength(2);
     expect(
@@ -102,6 +104,89 @@ describe("cron history and navigation", () => {
       (history.querySelectorAll("button")[1] as HTMLButtonElement).click(),
     );
     expect(open).toHaveBeenCalledWith("old");
+  });
+  it("shows the basic-details card when a task is selected", async () => {
+    await act(async () =>
+      root.render(
+        <DshCronPage
+          adapter={adapter}
+          onOpenSession={() => {}}
+          onStartChat={() => {}}
+        />,
+      ),
+    );
+    await act(async () =>
+      buttons()
+        .find((button) => button.textContent?.includes("Daily digest"))!
+        .click(),
+    );
+    const panel = container.querySelector("[data-cron-history-panel]")!;
+    expect(panel.textContent).toContain("Details");
+    expect(panel.textContent).toContain("Every 5 min");
+    expect(panel.textContent).toContain("New chat on every run");
+    expect(panel.textContent).toContain("Off"); // catch-up off
+  });
+  it("keeps the list visible while the side panel is open, and closes it again", async () => {
+    await act(async () =>
+      root.render(
+        <DshCronPage
+          adapter={adapter}
+          onOpenSession={() => {}}
+          onStartChat={() => {}}
+        />,
+      ),
+    );
+    const toggle = buttons().find((button) =>
+      button.textContent?.includes("Daily digest"),
+    )!;
+    await act(async () => toggle.click());
+    // Master–detail: the task list stays rendered next to the panel.
+    expect(
+      container.querySelector('ul[aria-label="Run history"]'),
+    ).not.toBeNull();
+    expect(
+      buttons().some((button) => button.textContent?.includes("Daily digest")),
+    ).toBe(true);
+    await act(async () =>
+      (
+        container.querySelector(
+          'button[aria-label="Close"]',
+        ) as HTMLButtonElement
+      ).click(),
+    );
+    expect(container.querySelector('ul[aria-label="Run history"]')).toBeNull();
+    expect(
+      buttons().some((button) => button.textContent?.includes("Daily digest")),
+    ).toBe(true);
+  });
+  it("switches the side panel when another task is selected", async () => {
+    adapter.list = vi.fn(async () => [
+      task,
+      { ...task, id: "cron_b", name: "Nightly wrap-up", runs: [] },
+    ]);
+    await act(async () =>
+      root.render(
+        <DshCronPage
+          adapter={adapter}
+          onOpenSession={() => {}}
+          onStartChat={() => {}}
+        />,
+      ),
+    );
+    await act(async () =>
+      buttons()
+        .find((button) => button.textContent?.includes("Daily digest"))!
+        .click(),
+    );
+    expect(container.querySelector("[data-cron-history-panel]")).not.toBeNull();
+    await act(async () =>
+      buttons()
+        .find((button) => button.textContent?.includes("Nightly wrap-up"))!
+        .click(),
+    );
+    const panel = container.querySelector("[data-cron-history-panel]")!;
+    expect(panel.textContent).toContain("Nightly wrap-up");
+    expect(panel.textContent).toContain("No runs yet.");
   });
   it("keeps the menu unread while viewing the panel and clears it after the result is read", async () => {
     const props = {
