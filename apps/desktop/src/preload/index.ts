@@ -552,6 +552,17 @@ const api = {
         ...(error === undefined ? {} : { error }),
       }),
   },
+  /**
+   * Conversation data plane proxy. Adapter calls (`agentSessions`,
+   * `agentWorkspaces`, `agentModels`, presets/settings/credentials/
+   * permissions/skills/commands) are executed by the MAIN process on the
+   * app's single DshApiClient; windows dispatch JSON args and receive JSON
+   * results — no window-local DSH connection for conversation data.
+   */
+  dshApis: {
+    call: (adapter: string, method: string, args: unknown[] = []) =>
+      ipcRenderer.invoke("dsh-api:call", { adapter, method, args }),
+  },
   quickAsk: {
     onPrefill: (cb: (payload: { text: string; sourceApp: string }) => void) => {
       const handler = (

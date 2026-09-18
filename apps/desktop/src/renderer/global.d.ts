@@ -88,6 +88,13 @@ interface AmibaBridgeApi {
    * and receive routed snapshots/events over IPC.
    */
   chatEngine: import("@amiba/app-runtime/dsh-client").ChatEngineIpcSurface;
+  /**
+   * Conversation data plane proxy (main-process adapters). See
+   * `renderer/platform/ipc-platform-adapters.ts`.
+   */
+  dshApis: {
+    call(adapter: string, method: string, args?: unknown[]): Promise<unknown>;
+  };
   dshPlugins: import("@amiba/extension-sdk").AmibaDshPluginManagerBridge;
   storage: {
     get(keys?: string | string[]): Promise<Record<string, unknown>>;

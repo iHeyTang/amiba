@@ -1,4 +1,4 @@
-export { bindOfficialAttachments } from "./official-attachments.js";
+export { bindOfficialAttachments, officialAttachments } from "./official-attachments.js";
 import type { AgentSubagentAddress } from "../platform/index.js"
 
 export { upsertCompactionTimeline, interruptOpenCompactions } from "./compaction.js"

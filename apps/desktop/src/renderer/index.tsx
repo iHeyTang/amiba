@@ -1,4 +1,3 @@
-import { DshApiClient } from "@amiba/app-runtime/dsh-client";
 import { setPlatform } from "@amiba/app-runtime/platform";
 import { seedDocumentLanguage } from "@amiba/i18n";
 
@@ -117,8 +116,9 @@ void (async () => {
       "data-amiba-dsh-base-url",
       boot.baseUrl,
     );
-    const dshApiClient = new DshApiClient({ baseUrl: boot.baseUrl });
-    setPlatform(createElectronAdapter(dshApiClient));
+    // Windows are pure views: the platform adapter dispatches conversation
+    // data, the hosted chat engine and shared state to the MAIN process.
+    setPlatform(createElectronAdapter());
     // DSH Client plugins register before Amiba's React root mounts. Publish a
     // provisional locale first so their initial labels never inherit
     // index.html's fallback language and then become stuck in a slot snapshot

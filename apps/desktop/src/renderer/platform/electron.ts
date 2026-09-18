@@ -1,18 +1,19 @@
 import {
-  createDshPlatformAdapters,
   createIpcChatEngineClient,
+  officialAttachments,
   type ChatEngineIpcSurface,
-  type DshApiClient,
 } from "@amiba/app-runtime/dsh-client";
 import type {
   PlatformAdapter,
   StorageChangeMap,
 } from "@amiba/app-runtime/platform";
 import { getPlatform } from "@amiba/app-runtime/platform";
+import {
+  createIpcPlatformAdapters,
+  type IpcCall,
+} from "./ipc-platform-adapters";
 
-export function createElectronAdapter(
-  dshClient?: DshApiClient,
-): PlatformAdapter {
+export function createElectronAdapter(): PlatformAdapter {
   const bridge = window.amiba;
   const chatEngine = bridge.chatEngine as ChatEngineIpcSurface | undefined;
 
@@ -78,7 +79,16 @@ export function createElectronAdapter(
       closeWindow: () => bridge.window.close(),
     },
 
-    ...(dshClient ? createDshPlatformAdapters(dshClient) : {}),
+    // Conversation data plane: every session/workspace/model adapter call is
+    // dispatched to the MAIN process (`dshApis`), which runs the real
+    // implementations on the app's single DshApiClient — no window-local
+    // DSH connection for conversation data.
+    ...createIpcPlatformAdapters((adapter, method, args) =>
+      (bridge.dshApis.call as IpcCall)(adapter, method, args),
+    ),
+    // The official attachment draft registry is per-renderer (bound by the
+    // DSH Web Shell), so attachments stay local to the owning window.
+    agentAttachments: officialAttachments,
     agentDiagnostics: bridge.agentDiagnostics,
 
     // Native workbench extensions belong to the main window, not the pet canvas.
