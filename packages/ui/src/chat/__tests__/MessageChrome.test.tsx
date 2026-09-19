@@ -1444,28 +1444,65 @@ describe("chat message chrome", () => {
   });
 });
 
-it("aggregates every reasoning item into one top-level thinking fold", () => {
-  const { container } = render(<Bubble m={{uiId:"split",role:"assistant",content:"",reasoning:"before toolafter tool",toolProgress:[{tool:"bash",toolCallId:"c",status:"completed",args:{command:"echo ok"},durationMs:7}],assistantTimeline:[{kind:"reasoning",id:"r1",text:"before tool"},{kind:"tool",id:"t",toolCallId:"c"},{kind:"reasoning",id:"r2",text:"after tool"}]} as UiMessage}/>);
-  // Reasoning fragments no longer sprinkle the execution series: one fold
-  // holds BOTH fragments and sits above the tool disclosure (whose default
-  // label is the tool count, not a second thought).
-  const thoughtFold = Array.from(
-    container.querySelectorAll("[data-execution-summary]"),
-  ).find((node) =>
-    /sidepanel\.trace\.thoughtFor|sidepanel\.trace\.thoughtProcess/.test(
-      node.textContent ?? "",
-    ),
+it("keeps every reasoning segment in its own row instead of pasting it into the first", () => {
+  const { container } = render(<Bubble m={{uiId:"split",role:"assistant",content:"",reasoning:"before toolafter tool",toolProgress:[{tool:"bash",toolCallId:"c",status:"completed",args:{command:"echo ok"},durationMs:7000,startedAt:4000}],assistantTimeline:[{kind:"reasoning",id:"r1",text:"before tool",startedAt:1000,endedAt:4000},{kind:"tool",id:"t",toolCallId:"c",startedAt:4000},{kind:"reasoning",id:"r2",text:"after tool",startedAt:11000,endedAt:15000}]} as UiMessage}/>);
+  // The interleaved turn is ONE aggregate process row — whose label reports
+  // the work the turn actually did, never a thought duration borrowed from
+  // one segment — and expanding it restores the exact sequence the model
+  // produced.
+  const summaries = container.querySelectorAll("[data-execution-summary]");
+  expect(summaries).toHaveLength(1);
+  const thoughtFold = summaries[0]!;
+  expect(thoughtFold.querySelector("button")!).toHaveTextContent(
+    "sidepanel.trace.workedForSeconds",
   );
-  expect(thoughtFold).toBeTruthy();
-  fireEvent.click(thoughtFold!.querySelector("button")!);
-  const before = screen.getByText(/before tool/);
-  const after = screen.getByText(/after tool/);
-  expect(thoughtFold!.contains(before)).toBeTruthy();
-  expect(thoughtFold!.contains(after)).toBeTruthy();
+  fireEvent.click(thoughtFold.querySelector("button")!);
+  const before = screen.getAllByText(/before tool/).at(-1)!;
+  const after = screen.getAllByText(/after tool/).at(-1)!;
+  const tool = screen.getByText("echo ok");
+  expect(before.compareDocumentPosition(tool) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(tool.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // The later segment is its own row: its text is never concatenated into
+  // the earlier segment's text.
+  expect(container.textContent ?? "").not.toContain("before tool\n\nafter tool");
+  expect(container.textContent ?? "").not.toContain("before toolafter tool");
+});
+
+it("streams a post-tool reasoning segment as its own live row", () => {
+  const { container } = render(
+    <Bubble
+      m={
+        {
+          uiId: "live-split",
+          role: "assistant",
+          content: "",
+          streaming: true,
+          toolProgress: [
+            { tool: "bash", toolCallId: "c", status: "completed", durationMs: 7 },
+          ],
+          assistantTimeline: [
+            { kind: "reasoning", id: "r1", text: "first thought", startedAt: 1000, endedAt: 3000 },
+            { kind: "tool", id: "t", toolCallId: "c", startedAt: 3000 },
+            { kind: "reasoning", id: "r2", text: "second thought", startedAt: 5000, endedAt: 9000 },
+          ],
+        } as UiMessage
+      }
+    />,
+  );
+  // Still one aggregate row for the whole turn…
+  expect(container.querySelectorAll("[data-execution-summary]")).toHaveLength(1);
+  // …but the segment the model is writing right now owns its own row and is
+  // the live trace, instead of appearing inside the first segment's text.
+  expect(container.textContent ?? "").not.toContain("first thoughtsecond thought");
+  const live = container.querySelector("[data-live-reasoning]");
+  expect(live?.textContent).toContain("second thought");
+  expect(live?.textContent ?? "").not.toContain("first thought");
+  const first = screen.getAllByText("first thought").at(-1)!;
+  expect(first.compareDocumentPosition(live!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 it("aggregates the thinking time across every reasoning item, not one fragment", () => {
-  render(
+  const { container } = render(
     <Bubble
       m={
         {
@@ -1480,7 +1517,7 @@ it("aggregates the thinking time across every reasoning item, not one fragment",
       }
     />,
   );
-  // 20s + 50s = 70s → the single fold reads "思考了 1 分 10 秒". A label
+  // 20s + 50s = 70s → the aggregate reads "思考了 1 分 10 秒". A label
   // computed from only the first fragment would still show "思考了 20 秒"
   // (thoughtForSeconds).
   expect(
@@ -1489,6 +1526,11 @@ it("aggregates the thinking time across every reasoning item, not one fragment",
   expect(
     screen.queryByRole("button", { name: /sidepanel\.trace\.thoughtForSeconds/ }),
   ).not.toBeInTheDocument();
+  // Both segments survive as their own rows inside the aggregate.
+  fireEvent.click(container.querySelector("[data-execution-summary] button")!);
+  expect(screen.getAllByText(/first fragment/).at(-1)).toBeInTheDocument();
+  expect(screen.getAllByText(/second fragment/).at(-1)).toBeInTheDocument();
+  expect(container.textContent ?? "").not.toContain("first fragment\n\nsecond fragment");
 });
 
 
