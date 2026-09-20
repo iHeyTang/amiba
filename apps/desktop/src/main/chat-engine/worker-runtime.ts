@@ -17,6 +17,7 @@ import type {
   UserQuestionAnswerItem,
   UserQuestionRequest,
 } from "@amiba/app-runtime/protocol";
+import { createFrameBatcher } from "../frame-batcher.ts";
 import type {
   EngineConnection,
   EngineWorkerCommand,
@@ -100,8 +101,17 @@ export function createEngineWorkerRuntime(
     port.postMessage(message);
   };
 
+  /**
+   * Frames are batched *here*, before they cross the process boundary: a
+   * streaming turn produces one frame per delta, and sending them individually
+   * would mean one structured clone per delta in each direction.
+   */
+  const frames = createFrameBatcher<EngineToClientMessage>((messages) =>
+    post({ type: "frames", messages }),
+  );
+
   const host: WorkerEngineHost = {
-    emitFrame: (message) => post({ type: "frame", message }),
+    emitFrame: (message) => frames.push(message),
     request: (request) =>
       new Promise<unknown>((resolve, reject) => {
         const id = nextRequestId++;
@@ -200,6 +210,7 @@ export function createEngineWorkerRuntime(
   function dispose(): void {
     if (disposed) return;
     disposed = true;
+    frames.dispose();
     engine?.dispose();
     engine = null;
     for (const { reject } of pendingRequests.values())

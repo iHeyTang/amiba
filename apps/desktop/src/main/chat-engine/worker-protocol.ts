@@ -82,7 +82,11 @@ export type MainToWorkerMessage =
 
 export type WorkerToMainMessage =
   | { type: "ready" }
-  | { type: "frame"; message: EngineToClientMessage }
+  /**
+   * Frames for one tick, batched *in the worker*: a streaming turn would
+   * otherwise cross the process boundary once per delta.
+   */
+  | { type: "frames"; messages: EngineToClientMessage[] }
   | {
       type: "command-result";
       id: number;
@@ -104,8 +108,8 @@ export interface WorkerPort {
 
 export interface EngineWorkerBridgeOptions {
   port: WorkerPort;
-  /** Frames the worker produced, in order, ready to route to windows. */
-  onFrame(message: EngineToClientMessage): void;
+  /** Frames the worker batched for one tick, in order. */
+  onFrames(messages: EngineToClientMessage[]): void;
   /** Borrow a main-process service; a rejection is reported back as an error. */
   handleRequest(request: EngineWorkerRequest): Promise<unknown>;
   /** The worker reported it constructed its engine. */
@@ -186,8 +190,8 @@ export class EngineWorkerBridge {
       case "ready":
         this.options.onReady?.();
         return;
-      case "frame":
-        if (!this.disposed) this.options.onFrame(message.message);
+      case "frames":
+        if (!this.disposed) this.options.onFrames(message.messages);
         return;
       case "command-result": {
         const pending = this.pending.get(message.id);

@@ -60,7 +60,8 @@ export interface SpawnEngineWorkerOptions {
   /** Absolute path of the built worker bundle (`out/main/chat-engine-worker.js`). */
   entryPath: string;
   connection: EngineConnection;
-  onFrame(message: EngineToClientMessage): void;
+  /** Frames the worker batched for one tick, in order. */
+  onFrames(messages: EngineToClientMessage[]): void;
   handleRequest(request: EngineWorkerRequest): Promise<unknown>;
   /** Subagent addresses the engine reads synchronously. */
   subagents(): Record<string, import("@amiba/app-runtime/platform").AgentSubagentAddress>;
@@ -96,7 +97,7 @@ export function spawnEngineWorker(
 
   const bridge = new EngineWorkerBridge({
     port,
-    onFrame: options.onFrame,
+    onFrames: options.onFrames,
     handleRequest: options.handleRequest,
     onError: options.onError,
   });

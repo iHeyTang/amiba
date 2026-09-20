@@ -40,7 +40,6 @@ import type {
 } from "@amiba/app-runtime/protocol";
 import { mainStore } from "./storage";
 import { workspaceManager } from "./workspace";
-import { createFrameBatcher, type FrameBatcher } from "./frame-batcher";
 import { dshRuntimeClient, sessionIndex } from "./session-index";
 import { dshRuntime } from "./dsh-runtime";
 import path from "node:path";
@@ -85,16 +84,6 @@ export class ChatEngineHost {
   >();
   private addressBySession = new Map<string, AgentSubagentAddress>();
   private metaWatchOff: (() => void) | undefined;
-  /**
-   * Per-window frame buffers. One runtime frame used to become one IPC message
-   * per subscriber; during streaming that is a structured clone and a renderer
-   * wake-up per delta, on the process that owns the window event loop. Frames
-   * are now delivered once per tick, in order.
-   */
-  private readonly frameBatches = new Map<
-    number,
-    FrameBatcher<EngineToClientMessage>
-  >();
 
   /** Start the host and register its IPC surface. Idempotent. */
   start(): void {
@@ -126,8 +115,6 @@ export class ChatEngineHost {
     this.metaWatchOff = undefined;
     this.router.clear();
     this.pendingSerializes.clear();
-    for (const batcher of this.frameBatches.values()) batcher.dispose();
-    this.frameBatches.clear();
     this.engine?.dispose();
     this.engine = null;
     this.worker?.kill();
@@ -284,7 +271,7 @@ export class ChatEngineHost {
             ? {}
             : { browserCookie: handle.browserCookie }),
         },
-        onFrame: (message) => this.route(message.sessionId, message),
+        onFrames: (messages) => this.routeBatch(messages),
         // The two services the worker borrows: the session.create directory
         // policy served by the main workspace manager, and the renderer-local
         // draft registry, which lives in the submitting window.
@@ -345,35 +332,31 @@ export class ChatEngineHost {
     }
   }
 
-  private route(sessionId: string, message: EngineToClientMessage): void {
-    this.router.route(sessionId, message, (id, msg) => {
+  /**
+   * Route one tick's frames to the windows that render them, one IPC message
+   * per window. The worker already batched them (one hop instead of one per
+   * delta); grouping per window here keeps the second hop to one message too.
+   */
+  private routeBatch(messages: readonly EngineToClientMessage[]): void {
+    if (messages.length === 0) return;
+    const perWindow = new Map<number, EngineToClientMessage[]>();
+    for (const message of messages) {
+      this.router.route(message.sessionId, message, (id, routed) => {
+        const batch = perWindow.get(id);
+        if (batch) batch.push(routed);
+        else perWindow.set(id, [routed]);
+      });
+    }
+    for (const [id, batch] of perWindow) {
       const contents = contentsOf(id);
-      if (!contents || contents.isDestroyed()) {
-        const stale = this.frameBatches.get(id);
-        if (stale) {
-          stale.dispose();
-          this.frameBatches.delete(id);
-        }
-        return;
+      if (!contents || contents.isDestroyed()) continue;
+      try {
+        contents.send("chat-engine:message", batch);
+      } catch {
+        // A frame can be disposed between the check and the send (window
+        // teardown, a dev reload). The batch is dropped, not fatal.
       }
-      let batcher = this.frameBatches.get(id);
-      if (!batcher) {
-        batcher = createFrameBatcher<EngineToClientMessage>((items) => {
-          const target = contentsOf(id);
-          if (!target || target.isDestroyed()) return;
-          try {
-            // One message per tick; the preload fans the batch back out to its
-            // listeners in order, so the renderer commits once per tick.
-            target.send("chat-engine:message", items);
-          } catch {
-            // A frame can be disposed between the check and the send (window
-            // teardown, a dev reload). The batch is dropped, not fatal.
-          }
-        });
-        this.frameBatches.set(id, batcher);
-      }
-      batcher.push(msg);
-    });
+    }
   }
 
   // ---------------------------------------------------------------------

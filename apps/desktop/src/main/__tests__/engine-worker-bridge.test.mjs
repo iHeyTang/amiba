@@ -93,7 +93,7 @@ function harness({ handleRequest = async () => null } = {}) {
   const ready = new Promise((resolve) => {
     resolveReady = resolve
   })
-  const frames = []
+  const batches = []
   let made
   const runtime = createEngineWorkerRuntime({
     port: worker,
@@ -104,11 +104,11 @@ function harness({ handleRequest = async () => null } = {}) {
   })
   const bridge = new EngineWorkerBridge({
     port: main,
-    onFrame: (message) => frames.push(message),
+    onFrames: (messages) => batches.push(messages),
     handleRequest,
     onReady: () => resolveReady(),
   })
-  return { bridge, runtime, ready, frames, engine: () => made.engine }
+  return { bridge, runtime, ready, batches, engine: () => made.engine }
 }
 
 test("init builds the engine and commands reach it", async () => {
@@ -154,18 +154,36 @@ test("a failing command rejects in main with the worker's message", async () => 
   )
 })
 
-test("frames reach main in the order the engine produced them", async () => {
+test("frames from one tick cross the process boundary as one batch, in order", async () => {
   const h = harness()
   h.bridge.init({ baseUrl: "http://dsh.test" })
   await h.ready
 
   h.engine().host.emitFrame({ type: "event", sessionId: "s1", event: { seq: 1 } })
   h.engine().host.emitFrame({ type: "event", sessionId: "s1", event: { seq: 2 } })
-  await new Promise((resolve) => setTimeout(resolve, 5))
+  await new Promise((resolve) => setTimeout(resolve, 40))
+
+  // One hop for both frames — not one per delta.
+  assert.equal(h.batches.length, 1)
+  assert.deepEqual(
+    h.batches[0].map((frame) => frame.event.seq),
+    [1, 2],
+  )
+})
+
+test("frames from different ticks arrive as separate batches", async () => {
+  const h = harness()
+  h.bridge.init({ baseUrl: "http://dsh.test" })
+  await h.ready
+
+  h.engine().host.emitFrame({ type: "event", sessionId: "s1", event: { seq: 1 } })
+  await new Promise((resolve) => setTimeout(resolve, 40))
+  h.engine().host.emitFrame({ type: "event", sessionId: "s1", event: { seq: 2 } })
+  await new Promise((resolve) => setTimeout(resolve, 40))
 
   assert.deepEqual(
-    h.frames.map((frame) => frame.event.seq),
-    [1, 2],
+    h.batches.map((batch) => batch.map((frame) => frame.event.seq)),
+    [[1], [2]],
   )
 })
 
