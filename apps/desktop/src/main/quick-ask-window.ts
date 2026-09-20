@@ -405,3 +405,34 @@ export function destroyQuickAskWindow(): void {
 export function getQuickAskWindow(): BrowserWindow | null {
   return quickAskWindow;
 }
+
+/**
+ * Boot the Quick-Ask renderer ahead of the first summon, resolving once its page
+ * has loaded.
+ *
+ * Quick-Ask is created lazily, so the first open after launch pays for a
+ * renderer process, its bundle (~1.6 MB) and the chat engine. The startup screen
+ * stays up until this resolves, so the cost lands on a loading indicator the
+ * user already expects instead of on their first double-tap. A summon that
+ * arrives while the warm-up is still loading joins the boot in flight
+ * (`summonQuickAsk` waits for `did-finish-load`) rather than starting a second
+ * one.
+ */
+export function prewarmQuickAsk(): Promise<void> {
+  if (quickAskWindow && !quickAskWindow.isDestroyed()) return whenQuickAskLoaded();
+  try {
+    return whenQuickAskLoaded(createQuickAskWindow());
+  } catch (error) {
+    console.warn("[amiba] Quick-Ask prewarm failed:", error);
+    return Promise.resolve();
+  }
+}
+
+function whenQuickAskLoaded(win = quickAskWindow): Promise<void> {
+  const contents = win && !win.isDestroyed() ? win.webContents : undefined;
+  if (!contents || !contents.isLoadingMainFrame()) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    contents.once("did-finish-load", () => resolve());
+    contents.once("did-fail-load", () => resolve());
+  });
+}

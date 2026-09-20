@@ -135,7 +135,13 @@ export class DshStateLayer {
     this.snapshot = snapshot;
     for (const win of BrowserWindow.getAllWindows()) {
       if (win.isDestroyed() || win.webContents.isDestroyed()) continue;
-      win.webContents.send("dsh-state:snapshot", snapshot);
+      try {
+        win.webContents.send("dsh-state:snapshot", snapshot);
+      } catch {
+        // A frame can be disposed between the check and the send (window
+        // teardown, a dev reload). That window misses this snapshot and pulls
+        // the current one when it (re)subscribes.
+      }
     }
   }
 

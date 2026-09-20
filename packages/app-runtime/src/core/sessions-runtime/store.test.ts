@@ -174,3 +174,48 @@ it("loads old message text without an attachment migration service", async () =>
   const messages=await loadMessages("old");
   expect(messages[0].content).toBe("Original words");
 });
+
+const historyEvent = (seq: number) => ({
+  event: {
+    type: "user/message",
+    seq,
+    time: seq,
+    data: {
+      id: `m${seq}`,
+      source: { kind: "user" },
+      content: [{ type: "text", text: `q${seq}` }],
+    },
+  },
+});
+
+it("reuses a loaded projection when the newest page reports the same revision", async () => {
+  mocks.history.mockClear();
+  const newest = { events: [historyEvent(2)], hasMore: true, projections: { asOfSeq: 7 } };
+  const older = { events: [historyEvent(1)], hasMore: false, projections: { asOfSeq: 7 } };
+  mocks.history.mockResolvedValueOnce(newest).mockResolvedValueOnce(older);
+
+  const first = await loadMessages("revision-steady");
+  expect(mocks.history).toHaveBeenCalledTimes(2); // the whole log
+
+  // Same revision on the next read: the newest page is enough to trust the cache.
+  mocks.history.mockResolvedValueOnce(newest);
+  const second = await loadMessages("revision-steady");
+  expect(mocks.history).toHaveBeenCalledTimes(3);
+  expect(second).toEqual(first);
+});
+
+it("re-reads the whole log when the revision moved", async () => {
+  mocks.history.mockClear();
+  mocks.history
+    .mockResolvedValueOnce({ events: [historyEvent(2)], hasMore: true, projections: { asOfSeq: 7 } })
+    .mockResolvedValueOnce({ events: [historyEvent(1)], hasMore: false, projections: { asOfSeq: 7 } });
+  const before = await loadMessages("revision-moved");
+
+  mocks.history
+    .mockResolvedValueOnce({ events: [historyEvent(5)], hasMore: true, projections: { asOfSeq: 9 } })
+    .mockResolvedValueOnce({ events: [historyEvent(1)], hasMore: false, projections: { asOfSeq: 9 } });
+  const after = await loadMessages("revision-moved");
+
+  expect(mocks.history).toHaveBeenCalledTimes(4);
+  expect(after).not.toEqual(before);
+});

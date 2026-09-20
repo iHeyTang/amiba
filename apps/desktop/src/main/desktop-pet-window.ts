@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu, screen } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
+import { whenShellReady } from "./shell-ready";
 const directory = path.dirname(fileURLToPath(import.meta.url));
 export function clampPetPosition(
   point: { x: number; y: number },
@@ -17,6 +18,33 @@ export function clampPetPosition(
     ),
   };
 }
+/**
+ * Whether the pet window is switched on, and whether its renderer has finished
+ * loading its page. The startup warm-up waits for the latter before letting the
+ * renderer reveal the UI, so the pet is never still booting behind a UI the user
+ * has already started using.
+ */
+let desktopPetEnabled = false;
+let desktopPetBooted = false;
+const desktopPetBootWaiters = new Set<() => void>();
+
+export function isDesktopPetEnabled(): boolean {
+  return desktopPetEnabled;
+}
+
+/** Resolves once the pet window's page is loaded; immediate when it is off. */
+export function whenDesktopPetBooted(): Promise<void> {
+  if (!desktopPetEnabled || desktopPetBooted) return Promise.resolve();
+  return new Promise<void>((resolve) => desktopPetBootWaiters.add(resolve));
+}
+
+function markDesktopPetBooted(): void {
+  if (desktopPetBooted) return;
+  desktopPetBooted = true;
+  for (const waiter of [...desktopPetBootWaiters]) waiter();
+  desktopPetBootWaiters.clear();
+}
+
 export async function installDesktopPetWindow(
   main: () => BrowserWindow | null,
   openMain: () => void,
@@ -41,6 +69,7 @@ export async function installDesktopPetWindow(
   } catch {
     /* First launch. */
   }
+  desktopPetEnabled = enabled;
   let win: BrowserWindow | null = null,
     ready = false;
   let dragTimer: ReturnType<typeof setInterval> | undefined;
@@ -218,10 +247,15 @@ export async function installDesktopPetWindow(
       const base = url.endsWith("/") ? url : `${url}/`;
       void w.loadURL(new URL("pet/index.html", base).href);
     } else void w.loadFile(path.join(directory, "../renderer/pet/index.html"));
+    // A failed load resolves the warm-up too: the pet is decorative, and the
+    // startup screen must never be held hostage by it.
+    w.webContents.once("did-finish-load", markDesktopPetBooted);
+    w.webContents.once("did-fail-load", markDesktopPetBooted);
     return w;
   };
   const setEnabled = async (value: boolean) => {
     enabled = value;
+    desktopPetEnabled = value;
     if (enabled) {
       const w = create();
       if (ready) w.showInactive();
@@ -406,32 +440,17 @@ export async function installDesktopPetWindow(
   screen.on("display-metrics-changed", relocate);
   app.on("before-quit", stopDrag);
   if (enabled) {
-    // The pet renderer boots the full DSH shell, so creating its window
-    // during app startup makes two complete renderer boots compete for CPU
-    // right at first paint and visibly stalls the launch. Start it only once
-    // the main window has finished loading; the pet still appears as soon as
-    // its own renderer calls `desktop-pet:ready`.
-    const startPet = () => {
+    // The pet renderer is a second process with its own bundle, so booting it
+    // while the first window is still painting visibly stalls the launch. Wait
+    // for the renderer's own "shell is on screen" signal instead of guessing
+    // with a fixed delay after `did-finish-load`; the pet appears as soon as
+    // its renderer calls `desktop-pet:ready`. A renderer that never reports
+    // times out and the pet is created anyway — late beats never.
+    void (async () => {
+      await whenShellReady();
       if (!enabled) return;
       create();
       startPointerTracking();
-    };
-    const startWhenMainIsInteractive = () => {
-      const host = main();
-      if (!host || host.isDestroyed()) {
-        setTimeout(startWhenMainIsInteractive, 250);
-        return;
-      }
-      if (host.webContents.isLoadingMainFrame()) {
-        const finish = () => startPet();
-        host.webContents.once("did-finish-load", finish);
-        host.webContents.once("did-fail-load", finish);
-      } else {
-        // Main window already interactive: still give its first paint a head
-        // start before paying for the second renderer boot.
-        setTimeout(startPet, 350);
-      }
-    };
-    startWhenMainIsInteractive();
+    })();
   }
 }

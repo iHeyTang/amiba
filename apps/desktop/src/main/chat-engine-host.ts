@@ -41,6 +41,14 @@ import type {
 import { mainStore } from "./storage";
 import { workspaceManager } from "./workspace";
 import { dshRuntimeClient, sessionIndex } from "./session-index";
+import { dshRuntime } from "./dsh-runtime";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  spawnEngineWorker,
+  type EngineWorkerHandle,
+  type HostedEngine,
+} from "./chat-engine/worker-engine-facade";
 import { ChatEngineRouter } from "./chat-engine/router";
 
 /** Storage key the renderer sessions runtime keeps subagent addresses under. */
@@ -55,7 +63,12 @@ function contentsOf(id: number): WebContents | null {
 }
 
 export class ChatEngineHost {
-  private engine: DshChatEngineClient | null = null;
+  /** Built next to the main bundle by the same electron-vite build. */
+  private static readonly directory = path.dirname(fileURLToPath(import.meta.url));
+  private engine: HostedEngine | null = null;
+  /** The runtime host process; `engine` is its facade. */
+  private worker: EngineWorkerHandle | null = null;
+  private offSessions: (() => void) | undefined;
   private started = false;
   private registered = false;
   /** Pure window-subscription ledger (electrode-independent, unit-tested). */
@@ -78,18 +91,34 @@ export class ChatEngineHost {
     this.started = true;
     this.refreshSubagentMeta();
     this.metaWatchOff = mainStore.watch(() => this.refreshSubagentMeta());
+    // Session facts are the ONE `session/list` poll shared by the state layer,
+    // the activity tracker and the engine. The worker cannot reach that index,
+    // so every change is pushed to it.
+    this.offSessions = sessionIndex.onChange((rows) => {
+      const bridge = this.worker?.bridge;
+      if (!bridge) return;
+      for (const row of rows)
+        bridge.notifyActivity(row.sessionId, row.running);
+      // Parent relationships appear as subagents spawn; the worker's map has to
+      // keep up because the engine reads it synchronously.
+      bridge.notifySubagents(this.subagentAddressMap());
+    });
     this.registerIpc();
   }
 
   /** Teardown for app quit. */
   dispose(): void {
     this.started = false;
+    this.offSessions?.();
+    this.offSessions = undefined;
     this.metaWatchOff?.();
     this.metaWatchOff = undefined;
     this.router.clear();
     this.pendingSerializes.clear();
     this.engine?.dispose();
     this.engine = null;
+    this.worker?.kill();
+    this.worker = null;
   }
 
   private client(): Promise<DshApiClient> {
@@ -203,14 +232,14 @@ export class ChatEngineHost {
   }
 
   private async withEngine(
-    action: (engine: DshChatEngineClient) => void,
+    action: (engine: HostedEngine) => void,
   ): Promise<void> {
     const engine = await this.ensureEngine();
     if (engine) action(engine);
   }
 
   private async withEngineResult(
-    action: (engine: DshChatEngineClient) => Promise<RuntimeActionResult>,
+    action: (engine: HostedEngine) => Promise<RuntimeActionResult>,
   ): Promise<RuntimeActionResult> {
     const engine = await this.ensureEngine();
     if (!engine) return { ok: false, error: "Chat engine is not ready." };
@@ -218,74 +247,50 @@ export class ChatEngineHost {
   }
 
   private async withEngineReceipt(
-    action: (engine: DshChatEngineClient) => Promise<SubmitReceipt>,
+    action: (engine: HostedEngine) => Promise<SubmitReceipt>,
   ): Promise<SubmitReceipt> {
     const engine = await this.ensureEngine();
     if (!engine) return { kind: "rejected", error: "Chat engine is not ready." };
     return action(engine);
   }
 
-  private async ensureEngine(): Promise<DshChatEngineClient | null> {
+  /**
+   * Start the runtime host process and return the facade the rest of this class
+   * drives. The engine itself — client, follow streams, every frame — lives in
+   * that process, on its own event loop, instead of on the browser process's.
+   */
+  private async ensureEngine(): Promise<HostedEngine | null> {
     if (this.engine) return this.engine;
     try {
-      const client = await this.client();
-      const engine = new DshChatEngineClient({
-        client,
-        // Child addresses persist in the renderer sessions runtime's local
-        // meta (mainStore); resolve them here so hosted runs keep subagent
-        // continuation semantics without any window-local knowledge.
-        resolveSubagent: (sessionId) => this.resolveSubagent(sessionId),
-        // Same session.create directory policy as the renderer's
-        // `resolveSessionCreationWorkspace`, served by the main workspace
-        // manager and the same DSH client.
-        resolveSession: async (payload, signal) => {
-          const { cwd, workspaceId } = await this.resolveSessionWorkspace(
-            payload.sessionId,
-            signal,
-          );
-          return {
-            ...(cwd === undefined ? {} : { cwd }),
-            ...(workspaceId === undefined ? {} : { workspaceId }),
-          };
+      const handle = await dshRuntime.ensureStarted();
+      this.worker = spawnEngineWorker({
+        entryPath: path.join(ChatEngineHost.directory, "chat-engine-worker.js"),
+        connection: {
+          baseUrl: handle.baseUrl,
+          ...(handle.browserCookie === undefined
+            ? {}
+            : { browserCookie: handle.browserCookie }),
         },
-        selectModel: async (sessionId, selection, signal) => {
-          await client.selectModel({ sessionId, ...selection }, signal);
-        },
-        // The official draft registry is renderer-local; the engine asks the
-        // submitting window to serialize its drafts. `put`/`remove` belong to
-        // the renderer's own draft flow and are never called by the engine.
-        attachments: {
-          serialize: (sessionId, ids, signal) =>
-            this.serializeDrafts(sessionId, [...ids], signal),
-          put: async () => {
-            throw new Error(
-              "Attachment uploads are handled by the renderer draft registry.",
-            );
-          },
-          remove: async () => {
-            throw new Error(
-              "Attachment removal is handled by the renderer draft registry.",
-            );
-          },
-        },
-        // Session facts come from the shared main-process session index —
-        // one `session/list` poll serves this engine, the dsh-state layer and
-        // the activity tracker.
-        sessionActivity: (sessionId) => ({
-          getSnapshot: () => ({ running: sessionIndex.running(sessionId) }),
-          subscribe: (listener: () => void) =>
-            sessionIndex.onChange(() => listener()),
-        }),
+        onFrames: (messages) => this.routeBatch(messages),
+        // The two services the worker borrows: the session.create directory
+        // policy served by the main workspace manager, and the renderer-local
+        // draft registry, which lives in the submitting window.
+        handleRequest: (request) =>
+          request.kind === "resolveSession"
+            ? this.resolveSessionWorkspace(request.sessionId)
+            : this.serializeDrafts(request.sessionId, request.ids),
+        subagents: () => this.subagentAddressMap(),
+        activity: () =>
+          sessionIndex
+            .getSnapshot()
+            .map(
+              (row) => [row.sessionId, row.running] as [string, boolean],
+            ),
+        onError: (error) =>
+          console.error("[amiba] chat engine worker failed:", error),
       });
-      engine.onSnapshot((frame) => {
-        if (frame.type !== "snapshot") return;
-        this.route(frame.sessionId, frame);
-      });
-      engine.onStreamEvent((sessionId, event) => {
-        this.route(sessionId, { type: "event", sessionId, event });
-      });
-      this.engine = engine;
-      return engine;
+      this.engine = this.worker.engine;
+      return this.engine;
     } catch {
       // Runtime not ready yet; a later request retries.
       return null;
@@ -327,13 +332,31 @@ export class ChatEngineHost {
     }
   }
 
-  private route(sessionId: string, message: EngineToClientMessage): void {
-    this.router.route(sessionId, message, (id, msg) => {
+  /**
+   * Route one tick's frames to the windows that render them, one IPC message
+   * per window. The worker already batched them (one hop instead of one per
+   * delta); grouping per window here keeps the second hop to one message too.
+   */
+  private routeBatch(messages: readonly EngineToClientMessage[]): void {
+    if (messages.length === 0) return;
+    const perWindow = new Map<number, EngineToClientMessage[]>();
+    for (const message of messages) {
+      this.router.route(message.sessionId, message, (id, routed) => {
+        const batch = perWindow.get(id);
+        if (batch) batch.push(routed);
+        else perWindow.set(id, [routed]);
+      });
+    }
+    for (const [id, batch] of perWindow) {
       const contents = contentsOf(id);
-      if (contents && !contents.isDestroyed()) {
-        contents.send("chat-engine:message", msg);
+      if (!contents || contents.isDestroyed()) continue;
+      try {
+        contents.send("chat-engine:message", batch);
+      } catch {
+        // A frame can be disposed between the check and the send (window
+        // teardown, a dev reload). The batch is dropped, not fatal.
       }
-    });
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -357,6 +380,22 @@ export class ChatEngineHost {
     return undefined;
   }
 
+  /**
+   * The engine's synchronous view of durable subagent addresses: the mainStore
+   * sidecar plus the session index's parent fallback, resolved here because the
+   * worker cannot reach either.
+   */
+  private subagentAddressMap(): Record<string, AgentSubagentAddress> {
+    const addresses: Record<string, AgentSubagentAddress> = {};
+    const ids = new Set(this.addressBySession.keys());
+    for (const row of sessionIndex.getSnapshot()) ids.add(row.sessionId);
+    for (const sessionId of ids) {
+      const address = this.resolveSubagent(sessionId);
+      if (address) addresses[sessionId] = address;
+    }
+    return addresses;
+  }
+
   private refreshSubagentMeta(): void {
     void mainStore
       .get(LOCAL_META_KEY)
@@ -368,6 +407,9 @@ export class ChatEngineHost {
           if (address) next.set(sessionId, address);
         }
         this.addressBySession = next;
+        // The engine reads addresses synchronously during submit and abort, so
+        // the worker gets the whole resolved map rather than asking per call.
+        this.worker?.bridge.notifySubagents(this.subagentAddressMap());
       })
       .catch(() => {});
   }

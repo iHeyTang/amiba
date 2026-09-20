@@ -10,6 +10,7 @@
     "./primitives": "./src/primitives/index.ts",
     "./locales": "./src/locales/index.ts",
     "./plugin": "./src/plugin.ts",
+    "./plugin/i18n": "./src/plugin-i18n.ts",
     "./composer-runtime": "./src/chat/composer-runtime.ts",
     "./plugin/runtime-inventory": "./src/plugin-runtime-inventory.ts",
     "./tailwind-preset": "./tailwind-preset.cjs",

@@ -27,7 +27,14 @@ export class PetsSource {
   private disposed = false;
   private readonly listeners = new Set<(library: DshPetLibrary) => void>();
 
-  constructor(private readonly client: () => Promise<DshApiClient>) {}
+  // Plain field + assignment instead of a constructor parameter property:
+  // parameter properties need a transform, and the main-process test runner
+  // imports these modules with `node --experimental-strip-types`.
+  private readonly client: () => Promise<DshApiClient>;
+
+  constructor(client: () => Promise<DshApiClient>) {
+    this.client = client;
+  }
 
   start(): void {
     if (this.timer) return;
@@ -60,12 +67,15 @@ export class PetsSource {
   private async run(): Promise<void> {
     try {
       const client = await this.client();
-      const result = (await client.call("amibaPets/list", { args: {} })) as
-        | { ok: true; value: DshPetLibrary }
-        | { ok: false; error: unknown };
-      if (!result.ok) return;
-      this.library = result.value;
-      this.emit(result.value);
+      // `DshApiClient.call` already unwraps the RPC envelope: it rejects on a
+      // failed remote call and resolves to the remote's own result value, so
+      // the library arrives here directly — it is never wrapped in
+      // `{ ok, value }` (see `packages/app-runtime/src/dsh-client/index.ts`).
+      const library = await client.call<DshPetLibrary>("amibaPets/list", {
+        args: {},
+      });
+      this.library = library;
+      this.emit(library);
     } catch {
       // Runtime not ready or transient carrier error — keep the last
       // snapshot and retry on the next tick.
@@ -75,12 +85,11 @@ export class PetsSource {
   /** `amibaPets/activate`; the response carries the refreshed library. */
   async activate(id: string | null): Promise<void> {
     const client = await this.client();
-    const result = (await client.call("amibaPets/activate", {
+    const library = await client.call<DshPetLibrary>("amibaPets/activate", {
       args: { id },
-    })) as { ok: true; value: DshPetLibrary } | { ok: false; error: unknown };
-    if (!result.ok) throw new Error("amibaPets/activate failed");
-    this.library = result.value;
-    this.emit(result.value);
+    });
+    this.library = library;
+    this.emit(library);
   }
 
   dispose(): void {
@@ -104,7 +113,14 @@ export class NotificationSource {
   private running: Promise<void> | undefined;
   private readonly listeners = new Set<() => void>();
 
-  constructor(private readonly client: () => Promise<DshApiClient>) {}
+  // Plain field + assignment instead of a constructor parameter property:
+  // parameter properties need a transform, and the main-process test runner
+  // imports these modules with `node --experimental-strip-types`.
+  private readonly client: () => Promise<DshApiClient>;
+
+  constructor(client: () => Promise<DshApiClient>) {
+    this.client = client;
+  }
 
   private emit(): void {
     if (this.disposed) return;
@@ -141,14 +157,22 @@ export class NotificationSource {
     while (!this.disposed && token === this.generation) {
       try {
         const client = await this.client();
-        const result = (await client.call("amibaNotifications/watch", {
-          args: { after: this.cursor, subscriber: this.subscriber },
-        })) as
-          | { ok: true; value: DshNotificationUpdate }
-          | { ok: false; error: unknown };
+        // `DshApiClient.call` rejects on a failed remote call and resolves to
+        // the update itself; a malformed payload counts as a dropped
+        // subscription so the retry loop reconnects.
+        const update = await client.call<DshNotificationUpdate>(
+          "amibaNotifications/watch",
+          { args: { after: this.cursor, subscriber: this.subscriber } },
+        );
         if (this.disposed || token !== this.generation) return;
-        if (!result.ok) throw new Error("watch failed");
-        const update = result.value;
+        if (
+          !update ||
+          typeof update !== "object" ||
+          !update.cursor ||
+          !Array.isArray(update.notifications) ||
+          !Array.isArray(update.removed)
+        )
+          throw new Error("amibaNotifications/watch returned a malformed update");
         const changed =
           update.reset ||
           update.cursor.revision !== this.cursor?.revision ||
@@ -185,10 +209,7 @@ export class NotificationSource {
 
   async dismiss(id: string): Promise<void> {
     const client = await this.client();
-    const result = (await client.call("amibaNotifications/dismiss", {
-      args: { id },
-    })) as { ok: true; value: boolean } | { ok: false; error: unknown };
-    if (!result.ok) throw new Error("amibaNotifications/dismiss failed");
+    await client.call("amibaNotifications/dismiss", { args: { id } });
   }
 
   async markSessionsRead(
@@ -196,10 +217,9 @@ export class NotificationSource {
   ): Promise<void> {
     if (reads.length === 0) return;
     const client = await this.client();
-    const result = (await client.call("amibaNotifications/markSessionsRead", {
+    await client.call("amibaNotifications/markSessionsRead", {
       args: { reads },
-    })) as { ok: true; value: boolean } | { ok: false; error: unknown };
-    if (!result.ok) throw new Error("amibaNotifications/markSessionsRead failed");
+    });
   }
 
   async resync(): Promise<void> {
@@ -211,11 +231,11 @@ export class NotificationSource {
     this.retryTimer = undefined;
     try {
       const client = await this.client();
-      const result = (await client.call("amibaNotifications/cancelWatch", {
+      await client.call("amibaNotifications/cancelWatch", {
         args: { subscriber: this.subscriber },
-      })) as { ok: true; value: boolean } | { ok: false; error: unknown };
+      });
+    } catch {
       // A failed cancel is fine — the runtime drops stale subscribers.
-      void result;
     } finally {
       if (!this.disposed && token === this.generation) {
         void (this.running = this.run(token).finally(() => {

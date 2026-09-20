@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
+// Built output of the CLI, which is why `apps/desktop`'s `pretest` builds
+// `apps/cli` first — without it this file fails to import on a fresh checkout.
 import { discoverDevelopmentEndpoint } from '../../../../cli/dist/lib/development-connection.js';
 import { servePluginDevelopment } from '../plugin-development.ts';
 

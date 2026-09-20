@@ -14,6 +14,7 @@ import {
   type AgentExecutionContext,
 } from "../agent-context";
 import { projectRuntimeSessionHistory } from "../runtime-session-history";
+import { createLoadedHistoryCache } from "./loaded-history-cache";
 import { SOURCE_LOCAL } from "../channels";
 import {
   LOCAL_META_KEY,
@@ -29,6 +30,35 @@ const SESSION_HISTORY_PAGE_SIZE = 1000;
 
 let lastSavedIndex: Map<string, SessionMeta> | null = null;
 let lastSavedLocalMeta: Record<string, SessionLocalMeta> = {};
+
+/**
+ * Recently loaded session histories, validated by the projection revision the
+ * runtime reports for the read (`projections.asOfSeq`).
+ *
+ * Loading a session walks its whole event log — the runtime decodes the entire
+ * log per page — and then re-projects every event, so returning to a
+ * conversation the user was just in should not repeat that work. A cached
+ * projection is reused only when the newest page reports the *same* revision,
+ * which is what makes this safe: a log that grew (a turn finished in another
+ * window, an agent kept working) changes the revision and forces a fresh read.
+ * When the backend reports no revision we do not cache at all.
+ */
+const loadedHistory = createLoadedHistoryCache<{
+  messages: SessionMessage[];
+  revision: number;
+}>(3);
+
+function messageCacheKey(id: string, subagent?: AgentSubagentAddress): string {
+  return subagent ? `${id}\u0000${JSON.stringify(subagent)}` : id;
+}
+
+/** The revision a history read was taken at, when the backend reports one. */
+function historyRevision(
+  projections: Record<string, unknown> | undefined,
+): number | undefined {
+  const value = projections?.asOfSeq;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
 
 function sessionsAdapter() {
   const adapter = getPlatform().agentSessions;
@@ -280,8 +310,11 @@ export async function saveIndex(index: SessionMeta[]): Promise<void> {
 
 export async function loadMessages(id: string, subagent?: AgentSubagentAddress): Promise<SessionMessage[]> {
   if (!id) return [];
+  const cacheKey = messageCacheKey(id, subagent);
+  const cached = loadedHistory.get(cacheKey);
   const events: AgentSessionHistoryEntry[] = [];
   let beforeSeq: number | undefined;
+  let revision: number | undefined;
   for (;;) {
     const page = await sessionsAdapter().history(id, {
       ...(subagent ? { subagent } : {}),
@@ -292,6 +325,13 @@ export async function loadMessages(id: string, subagent?: AgentSubagentAddress):
       // previously needed ~19 sequential round trips now needs ~4.
       maxMessages: SESSION_HISTORY_PAGE_SIZE,
     });
+    if (beforeSeq === undefined) {
+      // The newest page carries the revision the projection was taken at; when
+      // it matches the cached one, nothing has been appended since.
+      revision = historyRevision(page.projections);
+      if (cached && revision !== undefined && cached.revision === revision)
+        return cached.messages.slice();
+    }
     events.push(...page.events);
     if (!page.hasMore || page.events.length === 0) break;
     const nextBefore = Math.min(...page.events.map((entry) => entry.event.seq));
@@ -299,6 +339,8 @@ export async function loadMessages(id: string, subagent?: AgentSubagentAddress):
     beforeSeq = nextBefore;
   }
   const messages = projectRuntimeSessionHistory(events);
+  if (revision !== undefined)
+    loadedHistory.set(cacheKey, { messages, revision });
   return messages;
 }
 
