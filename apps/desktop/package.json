@@ -64,7 +64,11 @@
         "AppImage",
         "deb"
       ]
-    }
+    },
+    "asarUnpack": [
+      "out/main/chat-engine-worker.js",
+      "out/main/chunks/**"
+    ]
   },
   "dependencies": {
     "@amiba/app-runtime": "workspace:*",
