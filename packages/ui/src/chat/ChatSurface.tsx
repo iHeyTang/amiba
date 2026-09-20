@@ -34,6 +34,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
@@ -114,6 +115,10 @@ import {
   type ComposerPlanSeatRenderer,
 } from "./Composer";
 import { ConversationTurnRail } from "./ConversationTurnRail";
+import {
+  EMPTY_CONVERSATION_ROWS_SOURCE,
+  type ConversationRowsSource,
+} from "./conversation-rows";
 import { useComposerAttachments } from "./useComposerAttachments";
 import { SessionDrawer } from "./SessionDrawer";
 import {
@@ -346,6 +351,14 @@ export interface ChatSurfaceProps {
     messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
     timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[];
     turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
+    /**
+     * Live source for the host-owned timeline rows. Read here, in the pane,
+     * rather than in the window shell: the pane already re-renders at stream
+     * rate, so this keeps a streaming reply from re-rendering the whole
+     * window. When both are supplied the plain values win, so existing
+     * embedders keep their exact behaviour.
+     */
+    conversationRows?: ConversationRowsSource;
     toolView?: ToolCallSeatRenderer;
     /**
      * renderSlot-backed dispatch of Amiba's KEYED `amiba.conversation.question`
@@ -473,6 +486,20 @@ export default function ChatSurface({
   const { t } = useT();
 
   const sessions = useSessions();
+  // Host-owned timeline rows (official command nodes, per-turn tails), read
+  // from the host's live source when it supplies one. Subscribed HERE, in the
+  // pane, rather than in the window shell: this component re-renders at
+  // stream rate anyway (it renders the streaming bubble), and keeping the
+  // derivation out of the shell is what stops a reply from re-rendering the
+  // whole window. See `ConversationRowsSource`.
+  const hostRows = slots?.conversationRows ?? EMPTY_CONVERSATION_ROWS_SOURCE;
+  const hostRowSnapshot = useSyncExternalStore(
+    hostRows.subscribe,
+    hostRows.getSnapshot,
+    hostRows.getSnapshot,
+  );
+  const timelineRows = slots?.timelineRows ?? hostRowSnapshot.timelineRows;
+  const turnTailAnchors = slots?.turnTailAnchors ?? hostRowSnapshot.turnTailAnchors;
   const surfaceActivity = useMemo(() => createSurfaceActivity(sessions.activeId), [sessions.activeId]);
   const hasActive =
     resolveChatSurfaceMode(sessions.activeId) === "conversation";
@@ -2527,8 +2554,8 @@ export default function ChatSurface({
                             assistantActions={slots?.assistantActions}
                             messageText={slots?.messageText}
                             turnTail={slots?.turnTail}
-                            timelineRows={slots?.timelineRows}
-                            turnTailAnchors={slots?.turnTailAnchors}
+                            timelineRows={timelineRows}
+                            turnTailAnchors={turnTailAnchors}
                             openTurnFile={path => {
                               if (path === ".") {
                                 if (!workspacePane.files || !sessions.activeId) throw new Error("Workspace folder access is unavailable.");

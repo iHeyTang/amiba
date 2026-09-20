@@ -6,9 +6,9 @@ import { sessionLineage, equalSessionLineage } from "./session-lineage.js";
 import { useSessionImageLoader } from "./session-image-loader.js";
 import { useTrajectoryInspection } from "./trajectory-inspection.js";
 import { CordisBusiness, type CordisPackages } from "./cordis-business.js";
-import { useCommandRows } from "./command-rows.js";
+import { createConversationRowsSource } from "./conversation-rows-source.js";
 import { InputRegion } from "./input-region.js";
-import { TurnTail, TurnText, useTurnTailAnchors } from "./turn-tail.js";
+import { TurnTail, TurnText } from "./turn-tail.js";
 import { DirectoryChooserContext, type DirectoryChooser } from "@amiba/ui";
 import type { DirectoryFlow } from "./directory-flow.js";
 import type { ConversationViewEntry } from "./conversation-view-source.js";
@@ -19,6 +19,7 @@ import {
   SessionsProvider,
   useSessions,
   type AgentExecutionContext,
+  type SessionsStateKey,
 } from "@amiba/app-runtime/core";
 import {
   DshChatEngineClient,
@@ -39,6 +40,7 @@ import type {
 } from "@deepseek-ai/dsh-client-ui-slots";
 import type {
   AmibaRootSlot,
+  CommandRowOwner,
   ConversationInputPlanOwnerProps,
 } from "@amiba/extension-sdk";
 
@@ -103,6 +105,27 @@ const HOME_PENDING_PROMPT_KEY = "home.pendingPrompt";
 const HOME_PENDING_DRAFT_KEY = "home.pendingDraft";
 /** Names the settings dialog after its navigation heading (aria-labelledby). */
 const SETTINGS_TITLE_ID = "amiba-settings-title";
+
+/**
+ * Snapshot slices the window shell observes during render.
+ *
+ * `activeMessages` is deliberately absent. It is rewritten once per animation
+ * frame while a reply streams (the conversation pane buffers chunks into it),
+ * and nothing up here renders from it — the pane reads it itself. Leaving it
+ * out of the subscription is one of the two reasons a live reply no longer
+ * re-renders the entire window (sidebar history list, tab bar, workbench and
+ * conversation) 60 times a second; the other is
+ * `createConversationRowsSource`, which keeps the conversation projection out
+ * of this component too. Together they are what stopped a session switch from
+ * competing with the frames of the session being left.
+ */
+const PRODUCT_SHELL_STATE_KEYS = [
+  "sessionLoad",
+  "ready",
+  "sessions",
+  "openTabIds",
+  "activeId",
+] as const satisfies readonly SessionsStateKey[];
 
 export interface SettingsSectionRow {
   id: string;
@@ -531,7 +554,7 @@ function ProductShellInner({
     useOfficialSessions,
   });
   const { open: settingsOpen, close: closeSettings } = settings;
-  const sessions = useSessions();
+  const sessions = useSessions(PRODUCT_SHELL_STATE_KEYS);
   const detailsCwd = useOfficialSessions(list => sessions.activeId ? Object.values(list.byId).find(row => row.id === sessions.activeId)?.cwd : undefined);
   const lineage = useOfficialSessions(list => sessionLineage(list, sessions.activeId), equalSessionLineage);
   const childAddressSource = useRef<(id: string) => AgentSubagentAddress | undefined>(() => undefined);
@@ -552,10 +575,27 @@ function ProductShellInner({
   }, [directoryFlows, homeDirectory.available, workspaceDirectory.available, platform]);
   const viewEntries = useSyncExternalStore(conversationViews.subscribe, conversationViews.getSnapshot, conversationViews.getSnapshot);
   const trajectory = useTrajectoryInspection(sessions.activeId, viewEntries);
-  const commandRows = useCommandRows(sessions.activeId ? conversationSource(sessions.activeId) : undefined,
-    owner => renderSlot("conversation.chat.commandview", owner, { entryKey: owner.node.name ?? "", fallback: null }), commandRowKeys);
-  const loadMessageImage = useSessionImageLoader(sessions.activeId ? conversationSource(sessions.activeId) : undefined);
-  const turnTailAnchors = useTurnTailAnchors(sessions.activeId ? conversationSource(sessions.activeId) : undefined);
+  const activeConversationSource = sessions.activeId ? conversationSource(sessions.activeId) : undefined;
+  const loadMessageImage = useSessionImageLoader(activeConversationSource);
+  // The rows the conversation pane interleaves are derived from the LIVE
+  // projection — which publishes on every streamed frame. They used to be
+  // derived here, in the shell, so each frame re-rendered the shell and with
+  // it the whole window. The pane subscribes to this source instead (it
+  // already re-renders at stream rate), and the plain values it produces stay
+  // memoized on the projection's own snapshot identity, so nothing above the
+  // pane is woken by a reply. See `createConversationRowsSource`.
+  const renderCommandRow = useCallback(
+    (owner: CommandRowOwner) =>
+      renderSlot("conversation.chat.commandview", owner, {
+        entryKey: owner.node.name ?? "",
+        fallback: null,
+      }),
+    [renderSlot],
+  );
+  const conversationRows = useMemo(
+    () => createConversationRowsSource(activeConversationSource, commandRowKeys, renderCommandRow),
+    [activeConversationSource, commandRowKeys, renderCommandRow],
+  );
   // Host-side session changes (a plugin creating a task session, a blank
   // session getting its first turn) reach the official list live; re-read
   // Amiba's own index whenever the facts it renders change, so the sidebar
@@ -933,8 +973,7 @@ function ProductShellInner({
                 inputLeft: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.input.left", owner)} />,
                 inputRight: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.input.right", owner)} />,
                 messageText: (runtimeTurn, children, openFile, timeline) => <TurnText timeline={timeline} source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} fileMentions={fileMentions}>{children}</TurnText>,
-                timelineRows: commandRows,
-                turnTailAnchors,
+                conversationRows,
                 turnTail: (runtimeTurn, openFile) => <TurnTail source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} render={owner => renderSlotChain("conversation.chat.turnTail", owner)} />,
                 messageImages: renderMessageImages,
                 approvalDetail: (callId) => renderSlot("conversation.approval.detail", { callId }),

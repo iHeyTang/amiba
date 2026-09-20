@@ -63,13 +63,19 @@ function useConversationSnapshot(source?: ObservableSnapshot<ConversationSnapsho
 }
 
 /** Preserve engine order even when the product has no visible assistant row. */
-export function useTurnTailAnchors(source?: ObservableSnapshot<ConversationSnapshot | undefined>) {
-  const snapshot = useConversationSnapshot(source);
-  return useMemo(() => snapshot?.chat.timeline.turnOrder.flatMap(runtimeTurn => {
+export function turnTailAnchorsOf(
+  snapshot: ConversationSnapshot | null | undefined,
+): readonly { runtimeTurn: number; endSeq: number }[] {
+  return snapshot?.chat.timeline.turnOrder.flatMap(runtimeTurn => {
     const turn = snapshot.chat.timeline.turns.get(runtimeTurn);
     return turn?.status === "closed" && turn.end && turn.data.get("turn-tail")
       ? [{ runtimeTurn, endSeq: turn.end.seq }] : [];
-  }) ?? [], [snapshot]);
+  }) ?? [];
+}
+
+export function useTurnTailAnchors(source?: ObservableSnapshot<ConversationSnapshot | undefined>) {
+  const snapshot = useConversationSnapshot(source);
+  return useMemo(() => turnTailAnchorsOf(snapshot), [snapshot]);
 }
 
 

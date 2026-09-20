@@ -31,7 +31,7 @@ import {
   type TransitionEvent as ReactTransitionEvent,
 } from "react";
 
-import { useSessions, type ChatEngineClient } from "@amiba/app-runtime/core";
+import { useSessions, type ChatEngineClient, type SessionsStateKey } from "@amiba/app-runtime/core";
 import type { TriggerProvider } from "./composer/providers/types";
 import type { ComposerTriggerRuntime } from "./composer/triggers/contracts";
 import { useT } from "@amiba/i18n";
@@ -257,6 +257,15 @@ export interface FullScreenChatViewProps {
     messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
     timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[];
     turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
+    /**
+     * Host-owned timeline rows as a live source, consumed by the
+     * conversation pane itself. Prefer this over the `timelineRows` /
+     * `turnTailAnchors` value form in a host whose conversation projection
+     * publishes at stream rate: the pane re-renders per frame anyway, while
+     * deriving the rows in the window shell re-rendered the whole window.
+     * See {@link ConversationRowsSource}.
+     */
+    conversationRows?: import("./conversation-rows").ConversationRowsSource;
     toolView?: ToolCallSeatRenderer;
     /**
      * renderSlot-backed dispatch of Amiba's keyed
@@ -358,8 +367,35 @@ export interface FullScreenChatViewProps {
   messageSourceLabel?: MessageSourceLabelResolver;
 }
 
+/**
+ * Snapshot slices the window chrome observes during render.
+ *
+ * ``activeMessages`` is deliberately absent. It is the one slice that
+ * changes on every animation frame while a reply streams, and nothing in
+ * the shell — sidebar history list, tab bar, workbench, header — renders
+ * from it. Leaving it out of the subscription is what stops a live reply
+ * from re-rendering the entire window (and every row in a 200+ session
+ * history list) 60 times a second, which is what made *switching* to
+ * another session mid-stream feel frozen: the frames React spent on the
+ * outgoing session's message buffer were frames it did not spend draining
+ * the storage and wire work the switch was waiting on.
+ *
+ * The conversation subtree subscribes to ``activeMessages`` itself
+ * (``ChatSurface``), so the streaming bubble still updates.
+ */
+const SHELL_STATE_KEYS = [
+  "sessionLoad",
+  "ready",
+  "sessions",
+  "openTabIds",
+  "activeId",
+] as const satisfies readonly SessionsStateKey[];
+
 export default function FullScreenChatView(props: FullScreenChatViewProps) {
-  const sessions = useSessions();
+  // Only ``activeId`` is read here (it feeds the workspace-pane provider
+  // below); everything else this shell renders is read by
+  // ``FullScreenChatViewInner``, which subscribes on its own.
+  const sessions = useSessions(["activeId"]);
   // The provider owns the top-bar title-override store. Any descendant
   // (chat surface, future plugin panels, etc.) can call
   // ``useSetSessionTitle`` to hot-update the bar without prop-drilling.
@@ -399,7 +435,11 @@ function FullScreenChatViewInner({
 }: FullScreenChatViewProps) {
   useResolvedTheme();
   const { t, language } = useT();
-  const sessions = useSessions();
+  // The window chrome (sidebar history list, tab bar, workbench, header)
+  // reads every slice EXCEPT ``activeMessages``. Subscribing without that
+  // key is what keeps a streaming reply from re-rendering the whole window
+  // once per animation frame — see ``SHELL_STATE_KEYS``.
+  const sessions = useSessions(SHELL_STATE_KEYS);
   const toolNavigation = useMemo(createToolNavigation, [sessions.activeId]);
   const palette = useCommandPalette();
   const [messagesWidth, setMessagesWidth] = useState<MessagesMaxWidth>(
@@ -1070,7 +1110,10 @@ function FullScreenChatViewInner({
             visible={workbenchVisible}
             renderPanel={slots?.workbenchPanel}
             inspectToolCall={(callId) => {
-              const event = (sessions.activeMessages as UiMessage[])
+              // Event-time read: the shell does not subscribe to
+              // ``activeMessages`` (it changes once per streamed frame), so
+              // pull the live snapshot instead of the render-time one.
+              const event = (sessions.getSnapshot().activeMessages as UiMessage[])
                 .flatMap((message) => message.toolProgress ?? [])
                 .find((event) => event.toolCallId === callId);
               if (!event) return false;
