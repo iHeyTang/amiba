@@ -16,7 +16,7 @@
     "prepackage": "pnpm --dir ../../packages/app-runtime build:dsh-runtime",
     "package": "pnpm runtime:prepare && electron-vite build && node scripts/fix-node-pty-permissions.mjs && electron-builder",
     "postinstall": "electron-builder install-app-deps && node scripts/fix-node-pty-permissions.mjs",
-    "pretest": "pnpm --dir ../../packages/app-runtime build:dsh-runtime",
+    "pretest": "pnpm --dir ../../packages/app-runtime build:dsh-runtime && pnpm --dir ../../apps/cli build",
     "test": "node --experimental-strip-types --test src/main/__tests__/*.test.mjs",
     "pretypecheck": "pnpm --dir ../../packages/app-runtime build:dsh-runtime",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
