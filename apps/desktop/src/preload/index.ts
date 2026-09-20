@@ -540,8 +540,17 @@ const api = {
     ) => {
       const handler = (
         _: Electron.IpcRendererEvent,
-        msg: import("@amiba/app-runtime/protocol").EngineToClientMessage,
-      ) => listener(msg);
+        payload:
+          | import("@amiba/app-runtime/protocol").EngineToClientMessage
+          | import("@amiba/app-runtime/protocol").EngineToClientMessage[],
+      ) => {
+        // Main coalesces the engine's frames per tick; a batch keeps its order.
+        if (Array.isArray(payload)) {
+          for (const msg of payload) listener(msg);
+          return;
+        }
+        listener(payload);
+      };
       ipcRenderer.on("chat-engine:message", handler);
       return () => ipcRenderer.off("chat-engine:message", handler);
     },
