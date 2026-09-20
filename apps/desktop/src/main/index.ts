@@ -37,6 +37,7 @@ import { buildAppMenuTemplate } from "./app-menu";
 import {
   destroyQuickAskWindow,
   hideQuickAsk,
+  prewarmQuickAsk,
   resizeQuickAsk,
   setQuickAskIgnoreMouseEvents,
   summonQuickAsk,
@@ -48,6 +49,7 @@ import {
   stopUnixSocketInbox,
 } from "./external-inbox";
 import { startHotkeyManager, stopHotkeyManager } from "./hotkey";
+import { markShellReady, whenShellReady } from "./shell-ready";
 import { registerIpcHandlers } from "./ipc";
 import { registerEmbeddedPageHandlers } from "./embedded-page";
 import { DesktopExtensionHost } from "./desktop-extensions";
@@ -603,6 +605,11 @@ if (!gotSingleInstanceLock) {
     installDshClientWebSocketHeaders();
     installPermissionRequestHandler();
     registerIpcHandlers();
+    // Registered before any window exists: the main renderer reports its shell
+    // as soon as it paints, and a signal that lands before the listener would
+    // otherwise leave the pet window and the Quick-Ask prewarm waiting for the
+    // timeout (see shell-ready.ts).
+    ipcMain.on("shell:ready", () => markShellReady());
     // Main process owns all heavy, resident state: the shared DSH state
     // subscription layer (pet library / notification feed / session activity),
     // the app's ONE chat engine, and the conversation data plane (session /
@@ -725,6 +732,15 @@ if (!gotSingleInstanceLock) {
       app.on("activate", pinDockIcon);
     }
     registerQuickAskIpcHandlers(summonWindow);
+
+    // Quick-Ask is created lazily, so the first summon after launch used to pay
+    // for a renderer process, its bundle and the chat engine. Warm it once the
+    // shell is up (the IPC it needs is registered above). Waiting on the
+    // renderer's signal instead of a fixed delay keeps that boot off the first
+    // paint.
+    void whenShellReady().then((ready) => {
+      if (ready) prewarmQuickAsk();
+    });
 
     // Load the persisted summon-hotkey config and start listening. The
     // manager subscribes to renderer writes too, so changes from the

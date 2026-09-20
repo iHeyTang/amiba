@@ -129,6 +129,12 @@ const api = {
   shell: {
     openExternal: (url: string) =>
       ipcRenderer.invoke("shell:open-external", url),
+    /**
+     * Tells the main process the product shell is on screen. Main uses it to
+     * start the second/third renderer *after* the first paint instead of
+     * guessing with a fixed delay (see `main/shell-ready.ts`).
+     */
+    notifyReady: () => ipcRenderer.send("shell:ready"),
   },
 
   window: {

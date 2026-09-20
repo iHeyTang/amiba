@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu, screen } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
+import { whenShellReady } from "./shell-ready";
 const directory = path.dirname(fileURLToPath(import.meta.url));
 export function clampPetPosition(
   point: { x: number; y: number },
@@ -406,32 +407,17 @@ export async function installDesktopPetWindow(
   screen.on("display-metrics-changed", relocate);
   app.on("before-quit", stopDrag);
   if (enabled) {
-    // The pet renderer boots the full DSH shell, so creating its window
-    // during app startup makes two complete renderer boots compete for CPU
-    // right at first paint and visibly stalls the launch. Start it only once
-    // the main window has finished loading; the pet still appears as soon as
-    // its own renderer calls `desktop-pet:ready`.
-    const startPet = () => {
+    // The pet renderer is a second process with its own bundle, so booting it
+    // while the first window is still painting visibly stalls the launch. Wait
+    // for the renderer's own "shell is on screen" signal instead of guessing
+    // with a fixed delay after `did-finish-load`; the pet appears as soon as
+    // its renderer calls `desktop-pet:ready`. A renderer that never reports
+    // times out and the pet is created anyway — late beats never.
+    void (async () => {
+      await whenShellReady();
       if (!enabled) return;
       create();
       startPointerTracking();
-    };
-    const startWhenMainIsInteractive = () => {
-      const host = main();
-      if (!host || host.isDestroyed()) {
-        setTimeout(startWhenMainIsInteractive, 250);
-        return;
-      }
-      if (host.webContents.isLoadingMainFrame()) {
-        const finish = () => startPet();
-        host.webContents.once("did-finish-load", finish);
-        host.webContents.once("did-fail-load", finish);
-      } else {
-        // Main window already interactive: still give its first paint a head
-        // start before paying for the second renderer boot.
-        setTimeout(startPet, 350);
-      }
-    };
-    startWhenMainIsInteractive();
+    })();
   }
 }

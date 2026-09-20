@@ -105,6 +105,7 @@ interface AmibaBridgeApi {
   agentDiagnostics: import("@amiba/app-runtime/platform").AgentDiagnosticsAdapter;
   shell: {
     openExternal(url: string): Promise<void>;
+    notifyReady(): void;
   };
   window: {
     close(): Promise<void>;

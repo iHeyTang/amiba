@@ -67,6 +67,10 @@ function waitForAmibaRoot(timeoutMs = 30_000): Promise<void> {
       window.clearTimeout(timeout);
       observer.disconnect();
       window.removeEventListener(ROOT_READY_EVENT, finish);
+      // The shell is on screen: this is the signal the main process waits for
+      // before booting the pet and Quick-Ask renderers, so a second renderer
+      // boot never lands on the first paint.
+      window.amiba.shell.notifyReady();
       window.queueMicrotask(() => {
         for (const sessionId of pendingSessionIds.splice(0)) {
           dispatchOpenSession(sessionId);

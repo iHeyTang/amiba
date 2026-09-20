@@ -405,3 +405,32 @@ export function destroyQuickAskWindow(): void {
 export function getQuickAskWindow(): BrowserWindow | null {
   return quickAskWindow;
 }
+
+/**
+ * Idle delay after the shell reports ready before Quick-Ask is warmed. The
+ * window is created hidden and shown only by a summon, so the cost is CPU and
+ * memory, not pixels: long enough that the shell's own first paint and initial
+ * data load are done, short enough that an early summon still finds it warm.
+ */
+const QUICK_ASK_PREWARM_DELAY_MS = 2_000;
+
+/**
+ * Boot the Quick-Ask renderer ahead of the first summon.
+ *
+ * Quick-Ask is created lazily and reclaimed after 10 minutes hidden, so the
+ * first open after launch pays for a renderer process, its bundle (~1.6 MB) and
+ * the chat engine. Warming it once the shell is up moves that cost off the
+ * user's first double-tap; the existing idle-destroy policy still bounds what
+ * we keep resident.
+ */
+export function prewarmQuickAsk(delayMs = QUICK_ASK_PREWARM_DELAY_MS): void {
+  const timer = setTimeout(() => {
+    if (quickAskWindow && !quickAskWindow.isDestroyed()) return;
+    try {
+      createQuickAskWindow();
+    } catch (error) {
+      console.warn("[amiba] Quick-Ask prewarm failed:", error);
+    }
+  }, Math.max(0, delayMs));
+  timer.unref?.();
+}
