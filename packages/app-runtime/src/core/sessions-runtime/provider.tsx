@@ -25,7 +25,7 @@ import {
 } from "react";
 
 import { SessionsStore } from "./sessions-store";
-import type { SessionsController, SessionsState } from "./types";
+import type { SessionsController, SessionsState, SessionsStateKey } from "./types";
 
 // ---------------------------------------------------------------------------
 // Context
@@ -99,16 +99,45 @@ function deriveOpenTabs(state: SessionsState): SessionsController["openTabs"] {
  * The returned controller has stable method references (the store
  * issues them once); the state fields update reactively on every
  * commit.
+ *
+ * Pass `keys` to narrow which snapshot slices re-render this component.
+ * The layout shell does this: it renders the sidebar, tab bar and
+ * workbench — none of which read ``activeMessages`` — so it subscribes
+ * without that key and a streaming reply no longer re-renders the whole
+ * window 60 times a second.
+ *
+ * Contract for a narrowed consumer: read *during render* only the keys you
+ * subscribed to, and read anything else through ``getSnapshot()`` at event
+ * time. A key outside the subscription is still present on the returned
+ * controller (it is the latest committed snapshot, never a rolled-back
+ * one), it is simply not guaranteed to be the value the current render
+ * was triggered by.
  */
-export function useSessions(): SessionsController {
+export function useSessions(
+  keys?: readonly SessionsStateKey[],
+): SessionsController {
   const store = useContext(SessionsStoreContext);
   if (!store) {
     throw new Error(
       "useSessions() must be called from a subtree wrapped in <SessionsProvider>.",
     );
   }
+  // Callers pass the key list as an inline literal, so the array identity
+  // changes every render. Key the memo on the contents instead — the
+  // subscription handle has to stay stable or `useSyncExternalStore` would
+  // tear down and re-establish it on every render.
+  const keySignature = keys ? keys.join("\u0000") : "";
+  const stableKeys = useMemo(
+    () => (keys ? keys : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- contents, not identity
+    [keySignature],
+  );
+  const subscribe = useMemo(
+    () => (listener: () => void) => store.subscribeKeys(stableKeys, listener),
+    [store, stableKeys],
+  );
   const state = useSyncExternalStore(
-    store.subscribe,
+    subscribe,
     store.getSnapshot,
     store.getSnapshot,
   );

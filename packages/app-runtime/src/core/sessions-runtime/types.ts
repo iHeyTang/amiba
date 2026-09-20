@@ -34,6 +34,35 @@ export interface SessionsState {
 }
 
 /**
+ * Every top-level key of {@link SessionsState}, in a fixed order.
+ *
+ * The store derives "what changed" from this list, so this is the single
+ * place that has to know the shape of the snapshot. Adding state here
+ * makes both the change detection and the scoped notification fan-out
+ * follow automatically.
+ */
+export const SESSIONS_STATE_KEYS = [
+  "sessionLoad",
+  "ready",
+  "sessions",
+  "openTabIds",
+  "activeId",
+  "activeMessages",
+] as const;
+
+/**
+ * One observable slice of the snapshot.
+ *
+ * Subscriptions are scoped by these keys because the snapshot mixes
+ * wildly different update rates: ``activeMessages`` changes on every
+ * animation frame while a reply streams, whereas ``sessions`` /
+ * ``openTabIds`` / ``activeId`` change only when the user does something.
+ * A component that merely renders the sidebar must not be woken 60 times
+ * a second by the streaming buffer — see ``SessionsStore.subscribeKeys``.
+ */
+export type SessionsStateKey = (typeof SESSIONS_STATE_KEYS)[number];
+
+/**
  * Public controller surface returned by ``useSessions()``. State fields
  * mirror ``SessionsState`` but are widened to mutable array types so
  * existing consumer code (which spreads + slices freely) continues to

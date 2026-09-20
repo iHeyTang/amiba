@@ -189,3 +189,15 @@ export { createResidentInputTransaction } from "./internal/resident-input-transa
 export type { ComposerDraftSource } from "./composer-draft-store";
 
 export { WorkspaceTextMentionsContext } from "./workspace-file-links";
+// Host-owned conversation rows as a live source. A host whose conversation
+// projection publishes at stream rate hands the pane this instead of the
+// `timelineRows` / `turnTailAnchors` value form, so the rows are derived
+// where they render instead of re-rendering the window shell once per frame.
+export {
+  EMPTY_CONVERSATION_ROWS,
+  EMPTY_CONVERSATION_ROWS_SOURCE,
+  type ConversationRows,
+  type ConversationRowsSource,
+  type ConversationTimelineRow,
+  type ConversationTurnTailAnchor,
+} from "./conversation-rows";

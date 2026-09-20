@@ -1,7 +1,6 @@
-import { useCallback, useSyncExternalStore, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { CommandRowOwner } from "@amiba/extension-sdk";
 import type { ConversationSnapshot } from "./conversation-snapshot.js";
-import type { ObservableSnapshot } from "@deepseek-ai/dsh-client-store";
 
 /** Use the official Chat projection, including its explicit compaction correlation. */
 export function commandRowOwners(snapshot: Pick<ConversationSnapshot, "chat"> | undefined): { id: string; seq: number; owner: CommandRowOwner }[] {
@@ -20,14 +19,26 @@ export function commandRowOwners(snapshot: Pick<ConversationSnapshot, "chat"> | 
   });
 }
 
-export function useCommandRows(source: ObservableSnapshot<ConversationSnapshot | undefined> | undefined,
-  render: (owner: CommandRowOwner) => ReactNode, keys: ObservableSnapshot<readonly string[]>) {
-  const subscribe = useCallback((fn: () => void) => source?.subscribe(fn) ?? (() => {}), [source]);
-  const read = useCallback(() => source?.getSnapshot(), [source]);
-  const snapshot = useSyncExternalStore(subscribe, read, read);
-  const registered = useSyncExternalStore(keys.subscribe, keys.getSnapshot, keys.getSnapshot);
-  return commandRowOwners(snapshot).filter(row => registered.includes(row.owner.node.name ?? "")).map(row => ({
-    id: row.id, seq: row.seq, content: render(row.owner),
-    replaceMessageId: `dsh:command:${row.owner.node.commandId}:result`,
-  }));
+/**
+ * The registered command rows to interleave into the conversation timeline.
+ *
+ * Pure on purpose: callers own the subscription. Deriving these in the window
+ * shell subscribed it to a projection that publishes on every streamed frame,
+ * so the shell — and with it the whole window — re-rendered per frame. The
+ * conversation pane reads them instead (see `createConversationRowsSource`),
+ * which is where the stream-rate reads belong.
+ */
+export function commandTimelineRows(
+  snapshot: Pick<ConversationSnapshot, "chat"> | undefined,
+  registered: readonly string[],
+  render: (owner: CommandRowOwner) => ReactNode,
+): { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[] {
+  return commandRowOwners(snapshot)
+    .filter(row => registered.includes(row.owner.node.name ?? ""))
+    .map(row => ({
+      id: row.id,
+      seq: row.seq,
+      content: render(row.owner),
+      replaceMessageId: `dsh:command:${row.owner.node.commandId}:result`,
+    }));
 }

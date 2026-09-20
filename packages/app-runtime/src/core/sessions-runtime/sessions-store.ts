@@ -66,7 +66,8 @@ import {
   saveMessages,
   searchIndex,
 } from "./store";
-import type { SessionsState } from "./types";
+import { SESSIONS_STATE_KEYS } from "./types";
+import type { SessionsState, SessionsStateKey } from "./types";
 
 const PERSIST_DEBOUNCE_MS = 250;
 
@@ -80,13 +81,20 @@ const INITIAL_STATE: SessionsState = Object.freeze({
 
 type Listener = () => void;
 
+/** One observer of the snapshot, optionally narrowed to a set of keys. */
+interface Subscription {
+  /** Keys this listener observes; ``null`` means "every key". */
+  keys: ReadonlySet<SessionsStateKey> | null;
+  listener: Listener;
+}
+
 export class SessionsStore {
   // -------------------------------------------------------------------------
   // Reactive state
   // -------------------------------------------------------------------------
 
   private state: SessionsState = INITIAL_STATE;
-  private listeners: Set<Listener> = new Set();
+  private subscriptions: Set<Subscription> = new Set();
 
   // -------------------------------------------------------------------------
   // Async-load guard
@@ -135,11 +143,49 @@ export class SessionsStore {
    * Subscribe to state changes. Returns an unsubscribe callback. The
    * listener is invoked once per state transition; it should call
    * ``getSnapshot()`` for the new state.
+   *
+   * This is the "wake me for anything" subscription. Prefer
+   * {@link subscribeKeys} when the consumer only reads part of the
+   * snapshot — see that method for why it matters.
    */
   subscribe = (listener: Listener): (() => void) => {
-    this.listeners.add(listener);
+    return this.subscribeKeys(null, listener);
+  };
+
+  /**
+   * Subscribe to a subset of the snapshot.
+   *
+   * Why this exists: ``activeMessages`` changes once per animation frame
+   * while a reply streams, while ``sessions`` / ``openTabIds`` /
+   * ``activeId`` change only on user action. With a single global
+   * notification channel every streaming chunk re-rendered the entire
+   * application view — sidebar history list, tab bar, workbench and the
+   * conversation — and that background re-render storm is what made
+   * *switching* to another session while a reply was still printing feel
+   * frozen: the renderer spent its time on frames for the message buffer
+   * instead of draining the storage/wire messages the switch was waiting
+   * on.
+   *
+   * A listener registered with ``keys`` is only invoked when at least one
+   * of those keys actually changed. Passing ``null`` observes everything
+   * (identical to {@link subscribe}).
+   *
+   * The store still publishes whole immutable snapshots; scoping only
+   * filters *notifications*. Consumers therefore remain correct as long as
+   * they read at most the keys they subscribed to during render, and pull
+   * a live value from ``getSnapshot()`` at event time for anything else.
+   */
+  subscribeKeys = (
+    keys: readonly SessionsStateKey[] | ReadonlySet<SessionsStateKey> | null,
+    listener: Listener,
+  ): (() => void) => {
+    const subscription: Subscription = {
+      keys: keys ? (keys instanceof Set ? keys : new Set(keys)) : null,
+      listener,
+    };
+    this.subscriptions.add(subscription);
     return () => {
-      this.listeners.delete(listener);
+      this.subscriptions.delete(subscription);
     };
   };
 
@@ -211,7 +257,7 @@ export class SessionsStore {
       this.storageWatchUnsubscribe();
       this.storageWatchUnsubscribe = null;
     }
-    this.listeners.clear();
+    this.subscriptions.clear();
     this.initialized = false;
   };
 
@@ -220,20 +266,39 @@ export class SessionsStore {
   // -------------------------------------------------------------------------
 
   private commit(patch: Partial<SessionsState>): void {
-    const next: SessionsState = { ...this.state, ...patch };
-    if (
-      next.ready === this.state.ready &&
-      next.sessions === this.state.sessions &&
-      next.openTabIds === this.state.openTabIds &&
-      next.activeId === this.state.activeId &&
-      next.activeMessages === this.state.activeMessages &&
-      next.sessionLoad === this.state.sessionLoad
-    ) {
+    const previous = this.state;
+    const next: SessionsState = { ...previous, ...patch };
+    // Derive the changed keys by comparing references. Driving this off
+    // ``SESSIONS_STATE_KEYS`` (rather than a hand-written field list) keeps
+    // change detection and the notification fan-out in lockstep: a new state
+    // field is picked up by both the moment it is added to the snapshot type.
+    const changed: SessionsStateKey[] = [];
+    for (const key of SESSIONS_STATE_KEYS) {
+      if (next[key] !== previous[key]) changed.push(key);
+    }
+    if (changed.length === 0) {
       // Nothing actually changed (reference-equal).
       return;
     }
     this.state = next;
-    for (const listener of this.listeners) listener();
+    this.emit(changed);
+  }
+
+  /**
+   * Fan a transition out to the observers whose keys intersect `changed`.
+   *
+   * Iterates over a snapshot of the subscription set: a listener may
+   * unsubscribe (or a nested commit may add one) while we walk it, and the
+   * set must not be mutated mid-iteration.
+   */
+  private emit(changed: readonly SessionsStateKey[]): void {
+    if (this.subscriptions.size === 0) return;
+    for (const subscription of [...this.subscriptions]) {
+      if (!this.subscriptions.has(subscription)) continue;
+      const { keys, listener } = subscription;
+      if (keys && !changed.some((key) => keys.has(key))) continue;
+      listener();
+    }
   }
 
   // -------------------------------------------------------------------------
