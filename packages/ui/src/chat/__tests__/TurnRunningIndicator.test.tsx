@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@amiba/i18n", () => ({
@@ -87,43 +87,37 @@ describe("one activity owner", () => {
     </AwaitingUserInputContext.Provider>
   );
 
-  it("keeps thinking in its own fold while the tool disclosure tracks the call", () => {
+  it("owns an interleaved turn with ONE disclosure whose rows follow the timeline", () => {
     const { rerender, container } = render(view(thought));
-    // The reasoning owns one fold, labeled as live thinking; no separate
-    // working tail while the fold itself is the only activity.
+    // Thinking alone owns the turn: one disclosure, labeled as live thinking,
+    // and no separate working tail.
     expect(screen.getAllByText("sidepanel.trace.thinking")).toHaveLength(1);
     expect(screen.queryByText(WORKING)).not.toBeInTheDocument();
-    const thinkingDisclosure = container.querySelector(
-      "[data-execution-summary]",
-    )!;
+    expect(container.querySelectorAll("[data-execution-summary]")).toHaveLength(1);
     const running: UiMessage = {
       ...thought,
       assistantTimeline: [...thought.assistantTimeline!, { kind: "tool", id: "t1", toolCallId: "call-1" }],
       toolProgress: [{ tool: "read_file", toolCallId: "call-1", status: "running" }],
     };
     rerender(view(running));
-    // The tool call gets its own disclosure below the persistent thinking fold.
+    // The tool joins the SAME disclosure as its own row — the thought is not
+    // yanked into a separate top fold — and the running chip owns the label.
     const disclosures = container.querySelectorAll("[data-execution-summary]");
-    expect(disclosures).toHaveLength(2);
-    expect(disclosures[0]).toBe(thinkingDisclosure);
+    expect(disclosures).toHaveLength(1);
+    expect(disclosures[0]!.textContent ?? "").toContain("Inspecting the request");
+    expect(disclosures[0]!.querySelector(".agent-thinking-text")).not.toBeNull();
     expect(screen.queryByText(WORKING)).not.toBeInTheDocument();
     const waiting: UiMessage = {
       ...running, toolProgress: [{ ...running.toolProgress![0]!, status: "completed" }],
     };
     rerender(view(waiting));
-    // The tool disclosure reports the completed action (with the working
-    // tail on the open stream); the thought fold still opens to the text.
+    // The tool settled and no live reasoning has arrived yet: the turn tail
+    // says so, exactly once, while the thought row stays in the series.
     expect(screen.getAllByText(WORKING)).toHaveLength(1);
-    const toolDisclosure = container.querySelectorAll(
-      "[data-execution-summary]",
-    )[1]!;
-    const toolButton = toolDisclosure.querySelector("button")!;
-    expect(toolButton).toHaveTextContent("sidepanel.trace.actionStatus.completed");
-    expect(toolButton.querySelector(".agent-thinking-text")).toBeNull();
-    fireEvent.click(thinkingDisclosure.querySelector("button")!);
-    expect(thinkingDisclosure.textContent ?? "").toContain(
-      "Inspecting the request",
-    );
+    expect(container.querySelectorAll("[data-execution-summary]")).toHaveLength(1);
+    expect(
+      container.querySelector("[data-execution-summary]")!.textContent ?? "",
+    ).toContain("Inspecting the request");
     rerender(view(waiting, true));
     expect(screen.queryByText(WORKING)).not.toBeInTheDocument();
     rerender(view({ ...waiting, streaming: false }));
@@ -139,13 +133,16 @@ describe("one activity owner", () => {
   });
 
   it("does not suppress a later wait just because historical reasoning exists", () => {
-    render(view({ ...thought, content: PROSE, assistantTimeline: [
+    const { container } = render(view({ ...thought, content: PROSE, assistantTimeline: [
       ...thought.assistantTimeline!, { kind: "text", id: "prose", text: PROSE },
     ] }));
     expect(screen.getByText(PROSE)).toBeInTheDocument();
     expect(screen.getAllByText(WORKING)).toHaveLength(1);
-    // Historical reasoning sits in its own top-level fold; it neither
+    // Historical reasoning keeps its own row inside the series; it neither
     // fragments the series nor hides the still-streaming prose wait.
-    expect(screen.getAllByText("sidepanel.trace.thinking")).toHaveLength(1);
+    expect(container.querySelectorAll("[data-execution-summary]")).toHaveLength(1);
+    expect(
+      container.querySelector("[data-execution-summary]")!.textContent ?? "",
+    ).toContain("Inspecting the request");
   });
 });

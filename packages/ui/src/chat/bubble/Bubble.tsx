@@ -862,9 +862,19 @@ function ExecutionDisclosure({
     .reverse()
     .find((event) => event.status === "running");
   const hasDetails = details.length > 0;
-  const thought = details.find(
+  const reasoningDetails = details.filter(
     (detail): detail is Extract<TurnTraceDetail, { kind: "reasoning" }> =>
       detail.kind === "reasoning",
+  );
+  const thought = reasoningDetails[0];
+  // Every thinking segment of the turn contributes to the aggregate label, so
+  // a multi-segment trace never reports only its first fragment's span.
+  const thoughtMs = reasoningDetails.reduce<number | undefined>(
+    (total, detail) =>
+      detail.reasoningMs === undefined
+        ? total
+        : (total ?? 0) + Math.max(0, detail.reasoningMs),
+    undefined,
   );
   // One natural phrase, not a data pile: total effort when tools ran,
   // thought duration when the turn was reasoning-only.
@@ -872,7 +882,7 @@ function ExecutionDisclosure({
     tools.length > 0 && typeof processMs === "number" && processMs > 0
       ? workedLabel(t, processMs)
       : thought
-        ? thoughtLabel(t, thought.reasoningMs)
+        ? thoughtLabel(t, thoughtMs)
         : tools.length > 0
           ? t("sidepanel.trace.toolCount", { count: tools.length })
           : latestProgress || t("sidepanel.trace.executionDetails");
@@ -943,7 +953,7 @@ function ExecutionDisclosure({
       {showLiveReasoning && <LiveReasoningPane text={liveReasoning} />}
       {expanded && hasDetails && (
         <div className="ml-[7px] flex min-w-0 flex-col gap-0.5 border-l border-border/60 py-1.5 pl-3 pr-1">
-          {details.map((detail) => {
+          {details.map((detail, index) => {
             if (detail.kind === "notice") return <div key={detail.id} className="min-w-0 self-stretch text-left [&>*]:justify-start"><Bubble m={detail.message} /></div>;
             if (detail.kind === "fallback") {
               return (
@@ -956,6 +966,12 @@ function ExecutionDisclosure({
               );
             }
             if (detail.kind === "reasoning") {
+              // The newest thinking segment streams in full, pinned to its
+              // tail. Earlier segments keep their own row inside the series —
+              // never one blob with a later segment's words appended to it.
+              if (streaming && index === details.length - 1) {
+                return <LiveReasoningPane key={detail.id} text={detail.text} />;
+              }
               // A reasoning-only turn degenerates under uniform nesting: the
               // outer summary already reads "thought for Xs", so an inner
               // fold with the SAME label demands a second click to reach the
@@ -1238,6 +1254,9 @@ type AssistantFlowItem =
       id: string;
       details: TurnTraceDetail[];
       tools: ToolProgress[];
+      /** Wall-clock span of this segment's own activity, when its reasoning
+       * and tool timestamps allow measuring one. */
+      processMs?: number;
     };
 
 function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
@@ -1256,15 +1275,32 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
   const flow: AssistantFlowItem[] = [];
   let pendingDetails: TurnTraceDetail[] = [];
   let pendingTools: ToolProgress[] = [];
+  let pendingStart: number | undefined;
+  let pendingEnd: number | undefined;
 
-  // Reasoning never joins the execution series: it is aggregated into ONE
-  // thinking fold by the caller. A text item is MID-TURN narration (folds
-  // into the series beside its tools) when a tool call both precedes and
-  // follows it; leading intro prose and the trailing result stay
-  // standalone paragraphs. The model emits working narration with two
-  // different wire types (reasoning vs text), so placement is decided by
-  // position rather than type — otherwise near-identical lines would
-  // inconsistently render as timed rows or detached paragraphs.
+  // One span per execution segment, measured from the timestamps the
+  // segment's own items carry. The segment summary reads "worked for X"
+  // from this instead of borrowing a single reasoning fragment's span.
+  const noteSpan = (from?: number, to?: number) => {
+    if (typeof from === "number") {
+      pendingStart = pendingStart === undefined ? from : Math.min(pendingStart, from);
+    }
+    if (typeof to === "number") {
+      pendingEnd = pendingEnd === undefined ? to : Math.max(pendingEnd, to);
+    }
+  };
+
+  // Every timeline item joins the series in ITS OWN chronological row: the
+  // think → tool → think turn collapses into ONE aggregate row that expands
+  // back to exactly those three rows. Reasoning is never concatenated into a
+  // single thought blob, so a later thinking segment can never be pasted
+  // inside the earlier one. A text item is MID-TURN narration (folds into the
+  // series beside its tools) when a tool call both precedes and follows it;
+  // leading intro prose and the trailing result stay standalone paragraphs.
+  // The model emits working narration with two different wire types
+  // (reasoning vs text), so placement is decided by position rather than
+  // type — otherwise near-identical lines would inconsistently render as
+  // timed rows or detached paragraphs.
   const midTurnTextIds = new Set<string>();
   {
     const textIndexes = timeline
@@ -1287,9 +1323,17 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
       id: pendingDetails[0]!.id,
       details: pendingDetails,
       tools: pendingTools,
+      processMs:
+        pendingStart !== undefined &&
+        pendingEnd !== undefined &&
+        pendingEnd > pendingStart
+          ? pendingEnd - pendingStart
+          : undefined,
     });
     pendingDetails = [];
     pendingTools = [];
+    pendingStart = undefined;
+    pendingEnd = undefined;
   };
   const appendText = (id: string, text: string, sources: TextSourceRange[] = []) => {
     const body = splitThinkingFromBody(text).body;
@@ -1315,6 +1359,12 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
     const event = tools.get(toolCallId);
     if (!event) return;
     seenTools.add(toolCallId);
+    noteSpan(
+      event.startedAt,
+      event.startedAt !== undefined && typeof event.durationMs === "number"
+        ? event.startedAt + event.durationMs
+        : undefined,
+    );
     pendingTools.push(event);
     pendingDetails.push({ kind: "tool", id, event });
   };
@@ -1330,10 +1380,18 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
     if (item.kind === "text") {
       appendText(item.id, item.text, timelineTextSource(item).sources);
     } else if (item.kind === "reasoning") {
-      // Collected by the caller into the single top-level thinking fold;
-      // a per-segment "思考了 X 秒" row would fragment one thinking phase
-      // into many mistimed rows and mix it with tool activity.
-      continue;
+      // Its own row, in place: a later segment must never be appended to an
+      // earlier one's text just because both are reasoning.
+      noteSpan(item.startedAt, item.endedAt);
+      pendingDetails.push({
+        kind: "reasoning",
+        id: item.id,
+        text: item.text,
+        reasoningMs:
+          item.startedAt !== undefined && item.endedAt !== undefined
+            ? Math.max(0, item.endedAt - item.startedAt)
+            : undefined,
+      });
     } else if (item.kind === "tool") {
       appendTool(item.id, item.toolCallId);
     } else if (item.kind === "compaction" || item.kind === "retry") {
@@ -1417,42 +1475,33 @@ function InterleavedAssistantFlow({
   const processTools: ToolProgress[] = processSegments.flatMap((segment) =>
     segment.kind === "execution" ? segment.tools : [],
   );
+  // The settled aggregate is ONE row for every execution segment, so its
+  // "worked for" span is the measured sum of those segments. The message's
+  // own process span wins when the runtime reported one.
+  const processSpanMs = processSegments.reduce<number | undefined>(
+    (total, segment) =>
+      segment.kind === "execution" && segment.processMs !== undefined
+        ? (total ?? 0) + segment.processMs
+        : total,
+    undefined,
+  );
   const resultSource = joinTextSources(resultSegments.map(segment=>segment.kind === "text" ? segment : {text:"",sources:[]}), "\n\n");
   const resultText = resultSource.text.trim();
   const resultStreaming = !!message.streaming;
   const processStreaming = resultStreaming && resultText.length === 0;
-  // ONE thinking fold for the whole turn: every reasoning item is
-  // aggregated here — at the top of the message, with the total thinking
-  // time, containing nothing but thought — instead of being sprinkled
-  // across the execution rows as per-chunk "思考了 X 秒" fragments that
-  // also carried tool activity and sat at odd mid-message positions.
-  const thinkingItems = (message.assistantTimeline ?? []).filter(
-    (item): item is Extract<AssistantTimelineItem, { kind: "reasoning" }> =>
-      item.kind === "reasoning",
-  );
-  const thinkingText =
-    thinkingItems
-      .map((item) => item.text)
-      .filter((text) => text.length > 0)
-      .join("\n\n") || message.reasoning?.trim() || "";
-  const thinkingMs = thinkingItems.some(
-    (item) => item.startedAt !== undefined && item.endedAt !== undefined,
-  )
-    ? thinkingItems.reduce((total, item) => {
-        if (item.startedAt === undefined || item.endedAt === undefined) {
-          return total;
-        }
-        return total + Math.max(0, item.endedAt - item.startedAt);
-      }, 0)
-    : message.reasoningMs;
+  // Thinking segments stay in the series, each in its own row, so the turn
+  // collapses into ONE aggregate process row that expands back to the exact
+  // sequence the model produced (think → tool → think). Concatenating them
+  // into one top-level thought blob pasted every later segment inside the
+  // first one.
   const hasLifecycleRecords = flow.some(segment => segment.kind === "compaction" || segment.kind === "retry");
   const compacting = flow.some(segment => segment.kind === "compaction" && segment.compaction.status === "running");
   // The execution tail owns its live label or its completed row + fallback.
   // Historical disclosures above subsequent prose must not suppress it.
   const tailOwnsActivity = flow.at(-1)?.kind === "execution";
   const retrying = flow.at(-1)?.kind === "retry";
-  // A turn whose only content so far is the thinking fold needs no separate
-  // "working" tail — the fold itself is the activity.
+  // A turn whose only content so far is thought needs no separate "working"
+  // tail — the thought row itself is the activity.
   const hasPostThoughtContent = flow.length > 0 || resultText.length > 0;
   const showRunning = !retrying && resultStreaming && !awaitingUserInput && !compacting && !tailOwnsActivity && hasPostThoughtContent;
 
@@ -1532,28 +1581,22 @@ function InterleavedAssistantFlow({
     !!message.streaming && trace.reasoningText.length > 0
       ? compactProgressNote(trace.reasoningText)
       : "";
+  // While a turn streams, its newest thought is the live trace: the segment
+  // ending in a reasoning row hands that row's full text to the disclosure so
+  // a collapsed series still shows what the model is thinking right now.
+  const segmentLiveReasoning = (
+    segment: AssistantFlowItem,
+    index: number,
+  ): string => {
+    if (!resultStreaming || index !== flow.length - 1) return "";
+    if (segment.kind !== "execution") return "";
+    const last = segment.details.at(-1);
+    return last?.kind === "reasoning" ? last.text : "";
+  };
 
   return (
     <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
       <div ref={flowRef} className="flex min-w-0 flex-col gap-2">
-        {thinkingItems.length > 0 && (
-          <ExecutionDisclosure
-            details={[
-              {
-                kind: "reasoning",
-                id: `${message.uiId}:thinking`,
-                text: thinkingText,
-                reasoningMs: thinkingMs,
-              },
-            ]}
-            tools={[]}
-            streaming={resultStreaming && !awaitingUserInput}
-            latestProgress={
-              resultStreaming ? compactProgressNote(thinkingText) : ""
-            }
-            liveReasoning={resultStreaming ? thinkingText : ""}
-          />
-        )}
         {resultStreaming || hasLifecycleRecords ? (
           <>
             {trace.reasoningText.length > 0 &&
@@ -1601,6 +1644,8 @@ function InterleavedAssistantFlow({
                   details={segment.details}
                   tools={segment.tools}
                   streaming={resultStreaming && index === flow.length - 1 && !awaitingUserInput}
+                  liveReasoning={segmentLiveReasoning(segment, index)}
+                  processMs={segment.processMs}
                   defaultExpanded={resultStreaming}
                 />
               ),
@@ -1617,7 +1662,7 @@ function InterleavedAssistantFlow({
                 tools={processTools}
                 streaming={processStreaming}
                 latestProgress={clusterProgress}
-                processMs={message.processMs}
+                processMs={message.processMs ?? processSpanMs}
               />
             )}
             {resultText.length > 0 && (
