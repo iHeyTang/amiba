@@ -407,55 +407,32 @@ export function getQuickAskWindow(): BrowserWindow | null {
 }
 
 /**
- * Stagger between the shell reporting ready and Quick-Ask being warmed. Both
- * the pet window and this one boot on that same signal, so a short gap keeps two
- * renderer processes from starting in the same tick. It is deliberately small:
- * a summon that arrives while the warm-up is still loading joins the boot in
- * flight (`summonQuickAsk` waits for `did-finish-load`) instead of starting a
- * second one, so the popup is ready sooner either way.
- */
-const QUICK_ASK_PREWARM_DELAY_MS = 300;
-
-/**
- * How long a warmed-but-never-summoned window is allowed to sit resident.
+ * Boot the Quick-Ask renderer ahead of the first summon, resolving once its page
+ * has loaded.
  *
- * The ordinary "hidden for 10 minutes" reaper only starts once the window has
- * been hidden, which never happens if nobody ever opens it. Without this bound a
- * warmed window that is never used would hold a renderer process and the chat
- * engine for the whole session.
+ * Quick-Ask is created lazily, so the first open after launch pays for a
+ * renderer process, its bundle (~1.6 MB) and the chat engine. The startup screen
+ * stays up until this resolves, so the cost lands on a loading indicator the
+ * user already expects instead of on their first double-tap. A summon that
+ * arrives while the warm-up is still loading joins the boot in flight
+ * (`summonQuickAsk` waits for `did-finish-load`) rather than starting a second
+ * one.
  */
-const QUICK_ASK_PREWARM_RECLAIM_MS = 10 * 60 * 1000;
+export function prewarmQuickAsk(): Promise<void> {
+  if (quickAskWindow && !quickAskWindow.isDestroyed()) return whenQuickAskLoaded();
+  try {
+    return whenQuickAskLoaded(createQuickAskWindow());
+  } catch (error) {
+    console.warn("[amiba] Quick-Ask prewarm failed:", error);
+    return Promise.resolve();
+  }
+}
 
-let prewarmReclaimTimer: ReturnType<typeof setTimeout> | undefined;
-
-/**
- * Boot the Quick-Ask renderer ahead of the first summon.
- *
- * Quick-Ask is created lazily and reclaimed after 10 minutes hidden, so the
- * first open after launch pays for a renderer process, its bundle (~1.6 MB) and
- * the chat engine. Warming it as soon as the shell is up moves that cost off the
- * user's first double-tap — including a double-tap a second after launch — while
- * the reclaim timer below keeps an unused window from staying resident forever.
- */
-export function prewarmQuickAsk(delayMs = QUICK_ASK_PREWARM_DELAY_MS): void {
-  const timer = setTimeout(() => {
-    if (quickAskWindow && !quickAskWindow.isDestroyed()) return;
-    try {
-      createQuickAskWindow();
-    } catch (error) {
-      console.warn("[amiba] Quick-Ask prewarm failed:", error);
-      return;
-    }
-    if (prewarmReclaimTimer !== undefined) clearTimeout(prewarmReclaimTimer);
-    prewarmReclaimTimer = setTimeout(() => {
-      prewarmReclaimTimer = undefined;
-      const win = quickAskWindow;
-      if (!win || win.isDestroyed() || win.isVisible()) return;
-      // Once it has been summoned the ordinary hide/blur reaper owns it.
-      if (lastSummonAt !== 0) return;
-      destroyQuickAskWindow();
-    }, QUICK_ASK_PREWARM_RECLAIM_MS);
-    prewarmReclaimTimer.unref?.();
-  }, Math.max(0, delayMs));
-  timer.unref?.();
+function whenQuickAskLoaded(win = quickAskWindow): Promise<void> {
+  const contents = win && !win.isDestroyed() ? win.webContents : undefined;
+  if (!contents || !contents.isLoadingMainFrame()) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    contents.once("did-finish-load", () => resolve());
+    contents.once("did-fail-load", () => resolve());
+  });
 }

@@ -1,5 +1,8 @@
 import { registerAppUpdates, finishPendingUpdate } from "./updates";
-import { installDesktopPetWindow } from "./desktop-pet-window";
+import {
+  installDesktopPetWindow,
+  whenDesktopPetBooted,
+} from "./desktop-pet-window";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { mkdirSync } from "node:fs";
@@ -50,6 +53,7 @@ import {
 } from "./external-inbox";
 import { startHotkeyManager, stopHotkeyManager } from "./hotkey";
 import { markShellReady, whenShellReady } from "./shell-ready";
+import { runStartupWarmup } from "./startup-warmup";
 import { registerIpcHandlers } from "./ipc";
 import { registerEmbeddedPageHandlers } from "./embedded-page";
 import { DesktopExtensionHost } from "./desktop-extensions";
@@ -733,14 +737,24 @@ if (!gotSingleInstanceLock) {
     }
     registerQuickAskIpcHandlers(summonWindow);
 
-    // Quick-Ask is created lazily, so the first summon after launch used to pay
-    // for a renderer process, its bundle and the chat engine. Warm it once the
-    // shell is up (the IPC it needs is registered above). Waiting on the
-    // renderer's signal instead of a fixed delay keeps that boot off the first
-    // paint.
-    void whenShellReady().then((ready) => {
-      if (ready) prewarmQuickAsk();
-    });
+    // Warm the surfaces the user can reach *before* the UI is revealed. The
+    // renderer keeps its startup screen up until the `shell:reveal` below, so
+    // these boots land on a loading indicator the user already expects instead
+    // of on their first double-tap or their first look at the pet
+    // (see startup-warmup.ts).
+    void (async () => {
+      if (!(await whenShellReady())) return;
+      const warmup = await runStartupWarmup([
+        { label: "desktop-pet", boot: whenDesktopPetBooted },
+        { label: "quick-ask", boot: () => prewarmQuickAsk() },
+      ]);
+      if (!warmup.completed)
+        console.warn(
+          `[amiba] startup warm-up still running: ${warmup.pending.join(", ")}`,
+        );
+      const win = mainWindow;
+      if (win && !win.isDestroyed()) win.webContents.send("shell:reveal");
+    })();
 
     // Load the persisted summon-hotkey config and start listening. The
     // manager subscribes to renderer writes too, so changes from the

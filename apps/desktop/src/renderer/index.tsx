@@ -63,13 +63,13 @@ function waitForAmibaRoot(timeoutMs = 30_000): Promise<void> {
   return new Promise((resolve, reject) => {
     const finish = (): void => {
       shellReady = true;
-      removeStartupScreen();
       window.clearTimeout(timeout);
       observer.disconnect();
       window.removeEventListener(ROOT_READY_EVENT, finish);
-      // The shell is on screen: this is the signal the main process waits for
-      // before booting the pet and Quick-Ask renderers, so a second renderer
-      // boot never lands on the first paint.
+      // The shell is mounted, but the startup screen stays up: main now warms
+      // the surfaces the user can reach (the pet window, Quick-Ask) and calls
+      // back when they are ready, so the UI is never revealed with a cold path
+      // behind it. `waitForReveal` consumes that call.
       window.amiba.shell.notifyReady();
       window.queueMicrotask(() => {
         for (const sessionId of pendingSessionIds.splice(0)) {
@@ -97,6 +97,30 @@ function waitForAmibaRoot(timeoutMs = 30_000): Promise<void> {
     // A fast shell can mount before this waiter is installed. Run the same
     // cleanup and pending-navigation drain for both arrival orders.
     if (document.querySelector("[data-amiba-product-shell]")) finish();
+  });
+}
+
+/**
+ * Wait for main's "everything is warm" signal. Bounded: a warm-up that hangs
+ * (or a main process that never answers) must still let the user in, and this
+ * bound sits above main's own warm-up timeout so the normal path always wins.
+ */
+function waitForReveal(timeoutMs = 12_000): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer: number | undefined;
+    let unsubscribe: () => void = () => {};
+    // `onReveal` can call back synchronously (the signal may already have
+    // arrived), so nothing it touches may be declared after it runs.
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+      unsubscribe();
+      resolve();
+    };
+    unsubscribe = window.amiba.shell.onReveal(finish);
+    timer = window.setTimeout(finish, timeoutMs);
   });
 }
 
@@ -194,6 +218,11 @@ void (async () => {
       });
     }
     await waitForAmibaRoot();
+    // The shell is mounted, but nothing is revealed until main reports that the
+    // surfaces behind it are warm — the startup screen is the only place where
+    // waiting is honest.
+    await waitForReveal();
+    removeStartupScreen();
   } catch (error) {
     console.error("[renderer] DSH Client Web Shell boot failed:", error);
     // The overlay is opaque and fixed; it must go or it hides the failure.

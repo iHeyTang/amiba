@@ -106,6 +106,8 @@ interface AmibaBridgeApi {
   shell: {
     openExternal(url: string): Promise<void>;
     notifyReady(): void;
+    /** Called when main has warmed the startup surfaces; may fire immediately. */
+    onReveal(listener: () => void): () => void;
   };
   window: {
     close(): Promise<void>;

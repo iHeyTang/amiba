@@ -59,6 +59,19 @@ ipcRenderer.on("ui:open-settings", () => {
   for (const listener of openSettingsListeners) listener();
 });
 
+/**
+ * The startup screen stays up until the main process has warmed every surface
+ * the user can reach. The signal can arrive before a listener attaches (main
+ * only sends it after the shell reported ready), so the preload latches it.
+ */
+let shellRevealed = false;
+const shellRevealListeners = new Set<() => void>();
+ipcRenderer.on("shell:reveal", () => {
+  shellRevealed = true;
+  for (const listener of [...shellRevealListeners]) listener();
+  shellRevealListeners.clear();
+});
+
 const api = {
   appUpdates: {
     getState: (): Promise<import("@amiba/app-runtime/platform").AppUpdateState> => ipcRenderer.invoke("app-updates:state"),
@@ -130,11 +143,23 @@ const api = {
     openExternal: (url: string) =>
       ipcRenderer.invoke("shell:open-external", url),
     /**
-     * Tells the main process the product shell is on screen. Main uses it to
-     * start the second/third renderer *after* the first paint instead of
-     * guessing with a fixed delay (see `main/shell-ready.ts`).
+     * Tells the main process the shell is on screen. Main uses it to start the
+     * second/third renderer (see `main/shell-ready.ts`) while the startup screen
+     * is still up.
      */
     notifyReady: () => ipcRenderer.send("shell:ready"),
+    /**
+     * Fires once main has finished warming those surfaces. The callback runs
+     * immediately if the signal already arrived.
+     */
+    onReveal: (listener: () => void) => {
+      if (shellRevealed) {
+        listener();
+        return () => {};
+      }
+      shellRevealListeners.add(listener);
+      return () => shellRevealListeners.delete(listener);
+    },
   },
 
   window: {

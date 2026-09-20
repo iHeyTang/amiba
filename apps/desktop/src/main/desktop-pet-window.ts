@@ -18,6 +18,33 @@ export function clampPetPosition(
     ),
   };
 }
+/**
+ * Whether the pet window is switched on, and whether its renderer has finished
+ * loading its page. The startup warm-up waits for the latter before letting the
+ * renderer reveal the UI, so the pet is never still booting behind a UI the user
+ * has already started using.
+ */
+let desktopPetEnabled = false;
+let desktopPetBooted = false;
+const desktopPetBootWaiters = new Set<() => void>();
+
+export function isDesktopPetEnabled(): boolean {
+  return desktopPetEnabled;
+}
+
+/** Resolves once the pet window's page is loaded; immediate when it is off. */
+export function whenDesktopPetBooted(): Promise<void> {
+  if (!desktopPetEnabled || desktopPetBooted) return Promise.resolve();
+  return new Promise<void>((resolve) => desktopPetBootWaiters.add(resolve));
+}
+
+function markDesktopPetBooted(): void {
+  if (desktopPetBooted) return;
+  desktopPetBooted = true;
+  for (const waiter of [...desktopPetBootWaiters]) waiter();
+  desktopPetBootWaiters.clear();
+}
+
 export async function installDesktopPetWindow(
   main: () => BrowserWindow | null,
   openMain: () => void,
@@ -42,6 +69,7 @@ export async function installDesktopPetWindow(
   } catch {
     /* First launch. */
   }
+  desktopPetEnabled = enabled;
   let win: BrowserWindow | null = null,
     ready = false;
   let dragTimer: ReturnType<typeof setInterval> | undefined;
@@ -219,10 +247,15 @@ export async function installDesktopPetWindow(
       const base = url.endsWith("/") ? url : `${url}/`;
       void w.loadURL(new URL("pet/index.html", base).href);
     } else void w.loadFile(path.join(directory, "../renderer/pet/index.html"));
+    // A failed load resolves the warm-up too: the pet is decorative, and the
+    // startup screen must never be held hostage by it.
+    w.webContents.once("did-finish-load", markDesktopPetBooted);
+    w.webContents.once("did-fail-load", markDesktopPetBooted);
     return w;
   };
   const setEnabled = async (value: boolean) => {
     enabled = value;
+    desktopPetEnabled = value;
     if (enabled) {
       const w = create();
       if (ready) w.showInactive();
