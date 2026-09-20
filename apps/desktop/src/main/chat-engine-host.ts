@@ -361,9 +361,14 @@ export class ChatEngineHost {
         batcher = createFrameBatcher<EngineToClientMessage>((items) => {
           const target = contentsOf(id);
           if (!target || target.isDestroyed()) return;
-          // One message per tick; the preload fans the batch back out to its
-          // listeners in order, so the renderer commits once per tick.
-          target.send("chat-engine:message", items);
+          try {
+            // One message per tick; the preload fans the batch back out to its
+            // listeners in order, so the renderer commits once per tick.
+            target.send("chat-engine:message", items);
+          } catch {
+            // A frame can be disposed between the check and the send (window
+            // teardown, a dev reload). The batch is dropped, not fatal.
+          }
         });
         this.frameBatches.set(id, batcher);
       }
