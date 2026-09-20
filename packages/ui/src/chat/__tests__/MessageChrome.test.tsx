@@ -1868,3 +1868,22 @@ describe("ordered attachment row (files + images in original order)", () => {
     expect(row.textContent).not.toContain("img-a");
   });
 });
+
+it("windows long conversations to the newest turns and reveals the rest on demand", () => {
+  const messages: UiMessage[] = [];
+  for (let turn = 0; turn < 60; turn += 1) {
+    messages.push({ uiId: `u${turn}`, role: "user", content: `q${turn}`, runtimeSeq: turn * 2 });
+    messages.push({ uiId: `a${turn}`, role: "assistant", content: `a${turn}`, runtimeSeq: turn * 2 + 1 });
+  }
+  const { container, rerender } = render(<MessageTurns messages={messages} />);
+
+  // Only the newest slice is mounted, and the sentinel marks the cut.
+  expect(container.querySelector("[data-turn-window-sentinel]")).not.toBeNull();
+  expect(container.querySelector('[data-conversation-user-turn="u0"]')).toBeNull();
+  expect(container.querySelector('[data-conversation-user-turn="u59"]')).not.toBeNull();
+
+  // Short histories stay whole: no sentinel, nothing hidden.
+  rerender(<MessageTurns messages={messages.slice(-4)} />);
+  expect(container.querySelector("[data-turn-window-sentinel]")).toBeNull();
+  expect(container.querySelector('[data-conversation-user-turn="u58"]')).not.toBeNull();
+});

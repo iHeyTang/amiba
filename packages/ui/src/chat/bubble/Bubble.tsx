@@ -43,6 +43,7 @@ import {
   type ReactNode,
 } from "react";
 import { ChatMarkdown as Streamdown } from "@amiba/markdown";
+import { MESSAGE_TURN_WINDOW, windowTurns } from "../turn-window";
 import { useT } from "@amiba/i18n";
 
 import {
@@ -2013,10 +2014,46 @@ export function MessageTurns({
     return { turns, extensionRows, lastMessageForTurn, executionNotices };
   }, [messages, timelineRows, turnTailAnchors, sessionId]);
   const { turns, extensionRows, lastMessageForTurn, executionNotices } = derived;
+  // Long histories are windowed: mounting one bubble tree per turn on every
+  // session switch is what froze the app on continued conversations. Scrolling
+  // above the sentinel pulls in the previous slice of turns.
+  const [turnWindow, setTurnWindow] = useState(MESSAGE_TURN_WINDOW);
+  const windowSentinelRef = useRef<HTMLDivElement>(null);
+  const { visible: visibleTurns, hidden: hiddenTurns } = windowTurns(
+    turns,
+    turnWindow,
+  );
+  useEffect(() => {
+    // A different conversation starts from its own tail again.
+    setTurnWindow(MESSAGE_TURN_WINDOW);
+  }, [sessionId]);
+  useEffect(() => {
+    if (hiddenTurns === 0) return;
+    const node = windowSentinelRef.current;
+    if (!node || typeof IntersectionObserver !== "function") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting))
+          setTurnWindow((current) => current + MESSAGE_TURN_WINDOW);
+      },
+      // Preload before the user actually reaches the top of the history.
+      { rootMargin: "400px 0px 0px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hiddenTurns]);
 
   return (
     <>
-      {turns.map((turn, i) => {
+      {hiddenTurns > 0 && (
+        <div
+          ref={windowSentinelRef}
+          data-turn-window-sentinel=""
+          aria-hidden="true"
+          className="h-px w-full"
+        />
+      )}
+      {visibleTurns.map((turn, i) => {
         const replyItems = buildTurnReplyItems(turn.replies);
         // Rendering can fold assistant rows into an execution disclosure or omit
         // an empty row. Locate the tail after the row's final rendered item,
