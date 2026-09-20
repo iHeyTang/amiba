@@ -24,8 +24,24 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin({ exclude: WORKSPACE_PKGS })],
     build: {
       outDir: "out/main",
-      lib: { entry: "src/main/index.ts" },
       minify: "esbuild",
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, "src/main/index.ts"),
+          // The runtime host is a separate bundle because it runs in its own
+          // `utilityProcess` (Electron gives a utility process no `app`, so it
+          // cannot share the app entry).
+          "chat-engine-worker": resolve(
+            __dirname,
+            "src/main/chat-engine/worker-entry.ts",
+          ),
+        },
+        output: {
+          // Electron's main process and its utility children load CommonJS.
+          format: "cjs",
+          entryFileNames: "[name].js",
+        },
+      },
     },
   },
   preload: {
