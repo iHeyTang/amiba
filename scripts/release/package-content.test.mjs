@@ -38,10 +38,37 @@ test('builder 25 exclusions work with real workspace paths as well as node_modul
   const { FileMatcher } = require('app-builder-lib/out/fileMatcher.js');
   const filter = new FileMatcher(root, root, value => value, ['**/*', ...packageExclusions]).createFilter();
   const fileStat = { isDirectory: () => false };
-  for (const relative of ['packages/app-runtime/resources/dsh-runtime/node/bin/node', 'node_modules/@amiba/app-runtime/resources/dsh-runtime/node/bin/node', 'packages/app-runtime/.cache/npm/tarball', 'node_modules/example/dist/index.js.map']) {
+  for (const relative of [
+    'packages/app-runtime/resources/dsh-runtime/node/bin/node',
+    'node_modules/@amiba/app-runtime/resources/dsh-runtime/node/bin/node',
+    'packages/app-runtime/.cache/npm/tarball',
+    'node_modules/example/dist/index.js.map',
+    'node_modules/@amiba/app-runtime/README.zh-CN.md',
+    'node_modules/@amiba/ui/src/index.ts',
+  ]) {
     assert.equal(filter(path.join(root, relative), fileStat), false, relative);
   }
-  assert.equal(filter(path.join(root, 'packages/app-runtime/dist/dsh-runtime/index.js'), fileStat), true);
+  // No workspace package may be packed, in either path form: electron-vite
+  // inlines them into the app bundles, and builder's `asarUnpack` filter
+  // resolves their pnpm links to these real paths and throws on any file
+  // outside the app directory. Derived from disk so a new workspace package
+  // cannot silently reintroduce the failure.
+  const workspacePackages = [];
+  for (const scope of ['packages', 'plugins']) {
+    for (const entry of fs.readdirSync(path.join(root, scope))) {
+      if (fs.existsSync(path.join(root, scope, entry, 'package.json'))) workspacePackages.push(`${scope}/${entry}`);
+    }
+  }
+  assert.ok(workspacePackages.length > 5, `expected workspace packages, found ${workspacePackages.length}`);
+  for (const workspacePackage of workspacePackages) {
+    for (const file of ['package.json', 'README.zh-CN.md', 'src/index.ts']) {
+      const relative = `${workspacePackage}/${file}`;
+      assert.equal(filter(path.join(root, relative), fileStat), false, relative);
+    }
+  }
+  for (const relative of ['apps/desktop/out/main/index.js', 'apps/desktop/package.json', 'node_modules/ws/index.js', 'node_modules/node-pty/build/Release/pty.node']) {
+    assert.equal(filter(path.join(root, relative), fileStat), true, relative);
+  }
 });
 
 test('runtime CLI links remain usable after moving the package off the build machine', { skip: process.platform === 'win32' }, async () => {
