@@ -1,5 +1,5 @@
 import { patchSetDigest, canReusePatchSet } from "./reuse-dependencies.mjs";
-import { packageCommand, applyManagedRuntimePatches } from "./process-tools.mjs";
+import { packageCommand, applyManagedRuntimePatches, pruneRuntime, runtimePatchTargets } from "./process-tools.mjs";
 import { validateDependencyLock, validatePluginBuildSources } from "./dependency-lock.mjs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -423,47 +423,6 @@ function markerMatches(value) {
   return Object.entries(expected).every(([key, item]) => value?.[key] === item);
 }
 
-/**
- * Regexes for paths pruned from the staged runtime before it ships. The
- * runtime is shipped unpacked via electron-builder `extraResources`, so the
- * asar-level exclusions in `scripts/release/package-content.mjs` never see
- * it — this walk is the only place the release size is controlled.
- */
-const RUNTIME_PRUNE_PATTERNS = [
-  // Source maps — debug-only. The installed app carried ~270 MB of them.
-  /\.map$/u,
-  // TypeScript declarations — never executed at runtime. The installed app
-  // carried ~90-135 MB across `*.d.ts` / `*.d.mts` / `*.d.cts`.
-  /\.d\.(?:ts|mts|cts)$/u,
-  // Browser-only onnxruntime-web bundle. The memos plugin executes on
-  // onnxruntime-node in the Node runtime; `ort.webgl.js` / `ort.wasm` and
-  // the rest of the web build (~130 MB) are never referenced by any
-  // runtime JS (verified across the plugin + transformers packages).
-  /[\\/]node_modules[\\/]onnxruntime-web(?:[\\/]|$)/u,
-];
-
-async function pruneRuntime(root) {
-  let removed = 0;
-  const queue = (await fsp.readdir(root, { withFileTypes: true })).map((entry) =>
-    path.join(root, entry.name),
-  );
-  for (let i = 0; i < queue.length; i += 1) {
-    const current = queue[i];
-    const relative = path.relative(root, current).split(path.sep).join("/");
-    if (RUNTIME_PRUNE_PATTERNS.some((pattern) => pattern.test(relative))) {
-      await fsp.rm(current, { recursive: true, force: true });
-      removed += 1;
-      continue;
-    }
-    const info = await fsp.lstat(current);
-    if (info.isDirectory()) {
-      const children = await fsp.readdir(current, { withFileTypes: true });
-      for (const child of children) queue.push(path.join(current, child.name));
-    }
-  }
-  console.log(`[dsh:runtime] pruned ${removed} dev/cross-platform paths from the staged runtime`);
-}
-
 function verify(root = outputDir) {
   const markerFile = path.join(root, "runtime-manifest.json");
   if (!fs.existsSync(markerFile)) fail(`missing marker: ${markerFile}`);
@@ -877,7 +836,12 @@ try {
     path.join(stage, "runtime-manifest.json"),
     `${JSON.stringify(marker, null, 2)}\n`,
   );
-  await pruneRuntime(stage);
+  // Keep the files the reviewed patches write. Pruning a `*.d.ts` a patch
+  // touches would make the NEXT preparation fail: a reused app tree is only
+  // accepted after `applyManagedRuntimePatches` reverse-checks every patch,
+  // and a reverse check cannot succeed once its target file is gone.
+  const pruned = await pruneRuntime(stage, runtimePatchTargets(appDir, workspaceDir));
+  console.log(`[dsh:runtime] pruned ${pruned} dev/cross-platform paths from the staged runtime`);
   verify(stage);
   await fsp.mkdir(path.dirname(outputDir), { recursive: true });
   await fsp.rm(outputDir, { recursive: true, force: true });
