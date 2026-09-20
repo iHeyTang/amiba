@@ -1,6 +1,10 @@
 import type { AmibaNotification } from "@amiba/dsh-plugin-notification-hub/model";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { usePluginT } from "@amiba/ui/plugin";
+// Narrow ui entry, not the `@amiba/ui/plugin` barrel: the barrel also
+// re-exports the chat surfaces, which drags markdown/streamdown (and its
+// ~1 MB Mermaid chunk) into every window that needs nothing but a label —
+// the desktop pet window among them.
+import { usePluginT } from "@amiba/ui/plugin/i18n";
 import { Check, CircleAlert, LoaderCircle, MessageCircle } from "lucide-react";
 import type {
   DesktopPetBridge,

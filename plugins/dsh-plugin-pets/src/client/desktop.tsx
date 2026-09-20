@@ -7,7 +7,9 @@ import type {
   DesktopPetLayout,
 } from "@amiba/app-runtime/platform";
 import { DesktopMessage } from "./DesktopMessage.js";
-import { usePluginT } from "@amiba/ui/plugin";
+// See DesktopMessage: the narrow entry keeps this window's module graph away
+// from the chat surfaces the `@amiba/ui/plugin` barrel re-exports.
+import { usePluginT } from "@amiba/ui/plugin/i18n";
 import { petsI18n } from "./i18n.js";
 import { PetView } from "./PetView.js";
 import type { PetLibraryClient } from "./library.js";
