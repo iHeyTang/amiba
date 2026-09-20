@@ -1,12 +1,48 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { targets } from './config.mjs';
+
+const root = fileURLToPath(new URL('../../', import.meta.url));
+
+/**
+ * Every workspace package lives outside `apps/desktop`, but pnpm links it into
+ * `apps/desktop/node_modules/@amiba/*`. `apps/desktop/electron.vite.config.ts`
+ * inlines those packages into the main / preload / renderer bundles
+ * (`WORKSPACE_PKGS`, enforced by `apps/desktop/scripts/verify-desktop-bundle.mjs`),
+ * so the links are build-time only and must not be packed.
+ *
+ * They also break packaging outright: with `asarUnpack` set, builder 25
+ * evaluates its unpack filter for every packed file, that filter resolves each
+ * link to its real source path — outside the app directory — and
+ * `getRelativePath` throws ("…/packages/app-runtime/README.zh-CN.md must be
+ * under …/apps/desktop/").
+ *
+ * Derived from the directory listing rather than a hand-kept name list, so a
+ * new workspace package cannot silently reintroduce the failure. Only
+ * `packages/*` and `plugins/*` are considered: `apps/*` are the apps
+ * themselves, and excluding one of those would strip the packaged app.
+ */
+function workspacePackageExclusions() {
+  const patterns = ['!**/node_modules/@amiba{,/**/*}'];
+  for (const scope of ['packages', 'plugins']) {
+    const directory = path.join(root, scope);
+    if (!fs.existsSync(directory)) continue;
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      if (!fs.existsSync(path.join(directory, entry.name, 'package.json'))) continue;
+      patterns.push(`!**/${scope}/${entry.name}{,/**/*}`);
+    }
+  }
+  return patterns;
+}
 
 export const packageExclusions = [
   '!**/.cache{,/**/*}',
   '!**/_cacache{,/**/*}',
   // Workspace symlinks are matched against their real source paths by builder 25.
   '!**/resources/dsh-runtime{,/**/*}',
+  ...workspacePackageExclusions(),
   // `.d.mts.map` / `.d.cts.map` do not match the `{js,mjs,...}` glob above,
   // so catch every source map explicitly as well.
   '!**/*.{js,mjs,cjs,css,ts,tsx}.map',
