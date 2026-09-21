@@ -24,6 +24,7 @@ export class SessionIndex {
   private byId = new Map<string, DshSessionRow>();
   private readonly listeners = new Set<(rows: DshSessionRow[]) => void>();
   private readonly eventListeners = new Set<(event: DshMuxEnvelope) => void>();
+  private readonly initialInteractions = new Map<string, DshMuxEnvelope>();
   private readonly lifetime = new AbortController();
   private readonly client: () => Promise<Client>;
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -65,6 +66,7 @@ export class SessionIndex {
     clearTimeout(this.timer);
     this.listeners.clear();
     this.eventListeners.clear();
+    this.initialInteractions.clear();
   }
 
   private schedule(delay: number): void {
@@ -82,6 +84,9 @@ export class SessionIndex {
         if (signal.aborted) return;
         for await (const event of client.events(signal, () => {
           this.connected = true;
+          // A new carrier replays current pending interactions. Do not retain
+          // a request cancelled while the initial connection was unavailable.
+          if (!this.hasSnapshot) this.initialInteractions.clear();
           if (this.pending) this.reconcileAgain = true;
           else void this.refresh();
         })) {
@@ -102,7 +107,7 @@ export class SessionIndex {
             // from durable history. Only session/list can remove its row.
             this.requestReconcile();
           }
-          for (const listener of this.eventListeners) listener(event);
+          this.dispatch(event);
         }
       } catch {
         // Runtime restart / dropped carrier: preserve state until resnapshot.
@@ -116,6 +121,27 @@ export class SessionIndex {
         signal.addEventListener("abort", finish, { once: true });
       });
     }
+  }
+
+  private dispatch(event: DshMuxEnvelope): void {
+    if (!this.hasSnapshot) {
+      const frame = event.payload;
+      // ActivitySource cannot select a session before its first index. Retain
+      // pending waits until that baseline, including cancellation in the gap.
+      if (frame.type === "approval/requested") {
+        this.initialInteractions.set(`approval:${frame.approvalId}`, event); return;
+      }
+      if (frame.type === "approval/resolved") {
+        this.initialInteractions.delete(`approval:${frame.approvalId}`); return;
+      }
+      if (frame.type === "question/requested") {
+        this.initialInteractions.set(`question:${event.rpcId}`, event); return;
+      }
+      if (frame.type === "question/resolved") {
+        this.initialInteractions.delete(`question:${frame.questionRpcId}`); return;
+      }
+    }
+    for (const listener of this.eventListeners) listener(event);
   }
 
   private isDelta(frame: DshMuxFrame): boolean {
@@ -160,6 +186,11 @@ export class SessionIndex {
     this.byId = next;
     this.rows = rows;
     for (const listener of this.listeners) listener(rows);
+    if (first) {
+      const interactions = [...this.initialInteractions.values()];
+      this.initialInteractions.clear();
+      for (const event of interactions) this.dispatch(event);
+    }
   }
 
   private refresh(): Promise<void> {

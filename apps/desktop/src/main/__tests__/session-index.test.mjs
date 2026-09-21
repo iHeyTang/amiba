@@ -13,7 +13,7 @@ function harness() {
     async *events(signal, onOpen) {
       const queue = []; let wake;
       const notify = () => { wake?.(); wake = undefined; };
-      const stream = { signal, push(payload) { queue.push({ payload }); notify(); }, drop() { queue.push(null); notify(); } };
+      const stream = { signal, push(payload, rpcId = "") { queue.push({ payload, rpcId }); notify(); }, drop() { queue.push(null); notify(); } };
       streams.push(stream);
       signal.addEventListener('abort', notify, { once: true });
       try {
@@ -123,5 +123,32 @@ test('buffers restored sessions until the initial complete snapshot, preventing 
     assert.equal(snapshots.length, 1);
     assert.equal(snapshots[0].length, 2);
     assert.equal(h.index.running('newer'), true);
+  } finally { h.index.dispose(); }
+});
+
+
+test('retains active approvals and questions until the first index, without replaying cancelled waits', async () => {
+  const h = harness(); let resolve;
+  h.list = () => new Promise(r => { resolve = r; });
+  const waits = [];
+  h.index.onEvent(event => {
+    if (/^(approval|question)\//.test(event.payload.type)) {
+      waits.push({ event, running: h.index.running('a') });
+    }
+  });
+  try {
+    h.index.start(); await flush();
+    h.streams[0].push({ type: 'approval/requested', sessionId: 'a', approvalId: 'cancelled' });
+    h.streams[0].push({ type: 'approval/resolved', sessionId: 'a', approvalId: 'cancelled', outcome: 'cancelled' });
+    h.streams[0].push({ type: 'approval/requested', sessionId: 'a', approvalId: 'active' });
+    h.streams[0].push({ type: 'question/requested', sessionId: 'a', questions: [] }, 'question');
+    await flush(); assert.deepEqual(waits, []);
+    resolve({ items: [row('a', { running: true })] }); await flush();
+    assert.equal(waits.length, 2);
+    assert.equal(waits[0].event.payload.approvalId, 'active');
+    assert.equal(waits[1].event.rpcId, 'question');
+    assert.ok(waits.every(wait => wait.running));
+    h.streams[0].push({ type: 'question/resolved', sessionId: 'a', questionRpcId: 'question', outcome: 'cancelled' });
+    await flush(); assert.equal(waits.length, 3);
   } finally { h.index.dispose(); }
 });
