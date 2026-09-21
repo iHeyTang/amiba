@@ -8,7 +8,7 @@
  *
  *   1. Follows the global events mux for interaction waits (approvals /
  *      questions) and the session-title projection.
- *   2. Follows the most recently active non-blank session's journal
+ *   2. Follows the most recently active running session's journal
  *      (`session/follow`) and projects its raw events onto the same phase
  *      lattice the chat surface uses (thinking / responding / tooling /
  *      waiting / completed / failed / interrupted).
@@ -74,6 +74,8 @@ export class ActivitySource {
   private activity: DesktopPetActivity = IDLE_ACTIVITY;
   private title: string | undefined;
   private followedSession = "";
+  private hasSessionSnapshot = false;
+  private latestSeenUpdate = -Infinity;
   private journalController: AbortController | undefined;
   private globalController: AbortController | undefined;
   private readonly offSessions: () => void;
@@ -93,10 +95,9 @@ export class ActivitySource {
   private restored = true;
   private revision = 0;
 
-  constructor(
-    private readonly client: () => Promise<DshApiClient>,
-    sessions: SessionIndex,
-  ) {
+  private readonly client: () => Promise<DshApiClient>;
+  constructor(client: () => Promise<DshApiClient>, sessions: SessionIndex) {
+    this.client = client;
     this.offSessions = sessions.onChange((rows) => this.onSessions(rows));
   }
 
@@ -163,11 +164,18 @@ export class ActivitySource {
 
   private onSessions(rows: DshSessionRow[]): void {
     const current = pickCurrentSession(rows);
+    // Short turns can start and finish between index polls. Replay new
+    // activity after startup as well, so their terminal state is not lost.
+    const shouldFollow = !!current && (current.running ||
+      (this.hasSessionSnapshot && current.updatedAt > this.latestSeenUpdate));
+    this.hasSessionSnapshot = true;
+    for (const row of rows) this.latestSeenUpdate = Math.max(this.latestSeenUpdate, row.updatedAt);
     const nextTitle =
       current?.title || rows.find((row) => row.sessionId === this.followedSession)?.title;
     if (nextTitle !== undefined) this.title = nextTitle;
     const nextId = current?.sessionId ?? "";
     if (nextId === this.followedSession) {
+      if (shouldFollow && !this.journalController) void this.startJournal(nextId);
       this.publish(false);
       return;
     }
@@ -178,7 +186,10 @@ export class ActivitySource {
     this.tools.clear();
     this.base = "idle";
     this.restored = true;
-    if (nextId) void this.startJournal(nextId);
+    // An idle homepage needs only the index's title, not a cold replay of the
+    // last conversation. Start following when work runs; retain that live
+    // subscription through turn/end so completion/errors are still observed.
+    if (nextId && shouldFollow) void this.startJournal(nextId);
     this.publish(true);
   }
 
@@ -192,7 +203,7 @@ export class ActivitySource {
         undefined,
         { kind: "session", sessionId },
       )) {
-        if (this.disposed || this.followedSession !== sessionId) return;
+        if (this.disposed || controller.signal.aborted || this.journalController !== controller) return;
         const frame = envelope.payload;
         if (frame.type === "session/event") {
           this.applyEvent(frame.event as unknown as RawSessionEvent);
@@ -276,7 +287,8 @@ export class ActivitySource {
       !forceRestored &&
       phase === this.activity.phase &&
       next.restored === this.activity.restored &&
-      next.sessionId === this.activity.sessionId
+      next.sessionId === this.activity.sessionId &&
+      next.title === this.activity.title
     ) {
       return;
     }

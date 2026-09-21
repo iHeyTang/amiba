@@ -80,3 +80,40 @@ test('observation ownership handles navigation during setup and ignores other wi
   await third;
   assert.equal(sender.listenerCount('did-start-navigation'), 0);
 });
+
+test('legacy previews observe only requested files and release pending work on unwatch', async () => {
+  const handlers = new Map(), opened = [], sent = [];
+  registerFileResourceIpc({ handle: (name, fn) => handlers.set(name, fn) }, () => '/workspace',
+    (root, candidate, changed, signal) => new Promise(resolve => opened.push({ root, candidate, changed, signal, resolve })));
+  const sender = Object.assign(new EventEmitter(), { id: 1, isDestroyed: () => false, send: (...args) => sent.push(args) });
+  const watching = handlers.get('files:watch')({ sender }, { subscriptionId: 'view', sessionId: 's', paths: ['a', 'b', 'a'] });
+  assert.deepEqual(opened.map(x => x.candidate), ['a', 'b']);
+  opened[0].changed('unlink', '/workspace/a');
+  assert.deepEqual(sent.pop(), ['files:changed', { subscriptionId: 'view', sessionId: 's', event: 'unlink', path: '/workspace/a' }]);
+  handlers.get('files:unwatch')({ sender }, 'view');
+  assert.ok(opened.every(x => x.signal.aborted));
+  const before = sent.length;
+  opened[1].changed('add', '/workspace/b');
+  assert.equal(sent.length, before);
+  opened.forEach(x => x.resolve(async () => {}));
+  await watching;
+  assert.equal(sender.listenerCount('destroyed'), 0);
+});
+
+test('a cancelled setup failure cannot remove a replacement subscription with the same id', async () => {
+  const handlers = new Map(), opened = [];
+  registerFileResourceIpc({ handle: (name, fn) => handlers.set(name, fn) }, () => '/workspace',
+    (_root, _path, _changed, signal) => new Promise((resolve, reject) => opened.push({ signal, resolve, reject })));
+  const sender = Object.assign(new EventEmitter(), { id: 1, isDestroyed: () => false, send() {} });
+  const start = id => handlers.get('files:observe-resource')({ sender }, { id, sessionId: 's', path: 'a' });
+  const stop = id => handlers.get('files:unobserve-resource')({ sender }, id);
+  const retained = start('retained'); opened[0].resolve(async () => {}); await retained;
+  const old = start('reused'); const rejected = assert.rejects(old, /cancelled discovery/);
+  stop('reused');
+  const replacement = start('reused'); opened[2].resolve(async () => {}); await replacement;
+  opened[1].reject(new Error('cancelled discovery')); await rejected;
+  stop('retained');
+  assert.equal(opened[2].signal.aborted, false);
+  stop('reused');
+  assert.equal(opened[2].signal.aborted, true);
+});

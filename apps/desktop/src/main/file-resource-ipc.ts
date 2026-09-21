@@ -1,7 +1,8 @@
 import type { IpcMain, WebContents } from 'electron';
+import type { WorkspaceFileEvent } from './workspace-file-observer';
 
-/** Resource observations are owned by the originating document, not just its
- * process. Reload/navigation closes them even if renderer cleanup never runs.
+/** Both preview APIs observe only requested files. Document ownership closes
+ * subscriptions on navigation/destruction, including setup still in flight.
  */
 export function registerFileResourceIpc(
   ipcMain: Pick<IpcMain, 'handle'>,
@@ -23,7 +24,7 @@ export function registerFileResourceIpc(
       released = true;
       for (const controller of subscriptions.values()) controller.abort();
       subscriptions.clear();
-      owners.delete(sender.id);
+      if (owners.get(sender.id) === owner) owners.delete(sender.id);
       sender.removeListener('destroyed', release);
       sender.removeListener('did-start-navigation', navigating);
     };
@@ -37,49 +38,51 @@ export function registerFileResourceIpc(
     return owner;
   }
 
-  ipcMain.handle('files:observe-resource', async (event, args: { id: string; sessionId: string; path: string }) => {
-    if (!args.id || !args.sessionId || typeof args.path !== 'string') throw new Error('Invalid resource observation.');
-    if (event.sender.isDestroyed()) return;
-    const owner = ownerFor(event.sender);
-    if (owner.subscriptions.has(args.id)) throw new Error('Duplicate resource observation.');
+  async function observe(sender: WebContents, id: string, sessionId: string, paths: string[], legacy = false) {
+    if (!id || !sessionId || !Array.isArray(paths) || paths.some(p => typeof p !== 'string' || !p.trim())) {
+      throw new Error('Invalid resource observation.');
+    }
+    if (sender.isDestroyed()) return;
+    const key = `${legacy ? 'watch' : 'resource'}:${id}`;
+    const owner = ownerFor(sender);
+    if (owner.subscriptions.has(key)) throw new Error('Duplicate resource observation.');
     const controller = new AbortController();
-    owner.subscriptions.set(args.id, controller);
+    owner.subscriptions.set(key, controller);
     let current: AbortController | undefined;
     let setup: Promise<void>;
-    const notify = () => {
-      if (!controller.signal.aborted && !event.sender.isDestroyed()) {
-        event.sender.send('files:resource-changed', args.id);
-      }
+    const notify = (event: WorkspaceFileEvent = 'change', path = paths[0] ?? '') => {
+      if (controller.signal.aborted || sender.isDestroyed()) return;
+      if (legacy) sender.send('files:changed', { subscriptionId: id, sessionId, path, event });
+      else sender.send('files:resource-changed', id);
     };
     const begin = (): Promise<void> => {
       current?.abort();
       const generation = new AbortController();
       current = generation;
       const pending = (async () => {
-        const root = rootForSession(args.sessionId);
+        const root = rootForSession(sessionId);
         if (!root) throw new Error('No workspace is bound to this conversation.');
-        await observeWorkspaceFile(root, args.path, () => {
-          if (current === generation && !generation.signal.aborted) notify();
-        }, generation.signal);
+        await Promise.all([...new Set(paths)].map(path => observeWorkspaceFile(root, path, (event, observed) => {
+          if (current === generation && !generation.signal.aborted) notify(event, observed);
+        }, generation.signal)));
       })();
-      // Later rebind failures invalidate metadata but keep the workspace change
-      // subscription, so a subsequent valid binding can establish observation.
       void pending.catch(() => {
-        if (current === generation && !generation.signal.aborted) notify();
+        generation.abort();
+        // Retain the binding subscription so a later valid root can recover.
+        if (current === generation) notify();
       });
       return pending;
     };
     const offWorkspace = onWorkspaceChange(change => {
-      if (change.sessionId !== args.sessionId || controller.signal.aborted) return;
+      if (change.sessionId !== sessionId || controller.signal.aborted) return;
       setup = begin();
-      notify();
+      for (const path of paths) notify('change', path);
     });
     const stop = () => { current?.abort(); offWorkspace(); };
     controller.signal.addEventListener('abort', stop, { once: true });
     try {
       setup = begin();
-      // Binding may change while initial native discovery is in flight. Only
-      // the latest generation's completion can resolve the caller's readiness.
+      // Binding may change during discovery; only current readiness counts.
       for (;;) {
         const pending = setup;
         try { await pending; } catch (error) {
@@ -89,15 +92,24 @@ export function registerFileResourceIpc(
       }
     } catch (error) {
       controller.abort();
-      owner.subscriptions.delete(args.id);
+      if (owner.subscriptions.get(key) === controller) owner.subscriptions.delete(key);
       if (!owner.subscriptions.size) owner.release();
       throw error;
     }
-  });
-  ipcMain.handle('files:unobserve-resource', (event, id: string) => {
-    const owner = owners.get(event.sender.id);
-    owner?.subscriptions.get(id)?.abort();
-    owner?.subscriptions.delete(id);
+  }
+  function stop(sender: WebContents, key: string) {
+    const owner = owners.get(sender.id);
+    owner?.subscriptions.get(key)?.abort();
+    owner?.subscriptions.delete(key);
     if (owner && !owner.subscriptions.size) owner.release();
+  }
+
+  ipcMain.handle('files:observe-resource', (event, args: { id: string; sessionId: string; path: string }) =>
+    observe(event.sender, args.id, args.sessionId, [args.path]));
+  ipcMain.handle('files:unobserve-resource', (event, id: string) => stop(event.sender, `resource:${id}`));
+  ipcMain.handle('files:watch', (event, args: { subscriptionId: string; sessionId: string; paths: string[] }) => {
+    if (!Array.isArray(args.paths)) throw new Error('Invalid file watch subscription.');
+    return observe(event.sender, args.subscriptionId, args.sessionId, args.paths.slice(0, 32), true);
   });
+  ipcMain.handle('files:unwatch', (event, id: string) => stop(event.sender, `watch:${id}`));
 }

@@ -7,7 +7,7 @@ export { workerSource }
 /** Resource kinds used by PDF.js 6's BinaryDataFactory requests. */
 export type PdfAssetKind = 'cMapUrl' | 'standardFontDataUrl' | 'wasmUrl'
 
-/** Original filenames mapped to base64, in the same PDF.js version as the worker. */
+/** Original filenames mapped to gzip-compressed base64, in the same PDF.js version as the worker. */
 export type PdfAssetMap = Readonly<Record<PdfAssetKind, Readonly<Record<string, string>>>>
 
 declare global {
@@ -33,7 +33,13 @@ export function createPdfBinaryDataFactory(assets: PdfAssetMap = __DSH_PDFJS_ASS
         const files = assets[kind]
         const data = Object.hasOwn(files, filename) ? files[filename] : undefined
         if (data === undefined) throw new Error(`PDF.js asset is not bundled: ${kind}/${filename}`)
-        return Uint8Array.from(atob(data), character => character.charCodeAt(0))
+        // Only decompress the resource PDF.js requests. Each call returns its
+        // own transferable buffer; no inflated asset cache survives the view.
+        const compressed = Uint8Array.from(atob(data), character => character.charCodeAt(0))
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) { controller.enqueue(compressed); controller.close() },
+        }).pipeThrough(new DecompressionStream('gzip'))
+        return new Response(stream).arrayBuffer().then(bytes => new Uint8Array(bytes))
       })
     }
   }

@@ -5,9 +5,8 @@
  * it as the structured cwd for each DSH turn and also adds a compact
  * user-turn context note so workspace switches stay explicit without
  * rebuilding the persisted system prompt. Sessions without a binding resolve
- * to the user's home directory. The default root is never watched recursively;
- * a chokidar watcher runs only for explicit project-directory bindings so the
- * app does not crawl the user's entire home directory.
+ * to the product workspace. Bindings are metadata only: file previews observe
+ * individual resources on demand, never a whole project for every session.
  *
  * Persistence: `workspace.bindings` stores `Record<sessionId, path>`.
  * Restored at startup; orphaned bindings (target deleted / unreadable)
@@ -18,7 +17,6 @@ import { EventEmitter } from "node:events"
 import fs from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
-import chokidar from "chokidar"
 import type { WorkspaceChange } from "@amiba/app-runtime/platform"
 
 import { mainStore } from "./storage"
@@ -26,56 +24,22 @@ import { getDefaultWorkspaceRoot, ensureDefaultWorkspaceRoot } from "./workspace
 
 const STORE_KEY = "workspace.bindings"
 
-/**
- * Directories chokidar must NEVER descend into when watching a
- * developer-style workspace. These trees can each contain hundreds of
- * thousands of files and would saturate the IPC channel (and the
- * watcher's event loop) within seconds of binding a typical Node /
- * Rust / Python repo. The patterns match anywhere along the path.
- */
-const IGNORED_PATTERNS = [
-  /(^|[\\/])\.git([\\/]|$)/,
-  /(^|[\\/])\.hg([\\/]|$)/,
-  /(^|[\\/])\.svn([\\/]|$)/,
-  /(^|[\\/])\.DS_Store$/,
-  /(^|[\\/])node_modules([\\/]|$)/,
-  /(^|[\\/])dist([\\/]|$)/,
-  /(^|[\\/])build([\\/]|$)/,
-  /(^|[\\/])out([\\/]|$)/,
-  /(^|[\\/])target([\\/]|$)/,
-  /(^|[\\/])\.next([\\/]|$)/,
-  /(^|[\\/])\.nuxt([\\/]|$)/,
-  /(^|[\\/])\.turbo([\\/]|$)/,
-  /(^|[\\/])\.cache([\\/]|$)/,
-  /(^|[\\/])coverage([\\/]|$)/,
-  /(^|[\\/])\.venv([\\/]|$)/,
-  /(^|[\\/])__pycache__([\\/]|$)/,
-]
-
-function isIgnored(p: string): boolean {
-  return IGNORED_PATTERNS.some((re) => re.test(p))
-}
-
 interface Binding {
   path: string
-  watcher: chokidar.FSWatcher | null
 }
 
 /**
  * Validate a candidate bind target. Rejects:
  *   - empty / whitespace strings
  *   - paths that aren't an existing directory
- *   - paths that are the FS root (`/`, `C:\`) — chokidar would try to
- *     walk the whole disk
- *   - the user's bare $HOME — same risk + likely a misclick
+ *   - the FS root or bare $HOME: explicit bindings must name a project
  */
 async function validateBindTarget(target: string): Promise<string> {
   if (!target || !target.trim()) {
     throw new Error("workspace.bind: path required")
   }
   const abs = path.resolve(target)
-  // Reject the FS root and bare home — both produce catastrophic watcher
-  // load and are almost certainly mistakes.
+  // Keep explicit project bindings scoped to a project directory.
   const parsed = path.parse(abs)
   if (abs === parsed.root) {
     throw new Error(`workspace.bind: refusing to bind filesystem root (${abs})`)
@@ -135,10 +99,7 @@ class WorkspaceManager extends EventEmitter {
       if (typeof raw !== "string" || !raw) continue
       try {
         const abs = await validateBindTarget(raw)
-        const watcher = startWatcher(abs, (event, p) =>
-          this.emitFile(sessionId, event, p),
-        )
-        this.bindings.set(sessionId, { path: abs, watcher })
+        this.bindings.set(sessionId, { path: abs })
         restored[sessionId] = abs
       } catch (err) {
         console.warn(
@@ -265,10 +226,7 @@ class WorkspaceManager extends EventEmitter {
     const existing = this.bindings.get(sessionId)
     if (existing && existing.path === abs) return
     await this.stopBinding(sessionId)
-    const watcher = startWatcher(abs, (event, p) =>
-      this.emitFile(sessionId, event, p),
-    )
-    this.bindings.set(sessionId, { path: abs, watcher })
+    this.bindings.set(sessionId, { path: abs })
     await this.persist()
     this.emit("change", {
       kind: "bound",
@@ -293,42 +251,15 @@ class WorkspaceManager extends EventEmitter {
   }
 
   /**
-   * Subscribe to bind/unbind changes. File-change events stay in-process
-   * — see module header for rationale.
+   * Subscribe to bind/unbind changes. File previews own their observations.
    */
   onChange(cb: (change: WorkspaceChange) => void): () => void {
     this.on("change", cb)
     return () => this.off("change", cb)
   }
 
-  /**
-   * Internal file-event channel for in-main consumers (e.g. an eventual
-   * fs-scoped plugin). NOT exposed to renderers. Listener should be
-   * cheap — events fire once per add/change/unlink under the bound tree.
-   */
-  onFile(
-    cb: (e: {
-      sessionId: string
-      event: "add" | "change" | "unlink"
-      path: string
-    }) => void,
-  ): () => void {
-    this.on("file", cb)
-    return () => this.off("file", cb)
-  }
-
-  private emitFile(
-    sessionId: string,
-    event: "add" | "change" | "unlink",
-    p: string,
-  ): void {
-    this.emit("file", { sessionId, event, path: p })
-  }
-
   private async stopBinding(sessionId: string): Promise<void> {
-    const b = this.bindings.get(sessionId)
     this.bindings.delete(sessionId)
-    if (b?.watcher) await b.watcher.close()
   }
 
   private async persist(): Promise<void> {
@@ -342,26 +273,6 @@ class WorkspaceManager extends EventEmitter {
       await this.stopBinding(sid)
     }
   }
-}
-
-function startWatcher(
-  target: string,
-  onFile: (event: "add" | "change" | "unlink", path: string) => void,
-): chokidar.FSWatcher {
-  const w = chokidar.watch(target, {
-    ignored: (p: string) => isIgnored(p),
-    ignoreInitial: true,
-    persistent: true,
-    depth: 8,
-    awaitWriteFinish: { stabilityThreshold: 150, pollInterval: 50 },
-  })
-  w.on("add", (p: string) => onFile("add", p))
-  w.on("change", (p: string) => onFile("change", p))
-  w.on("unlink", (p: string) => onFile("unlink", p))
-  w.on("error", (err: unknown) => {
-    console.warn("[workspace] watcher error:", err)
-  })
-  return w
 }
 
 export const workspaceManager = new WorkspaceManager()

@@ -493,9 +493,8 @@ export interface ShellAdapter {
  * A workspace change event. Always carries the `sessionId` the binding
  * belongs to so a single renderer subscriber can route events across
  * multiple chat surfaces. File-change events are NOT broadcast over this
- * channel — the watcher consumes them in main for fs-scoped tooling but
- * doesn't fan them out to renderers (they were a no-op at every
- * subscriber and easy to flood under noisy trees like `node_modules`).
+ * channel. File previews subscribe to individual resources on demand;
+ * restoring workspace bindings does not watch directory trees.
  */
 export type WorkspaceChange =
   | { kind: "bound"; sessionId: string; path: string }
