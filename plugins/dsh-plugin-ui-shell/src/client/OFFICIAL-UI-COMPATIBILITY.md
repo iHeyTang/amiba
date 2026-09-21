@@ -15,6 +15,25 @@ and radii. Controls and deliverables overrides are also pinned CSS-module
 selectors. Check these selectors against the shipped frontend on every upgrade.
 Do not replace `Menu` positioning with hand-authored coordinates.
 
+## Attachment seats
+
+Amiba renders attachments — the user bubble, the composer and the empty-state
+composer — through the shared `AttachmentGallery` component (compact tiles for
+images, chips for files). The official seats stay part of the vocabulary and
+keep their takeover semantics:
+
+- `conversation.message.images`: the user bubble dispatches this seat once per
+  message (a whole-group call). Amiba's default occupant is
+  `MessageImagesGallery`, registered at `SHADOW_PRIORITY` (-1) — below the
+  official ui-attachment occupant's implicit 0 — so a plugin registering below
+  the shadow priority (≤ -2) replaces the image side of the row, while the
+  default stays the shared gallery tiles. The owner shape
+  (`images`/`loadImage`/`align`/`compact`) is unchanged from the official
+  contract.
+- `conversation.input.attachments`: kept declared for third-party hosts that
+  dispatch it themselves; Amiba's composer renders the gallery natively from
+  its attachment hook and no longer forwards this seat.
+
 Run `node plugins/dsh-plugin-ui-shell/scripts/audit-official-theme.mjs` from the
 workspace after installing dependencies. This checks DSH token references in
 installed official UI bundles and primitive styles. It includes potentially

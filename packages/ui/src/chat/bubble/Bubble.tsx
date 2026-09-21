@@ -1,4 +1,4 @@
-import type { AssistantTimelineItem } from "@amiba/app-runtime/protocol";
+import type { AssistantTimelineItem, MessageAttachment } from "@amiba/app-runtime/protocol";
 import { toolCallTreeContains } from "./nested-tool-calls";
 import { toolCallBlockFromProgress } from "./tool-call-block";
 import { WorkbenchViewBoundary } from "../workbench-extensions";
@@ -65,6 +65,7 @@ import {
 import { splitTrailingTextRun } from "../internal/turn-presentation";
 import { ApprovalRecordChip } from "./approval";
 import { AgentDestinationChip, AttachmentBadgeView } from "./chips";
+import { AttachmentGallery, type AttachmentGalleryItem } from "../attachment-gallery";
 import { ToolChip } from "./tool-chip";
 import { hasToolDetail } from "./tool-presentation";
 import { CodeEvidence } from "./tool-evidence";
@@ -214,7 +215,17 @@ function MessageNoticeRow({
 
 export interface BubbleProps {
   m: UiMessage;
-  messageImages?: (images: NonNullable<UiMessage["images"]>) => ReactNode;
+  /**
+   * Renderer for the message's images — the shell's dispatch of the official
+   * `conversation.message.images` seat. The default occupant renders compact
+   * gallery tiles; a plugin taking the seat over replaces just the image
+   * side. The second argument mirrors the row's lone-image rule: `true` when
+   * the row holds more than one attachment, so a mixed row collapses to
+   * small tiles exactly like the composer/empty-state input. With no
+   * renderer (loader-less hosts) images are omitted and files keep their
+   * chips.
+   */
+  messageImages?: (images: NonNullable<UiMessage["images"]>, compact?: boolean) => ReactNode;
   /** Turn-level renderers use this after moving execution details into one summary. */
   suppressTrace?: boolean;
   /** MessageTurns renders terminal run state after the whole execution segment. */
@@ -284,16 +295,73 @@ function BubbleUnmemoized({
     const fileBadges = m.attachmentBadges ?? [];
     // The attachment row mirrors the official user message: one container,
     // attachments in their ORIGINAL content order, files and images
-    // interleaved as the message carried them. Every image item rides the
-    // official `conversation.message.images` slot (per-item, exactly as the
-    // official chat view invokes it), so Amiba's default capsule rendering
-    // and any plugin takeover both stay inside the same row.
-    const attachments = m.attachments ?? [
-      ...fileBadges.map((badge) => ({ kind: "file" as const, badge })),
+    // interleaved as the message carried them. When the ordered list is
+    // missing (optimistic live bubble, plugin messages) it is rebuilt from
+    // badges — an IMAGE badge renders as the same thumbnail tile as a
+    // durable image, not as a file chip.
+    const imageBadges = fileBadges.filter((badge) => badge.kind === "image");
+    const attachments: readonly MessageAttachment[] = m.attachments ?? [
+      ...fileBadges
+        .filter((badge) => badge.kind !== "image")
+        .map((badge) => ({ kind: "file" as const, badge })),
       ...(m.images ?? []).map((image) => ({ kind: "image" as const, image })),
     ];
-    const hasReferences = attachments.length > 0;
     const hasContent = bodyText.length > 0;
+    // ONE attachment presentation everywhere: file chips natively, images as
+    // a single seat invocation (the default `conversation.message.images`
+    // occupant renders the same compact tiles the composer uses; a plugin
+    // taking the seat over replaces just the image side, still inside the
+    // shared row). Only DURABLE image refs go through the seat — an image
+    // badge on an optimistic live bubble has no session-readable ref yet, so
+    // it renders straight from its 256px thumbnail as the same tile shape.
+    // The compact flag mirrors the row's lone-image rule so a lone image is
+    // the larger bounded preview and a mixed row collapses to small tiles,
+    // exactly like the composer/empty-state input.
+    const durableImages: NonNullable<UiMessage["images"]> =
+      m.images?.length
+        ? m.images
+        : attachments.flatMap((item) => (item.kind === "image" ? [item.image] : []));
+    const hasRefs = attachments.length > 0 || imageBadges.length > 0 || durableImages.length > 0;
+    // A durable message carries images as session-readable refs (`m.images`);
+    // the same image also appears as an attachmentBadge, which is ONLY used
+    // as the optimistic live fallback when no refs exist yet.
+    const optimisticImageBadges =
+      durableImages.length === 0 ? imageBadges : [];
+    const compactRow = attachments.length + imageBadges.length > 1;
+    const imageNode =
+      messageImages && durableImages.length > 0 ? (
+        <WorkbenchViewBoundary fallback={null}>
+          <MessageImages images={durableImages} render={messageImages} compact={compactRow} />
+        </WorkbenchViewBoundary>
+      ) : undefined;
+    let imageGroupPlaced = false;
+    const galleryItems: AttachmentGalleryItem[] = [];
+    // Optimistic badge-only images first — they have no durable ref, so they
+    // render straight from their thumbnail before the durable image group.
+    for (const badge of optimisticImageBadges) {
+      galleryItems.push({
+        kind: "image",
+        id: badge.uiId,
+        name: badge.name,
+        thumbUrl: badge.thumbDataUrl ?? null,
+        previewUrl: badge.thumbDataUrl ?? null,
+      });
+    }
+    for (const item of attachments) {
+      if (item.kind === "file") {
+        galleryItems.push({
+          kind: "file",
+          id: item.badge.uiId,
+          name: item.badge.name,
+          fileKind: item.badge.kind,
+          size: item.badge.size,
+        });
+        continue;
+      }
+      if (!imageNode || imageGroupPlaced) continue;
+      imageGroupPlaced = true;
+      galleryItems.push({ kind: "image", id: "message-images", node: imageNode });
+    }
     // A message a plugin dispatched on the user's behalf (a relayed task
     // brief, an inbound IM message) reads as a user turn but did not come
     // from the person at the composer — say so, in the same quiet chip the
@@ -317,29 +385,38 @@ function BubbleUnmemoized({
             {t("sidepanel.message.from", { source: sourceLabel })}
           </div>
         )}
-        {hasReferences && (
-          <div
-            data-message-attachments
-            className={cn(
-              "flex flex-wrap items-center gap-1.5",
-              hasContent && "mb-2",
-            )}
-          >
-            {attachments.map((item, index) =>
-              item.kind === "file" ? (
-                <AttachmentBadgeView key={item.badge.uiId} badge={item.badge} />
-              ) : messageImages ? (
-                <WorkbenchViewBoundary
-                  key={`image:${item.image.attachment.attachmentId}`}
-                  fallback={null}
-                >
-                  <MessageImages images={[item.image]} render={messageImages} />
-                </WorkbenchViewBoundary>
-              ) : (
-                <Fragment key={`image:${index}`} />
-              ),
-            )}
-          </div>
+        {hasRefs && (
+          galleryItems.length > 0 ? (
+            <div
+              data-message-attachments
+              className={hasContent ? "mb-2" : undefined}
+            >
+              <AttachmentGallery items={galleryItems} />
+            </div>
+          ) : (
+            <div
+              data-message-attachments
+              className={cn(
+                "flex flex-wrap items-center gap-1.5",
+                hasContent && "mb-2",
+              )}
+            >
+              {attachments.map((item, index) =>
+                item.kind === "file" ? (
+                  <AttachmentBadgeView key={item.badge.uiId} badge={item.badge} />
+                ) : messageImages ? (
+                  <WorkbenchViewBoundary
+                    key={`image:${item.image.attachment.attachmentId}`}
+                    fallback={null}
+                  >
+                    <MessageImages images={[item.image]} render={messageImages} />
+                  </WorkbenchViewBoundary>
+                ) : (
+                  <Fragment key={`image:${index}`} />
+                ),
+              )}
+            </div>
+          )
         )}
         {hasContent && (
           <div className="whitespace-pre-wrap break-words"><ReferenceText text={bodyText} /></div>
@@ -2343,7 +2420,8 @@ function UserActionButton({
   );
 }
 
-function MessageImages({ images, render }: {
+function MessageImages({ images, render, compact = false }: {
   images: NonNullable<UiMessage["images"]>;
   render: NonNullable<BubbleProps["messageImages"]>;
-}) { return render(images); }
+  compact?: boolean;
+}) { return render(images, compact); }

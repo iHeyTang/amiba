@@ -22,7 +22,7 @@ import {
 import { cn } from "../primitives";
 import { ArrowUp } from "lucide-react";
 
-import { AttachmentChip } from "./bubble/chips";
+import { AttachmentGallery, type AttachmentGalleryItem } from "./attachment-gallery";
 import {
   RichComposerEditor,
   type RichComposerHandle,
@@ -290,7 +290,6 @@ export interface ComposerProps {
    * (Quick-Ask) pass nothing and behave exactly as before.
    */
   inputOverlay?: ReactNode;
-  inputAttachments?: ComposerAttachmentsRenderer;
   inputDock?: ReactNode;
   composerDock?: ReactNode;
   inputLeft?: ReactNode;
@@ -464,7 +463,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       approvalModePicker,
       planSeat,
       inputOverlay,
-      inputAttachments,
       inputDock,
       composerDock,
       inputLeft,
@@ -746,29 +744,39 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       });
     }, [permissionSessionId, triggerRuntime, !!attachments]);
 
-    const attachmentSeatSession = permissionSessionId;
-    const attachmentSeatWritable = () => {
-      const binding = imageBindingRef.current;
-      return binding.sessionId === attachmentSeatSession && !!binding.attachments &&
-        !binding.disabled && !commandAttemptRef.current && !resolvingMentionRef.current;
-    };
-    const attachmentSeatCanAdd = () => attachmentSeatWritable() &&
-      !imageBindingRef.current.attachments?.attachmentBusy &&
-      !imageBindingRef.current.attachments?.attachmentUploading &&
-      (imageBindingRef.current.attachments?.canAddDraftImages?.() ?? true);
-    const attachmentSeat = inputAttachments?.({
-      attachments: attachments?.getDraftImages?.() ?? attachments?.draftImages ?? [],
-      canAcceptDrop: attachmentSeatCanAdd(),
-      uploads: attachments?.fileUploads ?? {},
-      onRetryFile: id => { if (attachmentSeatWritable()) imageBindingRef.current.attachments?.retryFileUpload?.(id); },
-      onAddFiles: files => {
-        if (!attachmentSeatCanAdd()) return;
-        if (files.length) void imageBindingRef.current.attachments?.addFiles([...files]);
-      },
-      onRemoveAttachment: id => {
-        if (attachmentSeatWritable()) imageBindingRef.current.attachments?.removeDraftImage?.(id);
-      },
-    });
+    const galleryItems: AttachmentGalleryItem[] = useMemo(
+      () =>
+        (attachments?.attachments ?? []).map((a) => {
+          const failed =
+            !!a.attachmentId && attachments?.fileUploads?.[a.attachmentId]?.status === "error";
+          const uploading = !!a.uploading;
+          return a.kind === "image"
+            ? {
+                kind: "image" as const,
+                id: a.uiId,
+                name: a.name,
+                thumbUrl: a.thumbDataUrl ?? null,
+                previewUrl: a.previewDataUrl ?? null,
+                uploading,
+                onRemove: () => attachments?.removeAttachment(a.uiId),
+              }
+            : {
+                kind: "file" as const,
+                id: a.uiId,
+                name: a.name,
+                fileKind: a.kind,
+                size: a.size,
+                uploading,
+                failed,
+                onRemove: () => attachments?.removeAttachment(a.uiId),
+                onRetry:
+                  failed && a.attachmentId != null
+                    ? () => attachments?.retryFileUpload?.(a.attachmentId as string)
+                    : undefined,
+              };
+        }),
+      [attachments?.attachments, attachments?.fileUploads],
+    );
 
     // Default canSubmit if not provided.
     const effectiveCanSubmit =
@@ -950,27 +958,21 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       if (e.defaultPrevented && text) innerRef.current?.pasteText?.(text);
     };
 
-    // Built-in attachment chip strip merged with the optional `chipRow`
-    // slot from the surface (e.g. pinned page chips). Attachment chips
-    // ALWAYS render first so the order is consistent across surfaces.
-    const attachmentChips = attachments?.attachments ?? [];
-    const renderedChipRow =
-      attachmentChips.length > 0 || chipRow ? (
+    // Attachment gallery strip merged with the optional `chipRow` slot
+    // from the surface (e.g. pinned page chips). Files and images share one
+    // compact gallery, exactly like the user message bubble, so the draft
+    // preview and the sent bubble read the same way.
+    const renderedGalleryRow =
+      galleryItems.length > 0 || chipRow ? (
         <div
           className={cn(
-            "flex flex-wrap items-center gap-1 border-b py-1.5",
+            "border-b py-1.5",
             frameVariant === "hero"
               ? "border-foreground/5 px-3"
               : "border-border/50 px-2",
           )}
         >
-          {attachmentChips.map((a) => (
-            <AttachmentChip
-              key={a.uiId}
-              attachment={a}
-              onRemove={() => attachments?.removeAttachment(a.uiId)}
-            />
-          ))}
+          <AttachmentGallery items={galleryItems} />
           {chipRow}
         </div>
       ) : null;
@@ -1073,8 +1075,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             </div>
           ) : null}
           {topAffordance}
-          {renderedChipRow}
-          {attachmentSeat}
+          {renderedGalleryRow}
           <div className="flex items-start">
             <div className="min-w-0 flex-1">
               <RichComposerEditor

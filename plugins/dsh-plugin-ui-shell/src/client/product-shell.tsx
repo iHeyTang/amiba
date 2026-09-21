@@ -778,12 +778,13 @@ function ProductShellInner({
     [platform],
   );
   const renderMessageImages = useCallback(
-    (images: NonNullable<import("@amiba/app-runtime/protocol").ChatMessage["images"]>) =>
+    (images: NonNullable<import("@amiba/app-runtime/protocol").ChatMessage["images"]>, compact?: boolean) =>
       loadMessageImage
         ? renderSlot("conversation.message.images", {
             images,
             loadImage: loadMessageImage,
             align: "end",
+            ...(compact !== undefined ? { compact } : {}),
           })
         : null,
     [loadMessageImage, renderSlot],
@@ -967,7 +968,6 @@ function ProductShellInner({
                 // bridge) and renders nothing while none is current, which is also
                 // why the home/draft composer keeps Amiba's own trigger menu.
                 inputOverlay: renderSlot("conversation.input.overlay", {}),
-                inputAttachments: owner => renderSlot("conversation.input.attachments", owner),
                 inputDock: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.input.dock", owner)} />,
                 composerDock: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.composer.dock", owner)} />,
                 inputLeft: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.input.left", owner)} />,
