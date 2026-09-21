@@ -65,7 +65,9 @@ function ToolChipRow({ event, mode, owner }: { event: ToolProgress; mode?: "row"
   void tick;
 
   const presentation = describeToolCall(event, t);
-  const hasDetail = hasToolDetail(event);
+  // A running call is openable too: its detail folds open to the call's own
+  // arguments (what is in flight), matching the settled row's affordance.
+  const hasDetail = hasToolDetail(event) || running;
   const imageBlock = useMemo(() => toolCallBlockFromProgress(event), [event]);
   const images = useToolImageEvidence(event.toolCallId, imageBlock);
   const nested = useNestedToolCalls(owner);

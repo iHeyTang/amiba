@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -1308,9 +1308,136 @@ describe("chat message chrome", () => {
     const button = summary?.querySelector("button");
     expect(button).toHaveTextContent("sidepanel.trace.actionStatus.completed");
     expect(button).toHaveTextContent("src/main.ts");
-    expect(button?.querySelector(".agent-thinking-text")).toBeNull();
-    expect(screen.getAllByText("sidepanel.trace.working")).toHaveLength(1);
+    // Between calls the fold summary itself is the unified in-progress line:
+    // "已执行 … · 正在思考…" — the completed action plus the pulsing thought
+    // suffix, with no detached working tail below the fold.
+    expect(button?.querySelector(".agent-thinking-text")).not.toBeNull();
+    expect(button).toHaveTextContent("sidepanel.trace.thinking");
+    expect(screen.queryByText("sidepanel.trace.working")).not.toBeInTheDocument();
     expect(summary).not.toHaveTextContent("sidepanel.trace.generating");
+  });
+
+  it("opens a running tool row to the in-flight call arguments", async () => {
+    const { container } = render(
+      <Bubble
+        m={
+          {
+            uiId: "running-tool-row",
+            role: "assistant",
+            content: "",
+            streaming: true,
+            toolProgress: [
+              {
+                tool: "bash",
+                toolCallId: "run-1",
+                status: "running",
+                args: { command: "pnpm test", workdir: "/repo" },
+              },
+            ],
+            assistantTimeline: [
+              { kind: "tool", id: "t1", toolCallId: "run-1" },
+            ],
+          } as UiMessage
+        }
+      />,
+    );
+    // The summary button also names the running call; the last match is the
+    // call's own row inside the fold.
+    const row = screen
+      .getAllByRole("button", {
+        name: /sidepanel\.trace\.actions\.useTool pnpm test/,
+      })
+      .at(-1)!;
+    // A running call is openable exactly like a settled one: chevron present,
+    // and the fold reveals what is actually in flight (the call's arguments).
+    expect(row.querySelector(".lucide-chevron-right")).not.toBeNull();
+    expect(row).not.toBeDisabled();
+    await userEvent.click(row);
+    expect(
+      container.querySelector('[data-tool-detail="generic"]'),
+    ).toHaveTextContent("pnpm test");
+  });
+
+  it("keeps the streaming thought as an icon'd row inside the fold with a living total", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    try {
+      const { container } = render(
+        <Bubble
+          m={
+            {
+              uiId: "live-thought-row",
+              role: "assistant",
+              content: "",
+              streaming: true,
+              assistantTimeline: [
+                {
+                  kind: "reasoning",
+                  id: "r1",
+                  text: "working through the plan",
+                  startedAt: 0,
+                  endedAt: 0,
+                },
+              ],
+            } as UiMessage
+          }
+        />,
+      );
+      // The thinking row carries the same brain icon as settled thought rows,
+      // so the streaming trace is visually part of the execution series.
+      const row = container.querySelector("[data-live-reasoning-row]")!;
+      expect(row.querySelector(".lucide-brain")).not.toBeNull();
+      expect(row.querySelector(".agent-thinking-text")).not.toBeNull();
+      // The accumulated text stays visible, open inside the fold.
+      const pane = container.querySelector("[data-live-reasoning]");
+      expect(pane?.textContent).toContain("working through the plan");
+      // The row's duration ticks while the model reasons instead of freezing.
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(row.textContent ?? "").toMatch(/2\.0s/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the live thought inside the fold instead of floating below it", () => {
+    const { container } = render(
+      <MessageTurns
+        messages={
+          [
+            {
+              uiId: "thought-inside-fold",
+              role: "assistant",
+              content: "",
+              streaming: true,
+              reasoning: "thinking about it",
+              assistantTimeline: [
+                { kind: "reasoning", id: "r1", text: "thinking about it" },
+              ],
+            },
+          ] as UiMessage[]
+        }
+      />,
+    );
+    const summaryButton = container.querySelector(
+      "[data-execution-summary] > button",
+    )!;
+    // While the model thinks, the thought opens INSIDE the fold.
+    expect(container.querySelector("[data-live-reasoning]")).not.toBeNull();
+    expect(
+      container
+        .querySelector("[data-execution-summary] > button")!
+        .textContent,
+    ).toContain("sidepanel.trace.thinking");
+    // Collapsing the fold REMOVES the floating pane below it: the summary
+    // alone carries the unified "正在思考…" state.
+    fireEvent.click(summaryButton);
+    expect(container.querySelector("[data-live-reasoning]")).toBeNull();
+    expect(summaryButton.textContent).toContain("sidepanel.trace.thinking");
+    // Reopening puts the live text back inside the fold.
+    fireEvent.click(summaryButton);
+    expect(container.querySelector("[data-live-reasoning]")).not.toBeNull();
   });
 
   it("shows the repo controls without redundant runtime chrome", async () => {

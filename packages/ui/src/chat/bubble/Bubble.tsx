@@ -448,12 +448,6 @@ function BubbleUnmemoized({
               ]}
               tools={traceVisible ? trace.toolProgress : []}
               streaming={!!m.streaming && !hasBody && !awaitingUserInput}
-              latestProgress={
-                m.streaming && hasReasoningFold
-                  ? compactProgressNote(trace.reasoningText)
-                  : ""
-              }
-              liveReasoning={m.streaming ? trace.reasoningText : ""}
               processMs={m.processMs}
             />
           </div>
@@ -761,6 +755,8 @@ type TurnTraceDetail =
       id: string;
       text: string;
       reasoningMs?: number;
+      /** When the segment is still streaming, its live row ticks from this. */
+      startedAt?: number;
     }
   | {
       /** Intermediate step narration, folded with the tools it accompanied. */
@@ -826,6 +822,68 @@ function LiveReasoningPane({ text }: { text: string }) {
   );
 }
 
+/**
+ * A streaming thinking segment rendered as its own ROW in the execution
+ * series — same shape as a settled reasoning row (brain icon, target, live
+ * duration), with the accumulating text open underneath while it streams.
+ *
+ * The thought used to be a bare text block BELOW the fold, visually detached
+ * from the executed rows that precede it. Keeping it in the series makes the
+ * "正在思考" state part of the fold itself: the row carries the icon the tool
+ * rows have, its duration ticks while the model reasons, and the full text
+ * stays visible under the row without floating outside the disclosure.
+ */
+function LiveReasoningRow({
+  text,
+  startedAt,
+  reasoningMs,
+  streaming,
+}: {
+  text: string;
+  startedAt?: number;
+  reasoningMs?: number;
+  streaming: boolean;
+}) {
+  const { t } = useT();
+  const [open, setOpen] = useState(true);
+  // Force a re-render every second while streaming so the duration ticks
+  // live, exactly like a running tool row. Once the segment settles the
+  // interval tears down and `reasoningMs` takes over.
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!streaming || startedAt === undefined) return;
+    const id = window.setInterval(() => setTick((value) => value + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [streaming, startedAt]);
+  void tick;
+  const durationMs =
+    streaming && startedAt !== undefined
+      ? Math.max(0, Date.now() - startedAt)
+      : reasoningMs;
+
+  return (
+    <div data-live-reasoning-row>
+      <ToolRowFrame
+        icon={Brain}
+        action=""
+        ariaLabel={t("sidepanel.trace.thinking")}
+        target={
+          <span className="min-w-0 max-w-80 truncate agent-thinking-text">
+            {compactProgressNote(text) || t("sidepanel.trace.thinking")}
+          </span>
+        }
+        {...(durationMs === undefined ? {} : { durationMs })}
+        running={streaming}
+        detail={<LiveReasoningPane text={text} />}
+        expanded={open}
+        onExpandedChange={setOpen}
+        expandTitle={t("sidepanel.trace.expandDetails")}
+        collapseTitle={t("sidepanel.trace.collapseDetails")}
+      />
+    </div>
+  );
+}
+
 const noNavigationSubscribe = () => () => {};
 const idleNavigation = {callId:"",version:0};
 const noNavigationRequest = () => idleNavigation;
@@ -834,23 +892,29 @@ function ExecutionDisclosure({
   tools,
   streaming,
   latestProgress = "",
-  liveReasoning = "",
   processMs,
   defaultExpanded = false,
 }: {
   details: TurnTraceDetail[];
   tools: ToolProgress[];
   streaming: boolean;
+  /** Live progress availability (thinking without a timeline row yet). */
   latestProgress?: string;
-  /** Full accumulated reasoning while streaming; renders the live pane. */
-  liveReasoning?: string;
   processMs?: number;
   /** Open on mount — used by streamed execution so merged narration rows
    * stay visible live, matching the settled series after completion. */
   defaultExpanded?: boolean;
 }) {
   const { t } = useT();
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  // While the model is thinking, the live thought owns the turn the same way
+  // a running tool does: the disclosure opens so the reasoning row + text are
+  // part of the fold, instead of floating as a detached block below it.
+  const reasoningOwnsActivity =
+    details.at(-1)?.kind === "reasoning" ||
+    (tools.length === 0 && latestProgress.length > 0);
+  const [expanded, setExpanded] = useState(
+    defaultExpanded || (streaming && reasoningOwnsActivity),
+  );
 
   const navigation = useToolCallSeat()?.navigation;
   const navigationRequest = useSyncExternalStore(navigation?.subscribe ?? noNavigationSubscribe, navigation?.getSnapshot ?? noNavigationRequest);
@@ -886,10 +950,7 @@ function ExecutionDisclosure({
         ? thoughtLabel(t, thoughtMs)
         : tools.length > 0
           ? t("sidepanel.trace.toolCount", { count: tools.length })
-          : latestProgress || t("sidepanel.trace.executionDetails");
-  const reasoningOwnsActivity =
-    details.at(-1)?.kind === "reasoning" ||
-    (tools.length === 0 && (liveReasoning.length > 0 || latestProgress.length > 0));
+          : t("sidepanel.trace.executionDetails");
   // Keep the latest completed action visible, with its own completed tense.
   // Only a genuinely live activity may suppress the separate turn fallback.
   const summaryTool = streaming && runningTool
@@ -899,15 +960,14 @@ function ExecutionDisclosure({
       : undefined;
   const showWaiting = streaming && Boolean(summaryTool) && !runningTool;
   const summaryActive = streaming && !showWaiting;
-  const showLiveReasoning =
-    streaming && reasoningOwnsActivity && !expanded && liveReasoning.length > 0;
+  // The unified in-progress label: the live thought owns the summary while
+  // thinking; between calls it reads as the last completed action plus the
+  // pulsing "正在思考…" — one fold line, not a detached tail below the fold.
   const summaryLabel = summaryTool
     ? <ToolChip event={summaryTool} mode="summary" />
     : streaming
       ? reasoningOwnsActivity
-        ? showLiveReasoning
-          ? t("sidepanel.trace.thinking")
-          : latestProgress || t("sidepanel.trace.thinking")
+        ? t("sidepanel.trace.thinking")
         : t("sidepanel.trace.working")
       : completedLabel;
 
@@ -917,13 +977,7 @@ function ExecutionDisclosure({
         type="button"
         disabled={!hasDetails}
         aria-expanded={hasDetails ? expanded : undefined}
-        title={
-          hasDetails
-            ? expanded
-              ? t("sidepanel.trace.collapseDetails")
-              : t("sidepanel.trace.expandDetails")
-            : latestProgress
-        }
+        title={hasDetails ? (expanded ? t("sidepanel.trace.collapseDetails") : t("sidepanel.trace.expandDetails")) : undefined}
         onClick={() => hasDetails && setExpanded((value) => !value)}
         className={cn(
           "group/run inline-flex min-h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left text-[11px] text-muted-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
@@ -941,6 +995,12 @@ function ExecutionDisclosure({
         >
           {summaryLabel}
         </span>
+        {showWaiting && (
+          <span aria-hidden className="shrink-0 truncate agent-thinking-text">
+            {" · "}
+            {t("sidepanel.trace.thinking")}
+          </span>
+        )}
         {hasDetails && (
           <ChevronRight
             aria-hidden
@@ -951,7 +1011,6 @@ function ExecutionDisclosure({
           />
         )}
       </button>
-      {showLiveReasoning && <LiveReasoningPane text={liveReasoning} />}
       {expanded && hasDetails && (
         <div className="ml-[7px] flex min-w-0 flex-col gap-0.5 border-l border-border/60 py-1.5 pl-3 pr-1">
           {details.map((detail, index) => {
@@ -967,11 +1026,20 @@ function ExecutionDisclosure({
               );
             }
             if (detail.kind === "reasoning") {
-              // The newest thinking segment streams in full, pinned to its
-              // tail. Earlier segments keep their own row inside the series —
-              // never one blob with a later segment's words appended to it.
+              // The newest thinking segment streams as its OWN row — icon,
+              // ticking duration, live text open underneath — so the thought
+              // reads as part of the executed series instead of a bare text
+              // block below the fold. Earlier segments keep their own row.
               if (streaming && index === details.length - 1) {
-                return <LiveReasoningPane key={detail.id} text={detail.text} />;
+                return (
+                  <LiveReasoningRow
+                    key={detail.id}
+                    text={detail.text}
+                    startedAt={detail.startedAt}
+                    reasoningMs={detail.reasoningMs}
+                    streaming={streaming}
+                  />
+                );
               }
               // A reasoning-only turn degenerates under uniform nesting: the
               // outer summary already reads "thought for Xs", so an inner
@@ -1025,7 +1093,6 @@ function ExecutionDisclosure({
           })}
         </div>
       )}
-      {showWaiting && <div className="mt-2"><TurnRunningIndicator /></div>}
     </div>
   );
 }
@@ -1039,14 +1106,12 @@ function TurnExecutionDisclosureUnmemoized({ messages }: { messages: UiMessage[]
   const seenToolIds = new Set<string>();
   const seenApprovalIds = new Set<string>();
   let latestProgress = "";
-  let liveReasoning = "";
 
   for (const message of messages) {
     for (const notice of notices.get(message.uiId) ?? []) details.push({ kind: "notice", id: notice.uiId, message: notice });
     const trace = resolveAssistantTrace(message);
     if (message.streaming && trace.reasoningText) {
       latestProgress = compactProgressNote(trace.reasoningText);
-      liveReasoning = trace.reasoningText;
     } else if (trace.reasoningText && !trace.bodyText) {
       // Body-carrying messages render their own inline thought fold via
       // the Bubble trace; the aggregate only owns execution-only bubbles.
@@ -1088,7 +1153,6 @@ function TurnExecutionDisclosureUnmemoized({ messages }: { messages: UiMessage[]
         tools={tools}
         streaming={!awaitingUserInput && messages.some((message) => message.streaming)}
         latestProgress={latestProgress}
-        liveReasoning={liveReasoning}
         processMs={messages.reduce(
           (total, message) => total + (message.processMs ?? 0),
           0,
@@ -1392,6 +1456,7 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
           item.startedAt !== undefined && item.endedAt !== undefined
             ? Math.max(0, item.endedAt - item.startedAt)
             : undefined,
+        startedAt: item.startedAt,
       });
     } else if (item.kind === "tool") {
       appendTool(item.id, item.toolCallId);
@@ -1578,22 +1643,6 @@ function InterleavedAssistantFlow({
           ...processDetails,
         ]
       : processDetails;
-  const clusterProgress =
-    !!message.streaming && trace.reasoningText.length > 0
-      ? compactProgressNote(trace.reasoningText)
-      : "";
-  // While a turn streams, its newest thought is the live trace: the segment
-  // ending in a reasoning row hands that row's full text to the disclosure so
-  // a collapsed series still shows what the model is thinking right now.
-  const segmentLiveReasoning = (
-    segment: AssistantFlowItem,
-    index: number,
-  ): string => {
-    if (!resultStreaming || index !== flow.length - 1) return "";
-    if (segment.kind !== "execution") return "";
-    const last = segment.details.at(-1);
-    return last?.kind === "reasoning" ? last.text : "";
-  };
 
   return (
     <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
@@ -1610,7 +1659,6 @@ function InterleavedAssistantFlow({
                   )}
                   tools={[]}
                   streaming={resultStreaming && flow.length === 0 && !awaitingUserInput}
-                  latestProgress={clusterProgress}
                 />
               )}
             {flow.map((segment, index) =>
@@ -1645,7 +1693,6 @@ function InterleavedAssistantFlow({
                   details={segment.details}
                   tools={segment.tools}
                   streaming={resultStreaming && index === flow.length - 1 && !awaitingUserInput}
-                  liveReasoning={segmentLiveReasoning(segment, index)}
                   processMs={segment.processMs}
                   defaultExpanded={resultStreaming}
                 />
@@ -1662,7 +1709,6 @@ function InterleavedAssistantFlow({
                 details={clusterDetails}
                 tools={processTools}
                 streaming={processStreaming}
-                latestProgress={clusterProgress}
                 processMs={message.processMs ?? processSpanMs}
               />
             )}
