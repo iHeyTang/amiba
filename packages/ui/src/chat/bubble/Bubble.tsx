@@ -1895,6 +1895,30 @@ function UserStickyBubbleUnmemoized({
 export const UserStickyBubble = memo(UserStickyBubbleUnmemoized);
 
 /**
+ * One rendered conversation row: an optional user prompt (null when the turn
+ * is assistant-only — a host-started reply or a notice at the head of the
+ * history) plus the assistant replies grouped under it. Shared by the bubble
+ * renderer and the ConversationTurnRail, so marker count, order and row
+ * identity stay in lockstep with the DOM.
+ */
+export interface ConversationTurn {
+  user: UiMessage | null;
+  replies: UiMessage[];
+  userOrdinal: number;
+}
+
+/**
+ * The part of the conversation the message list currently renders. Long
+ * histories are windowed to the newest `MESSAGE_TURN_WINDOW` turns; the rail
+ * must only offer markers for turns that are actually in the DOM, or its
+ * ordinal alignment (and therefore its highlight and jump targets) drift.
+ */
+export interface ConversationTurnsWindow {
+  visible: readonly ConversationTurn[];
+  hidden: number;
+}
+
+/**
  * Group the flat message list into "turns" (one user message + the assistant
  * replies that follow it, up to the next user message) and pin each user
  * bubble to the top of the scroll viewport via `position: sticky`. While the
@@ -1916,6 +1940,7 @@ export function MessageTurns({
   onBranchUserMessage,
   onRestoreBeforeTurn,
   restorableTurnOrdinals,
+  onTurnsWindowChange,
 }: {
   messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
   messageImages?: BubbleProps["messageImages"];
@@ -1939,14 +1964,16 @@ export function MessageTurns({
     userOrdinal: number,
   ) => void | Promise<void>;
   restorableTurnOrdinals?: ReadonlySet<number>;
+  /**
+   * Reports the currently rendered turn window (see `ConversationTurnsWindow`).
+   * The ConversationTurnRail consumes this so its markers always address the
+   * same turns the bubble renderer mounted — windowing would otherwise leave
+   * the rail indexing turns that are not in the DOM.
+   */
+  onTurnsWindowChange?: (window: ConversationTurnsWindow) => void;
 }) {
   const { language } = useT();
   const [timeFormat] = useStoredTimeFormatPreference(language);
-  type Turn = {
-    user: UiMessage | null;
-    replies: UiMessage[];
-    userOrdinal: number;
-  };
   // The turn-grouping derivation (filters, sorts, splices, map building) was
   // previously recomputed from scratch on every render. During a streaming
   // flush ChatSurface re-renders at up to 60 fps, so this O(message-count)
@@ -1981,8 +2008,8 @@ export function MessageTurns({
       if (message.role === "assistant" && message.runtimeTurn !== undefined)
         lastMessageForTurn.set(message.runtimeTurn, message.uiId);
     }
-    const turns: Turn[] = [];
-    let cur: Turn | null = null;
+    const turns: ConversationTurn[] = [];
+    let cur: ConversationTurn | null = null;
     let userOrdinal = 0;
     const executionNotices = new Map<string, UiMessage[]>();
     const callOwners = new Map<string, UiMessage>();
@@ -2016,17 +2043,23 @@ export function MessageTurns({
   const { turns, extensionRows, lastMessageForTurn, executionNotices } = derived;
   // Long histories are windowed: mounting one bubble tree per turn on every
   // session switch is what froze the app on continued conversations. Scrolling
-  // above the sentinel pulls in the previous slice of turns.
+  // above the sentinel pulls in the previous slice of turns. The slice is
+  // memoized so its identity only changes when the window contents actually
+  // change — `onTurnsWindowChange` (read by the ConversationTurnRail) must not
+  // fire on every render of a streaming conversation.
   const [turnWindow, setTurnWindow] = useState(MESSAGE_TURN_WINDOW);
   const windowSentinelRef = useRef<HTMLDivElement>(null);
-  const { visible: visibleTurns, hidden: hiddenTurns } = windowTurns(
-    turns,
-    turnWindow,
+  const { visible: visibleTurns, hidden: hiddenTurns } = useMemo(
+    () => windowTurns(turns, turnWindow),
+    [turns, turnWindow],
   );
   useEffect(() => {
     // A different conversation starts from its own tail again.
     setTurnWindow(MESSAGE_TURN_WINDOW);
   }, [sessionId]);
+  useEffect(() => {
+    onTurnsWindowChange?.({ visible: visibleTurns, hidden: hiddenTurns });
+  }, [onTurnsWindowChange, visibleTurns, hiddenTurns]);
   useEffect(() => {
     if (hiddenTurns === 0) return;
     const node = windowSentinelRef.current;

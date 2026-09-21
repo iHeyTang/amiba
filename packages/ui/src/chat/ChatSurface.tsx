@@ -87,6 +87,7 @@ import {
   AwaitingUserInputContext,
   MessageSourceLabelContext,
   MessageTurns,
+  type ConversationTurnsWindow,
   type MessageSourceLabelResolver,
 } from "./bubble/Bubble";
 import {
@@ -584,6 +585,13 @@ export default function ChatSurface({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ChatError | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // The turn window the bubble renderer currently has in the DOM
+  // (MessageTurns reports it). The ConversationTurnRail only offers markers
+  // for these turns — long histories are windowed, so the full message list
+  // would leave markers pointing at turns that are not rendered.
+  const [railTurnWindow, setRailTurnWindow] = useState<ConversationTurnsWindow>(
+    { visible: [], hidden: 0 },
+  );
 
   // Composer-time uploads — owned by the shared `useComposerAttachments`
   // hook so this surface, HomeView, and the Quick-Ask popup all share
@@ -2574,6 +2582,7 @@ export default function ChatSurface({
                             onRestoreBeforeTurn={restoreWorkspaceBeforeTurn}
                             onOpenAgentDestination={openAgentDestination}
                             onBranchUserMessage={branchUserMessage}
+                            onTurnsWindowChange={setRailTurnWindow}
                           />
                           {slots?.progress?.()}
                         </WorkspaceUrlOpenerContext.Provider>
@@ -2592,7 +2601,7 @@ export default function ChatSurface({
         </div>
         {hasActive && showTurnRail && (
           <ConversationTurnRail
-            messages={messages}
+            turns={railTurnWindow.visible}
             viewportRef={conversationViewportRef}
             contentRef={conversationContentRef}
             containerRef={conversationFrameRef}
