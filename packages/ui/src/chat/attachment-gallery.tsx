@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { formatBytesShort, type AttachmentKind } from "@amiba/app-runtime/core";
 import { useT } from "@amiba/i18n";
 import { Loader2, RefreshCw, X } from "lucide-react";
@@ -32,6 +32,13 @@ export type AttachmentGalleryItem =
       loadImage?: () => Promise<string>;
       uploading?: boolean;
       onRemove?: () => void;
+      /**
+       * Already-rendered presentation node — the user bubble invokes the
+       * `conversation.message.images` seat per image and embeds its output
+       * here, so plugins can take over the tile without Amiba re-framing it.
+       * When set, the gallery places the node verbatim (no own tile chrome).
+       */
+      node?: ReactNode;
     }
   | {
       kind: "file";
@@ -72,7 +79,14 @@ export function AttachmentGallery({
 }: AttachmentGalleryProps) {
   if (items.length === 0) return null;
   const first = items[0];
-  const loneImage = !compact && items.length === 1 && first.kind === "image" && !first.uploading;
+  // A lone native image (no pre-rendered `node`) gets the larger bounded
+  // preview; anything pre-rendered by a seat/plugin keeps its own size.
+  const loneImage =
+    !compact &&
+    items.length === 1 &&
+    first.kind === "image" &&
+    first.node === undefined &&
+    !first.uploading;
   return (
     <div
       data-attachment-gallery
@@ -85,7 +99,14 @@ export function AttachmentGallery({
     >
       {items.map((item) =>
         item.kind === "image" ? (
-          <GalleryImageTile key={item.id} item={item} size={loneImage ? "large" : "tile"} />
+          item.node !== undefined ? (
+            // Layout responsibility stays with the pre-rendered node (the
+            // seat's output) — when the renderer returns nothing, nothing
+            // mounts, so the row stays byte-identical to having no image.
+            <Fragment key={item.id}>{item.node}</Fragment>
+          ) : (
+            <AttachmentImageTile key={item.id} item={item} size={loneImage ? "large" : "tile"} />
+          )
         ) : (
           <GalleryFileChip key={item.id} item={item} />
         ),
@@ -98,8 +119,11 @@ export function AttachmentGallery({
  * Bounded image preview. `large` is the lone-image presentation (capped so a
  * single screenshot reads clearly without dominating the row); `tile` is the
  * multi-image mode (uniform squares, matching the composer rail).
+ *
+ * Exported so the shell's default `conversation.message.images` occupant can
+ * render the exact same tile the composer draws.
  */
-function GalleryImageTile({
+export function AttachmentImageTile({
   item,
   size,
 }: {
@@ -228,6 +252,53 @@ function GalleryFileChip({ item }: { item: Extract<AttachmentGalleryItem, { kind
           <X className="h-3 w-3" />
         </button>
       )}
+    </span>
+  );
+}
+
+/** The official `conversation.message.images` seat owner shape (subset). */
+export interface MessageImagesOwner {
+  images: readonly { attachment: import("@amiba/extension-sdk").ImageAttachmentRef }[];
+  loadImage?: (attachment: import("@amiba/extension-sdk").ImageAttachmentRef) => Promise<string>;
+  align?: "start" | "end";
+  compact?: boolean;
+}
+
+/**
+ * Amiba's single presentation for a message's images: uniform compact tiles
+ * (a lone image gets the larger bounded preview, several images collapse to
+ * square tiles), exactly the language the composer and the file chips already
+ * use. Registered as the default occupant of the official
+ * `conversation.message.images` seat at a shadow priority, so third-party
+ * plugins can still take the seat over (register below the shadow priority)
+ * while Amiba owns the default look.
+ *
+ * Renders one self-spacing inline-flex group so multiple tiles sit beside
+ * each other without the caller's row gap leaking between them; the user
+ * bubble mounts this group per message inside its `AttachmentGallery` row.
+ */
+export function MessageImagesGallery({
+  owner,
+}: {
+  owner: MessageImagesOwner;
+}) {
+  const { images, loadImage, compact } = owner;
+  if (images.length === 0) return null;
+  const lone = !compact && images.length === 1;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {images.map((image) => (
+        <AttachmentImageTile
+          key={image.attachment.attachmentId}
+          item={{
+            kind: "image",
+            id: image.attachment.attachmentId,
+            name: image.attachment.name,
+            loadImage: loadImage ? () => loadImage(image.attachment) : undefined,
+          }}
+          size={lone ? "large" : "tile"}
+        />
+      ))}
     </span>
   );
 }

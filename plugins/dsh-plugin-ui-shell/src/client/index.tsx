@@ -1,8 +1,8 @@
 import { TrajectoryHeaderAction } from "./trajectory-header-action.js";
 import {
-  CapsuleMessageImages,
-  type CapsuleMessageImagesOwner,
-} from "./capsule-message-images.js";
+  MessageImagesGallery,
+  type MessageImagesOwner,
+} from "@amiba/ui";
 import { conversationSnapshotSource } from "./conversation-snapshot.js";
 import { UiConversation, ConversationController } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type { UiSession } from "@deepseek-ai/dsh-client-ui-session/client";
@@ -1112,22 +1112,22 @@ export async function apply(ctx: ClientContext): Promise<void> {
       { name: "conversation.session.header.actions", id: "amiba-transcript", order: 10 },
       TrajectoryHeaderAction,
     );
-    // Amiba's fallback presence for the OFFICIAL `conversation.message.images`
-    // slot: hosts that render this seat WITHOUT a session-bound image loader
-    // (the Amiba bubble uses `messageImageLoader` whenever the shell provides
-    // one and renders the unified AttachmentGallery instead) still get a
-    // capsule that matches the native file capsules. Registered at priority
-    // 100 because cell shadowing elects the LOWEST priority occupant — a
-    // plugin registering at the conventional 0 (or lower) takes over this
-    // seat and replaces the capsule with its own image presentation.
+    // Amiba's default presence for the OFFICIAL `conversation.message.images`
+    // slot: the SAME compact gallery tiles the composer and file chips use,
+    // so the user bubble's image side needs no separate loader path — the
+    // seat carries `loadImage` and the occupant renders Amiba's tiles. The
+    // official ui-attachment registers at the implicit 0, so Amiba shadows it
+    // at SHADOW_PRIORITY (-1) — the repo's established way to beat an
+    // official occupant — while a plugin registering strictly below the
+    // shadow priority (≤ -2) still takes the seat over.
     const disposeMessageImagesDefault = ctx.slots.register(
       // This official slot's occupant spec takes no `id` — the seat is a
       // single cell, and shadowing is decided purely by priority (lowest
-      // renders), so Amiba's default sits at 100 and a plugin registering
-      // at the conventional 0 (or lower) replaces it.
-      { name: "conversation.message.images", priority: 100 },
+      // renders), so Amiba's default sits at SHADOW_PRIORITY and a plugin
+      // registering below it replaces the gallery tile presentation.
+      { name: "conversation.message.images", priority: SHADOW_PRIORITY },
       (owner: unknown) => (
-        <CapsuleMessageImages owner={owner as CapsuleMessageImagesOwner} />
+        <MessageImagesGallery owner={owner as MessageImagesOwner} />
       ),
     );
     // The pinned-summary popover rides the same header-action seat as the

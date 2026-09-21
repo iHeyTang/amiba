@@ -1819,12 +1819,11 @@ describe("ordered attachment row (files + images in original order)", () => {
     expect(row).not.toBeNull();
     expect(row.textContent).toContain("a.pdf");
     expect(row.textContent).toContain("b.txt");
-    // Every image item rides the official slot as a PER-ITEM call, exactly
-    // like the official chat view invokes it.
-    expect(renderImages).toHaveBeenCalledTimes(2);
-    expect(renderImages).toHaveBeenNthCalledWith(1, [imageA]);
-    expect(renderImages).toHaveBeenNthCalledWith(2, [imageB]);
-    expect(container.querySelectorAll("[data-gallery]")).toHaveLength(2);
+    // The whole image set rides the official slot in ONE call (the default
+    // occupant renders compact gallery tiles beside the file chips).
+    expect(renderImages).toHaveBeenCalledTimes(1);
+    expect(renderImages).toHaveBeenCalledWith([imageA, imageB]);
+    expect(container.querySelectorAll("[data-gallery]")).toHaveLength(1);
   });
 
   it("falls back to file badges then images when no ordered attachments exist", () => {

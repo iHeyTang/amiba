@@ -975,7 +975,6 @@ function ProductShellInner({
                 conversationRows,
                 turnTail: (runtimeTurn, openFile) => <TurnTail source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} render={owner => renderSlotChain("conversation.chat.turnTail", owner)} />,
                 messageImages: renderMessageImages,
-                messageImageLoader: loadMessageImage,
                 approvalDetail: (callId) => renderSlot("conversation.approval.detail", { callId }),
                 assistantActions: (messageId) => renderSlot("conversation.chat.assistant-actions", { messageId: messageId as import("@amiba/extension-sdk").AssistantActionOwnerProps["messageId"] }),
                 toolView: renderToolViewSeat,

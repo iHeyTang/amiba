@@ -250,7 +250,6 @@ export interface FullScreenChatViewProps {
      * runtime) and every row renders Amiba's own tool chip.
      */
     messageImages?: (images: NonNullable<import("@amiba/app-runtime/protocol").ChatMessage["images"]>) => ReactNode;
-    messageImageLoader?: (attachment: import("@amiba/extension-sdk").ImageAttachmentRef) => Promise<string>;
     approvalDetail?: (callId: string) => ReactNode;
     assistantActions?: (messageId: string) => ReactNode;
     turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;

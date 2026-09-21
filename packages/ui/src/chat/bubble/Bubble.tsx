@@ -215,15 +215,14 @@ function MessageNoticeRow({
 
 export interface BubbleProps {
   m: UiMessage;
-  messageImages?: (images: NonNullable<UiMessage["images"]>) => ReactNode;
   /**
-   * Session-bound loader for durable image refs, supplied by the shell. When
-   * present, the user attachment row renders its images natively through
-   * `AttachmentGallery` (compact tiles, unified with the composer); hosts
-   * that only provide the `messageImages` slot keep the previous slot-driven
-   * per-image rendering.
+   * Renderer for the message's images — the shell's dispatch of the official
+   * `conversation.message.images` seat. The default occupant renders compact
+   * gallery tiles; a plugin taking the seat over replaces just the image
+   * side. With no renderer (loader-less hosts) images are omitted and files
+   * keep their chips.
    */
-  messageImageLoader?: (attachment: import("@amiba/extension-sdk").ImageAttachmentRef) => Promise<string>;
+  messageImages?: (images: NonNullable<UiMessage["images"]>) => ReactNode;
   /** Turn-level renderers use this after moving execution details into one summary. */
   suppressTrace?: boolean;
   /** MessageTurns renders terminal run state after the whole execution segment. */
@@ -261,7 +260,6 @@ function hasInterleavedAssistantTimeline(message: UiMessage): boolean {
 function BubbleUnmemoized({
   m,
   messageImages,
-  messageImageLoader,
   suppressTrace = false,
   suppressRunBoundary = false,
   onOpenAgentDestination,
@@ -301,30 +299,38 @@ function BubbleUnmemoized({
     ];
     const hasReferences = attachments.length > 0;
     const hasContent = bodyText.length > 0;
-    // The shell supplies a session-bound image loader, so both files and
-    // images render through the unified AttachmentGallery (compact tiles,
-    // exactly like the composer/empty-state drafts). Hosts that only provide
-    // the official `messageImages` slot keep the previous per-image slot
-    // rendering (plugin takeover intact) — the two paths only differ in how
-    // a durable image resolves to a URL.
-    const galleryItems: AttachmentGalleryItem[] = messageImageLoader
-      ? attachments.map((item) =>
-          item.kind === "file"
-            ? {
-                kind: "file",
-                id: item.badge.uiId,
-                name: item.badge.name,
-                fileKind: item.badge.kind,
-                size: item.badge.size,
-              }
-            : {
-                kind: "image",
-                id: item.image.attachment.attachmentId,
-                name: item.image.attachment.name,
-                loadImage: () => messageImageLoader!(item.image.attachment),
-              },
-        )
-      : [];
+    // ONE attachment presentation everywhere: file chips natively, images as
+    // a single seat invocation (the default `conversation.message.images`
+    // occupant renders the same compact tiles the composer uses; a plugin
+    // taking the seat over replaces just the image side, still inside the
+    // shared row). Hosts without a message-images renderer simply omit the
+    // images — files keep their chips. The image group sits where the first
+    // image appeared in the message order.
+    const messageImagesSet: NonNullable<UiMessage["images"]> =
+      attachments.flatMap((item) => (item.kind === "image" ? [item.image] : []));
+    const imageNode =
+      messageImages && messageImagesSet.length > 0 ? (
+        <WorkbenchViewBoundary fallback={null}>
+          <MessageImages images={messageImagesSet} render={messageImages} />
+        </WorkbenchViewBoundary>
+      ) : undefined;
+    let imageGroupPlaced = false;
+    const galleryItems: AttachmentGalleryItem[] = [];
+    for (const item of attachments) {
+      if (item.kind === "file") {
+        galleryItems.push({
+          kind: "file",
+          id: item.badge.uiId,
+          name: item.badge.name,
+          fileKind: item.badge.kind,
+          size: item.badge.size,
+        });
+        continue;
+      }
+      if (!imageNode || imageGroupPlaced) continue;
+      imageGroupPlaced = true;
+      galleryItems.push({ kind: "image", id: "message-images", node: imageNode });
+    }
     // A message a plugin dispatched on the user's behalf (a relayed task
     // brief, an inbound IM message) reads as a user turn but did not come
     // from the person at the composer — say so, in the same quiet chip the
@@ -1772,7 +1778,6 @@ export const Bubble = memo(BubbleUnmemoized);
 function UserStickyBubbleUnmemoized({
   m,
   messageImages,
-  messageImageLoader,
   onOpenAgentDestination,
   userOrdinal,
   onBranch,
@@ -1782,7 +1787,6 @@ function UserStickyBubbleUnmemoized({
 }: {
   m: UiMessage;
   messageImages?: BubbleProps["messageImages"];
-  messageImageLoader?: BubbleProps["messageImageLoader"];
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
   userOrdinal: number;
   onBranch?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
@@ -1843,7 +1847,7 @@ function UserStickyBubbleUnmemoized({
               )}
             >
               <div ref={innerRef}>
-                <Bubble m={m} messageImages={messageImages} messageImageLoader={messageImageLoader} onOpenAgentDestination={onOpenAgentDestination} />
+                <Bubble m={m} messageImages={messageImages} onOpenAgentDestination={onOpenAgentDestination} />
               </div>
             </div>
             {isClipping && (
@@ -1975,7 +1979,6 @@ export function MessageTurns({
   openTurnFile,
   assistantActions,
   messageImages,
-  messageImageLoader,
   messages,
   sessionId,
   onOpenAgentDestination,
@@ -1987,7 +1990,6 @@ export function MessageTurns({
 }: {
   messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
   messageImages?: BubbleProps["messageImages"];
-  messageImageLoader?: BubbleProps["messageImageLoader"];
   assistantActions?: (messageId: string) => ReactNode;
   turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
   timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[];
@@ -2181,7 +2183,6 @@ export function MessageTurns({
             {turn.user && (
               <UserStickyBubble
                 messageImages={messageImages}
-                messageImageLoader={messageImageLoader}
                 m={turn.user}
                 onOpenAgentDestination={onOpenAgentDestination}
                 userOrdinal={turn.userOrdinal}
@@ -2214,7 +2215,6 @@ export function MessageTurns({
                   ? messageText(item.message.runtimeTurn, <Bubble
                   m={item.message}
                   messageImages={messageImages}
-                  messageImageLoader={messageImageLoader}
                   suppressTrace={item.suppressTrace}
                   suppressRunBoundary={item.suppressRunBoundary}
                   onOpenAgentDestination={onOpenAgentDestination}
@@ -2222,7 +2222,6 @@ export function MessageTurns({
                   : <Bubble
                   m={item.message}
                   messageImages={messageImages}
-                  messageImageLoader={messageImageLoader}
                   suppressTrace={item.suppressTrace}
                   suppressRunBoundary={item.suppressRunBoundary}
                   onOpenAgentDestination={onOpenAgentDestination}
