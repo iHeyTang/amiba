@@ -91,7 +91,7 @@ export class ChatEngineHost {
     this.started = true;
     this.refreshSubagentMeta();
     this.metaWatchOff = mainStore.watch(() => this.refreshSubagentMeta());
-    // Session facts are the ONE `session/list` poll shared by the state layer,
+    // Session facts come from the shared event-driven index used by the state layer,
     // the activity tracker and the engine. The worker cannot reach that index,
     // so every change is pushed to it.
     this.offSessions = sessionIndex.onChange((rows) => {

@@ -5,6 +5,7 @@ import { ActivitySource } from '../dsh-state/activity.ts';
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function harness() {
   let notify;
+  let event;
   const streams = [];
   const source = new ActivitySource(async () => ({
     events(signal, _onOpen, address) {
@@ -20,29 +21,27 @@ function harness() {
         }
       })();
     },
-  }), { onChange(callback) { notify = callback; return () => {}; } });
-  return { source, streams, sessions: rows => notify(rows) };
+  }), { onChange(callback) { notify = callback; return () => {}; }, onEvent(callback) { event = callback; return () => {}; } });
+  return { source, streams, sessions: rows => notify(rows), event: payload => event({ rpcId: "request", payload }) };
 }
 const row = (sessionId, running = false, updatedAt = 1) => ({ sessionId, running, updatedAt, blank: false, title: sessionId });
 
 test('idle startup uses the index without reading history; a running turn starts the journal', async () => {
   const { source, streams, sessions } = harness();
   try {
-    source.start();
     sessions([row('old')]);
     await flush();
-    assert.equal(streams.length, 1);
-    assert.equal(streams[0].address, undefined);
+    assert.equal(streams.length, 0);
     assert.equal(source.getSnapshot().phase, 'idle');
     assert.equal(source.getSnapshot().title, 'old');
     sessions([row('old', true)]); await flush();
-    assert.deepEqual(streams[1].address, { kind: 'session', sessionId: 'old' });
-    streams[1].push({ type: 'session/event', event: { type: 'turn/start', data: {} } }); await flush();
+    assert.deepEqual(streams[0].address, { kind: 'session', sessionId: 'old' });
+    streams[0].push({ type: 'session/event', event: { type: 'turn/start', data: {} } }); await flush();
     assert.equal(source.getSnapshot().phase, 'thinking');
     // The index may stop running before the final event arrives.
     sessions([row('old')]);
-    assert.equal(streams[1].signal.aborted, false);
-    streams[1].push({ type: 'session/event', event: { type: 'turn/end', data: { reason: { kind: 'error' } } } }); await flush();
+    assert.equal(streams[0].signal.aborted, false);
+    streams[0].push({ type: 'session/event', event: { type: 'turn/end', data: { reason: { kind: 'error' } } } }); await flush();
     assert.equal(source.getSnapshot().phase, 'failed');
     sessions([{ ...row('old'), title: 'renamed' }]);
     assert.equal(source.getSnapshot().title, 'renamed');
@@ -78,5 +77,20 @@ test('a short turn completed between polls still receives its terminal state', a
     assert.equal(streams[0].address.sessionId, 'short-turn');
     streams[0].push({ type: 'session/event', event: { type: 'turn/end', data: {} } }); await flush();
     assert.equal(source.getSnapshot().phase, 'completed');
+  } finally { source.dispose(); }
+});
+
+ test('shared global channel retains approval and question waits without its own socket', async () => {
+  const { source, streams, sessions, event } = harness();
+  try {
+    sessions([row('a', true)]); await flush();
+    assert.equal(streams.length, 1);
+    event({ type: 'approval/requested', sessionId: 'a', approvalId: 'approval' });
+    assert.equal(source.getSnapshot().phase, 'waiting');
+    event({ type: 'question/requested', sessionId: 'a' });
+    event({ type: 'approval/resolved', sessionId: 'a', approvalId: 'approval' });
+    assert.equal(source.getSnapshot().phase, 'waiting');
+    event({ type: 'question/resolved', sessionId: 'a', questionRpcId: 'request' });
+    assert.equal(source.getSnapshot().phase, 'idle');
   } finally { source.dispose(); }
 });

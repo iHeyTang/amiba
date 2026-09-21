@@ -613,7 +613,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     };
     const disposeLayout = ctx.reflect.provide("layout", layout);
     const disposeRightTabRegistry = ctx.reflect.provide("sidebarRightTabs", sidebarRightTabs);
-    const resources = new ResourceRegistry(ctx);
+    const resources = new ResourceRegistry(ctx, getPlatform().workspaceFiles?.observe);
     const disposeResources = ctx.reflect.provide("resources", resources);
     // The official workspace-files client registers the file provider on this registry.
     const disposeResourceHook = ctx.slots.provideRoot({ keyedHooks: { resource: address => resources.source(address) } });

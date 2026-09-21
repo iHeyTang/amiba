@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 
 const PLUGIN_ID = "@amiba/dsh-plugin-memory-memos";
 const DSH_CLIENT_EXTERNALS = [
+  "streamdown",
   "@amiba/ui/plugin",
   "react",
   "react/jsx-runtime",
@@ -33,7 +34,7 @@ export default defineConfig({
     rollupOptions: {
       external: DSH_CLIENT_EXTERNALS,
       output: {
-        paths: { "@amiba/ui/plugin": "@amiba/dsh-plugin-ui-shell/client" },
+        paths: { "@amiba/ui/plugin": "@amiba/dsh-plugin-ui-shell/client", "streamdown": "@amiba/dsh-plugin-ui-shell/client" },
         exports: "named",
         // DSH loads this plugin through one factory, without a chunk loader.
         inlineDynamicImports: true,

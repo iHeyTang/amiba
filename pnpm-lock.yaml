@@ -1090,6 +1090,9 @@ importers:
       '@amiba/dsh-plugin-catalog':
         specifier: workspace:*
         version: link:../dsh-plugin-catalog
+      '@amiba/dsh-plugin-ui-shell':
+        specifier: workspace:*
+        version: link:../dsh-plugin-ui-shell
       '@amiba/extension-sdk':
         specifier: workspace:*
         version: link:../../packages/extension-sdk

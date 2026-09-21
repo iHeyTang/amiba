@@ -1,94 +1,89 @@
 import type { WorkspaceFileObservation, WorkspaceFileStat, WorkspaceFilesAdapter } from '@amiba/app-runtime/platform'
-import type { ResourceFailure as RemoteFailure, ResourceResult as RemoteResult } from './result.js'
-import type { ResourceProvider } from './contract.js'
+import type { RuntimeProvider } from './resources.js'
 import { parseFileAddress } from './file-address.js'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface ResourceProtocolMap { file: WorkspaceFileStat }
 }
 
-/** rc.2 has no official workspaceFiles change feed. Reconcile metadata only
- * while held, including absent files, default HOME and tree-ignored folders.
- * This is snapshot compatibility, not delivery of every intermediate write.
+/** Decorate the official provider, leaving reads, versions and permissions to
+ * DSH. Native events only invalidate its stream: reopening takes a fresh DSH
+ * stat and keeps the official change feed. No directory traversal or polling.
+ * The registry opens this adapter only while an address has subscribers/pins.
  */
-export function createFileResourceProvider(
-  files: Pick<WorkspaceFilesAdapter, 'stat' | 'observe'>,
-  intervalMs = 1000,
-): ResourceProvider<'file'> {
-  if (!Number.isFinite(intervalMs) || intervalMs <= 0) throw new Error('Invalid file reconciliation interval');
+export function observeFileResource(
+  provider: RuntimeProvider,
+  observe: NonNullable<WorkspaceFilesAdapter['observe']>,
+): RuntimeProvider {
   return {
-    protocol: 'file',
+    protocol: provider.protocol,
     async *open(address, { signal }) {
-      if (signal.aborted) return;
-      const parsed = parseFileAddress(address);
-      if (!parsed || parsed.scope !== 'session') {
-        yield failure(parsed ? 'workspace-file/unknown-workspace' : 'workspace-file/unsupported-address',
-          parsed ? 'A session-scoped file address is required.' : 'Unsupported file resource address.', { address });
-        return;
+      const parsed = parseFileAddress(address)
+      if (!parsed || parsed.scope !== 'session') { yield* provider.open(address, { signal }); return }
+      let observation: WorkspaceFileObservation | undefined
+      let target: string | undefined
+      let cycle: AbortController | undefined
+      let timer: ReturnType<typeof setTimeout> | undefined
+      let wake: (() => void) | undefined
+      let invalidated = false
+      let previous: string | undefined
+      const invalidate = () => {
+        if (signal.aborted || timer) return
+        timer = setTimeout(() => {
+          timer = undefined
+          invalidated = true
+          cycle?.abort()
+          wake?.()
+        }, 50)
       }
-      if (!files.stat) {
-        yield failure('workspace-file/unavailable', 'This platform does not provide file metadata.', { address });
-        return;
+      const disposeObservation = () => {
+        const current = observation
+        observation = undefined
+        current?.dispose()
       }
-      let observation: WorkspaceFileObservation | undefined;
-      let revision = 0;
-      let wake: (() => void) | undefined;
-      const changed = () => { revision++; wake?.(); };
-      const dispose = () => { const current = observation; observation = undefined; current?.dispose(); };
-      signal.addEventListener('abort', dispose, { once: true });
-      try {
+      const watch = (path: string) => {
+        if (path === target || signal.aborted) return
+        target = path
+        disposeObservation()
         try {
-          observation = files.observe?.(parsed.sessionId, parsed.path, changed);
-          if (signal.aborted) return;
-          if (observation) await observation.ready;
-        } catch {
-          // A watcher may be unavailable or the target's ancestors inaccessible.
-          // Continue authorized stat reconciliation, which reports the actual failure.
-          dispose();
-        }
-        let previous: string | undefined;
+          const current = observe(parsed.sessionId, path, invalidate)
+          observation = current
+          void current.ready.then(() => {
+            // Close the gap between the initial official stat and watcher
+            // readiness. One recheck, even if that gap contained no event.
+            if (observation === current) invalidate()
+          }, () => {
+            // Native workspace scope may be narrower than DSH read scope.
+            // Failure to watch must never replace the official read result.
+            if (observation === current) disposeObservation()
+          })
+        } catch { disposeObservation() }
+      }
+      const abort = () => { clearTimeout(timer); cycle?.abort(); disposeObservation(); wake?.() }
+      signal.addEventListener('abort', abort, { once: true })
+      try {
         while (!signal.aborted) {
-          const observed = revision;
-          let frame: RemoteResult<WorkspaceFileStat>;
+          invalidated = false
+          cycle = new AbortController()
           try {
-            frame = { ok: true, value: await files.stat(parsed.sessionId, parsed.path) };
+            for await (const frame of provider.open(address, { signal: cycle.signal })) {
+              if (signal.aborted || cycle.signal.aborted) break
+              const value = frame.ok ? frame.value as WorkspaceFileStat | undefined : undefined
+              watch(value?.absolutePath ?? target ?? parsed.path)
+              const identity = JSON.stringify(frame)
+              if (identity !== previous) { previous = identity; yield frame }
+            }
           } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            // Electron preserves the main error message, but not custom properties.
-            const code = /\bENOENT\b/.test(message) ? 'workspace-file/not-found'
-              : message.includes('not a file') ? 'workspace-file/not-regular-file'
-              : 'workspace-file/read-failed';
-            frame = failure(code, message, { path: parsed.path });
+            if (!cycle.signal.aborted) throw error
           }
-          if (signal.aborted) return;
-          const identity = JSON.stringify(frame);
-          if (identity !== previous) {
-            previous = identity;
-            yield frame;
-          }
-          if (signal.aborted) return;
-          await new Promise<void>(resolve => {
-            if (signal.aborted || revision !== observed) { resolve(); return; }
-            const finish = () => {
-              clearTimeout(timer);
-              signal.removeEventListener('abort', finish);
-              if (wake === finish) wake = undefined;
-              resolve();
-            };
-            const timer = setTimeout(finish, intervalMs);
-            wake = finish;
-            signal.addEventListener('abort', finish, { once: true });
-          });
+          if (signal.aborted) return
+          if (!invalidated) await new Promise<void>(resolve => { wake = resolve })
+          wake = undefined
         }
       } finally {
-        signal.removeEventListener('abort', dispose);
-        dispose();
-        wake?.();
+        signal.removeEventListener('abort', abort)
+        abort()
       }
     },
-  };
-}
-
-function failure(code: string, message: string, details: Record<string, unknown>): { ok: false; error: RemoteFailure } {
-  return { ok: false, error: { code, message, details } };
+  }
 }

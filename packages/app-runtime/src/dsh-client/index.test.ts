@@ -169,3 +169,46 @@ describe("DSH 0.1.5 Remote transport", () => {
     expect(calls).toHaveLength(0)
   })
 })
+
+
+describe("shared session and interaction events", () => {
+  it("forwards session deltas and control frames while retaining approval ownership", async () => {
+    const { client, sockets, calls } = harness()
+    const controller = new AbortController()
+    const opened = vi.fn()
+    const stream = client.events(controller.signal, opened)
+    const frames: unknown[] = []
+    const job = (async () => { for await (const frame of stream) frames.push(frame) })()
+    sockets.forEach(socket => socket.emit("open"))
+    const events = sockets.find(socket => socket.sent[0]?.endpoint === "$events")!
+    const control = sockets.find(socket => socket.sent[0]?.endpoint === "session/control")!
+    events.item({ type: "ready", clientId: "main" })
+    events.item({ type: "emit", event: "api-session/added", args: [{ sessionId: "background", updatedAt: 1, running: false, blank: true, parentSessionId: "parent" }] })
+    events.item({ type: "emit", event: "api-session/activity", args: ["background", 2] })
+    events.item({ type: "emit", event: "api-session/status", args: ["background", true] })
+    events.item({ type: "waterfall", event: "approval/request", eventId: "approval-1", agentId: "background", request: { toolName: "bash", questions: [] } })
+    control.item({ type: "jobs", sessionId: "background", jobs: [{ id: "job" }] })
+    await vi.waitFor(() => expect(frames).toHaveLength(5))
+    expect(opened).toHaveBeenCalledTimes(1)
+    expect(frames).toContainEqual({ rpcId: "", payload: { type: "session/status", sessionId: "background", running: true } })
+    expect(frames).toContainEqual({ rpcId: "", payload: { type: "session/jobs", sessionId: "background", jobs: [{ id: "job" }] } })
+    expect(calls).toHaveLength(0) // no observer automatically settles an approval
+    events.item({ type: "cancel", eventId: "approval-1" })
+    events.item({ type: "emit", event: "api-session/removed", args: ["background"] })
+    await vi.waitFor(() => expect(frames).toHaveLength(7))
+    expect(frames).toContainEqual({ rpcId: "approval-1", payload: { type: "approval/resolved", sessionId: "background", approvalId: "approval-1", outcome: "cancelled" } })
+    controller.abort(); await job
+    expect(sockets).toHaveLength(2); expect(sockets.every(socket => socket.closes.length === 1)).toBe(true)
+  })
+})
+
+
+it("ends the shared channel if either source ends so its supervisor can reconnect", async () => {
+  const { client, sockets } = harness()
+  const stream = client.events(); const first = stream.next()
+  sockets.forEach(socket => socket.emit("open"))
+  const socket = sockets[0]!
+  socket.message({ type: "end", streamId: socket.sent[0]!.streamId })
+  await expect(first).rejects.toThrow("reconnect required")
+  expect(sockets.every(socket => socket.closes.length === 1)).toBe(true)
+})

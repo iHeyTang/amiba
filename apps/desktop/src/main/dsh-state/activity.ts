@@ -17,7 +17,7 @@
  * `createSurfaceActivity`'s phases but never drives execution.
  */
 
-import type { DshApiClient } from "@amiba/app-runtime/dsh-client";
+import type { DshApiClient, DshMuxEnvelope } from "@amiba/app-runtime/dsh-client";
 import type { DesktopPetActivity } from "@amiba/app-runtime/platform";
 import type { SessionIndex } from "../session-index";
 import type { DshSessionRow } from "./types";
@@ -77,7 +77,7 @@ export class ActivitySource {
   private hasSessionSnapshot = false;
   private latestSeenUpdate = -Infinity;
   private journalController: AbortController | undefined;
-  private globalController: AbortController | undefined;
+  private readonly offEvents: () => void;
   private readonly offSessions: () => void;
   private disposed = false;
   private readonly listeners = new Set<() => void>();
@@ -99,6 +99,7 @@ export class ActivitySource {
   constructor(client: () => Promise<DshApiClient>, sessions: SessionIndex) {
     this.client = client;
     this.offSessions = sessions.onChange((rows) => this.onSessions(rows));
+    this.offEvents = sessions.onEvent((envelope) => this.onGlobalEvent(envelope));
   }
 
   onChange(listener: () => void): () => void {
@@ -110,56 +111,21 @@ export class ActivitySource {
     return this.activity;
   }
 
-  start(): void {
-    void this.startGlobal();
-  }
-
-  private async startGlobal(): Promise<void> {
-    if (this.globalController) return;
-    this.globalController = new AbortController();
-    const controller = this.globalController;
-    // Unlike the address-scoped journal, the global events mux has no
-    // client-side reconnect, so re-establish it with a small backoff on drops
-    // (runtime restarts, backplane blips). The journal follow below has its
-    // own internal reconnect loop.
-    while (!this.disposed && !controller.signal.aborted) {
-      try {
-        const client = await this.client();
-        for await (const envelope of client.events(controller.signal)) {
-          if (this.disposed) return;
-          const frame = envelope.payload;
-          if (!("sessionId" in frame) || frame.sessionId !== this.followedSession) {
-            continue;
-          }
-          switch (frame.type) {
-            case "approval/requested":
-              this.approvals.add(frame.approvalId);
-              break;
-            case "approval/resolved":
-              this.approvals.delete(frame.approvalId);
-              break;
-            case "question/requested":
-              this.questions.add(envelope.rpcId);
-              break;
-            case "question/resolved":
-              this.questions.delete(frame.questionRpcId);
-              break;
-            case "session/projection":
-              if (frame.key === "title" && typeof frame.value === "string") {
-                this.title = frame.value;
-              }
-              break;
-            default:
-              continue;
-          }
-          this.publish(false);
-        }
-      } catch {
-        // Carrier drop — reconnect after a short pause.
-      }
-      if (this.disposed || controller.signal.aborted) return;
-      await new Promise((resolve) => setTimeout(resolve, 2_000));
+  private onGlobalEvent(envelope: DshMuxEnvelope): void {
+    if (this.disposed) return;
+    const frame = envelope.payload;
+    if (!("sessionId" in frame) || frame.sessionId !== this.followedSession) return;
+    switch (frame.type) {
+      case "approval/requested": this.approvals.add(frame.approvalId); break;
+      case "approval/resolved": this.approvals.delete(frame.approvalId); break;
+      case "question/requested": this.questions.add(envelope.rpcId); break;
+      case "question/resolved": this.questions.delete(frame.questionRpcId); break;
+      case "session/projection":
+        if (frame.key === "title" && typeof frame.value === "string") this.title = frame.value;
+        break;
+      default: return;
     }
+    this.publish(false);
   }
 
   private onSessions(rows: DshSessionRow[]): void {
@@ -300,8 +266,7 @@ export class ActivitySource {
     this.disposed = true;
     this.offSessions();
     this.stopJournal();
-    this.globalController?.abort();
-    this.globalController = undefined;
+    this.offEvents();
     this.listeners.clear();
   }
 }
