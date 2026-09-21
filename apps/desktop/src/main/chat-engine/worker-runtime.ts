@@ -1,3 +1,4 @@
+import type { AgentSubagentAddress } from "@amiba/app-runtime/platform";
 /**
  * Worker side of the runtime host: owns the engine, borrows main's services.
  *
@@ -7,7 +8,6 @@
  */
 
 import type {
-  AgentSubagentAddress,
   ApprovalDecision,
   ApprovalRequest,
   EngineToClientMessage,
