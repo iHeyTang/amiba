@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   CodeEvidence,
   EvidenceShell,
+  StructuredEvidence,
   unwrapUntrustedToolResult,
 } from "./tool-evidence";
 import {
@@ -75,7 +76,15 @@ export function SemanticToolRow<Key extends string>({
       text={text || toolCallSettled(block)?.error?.code || action}
       tone="error"
     />
-  ) : running || spec.quietSuccess ? null : (
+  ) : running ? (
+    // A running call has no result yet, but its row must stay openable like
+    // every settled one: reveal what is actually in flight — the tool's own
+    // evidence against the running args (the full command, path, …), falling
+    // back to the raw argument record.
+    (spec.evidence?.({ args, text: "", block }) ?? (
+      <StructuredEvidence value={args} />
+    ))
+  ) : spec.quietSuccess ? null : (
     (spec.evidence?.({ args, text, block }) ?? null)
   );
   const detail = body || images || nested ? (

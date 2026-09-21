@@ -111,15 +111,19 @@ describe("one activity owner", () => {
       ...running, toolProgress: [{ ...running.toolProgress![0]!, status: "completed" }],
     };
     rerender(view(waiting));
-    // The tool settled and no live reasoning has arrived yet: the turn tail
-    // says so, exactly once, while the thought row stays in the series.
-    expect(screen.getAllByText(WORKING)).toHaveLength(1);
+    // The tool settled and no live reasoning has arrived yet: the run state
+    // lives INSIDE the fold summary as the unified "已执行 … · 正在思考…" line
+    // — no detached working tail below the fold — while the thought row stays
+    // in the series.
+    const waitingButton = container.querySelector("[data-execution-summary] > button")!;
+    expect(screen.queryByText(WORKING)).not.toBeInTheDocument();
     expect(container.querySelectorAll("[data-execution-summary]")).toHaveLength(1);
     expect(
       container.querySelector("[data-execution-summary]")!.textContent ?? "",
     ).toContain("Inspecting the request");
+    expect(waitingButton.textContent ?? "").toContain("sidepanel.trace.thinking");
     rerender(view(waiting, true));
-    expect(screen.queryByText(WORKING)).not.toBeInTheDocument();
+    expect(waitingButton.textContent ?? "").not.toContain("sidepanel.trace.thinking");
     rerender(view({ ...waiting, streaming: false }));
     expect(screen.queryByText(WORKING)).not.toBeInTheDocument();
   });
