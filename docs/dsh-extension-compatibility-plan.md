@@ -7,7 +7,7 @@ Main and the other task's personal menu, external-message and update changes are
 
 ## 最新进展：附件统一为一个画廊组件，conversation.message.images 整组调用 + shadow 默认 occupant（2026-09-21）
 
-用户消息改为官方同构的附件行：文件与图片共处一个 `AttachmentGallery` 行（图片为有界预览瓦片、文件为紧凑 chip，单图封顶、多图退化为统一小瓦片，与 composer/空状态输入完全一致）。文件项继续由 Amiba 原生 chip 渲染；图片项按消息**整组调用一次** conversation.message.images（owner.images 为整组图片，owner 载荷 images/loadImage/align/compact 保持官方契约），默认 occupant 为 `MessageImagesGallery`（复用 `AttachmentImageTile`，渲染紧凑瓦片），注册在 `SHADOW_PRIORITY`(-1)——低于官方 ui-attachment occupant 的隐式 0，故默认即 Amiba 画廊形态；第三方以 **≤ -2** 注册即可接管图片侧渲染，接管后仍在附件行内、位置由宿主决定。原「文本之后的右下角图片区」与更早的胶囊 occupant 均已移除。`conversation.input.attachments` 保留声明（第三方宿主可自行派发），Amiba 的 composer 不再转发该 seat，直接由 attachment hook 渲染同一附件画廊。
+用户消息改为官方同构的附件行：文件与图片共处一个 `AttachmentGallery` 行（图片为有界预览瓦片、文件为紧凑 chip，单图封顶、多图退化为统一小瓦片，与 composer/空状态输入完全一致）。文件项继续由 Amiba 原生 chip 渲染；图片项按消息**整组调用一次** conversation.message.images（owner.images 为整组图片，owner 载荷 images/loadImage/align/compact 保持官方契约），默认 occupant 为 `MessageImagesGallery`（复用 `AttachmentImageTile`，渲染紧凑瓦片），注册在 `SHADOW_PRIORITY`(-1)——低于官方 ui-attachment occupant 的隐式 0，故默认即 Amiba 画廊形态；第三方以 **≤ -2** 注册即可接管图片侧渲染，接管后仍在附件行内、位置由宿主决定。乐观 live 气泡尚无 durable ref 时，图片 `attachmentBadge` 直接以 256px 缩略图渲染为同款瓦片（不再退化成文件胶囊），durable 后再由 seat 接管——live/durable 气泡与两种输入框四态一致。原「文本之后的右下角图片区」与更早的胶囊 occupant 均已移除。`conversation.input.attachments` 保留声明（第三方宿主可自行派发），Amiba 的 composer 不再转发该 seat，直接由 attachment hook 渲染同一附件画廊。
 
 兼容性：conversation.message.images 的声明、single/session、owner 载荷（images/loadImage/align）保持官方契约；整组调用从宿主侧看是合法用法（owner.images 本就是数组契约），但 Amiba 默认 occupant 与附件行布局属宿主呈现策略，不在槽位契约内。
 

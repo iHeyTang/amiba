@@ -1,4 +1,4 @@
-import type { AssistantTimelineItem } from "@amiba/app-runtime/protocol";
+import type { AssistantTimelineItem, MessageAttachment } from "@amiba/app-runtime/protocol";
 import { toolCallTreeContains } from "./nested-tool-calls";
 import { toolCallBlockFromProgress } from "./tool-call-block";
 import { WorkbenchViewBoundary } from "../workbench-extensions";
@@ -219,10 +219,13 @@ export interface BubbleProps {
    * Renderer for the message's images — the shell's dispatch of the official
    * `conversation.message.images` seat. The default occupant renders compact
    * gallery tiles; a plugin taking the seat over replaces just the image
-   * side. With no renderer (loader-less hosts) images are omitted and files
-   * keep their chips.
+   * side. The second argument mirrors the row's lone-image rule: `true` when
+   * the row holds more than one attachment, so a mixed row collapses to
+   * small tiles exactly like the composer/empty-state input. With no
+   * renderer (loader-less hosts) images are omitted and files keep their
+   * chips.
    */
-  messageImages?: (images: NonNullable<UiMessage["images"]>) => ReactNode;
+  messageImages?: (images: NonNullable<UiMessage["images"]>, compact?: boolean) => ReactNode;
   /** Turn-level renderers use this after moving execution details into one summary. */
   suppressTrace?: boolean;
   /** MessageTurns renders terminal run state after the whole execution segment. */
@@ -292,30 +295,58 @@ function BubbleUnmemoized({
     const fileBadges = m.attachmentBadges ?? [];
     // The attachment row mirrors the official user message: one container,
     // attachments in their ORIGINAL content order, files and images
-    // interleaved as the message carried them.
-    const attachments = m.attachments ?? [
-      ...fileBadges.map((badge) => ({ kind: "file" as const, badge })),
+    // interleaved as the message carried them. When the ordered list is
+    // missing (optimistic live bubble, plugin messages) it is rebuilt from
+    // badges — an IMAGE badge renders as the same thumbnail tile as a
+    // durable image, not as a file chip.
+    const imageBadges = fileBadges.filter((badge) => badge.kind === "image");
+    const attachments: readonly MessageAttachment[] = m.attachments ?? [
+      ...fileBadges
+        .filter((badge) => badge.kind !== "image")
+        .map((badge) => ({ kind: "file" as const, badge })),
       ...(m.images ?? []).map((image) => ({ kind: "image" as const, image })),
     ];
-    const hasReferences = attachments.length > 0;
     const hasContent = bodyText.length > 0;
     // ONE attachment presentation everywhere: file chips natively, images as
     // a single seat invocation (the default `conversation.message.images`
     // occupant renders the same compact tiles the composer uses; a plugin
     // taking the seat over replaces just the image side, still inside the
-    // shared row). Hosts without a message-images renderer simply omit the
-    // images — files keep their chips. The image group sits where the first
-    // image appeared in the message order.
-    const messageImagesSet: NonNullable<UiMessage["images"]> =
-      attachments.flatMap((item) => (item.kind === "image" ? [item.image] : []));
+    // shared row). Only DURABLE image refs go through the seat — an image
+    // badge on an optimistic live bubble has no session-readable ref yet, so
+    // it renders straight from its 256px thumbnail as the same tile shape.
+    // The compact flag mirrors the row's lone-image rule so a lone image is
+    // the larger bounded preview and a mixed row collapses to small tiles,
+    // exactly like the composer/empty-state input.
+    const durableImages: NonNullable<UiMessage["images"]> =
+      m.images?.length
+        ? m.images
+        : attachments.flatMap((item) => (item.kind === "image" ? [item.image] : []));
+    const hasRefs = attachments.length > 0 || imageBadges.length > 0 || durableImages.length > 0;
+    // A durable message carries images as session-readable refs (`m.images`);
+    // the same image also appears as an attachmentBadge, which is ONLY used
+    // as the optimistic live fallback when no refs exist yet.
+    const optimisticImageBadges =
+      durableImages.length === 0 ? imageBadges : [];
+    const compactRow = attachments.length + imageBadges.length > 1;
     const imageNode =
-      messageImages && messageImagesSet.length > 0 ? (
+      messageImages && durableImages.length > 0 ? (
         <WorkbenchViewBoundary fallback={null}>
-          <MessageImages images={messageImagesSet} render={messageImages} />
+          <MessageImages images={durableImages} render={messageImages} compact={compactRow} />
         </WorkbenchViewBoundary>
       ) : undefined;
     let imageGroupPlaced = false;
     const galleryItems: AttachmentGalleryItem[] = [];
+    // Optimistic badge-only images first — they have no durable ref, so they
+    // render straight from their thumbnail before the durable image group.
+    for (const badge of optimisticImageBadges) {
+      galleryItems.push({
+        kind: "image",
+        id: badge.uiId,
+        name: badge.name,
+        thumbUrl: badge.thumbDataUrl ?? null,
+        previewUrl: badge.thumbDataUrl ?? null,
+      });
+    }
     for (const item of attachments) {
       if (item.kind === "file") {
         galleryItems.push({
@@ -354,7 +385,7 @@ function BubbleUnmemoized({
             {t("sidepanel.message.from", { source: sourceLabel })}
           </div>
         )}
-        {hasReferences && (
+        {hasRefs && (
           galleryItems.length > 0 ? (
             <div
               data-message-attachments
@@ -2389,7 +2420,8 @@ function UserActionButton({
   );
 }
 
-function MessageImages({ images, render }: {
+function MessageImages({ images, render, compact = false }: {
   images: NonNullable<UiMessage["images"]>;
   render: NonNullable<BubbleProps["messageImages"]>;
-}) { return render(images); }
+  compact?: boolean;
+}) { return render(images, compact); }

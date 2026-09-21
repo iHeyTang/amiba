@@ -778,12 +778,13 @@ function ProductShellInner({
     [platform],
   );
   const renderMessageImages = useCallback(
-    (images: NonNullable<import("@amiba/app-runtime/protocol").ChatMessage["images"]>) =>
+    (images: NonNullable<import("@amiba/app-runtime/protocol").ChatMessage["images"]>, compact?: boolean) =>
       loadMessageImage
         ? renderSlot("conversation.message.images", {
             images,
             loadImage: loadMessageImage,
             align: "end",
+            ...(compact !== undefined ? { compact } : {}),
           })
         : null,
     [loadMessageImage, renderSlot],

@@ -44,7 +44,7 @@
 | 19 | `conversation.input.overlay` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 20 | `conversation.input.plan` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
 | 21 | `conversation.input.right` | 入口已接入，桌面验证通过 | 按官方位置传递真实 session/input，草稿及图片变化实时更新；卸载保留原编辑器及卡片尺寸。inputActions 已接入标准会话属性，草稿写入、提交及旧命令完成后保留新草稿已通过真实桌面验证；已绑定离屏会话的标准 setDraft 也已实测；标准 useInput、驻留草稿和离屏图片操作已接入；标准离屏文本、真实引用、图片命令及命令交回原输入器已实测。完整队列对齐及组件私有依赖仍需继续适配。 |
-| 22 | `conversation.message.images` | 持久图片桌面接入已验证 | 使用已有 single/session 契约，传递真实图片引用及按会话授权的 loadImage（含 peek）。共享同一会话的重复读取，失败可重试；切换会话或卸载 shell 释放 URL，迟到响应不产生 URL。真实 Host 存储、实时插件消息、历史重开、未引用会话拒绝、URL 释放和插件卸载保留原文已验证。2026-09-21 起按消息整组调用一次（owner.images 为整组，owner 载荷 images/loadImage/align/compact 保持官方契约），默认 occupant 为 `MessageImagesGallery`（`SHADOW_PRIORITY` -1，低于官方隐式 0，复用 `AttachmentImageTile` 紧凑瓦片），与文件 chip 共处同一 AttachmentGallery 行；第三方以 ≤ -2 注册可接管图片侧渲染（仍在附件行内）。原文字、附件徽标及消息控件不变。 |
+| 22 | `conversation.message.images` | 持久图片桌面接入已验证 | 使用已有 single/session 契约，传递真实图片引用及按会话授权的 loadImage（含 peek）。共享同一会话的重复读取，失败可重试；切换会话或卸载 shell 释放 URL，迟到响应不产生 URL。真实 Host 存储、实时插件消息、历史重开、未引用会话拒绝、URL 释放和插件卸载保留原文已验证。2026-09-21 起按消息整组调用一次（owner.images 为整组，owner 载荷 images/loadImage/align/compact 保持官方契约），默认 occupant 为 `MessageImagesGallery`（`SHADOW_PRIORITY` -1，低于官方隐式 0，复用 `AttachmentImageTile` 紧凑瓦片），与文件 chip 共处同一 AttachmentGallery 行；第三方以 ≤ -2 注册可接管图片侧渲染（仍在附件行内）。乐观 live 气泡无 durable ref 时图片 badge 直接以缩略图渲染同款瓦片，live/durable/输入框形态一致。原文字、附件徽标及消息控件不变。 |
 | 23 | `conversation.session` | 不能同时原样接管 | 完整接管该区域可能替换现有界面或创建第二套控制器。需拆出附加能力；不能宣称完整兼容。 |
 | 24 | `conversation.session.header` | 只能按组件分别适配 | 这是已有界面的替换入口。可复用服务或增加可选展示，但默认能力和样式必须保留。 |
 | 25 | `conversation.session.header.actions` | 已接入，依赖另核对 | 槽位已有真实渲染入口；使用官方私有服务或样式的组件仍需专项验证。 |
