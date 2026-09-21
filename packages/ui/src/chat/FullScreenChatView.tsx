@@ -234,7 +234,6 @@ export interface FullScreenChatViewProps {
      * seat, forwarded through ChatSurface to the internal Composer's card.
      */
     inputOverlay?: ReactNode;
-    inputAttachments?: import("./Composer").ComposerAttachmentsRenderer;
     inputDock?: ReactNode;
     composerDock?: ReactNode;
     inputLeft?: ReactNode;
@@ -250,7 +249,7 @@ export interface FullScreenChatViewProps {
      * conversation. Omit it (Quick-Ask, any host outside a DSH plugin
      * runtime) and every row renders Amiba's own tool chip.
      */
-    messageImages?: (images: NonNullable<import("@amiba/app-runtime/protocol").ChatMessage["images"]>) => ReactNode;
+    messageImages?: (images: NonNullable<import("@amiba/app-runtime/protocol").ChatMessage["images"]>, compact?: boolean) => ReactNode;
     approvalDetail?: (callId: string) => ReactNode;
     assistantActions?: (messageId: string) => ReactNode;
     turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;

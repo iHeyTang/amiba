@@ -1891,7 +1891,8 @@ describe("durable image extension rendering", () => {
   it("passes durable references from MessageTurns while retaining original text and badges", () => {
     const renderImages = vi.fn(() => <div>Plugin image gallery</div>);
     const view = render(<MessageTurns messages={[message]} messageImages={renderImages} />);
-    expect(renderImages).toHaveBeenCalledWith([image]);
+    // 1 image + 1 file badge → compact row (mixed attachments collapse).
+    expect(renderImages).toHaveBeenCalledWith([image], true);
     expect(screen.getByText("Original text")).toBeInTheDocument();
     expect(screen.getByText("notes.txt")).toBeInTheDocument();
     expect(screen.getByText("Plugin image gallery")).toBeInTheDocument();
@@ -1900,6 +1901,27 @@ describe("durable image extension rendering", () => {
     expect(screen.getByText("Original text")).toBeInTheDocument();
     expect(screen.getByText("notes.txt")).toBeInTheDocument();
   });
+  it("does not duplicate a durable image when a stale image badge is present", () => {
+    // A durable message carries the image as a ref (`images`) AND a persisted
+    // image badge; the badge must not also render as a separate tile.
+    const renderImages = vi.fn(() => <div data-gallery />);
+    const dual: UiMessage = {
+      uiId: "dual",
+      role: "user",
+      content: "t",
+      images: [image],
+      attachmentBadges: [
+        { uiId: "img-badge", kind: "image", name: "shot.png", mime: "image/png", size: 22, thumbDataUrl: "data:image/png;base64,AA" },
+      ],
+    };
+    const { container } = render(<Bubble m={dual} messageImages={renderImages} />);
+    const row = container.querySelector("[data-message-attachments]")!;
+    // One image via the seat (rendered by the mock), zero badge-offered tiles.
+    expect(renderImages).toHaveBeenCalledTimes(1);
+    expect(renderImages).toHaveBeenCalledWith([image], true);
+    expect(row.querySelectorAll("img")).toHaveLength(0);
+  });
+
   it("leaves the original message DOM unchanged when the image seat returns nothing", () => {
     const view = render(<Bubble m={message} />); const before = view.container.innerHTML;
     view.rerender(<Bubble m={message} messageImages={() => null} />);
@@ -1922,7 +1944,7 @@ describe("ordered attachment row (files + images in original order)", () => {
   const fileB = { uiId: "f-b", name: "b.txt", mime: "text/plain", size: 20, kind: "text" as const };
 
   it("renders one attachment row with files and images interleaved in message order", () => {
-    const renderImages = vi.fn((images: unknown[]) => <div data-gallery>{images.length}</div>);
+    const renderImages = vi.fn((images: NonNullable<import("@amiba/app-runtime/protocol").ChatMessage["images"]>, _compact?: boolean) => <div data-gallery>{images.length}</div>);
     const { container } = render(
       <Bubble
         m={
@@ -1946,16 +1968,15 @@ describe("ordered attachment row (files + images in original order)", () => {
     expect(row).not.toBeNull();
     expect(row.textContent).toContain("a.pdf");
     expect(row.textContent).toContain("b.txt");
-    // Every image item rides the official slot as a PER-ITEM call, exactly
-    // like the official chat view invokes it.
-    expect(renderImages).toHaveBeenCalledTimes(2);
-    expect(renderImages).toHaveBeenNthCalledWith(1, [imageA]);
-    expect(renderImages).toHaveBeenNthCalledWith(2, [imageB]);
-    expect(container.querySelectorAll("[data-gallery]")).toHaveLength(2);
+    // The whole image set rides the official slot in ONE call (the default
+    // occupant renders compact gallery tiles beside the file chips).
+    expect(renderImages).toHaveBeenCalledTimes(1);
+    expect(renderImages).toHaveBeenCalledWith([imageA, imageB], true);
+    expect(container.querySelectorAll("[data-gallery]")).toHaveLength(1);
   });
 
   it("falls back to file badges then images when no ordered attachments exist", () => {
-    const renderImages = vi.fn(() => <div data-gallery />);
+    const renderImages = vi.fn((_images: NonNullable<import("@amiba/app-runtime/protocol").ChatMessage["images"]>, _compact?: boolean) => <div data-gallery />);
     const { container } = render(
       <Bubble
         m={
@@ -1965,14 +1986,14 @@ describe("ordered attachment row (files + images in original order)", () => {
             content: "t",
             attachmentBadges: [fileA],
             images: [imageA],
-          } as UiMessage
+          } as unknown as UiMessage
         }
         messageImages={renderImages}
       />,
     );
     const row = container.querySelector("[data-message-attachments]")!;
     expect(row.textContent).toContain("a.pdf");
-    expect(renderImages).toHaveBeenCalledWith([imageA]);
+    expect(renderImages).toHaveBeenCalledWith([imageA], true);
   });
 
   it("omits image items when no messageImages renderer is provided, keeping file capsules", () => {
@@ -1994,6 +2015,37 @@ describe("ordered attachment row (files + images in original order)", () => {
     const row = container.querySelector("[data-message-attachments]")!;
     expect(row.textContent).toContain("a.pdf");
     expect(row.textContent).not.toContain("img-a");
+  });
+
+  it("renders a live badge-only image as a thumbnail tile, not a file capsule", () => {
+    // Optimistic bubbles carry images as badges (no durable refs yet): the
+    // image must render as the same tile the composer/durable row uses.
+    const imageBadge = {
+      uiId: "badge-img",
+      name: "shot.png",
+      mime: "image/png",
+      size: 22,
+      kind: "image" as const,
+      thumbDataUrl: "data:image/png;base64,AA",
+    };
+    const { container } = render(
+      <Bubble
+        m={
+          {
+            uiId: "live",
+            role: "user",
+            content: "t",
+            attachmentBadges: [imageBadge],
+          } as unknown as UiMessage
+        }
+      />,
+    );
+    const row = container.querySelector("[data-message-attachments]")!;
+    const img = row.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute("src")).toBe("data:image/png;base64,AA");
+    // No file-capsule chrome for the image badge.
+    expect(row.textContent).not.toContain("22");
   });
 });
 
