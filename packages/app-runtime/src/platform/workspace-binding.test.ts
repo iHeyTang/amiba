@@ -4,8 +4,11 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 vi.mock("../../../../apps/desktop/src/main/storage", () => ({
-  mainStore: { get: async () => ({}), set: vi.fn(async () => {}) },
+  mainStore: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}) },
 }));
+const watcher = vi.hoisted(() => vi.fn(() => ({ on: vi.fn(), close: vi.fn() })));
+vi.mock("chokidar", () => ({ default: { watch: watcher } }));
+import { mainStore } from "../../../../apps/desktop/src/main/storage";
 import { workspaceManager } from "../../../../apps/desktop/src/main/workspace";
 const roots: string[] = [];
 afterEach(async () => {
@@ -52,4 +55,14 @@ it("preserves the Host spelling for a symlink to the selected root, but keeps an
   expect(await workspaceManager.resolveRuntimeCwd("alias", alias)).toBe(alias);
   await workspaceManager.bind("alias", chosen);
   expect(await workspaceManager.resolveRuntimeCwd("alias", alias)).toBe(chosen);
+});
+
+it("restores every session binding without scanning their directories", async () => {
+  const { host } = await directories();
+  const bindings = Object.fromEntries(Array.from({ length: 38 }, (_, i) => [`session-${i}`, host]));
+  vi.mocked(mainStore.get).mockResolvedValueOnce({ "workspace.bindings": bindings });
+  await workspaceManager.init();
+  expect(workspaceManager.listBindings()).toEqual(bindings);
+  expect(await workspaceManager.resolveRuntimeCwd("session-0", host)).toBe(host);
+  expect(watcher).not.toHaveBeenCalled();
 });

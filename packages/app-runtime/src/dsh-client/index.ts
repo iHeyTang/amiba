@@ -41,6 +41,10 @@ export interface DshSessionEvent {
 }
 
 export type DshMuxFrame =
+  | { type: "session/added"; summary: DshSessionSummary }
+  | { type: "session/removed"; sessionId: string }
+  | { type: "session/status"; sessionId: string; running: boolean }
+  | { type: "session/activity"; sessionId: string; updatedAt: number }
   | { type: "session/event"; sessionId: string; event: DshSessionEvent; view?: unknown }
   | { type: "session/subscribed"; sessionId: string; lastSeq: number }
   | { type: "approval/requested"; sessionId: string; approvalId: string; toolName: string; callId?: string; reason?: string }
@@ -775,7 +779,10 @@ export class DshApiClient {
     try {
       while (pending.size) {
         const { index, result } = await Promise.race(pending.values())
-        if (result.done) { pending.delete(index); continue }
+        if (result.done) {
+          if (!controller.signal.aborted) throw new Error("DSH global event source ended; reconnect required")
+          pending.delete(index); continue
+        }
         pending.set(index, sources[index]!.next().then(result => ({ index, result })))
         yield result.value
       }
@@ -818,7 +825,18 @@ export class DshApiClient {
       try {
         for await (const frame of this.stream<RemoteEvent>("$events", {}, signal)) {
           if (frame.type === "ready") { clientId = frame.clientId; onOpen?.(); continue }
-          if (frame.type === "waterfall") {
+          if (frame.type === "emit") {
+            const [id, value] = frame.args
+            if (frame.event === "api-session/added") {
+              yield { rpcId: "", payload: { type: "session/added", summary: id as DshSessionSummary } }
+            } else if (frame.event === "api-session/removed" && typeof id === "string") {
+              yield { rpcId: "", payload: { type: "session/removed", sessionId: id } }
+            } else if (frame.event === "api-session/status" && typeof id === "string" && typeof value === "boolean") {
+              yield { rpcId: "", payload: { type: "session/status", sessionId: id, running: value } }
+            } else if (frame.event === "api-session/activity" && typeof id === "string" && typeof value === "number") {
+              yield { rpcId: "", payload: { type: "session/activity", sessionId: id, updatedAt: value } }
+            }
+          } else if (frame.type === "waterfall") {
             const kind = frame.event === "approval/request" ? "approval" : frame.event === "user-questions/request" ? "question" : undefined
             if (!kind) { await this.remote("$events/result", { clientId, eventId: frame.eventId, outcome: { kind: "next" } }, signal); continue }
             owned.add(frame.eventId)

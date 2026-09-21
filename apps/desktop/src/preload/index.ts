@@ -180,9 +180,9 @@ const api = {
 
   /**
    * Workspace binding bridge. A bound directory gives the chat session
-   * filesystem context; changes inside that tree are pushed back via
-   * `onChanged` so the renderer can re-render the indicator and (later)
-   * surface a "files changed" cue. `getPathForFile` exposes Electron 33's
+   * filesystem context; binding changes are pushed back via `onChanged`.
+   * File previews subscribe to individual resources through `files`.
+   * `getPathForFile` exposes Electron 33's
    * webUtils so the renderer can resolve a dropped folder's absolute path
    * (the legacy `File.path` field is gone).
    */
@@ -292,12 +292,13 @@ const api = {
         sessionId,
         paths,
       });
-      return () => {
+      // Cancellation must reach main even while native discovery is pending.
+      const dispose = () => {
         ipcRenderer.off("files:changed", handler);
-        void registration.finally(() =>
-          ipcRenderer.invoke("files:unwatch", subscriptionId),
-        );
+        void ipcRenderer.invoke("files:unwatch", subscriptionId).catch(() => {});
       };
+      void registration.catch(dispose);
+      return dispose;
     },
   },
 

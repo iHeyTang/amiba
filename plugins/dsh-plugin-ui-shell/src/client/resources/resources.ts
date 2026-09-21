@@ -9,6 +9,8 @@
  * across React's render-then-subscribe window and a StrictMode remount, where a
  * recreated record would make every render resubscribe and restart the stream.
  */
+import type { WorkspaceFilesAdapter } from '@amiba/app-runtime/platform'
+import { observeFileResource } from './file-provider.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ResourceResult as RemoteResult } from './result.js'
 import type { ObservableSnapshot } from '@amiba/extension-sdk'
@@ -22,7 +24,7 @@ import type {
 } from './contract.js'
 
 /** A provider with its value type erased, so one map holds every protocol. */
-interface RuntimeProvider {
+export interface RuntimeProvider {
   readonly protocol: string
   open(address: string, ctx: ResourceOpenContext): AsyncIterable<RemoteResult<unknown>>
 }
@@ -79,10 +81,11 @@ export class ResourceRegistry implements Resources {
   private readonly records = new Map<string, ResourceRecord>()
 
   /** @param ctx - Context whose effects own the registered providers. */
-  constructor(private readonly ctx: Context) {}
+  constructor(private readonly ctx: Context, private readonly observeFile?: WorkspaceFilesAdapter['observe']) {}
 
   register<P extends ResourceProtocol>(provider: ResourceProvider<P>): () => void {
-    const runtime: RuntimeProvider = provider
+    const runtime: RuntimeProvider = provider.protocol === 'file' && this.observeFile
+      ? observeFileResource(provider, this.observeFile) : provider
     const { protocol } = runtime
     if (this.providers.has(protocol)) {
       throw new Error(`resources: protocol "${protocol}" already has a provider`)

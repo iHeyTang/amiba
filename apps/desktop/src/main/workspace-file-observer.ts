@@ -43,6 +43,15 @@ export async function resolveWorkspaceWatchPath(workspaceRoot: string, candidate
   return { root, path: path.join(resolved, ...missing) };
 }
 
+export type WorkspaceFileEvent = "add" | "change" | "unlink";
+type Changed = (event: WorkspaceFileEvent, path: string) => void;
+interface SharedObservation {
+  controller: AbortController;
+  listeners: Set<Changed>;
+  ready: Promise<() => Promise<void>>;
+}
+const observations = new Map<string, SharedObservation>();
+
 /** Watch precisely one authorized target, including a not-yet-created file.
  * The ready promise resolves after initial discovery, before the caller's
  * initial stat. Notifications are invalidations: callers reauthorize reads.
@@ -50,10 +59,60 @@ export async function resolveWorkspaceWatchPath(workspaceRoot: string, candidate
 export async function observeWorkspaceFile(
   workspaceRoot: string,
   candidate: string,
-  changed: () => void,
+  changed: Changed,
   signal: AbortSignal,
 ): Promise<() => Promise<void>> {
+  // Authorize each subscription before sharing its underlying native watcher.
   const resolved = await resolveWorkspaceWatchPath(workspaceRoot, candidate);
+  if (signal.aborted) return async () => {};
+  const key = JSON.stringify([resolved.root, resolved.path]);
+  let shared = observations.get(key);
+  if (!shared) {
+    const controller = new AbortController();
+    const listeners = new Set<Changed>();
+    shared = {
+      controller, listeners,
+      ready: observeResolvedFile(resolved, (event, path) => {
+        for (const listener of listeners) listener(event, path);
+      }, controller.signal),
+    };
+    observations.set(key, shared);
+  }
+  const entry = shared;
+  // A distinct listener also supports duplicate subscriptions using one callback.
+  const listener: Changed = (event, path) => changed(event, path);
+  entry.listeners.add(listener);
+  let released = false;
+  let closing: Promise<void> | undefined;
+  const dispose = (): Promise<void> => {
+    if (released) return closing ?? Promise.resolve();
+    released = true;
+    signal.removeEventListener('abort', aborted);
+    entry.listeners.delete(listener);
+    if (!entry.listeners.size) {
+      if (observations.get(key) === entry) observations.delete(key);
+      entry.controller.abort();
+      closing = entry.ready.then(close => close(), () => {});
+    }
+    return closing ?? Promise.resolve();
+  };
+  const aborted = () => { void dispose(); };
+  signal.addEventListener('abort', aborted, { once: true });
+  if (signal.aborted) await dispose();
+  try {
+    await entry.ready;
+    return dispose;
+  } catch (error) {
+    await dispose();
+    throw error;
+  }
+}
+
+async function observeResolvedFile(
+  resolved: { root: string; path: string },
+  changed: Changed,
+  signal: AbortSignal,
+): Promise<() => Promise<void>> {
   if (signal.aborted) return async () => {};
   const watcher = chokidar.watch(resolved.root, {
     persistent: true,
@@ -83,8 +142,13 @@ export async function observeWorkspaceFile(
   const aborted = () => { void dispose(); };
   signal.addEventListener('abort', aborted, { once: true });
   if (signal.aborted) await dispose();
-  watcher.on('all', (_event, observed) => {
-    if (!stopped && path.resolve(observed) === resolved.path) changed();
+  watcher.on('all', (event, observed) => {
+    // A file replaced by a directory must invalidate its preview as well.
+    const fileEvent = event === 'addDir' ? 'change' : event === 'unlinkDir' ? 'unlink' : event;
+    if (!stopped && path.resolve(observed) === resolved.path &&
+        (fileEvent === 'add' || fileEvent === 'change' || fileEvent === 'unlink')) {
+      changed(fileEvent, resolved.path);
+    }
   });
   try {
     await new Promise<void>((resolve, reject) => {
@@ -93,7 +157,7 @@ export async function observeWorkspaceFile(
       watcher.once('ready', resolve);
       // Keep an error listener for the whole lifetime; after readiness an
       // invalidation lets the caller's metadata reconciliation report errors.
-      watcher.on('error', error => { if (!stopped) changed(); reject(error); });
+      watcher.on('error', error => { if (!stopped) changed('change', resolved.path); reject(error); });
     });
     return dispose;
   } catch (error) {

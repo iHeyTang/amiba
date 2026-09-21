@@ -1,3 +1,4 @@
+import type { AgentSubagentAddress } from "@amiba/app-runtime/platform";
 /**
  * Wire protocol between the main process and the runtime-host worker.
  *
@@ -19,7 +20,6 @@
 import type {
   ApprovalDecision,
   ApprovalRequest,
-  AgentSubagentAddress,
   EngineToClientMessage,
   RuntimeActionResult,
   SubmitPayload,

@@ -4,7 +4,6 @@ import { readDocumentFile } from "./document-file-reader";
 import { observeWorkspaceFile } from "./workspace-file-observer";
 import { registerFileResourceIpc } from "./file-resource-ipc";
 import { readPreviewFile, statWorkspaceFile } from "./file-preview";
-import { resolve as resolvePath } from "node:path";
 
 import {
   BrowserWindow,
@@ -55,15 +54,6 @@ import {
   writeWorkspaceTerminal,
 } from "./workspace-development";
 
-
-interface FileWatchSubscription {
-  webContentsId: number;
-  sessionId: string;
-  paths: Set<string>;
-}
-
-const fileWatchSubscriptions = new Map<string, FileWatchSubscription>();
-const observedFileWatchSenders = new Set<number>();
 
 async function readWorkspaceFile(sessionId: string, candidate: string, raw = false) {
   const resolved = await workspaceManager.resolveFileForSession(sessionId, candidate);
@@ -439,72 +429,5 @@ export function registerIpcHandlers() {
     },
   );
 
-  ipcMain.handle(
-    "files:watch",
-    async (
-      event,
-      args: { subscriptionId: string; sessionId: string; paths: string[] },
-    ): Promise<void> => {
-      if (!args.subscriptionId || !args.sessionId) {
-        throw new Error("Invalid file watch subscription.");
-      }
-      const paths = new Set<string>();
-      for (const candidate of args.paths.slice(0, 32)) {
-        try {
-          const resolved = await workspaceManager.resolveFileForSession(
-            args.sessionId,
-            candidate,
-          );
-          paths.add(resolved.path);
-        } catch {
-          // A file can disappear between read and watch registration. The
-          // viewer already owns the corresponding missing-file state.
-        }
-      }
-      fileWatchSubscriptions.set(args.subscriptionId, {
-        webContentsId: event.sender.id,
-        sessionId: args.sessionId,
-        paths,
-      });
-      if (observedFileWatchSenders.has(event.sender.id)) return;
-      observedFileWatchSenders.add(event.sender.id);
-      event.sender.once("destroyed", () => {
-        observedFileWatchSenders.delete(event.sender.id);
-        for (const [id, subscription] of fileWatchSubscriptions) {
-          if (subscription.webContentsId === event.sender.id) {
-            fileWatchSubscriptions.delete(id);
-          }
-        }
-      });
-    },
-  );
-
-  ipcMain.handle("files:unwatch", (event, subscriptionId: string): void => {
-    const subscription = fileWatchSubscriptions.get(subscriptionId);
-    if (subscription?.webContentsId === event.sender.id) {
-      fileWatchSubscriptions.delete(subscriptionId);
-    }
-  });
-
   workspaceManager.onChange(broadcastWorkspaceChange);
-  workspaceManager.onFile((change) => {
-    const changedPath = resolvePath(change.path);
-    for (const [subscriptionId, subscription] of fileWatchSubscriptions) {
-      if (subscription.sessionId !== change.sessionId) continue;
-      if (
-        !subscription.paths.has(change.path) &&
-        !subscription.paths.has(changedPath)
-      ) {
-        continue;
-      }
-      const target = BrowserWindow.getAllWindows()
-        .map((win) => win.webContents)
-        .find((contents) => contents.id === subscription.webContentsId);
-      if (!target || target.isDestroyed()) {
-        fileWatchSubscriptions.delete(subscriptionId);
-        continue;
-      }
-      target.send("files:changed", { ...change, subscriptionId });
-    }
-  });
 }

@@ -32,7 +32,8 @@
     "@amiba/ui": "workspace:*",
     "@amiba/extension-sdk": "workspace:*",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "@amiba/dsh-plugin-ui-shell": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
@@ -58,7 +59,8 @@
       "external": [
         "react",
         "react-dom",
-        "react/jsx-runtime"
+        "react/jsx-runtime",
+        "@amiba/dsh-plugin-ui-shell/client"
       ],
       "inject": [
         "@deepseek-ai/dsh-client-ui-renderer",

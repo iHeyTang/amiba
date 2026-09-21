@@ -8,7 +8,7 @@
  *   - pet library      ← `amibaPets/list` polled every 2s (pets-source)
  *   - notification feed ← `amibaNotifications/watch` long-poll (notification-source)
  *   - session activity ← session journal + global events mux (activity-source)
- *   - session index    ← `session/list` polled every 2s (sessions-source),
+ *   - session index    ← `session events + reconnect / 30s reconciliation,
  *                        used for the cross-window sessions.revision bump that
  *                        makes every window refresh its history immediately
  *
@@ -64,7 +64,7 @@ export class DshStateLayer {
     // bump so every window's SessionsStore refreshes without waiting for its
     // next surface refresh tick (Quick-Ask minting a session used to leave
     // the main window's history stale until the next manual refresh). The
-    // bump is signature-gated: the shared poller emits every cycle, but the
+    // bump is signature-gated: the index emits only changed rows, but the
     // storage marker only fires when the visible session set / running flags
     // actually changed.
     this.offSessions = this.sessions.onChange((rows) => {
@@ -85,7 +85,6 @@ export class DshStateLayer {
     this.started = true;
     this.pets.start();
     this.notifications.start();
-    this.activity.start();
     this.registerIpc();
   }
 

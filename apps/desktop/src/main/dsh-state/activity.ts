@@ -8,7 +8,7 @@
  *
  *   1. Follows the global events mux for interaction waits (approvals /
  *      questions) and the session-title projection.
- *   2. Follows the most recently active non-blank session's journal
+ *   2. Follows the most recently active running session's journal
  *      (`session/follow`) and projects its raw events onto the same phase
  *      lattice the chat surface uses (thinking / responding / tooling /
  *      waiting / completed / failed / interrupted).
@@ -17,7 +17,7 @@
  * `createSurfaceActivity`'s phases but never drives execution.
  */
 
-import type { DshApiClient } from "@amiba/app-runtime/dsh-client";
+import type { DshApiClient, DshMuxEnvelope } from "@amiba/app-runtime/dsh-client";
 import type { DesktopPetActivity } from "@amiba/app-runtime/platform";
 import type { SessionIndex } from "../session-index";
 import type { DshSessionRow } from "./types";
@@ -74,8 +74,10 @@ export class ActivitySource {
   private activity: DesktopPetActivity = IDLE_ACTIVITY;
   private title: string | undefined;
   private followedSession = "";
+  private hasSessionSnapshot = false;
+  private latestSeenUpdate = -Infinity;
   private journalController: AbortController | undefined;
-  private globalController: AbortController | undefined;
+  private readonly offEvents: () => void;
   private readonly offSessions: () => void;
   private disposed = false;
   private readonly listeners = new Set<() => void>();
@@ -93,11 +95,11 @@ export class ActivitySource {
   private restored = true;
   private revision = 0;
 
-  constructor(
-    private readonly client: () => Promise<DshApiClient>,
-    sessions: SessionIndex,
-  ) {
+  private readonly client: () => Promise<DshApiClient>;
+  constructor(client: () => Promise<DshApiClient>, sessions: SessionIndex) {
+    this.client = client;
     this.offSessions = sessions.onChange((rows) => this.onSessions(rows));
+    this.offEvents = sessions.onEvent((envelope) => this.onGlobalEvent(envelope));
   }
 
   onChange(listener: () => void): () => void {
@@ -109,65 +111,37 @@ export class ActivitySource {
     return this.activity;
   }
 
-  start(): void {
-    void this.startGlobal();
-  }
-
-  private async startGlobal(): Promise<void> {
-    if (this.globalController) return;
-    this.globalController = new AbortController();
-    const controller = this.globalController;
-    // Unlike the address-scoped journal, the global events mux has no
-    // client-side reconnect, so re-establish it with a small backoff on drops
-    // (runtime restarts, backplane blips). The journal follow below has its
-    // own internal reconnect loop.
-    while (!this.disposed && !controller.signal.aborted) {
-      try {
-        const client = await this.client();
-        for await (const envelope of client.events(controller.signal)) {
-          if (this.disposed) return;
-          const frame = envelope.payload;
-          if (!("sessionId" in frame) || frame.sessionId !== this.followedSession) {
-            continue;
-          }
-          switch (frame.type) {
-            case "approval/requested":
-              this.approvals.add(frame.approvalId);
-              break;
-            case "approval/resolved":
-              this.approvals.delete(frame.approvalId);
-              break;
-            case "question/requested":
-              this.questions.add(envelope.rpcId);
-              break;
-            case "question/resolved":
-              this.questions.delete(frame.questionRpcId);
-              break;
-            case "session/projection":
-              if (frame.key === "title" && typeof frame.value === "string") {
-                this.title = frame.value;
-              }
-              break;
-            default:
-              continue;
-          }
-          this.publish(false);
-        }
-      } catch {
-        // Carrier drop — reconnect after a short pause.
-      }
-      if (this.disposed || controller.signal.aborted) return;
-      await new Promise((resolve) => setTimeout(resolve, 2_000));
+  private onGlobalEvent(envelope: DshMuxEnvelope): void {
+    if (this.disposed) return;
+    const frame = envelope.payload;
+    if (!("sessionId" in frame) || frame.sessionId !== this.followedSession) return;
+    switch (frame.type) {
+      case "approval/requested": this.approvals.add(frame.approvalId); break;
+      case "approval/resolved": this.approvals.delete(frame.approvalId); break;
+      case "question/requested": this.questions.add(envelope.rpcId); break;
+      case "question/resolved": this.questions.delete(frame.questionRpcId); break;
+      case "session/projection":
+        if (frame.key === "title" && typeof frame.value === "string") this.title = frame.value;
+        break;
+      default: return;
     }
+    this.publish(false);
   }
 
   private onSessions(rows: DshSessionRow[]): void {
     const current = pickCurrentSession(rows);
+    // Short turns can start and finish between index polls. Replay new
+    // activity after startup as well, so their terminal state is not lost.
+    const shouldFollow = !!current && (current.running ||
+      (this.hasSessionSnapshot && current.updatedAt > this.latestSeenUpdate));
+    this.hasSessionSnapshot = true;
+    for (const row of rows) this.latestSeenUpdate = Math.max(this.latestSeenUpdate, row.updatedAt);
     const nextTitle =
       current?.title || rows.find((row) => row.sessionId === this.followedSession)?.title;
     if (nextTitle !== undefined) this.title = nextTitle;
     const nextId = current?.sessionId ?? "";
     if (nextId === this.followedSession) {
+      if (shouldFollow && !this.journalController) void this.startJournal(nextId);
       this.publish(false);
       return;
     }
@@ -178,7 +152,10 @@ export class ActivitySource {
     this.tools.clear();
     this.base = "idle";
     this.restored = true;
-    if (nextId) void this.startJournal(nextId);
+    // An idle homepage needs only the index's title, not a cold replay of the
+    // last conversation. Start following when work runs; retain that live
+    // subscription through turn/end so completion/errors are still observed.
+    if (nextId && shouldFollow) void this.startJournal(nextId);
     this.publish(true);
   }
 
@@ -192,7 +169,7 @@ export class ActivitySource {
         undefined,
         { kind: "session", sessionId },
       )) {
-        if (this.disposed || this.followedSession !== sessionId) return;
+        if (this.disposed || controller.signal.aborted || this.journalController !== controller) return;
         const frame = envelope.payload;
         if (frame.type === "session/event") {
           this.applyEvent(frame.event as unknown as RawSessionEvent);
@@ -276,7 +253,8 @@ export class ActivitySource {
       !forceRestored &&
       phase === this.activity.phase &&
       next.restored === this.activity.restored &&
-      next.sessionId === this.activity.sessionId
+      next.sessionId === this.activity.sessionId &&
+      next.title === this.activity.title
     ) {
       return;
     }
@@ -288,8 +266,7 @@ export class ActivitySource {
     this.disposed = true;
     this.offSessions();
     this.stopJournal();
-    this.globalController?.abort();
-    this.globalController = undefined;
+    this.offEvents();
     this.listeners.clear();
   }
 }
