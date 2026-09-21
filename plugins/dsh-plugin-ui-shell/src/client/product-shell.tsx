@@ -967,7 +967,6 @@ function ProductShellInner({
                 // bridge) and renders nothing while none is current, which is also
                 // why the home/draft composer keeps Amiba's own trigger menu.
                 inputOverlay: renderSlot("conversation.input.overlay", {}),
-                inputAttachments: owner => renderSlot("conversation.input.attachments", owner),
                 inputDock: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.input.dock", owner)} />,
                 composerDock: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.composer.dock", owner)} />,
                 inputLeft: <InputRegion source={conversationSource(sessions.activeId)} input={triggerRuntime?.inputStateSource?.(sessions.activeId)} render={owner => renderSlot("conversation.input.left", owner)} />,
@@ -976,6 +975,7 @@ function ProductShellInner({
                 conversationRows,
                 turnTail: (runtimeTurn, openFile) => <TurnTail source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} render={owner => renderSlotChain("conversation.chat.turnTail", owner)} />,
                 messageImages: renderMessageImages,
+                messageImageLoader: loadMessageImage,
                 approvalDetail: (callId) => renderSlot("conversation.approval.detail", { callId }),
                 assistantActions: (messageId) => renderSlot("conversation.chat.assistant-actions", { messageId: messageId as import("@amiba/extension-sdk").AssistantActionOwnerProps["messageId"] }),
                 toolView: renderToolViewSeat,

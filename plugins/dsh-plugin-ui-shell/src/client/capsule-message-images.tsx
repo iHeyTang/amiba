@@ -2,18 +2,17 @@ import { useEffect, useState } from "react";
 import type { ImageAttachmentRef } from "@amiba/extension-sdk";
 
 /**
- * Amiba's default presence for the OFFICIAL `conversation.message.images`
- * slot: every image renders as a capsule pill (small thumbnail + name),
- * matching the native file capsules in the same attachment row, so files
- * and images share one uniform presentation in the message's original
- * order. The official chat view invokes this seat per image
- * (`images: [one]`); multi-image owners render a row of capsules.
+ * Amiba's fallback presence for the OFFICIAL `conversation.message.images`
+ * slot: every image renders as a capsule pill (small thumbnail + name).
+ * Amiba's own user bubble uses `messageImageLoader` (the session-bound
+ * loader) to render the unified AttachmentGallery instead; this occupant
+ * only serves hosts that dispatch the seat WITHOUT providing a loader, so
+ * the attachment row still shows a coherent capsule row there.
  *
  * See `installMessageImagesDefault` in the shell: the default is registered
  * at a HIGH priority because cell shadowing elects the LOWEST priority
  * occupant — a plugin registering at `0` (or lower) takes this seat over and
- * replaces the capsule with its own image presentation, still mounted inside
- * Amiba's attachment row.
+ * replaces the capsule with its own image presentation.
  */
 export function CapsuleMessageImages({
   owner,

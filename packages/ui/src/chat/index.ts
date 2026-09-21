@@ -86,6 +86,11 @@ export {
   type BubbleProps,
 } from "./bubble/Bubble";
 export {
+  AttachmentGallery,
+  type AttachmentGalleryItem,
+  type AttachmentGalleryProps,
+} from "./attachment-gallery";
+export {
   AgentDestinationChip,
   AttachmentBadgeView,
   AttachmentChip,

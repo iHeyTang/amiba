@@ -65,6 +65,7 @@ import {
 import { splitTrailingTextRun } from "../internal/turn-presentation";
 import { ApprovalRecordChip } from "./approval";
 import { AgentDestinationChip, AttachmentBadgeView } from "./chips";
+import { AttachmentGallery, type AttachmentGalleryItem } from "../attachment-gallery";
 import { ToolChip } from "./tool-chip";
 import { hasToolDetail } from "./tool-presentation";
 import { CodeEvidence } from "./tool-evidence";
@@ -215,6 +216,14 @@ function MessageNoticeRow({
 export interface BubbleProps {
   m: UiMessage;
   messageImages?: (images: NonNullable<UiMessage["images"]>) => ReactNode;
+  /**
+   * Session-bound loader for durable image refs, supplied by the shell. When
+   * present, the user attachment row renders its images natively through
+   * `AttachmentGallery` (compact tiles, unified with the composer); hosts
+   * that only provide the `messageImages` slot keep the previous slot-driven
+   * per-image rendering.
+   */
+  messageImageLoader?: (attachment: import("@amiba/extension-sdk").ImageAttachmentRef) => Promise<string>;
   /** Turn-level renderers use this after moving execution details into one summary. */
   suppressTrace?: boolean;
   /** MessageTurns renders terminal run state after the whole execution segment. */
@@ -252,6 +261,7 @@ function hasInterleavedAssistantTimeline(message: UiMessage): boolean {
 function BubbleUnmemoized({
   m,
   messageImages,
+  messageImageLoader,
   suppressTrace = false,
   suppressRunBoundary = false,
   onOpenAgentDestination,
@@ -284,16 +294,37 @@ function BubbleUnmemoized({
     const fileBadges = m.attachmentBadges ?? [];
     // The attachment row mirrors the official user message: one container,
     // attachments in their ORIGINAL content order, files and images
-    // interleaved as the message carried them. Every image item rides the
-    // official `conversation.message.images` slot (per-item, exactly as the
-    // official chat view invokes it), so Amiba's default capsule rendering
-    // and any plugin takeover both stay inside the same row.
+    // interleaved as the message carried them.
     const attachments = m.attachments ?? [
       ...fileBadges.map((badge) => ({ kind: "file" as const, badge })),
       ...(m.images ?? []).map((image) => ({ kind: "image" as const, image })),
     ];
     const hasReferences = attachments.length > 0;
     const hasContent = bodyText.length > 0;
+    // The shell supplies a session-bound image loader, so both files and
+    // images render through the unified AttachmentGallery (compact tiles,
+    // exactly like the composer/empty-state drafts). Hosts that only provide
+    // the official `messageImages` slot keep the previous per-image slot
+    // rendering (plugin takeover intact) — the two paths only differ in how
+    // a durable image resolves to a URL.
+    const galleryItems: AttachmentGalleryItem[] = messageImageLoader
+      ? attachments.map((item) =>
+          item.kind === "file"
+            ? {
+                kind: "file",
+                id: item.badge.uiId,
+                name: item.badge.name,
+                fileKind: item.badge.kind,
+                size: item.badge.size,
+              }
+            : {
+                kind: "image",
+                id: item.image.attachment.attachmentId,
+                name: item.image.attachment.name,
+                loadImage: () => messageImageLoader!(item.image.attachment),
+              },
+        )
+      : [];
     // A message a plugin dispatched on the user's behalf (a relayed task
     // brief, an inbound IM message) reads as a user turn but did not come
     // from the person at the composer — say so, in the same quiet chip the
@@ -318,28 +349,37 @@ function BubbleUnmemoized({
           </div>
         )}
         {hasReferences && (
-          <div
-            data-message-attachments
-            className={cn(
-              "flex flex-wrap items-center gap-1.5",
-              hasContent && "mb-2",
-            )}
-          >
-            {attachments.map((item, index) =>
-              item.kind === "file" ? (
-                <AttachmentBadgeView key={item.badge.uiId} badge={item.badge} />
-              ) : messageImages ? (
-                <WorkbenchViewBoundary
-                  key={`image:${item.image.attachment.attachmentId}`}
-                  fallback={null}
-                >
-                  <MessageImages images={[item.image]} render={messageImages} />
-                </WorkbenchViewBoundary>
-              ) : (
-                <Fragment key={`image:${index}`} />
-              ),
-            )}
-          </div>
+          galleryItems.length > 0 ? (
+            <div
+              data-message-attachments
+              className={hasContent ? "mb-2" : undefined}
+            >
+              <AttachmentGallery items={galleryItems} />
+            </div>
+          ) : (
+            <div
+              data-message-attachments
+              className={cn(
+                "flex flex-wrap items-center gap-1.5",
+                hasContent && "mb-2",
+              )}
+            >
+              {attachments.map((item, index) =>
+                item.kind === "file" ? (
+                  <AttachmentBadgeView key={item.badge.uiId} badge={item.badge} />
+                ) : messageImages ? (
+                  <WorkbenchViewBoundary
+                    key={`image:${item.image.attachment.attachmentId}`}
+                    fallback={null}
+                  >
+                    <MessageImages images={[item.image]} render={messageImages} />
+                  </WorkbenchViewBoundary>
+                ) : (
+                  <Fragment key={`image:${index}`} />
+                ),
+              )}
+            </div>
+          )
         )}
         {hasContent && (
           <div className="whitespace-pre-wrap break-words"><ReferenceText text={bodyText} /></div>
@@ -1732,6 +1772,7 @@ export const Bubble = memo(BubbleUnmemoized);
 function UserStickyBubbleUnmemoized({
   m,
   messageImages,
+  messageImageLoader,
   onOpenAgentDestination,
   userOrdinal,
   onBranch,
@@ -1741,6 +1782,7 @@ function UserStickyBubbleUnmemoized({
 }: {
   m: UiMessage;
   messageImages?: BubbleProps["messageImages"];
+  messageImageLoader?: BubbleProps["messageImageLoader"];
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
   userOrdinal: number;
   onBranch?: (message: UiMessage, userOrdinal: number) => void | Promise<void>;
@@ -1801,7 +1843,7 @@ function UserStickyBubbleUnmemoized({
               )}
             >
               <div ref={innerRef}>
-                <Bubble m={m} messageImages={messageImages} onOpenAgentDestination={onOpenAgentDestination} />
+                <Bubble m={m} messageImages={messageImages} messageImageLoader={messageImageLoader} onOpenAgentDestination={onOpenAgentDestination} />
               </div>
             </div>
             {isClipping && (
@@ -1933,6 +1975,7 @@ export function MessageTurns({
   openTurnFile,
   assistantActions,
   messageImages,
+  messageImageLoader,
   messages,
   sessionId,
   onOpenAgentDestination,
@@ -1944,6 +1987,7 @@ export function MessageTurns({
 }: {
   messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
   messageImages?: BubbleProps["messageImages"];
+  messageImageLoader?: BubbleProps["messageImageLoader"];
   assistantActions?: (messageId: string) => ReactNode;
   turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
   timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[];
@@ -2137,6 +2181,7 @@ export function MessageTurns({
             {turn.user && (
               <UserStickyBubble
                 messageImages={messageImages}
+                messageImageLoader={messageImageLoader}
                 m={turn.user}
                 onOpenAgentDestination={onOpenAgentDestination}
                 userOrdinal={turn.userOrdinal}
@@ -2169,6 +2214,7 @@ export function MessageTurns({
                   ? messageText(item.message.runtimeTurn, <Bubble
                   m={item.message}
                   messageImages={messageImages}
+                  messageImageLoader={messageImageLoader}
                   suppressTrace={item.suppressTrace}
                   suppressRunBoundary={item.suppressRunBoundary}
                   onOpenAgentDestination={onOpenAgentDestination}
@@ -2176,6 +2222,7 @@ export function MessageTurns({
                   : <Bubble
                   m={item.message}
                   messageImages={messageImages}
+                  messageImageLoader={messageImageLoader}
                   suppressTrace={item.suppressTrace}
                   suppressRunBoundary={item.suppressRunBoundary}
                   onOpenAgentDestination={onOpenAgentDestination}

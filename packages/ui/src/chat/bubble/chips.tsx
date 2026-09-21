@@ -185,7 +185,7 @@ export function KindIcon({ kind, className }: KindIconProps) {
  * image scales to fit the viewport with a small inset so it never butts
  * against the chrome.
  */
-function ImagePreviewDialog({
+export function ImagePreviewDialog({
   src,
   alt,
   children,

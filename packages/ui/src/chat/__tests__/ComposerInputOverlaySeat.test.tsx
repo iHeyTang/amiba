@@ -114,45 +114,35 @@ describe("additive official input regions", () => {
 });
 
 
-describe("official attachment presentation seat", () => {
-  it("adds its presentation alongside native chips and forwards real browser descriptors", () => {
-    const addFiles = vi.fn(async () => {}), removeDraftImage = vi.fn();
-    const file = new File(["image"], "photo.png", { type: "image/png" });
-    const image = { kind: "image", id: "browser-id", file, previewUrl: "blob:preview" };
-    let owner: import("@amiba/extension-sdk").ComposerAttachmentsOwner;
+describe("composer attachment gallery", () => {
+  it("renders one unified gallery for staged attachments and keeps pinned chips", () => {
     const attachments = {
-      attachments: [], draftImages: [image], canAddDraftImages: () => true,
-      addFiles, removeDraftImage, fileInputProps: { type: "file" },
+      attachments: [
+        { uiId: "img-1", kind: "image", name: "photo.png", mime: "image/png", size: 10, thumbDataUrl: "blob:thumb-1", previewDataUrl: "blob:preview-1" },
+        { uiId: "pdf-1", kind: "pdf", name: "a.pdf", mime: "application/pdf", size: 12 },
+      ],
+      draftImages: [], canAddDraftImages: () => true,
+      fileInputProps: { type: "file" }, removeAttachment: () => {},
     } as never;
     const props = { value: "", onChange: () => {}, onSubmit: () => {}, attachments,
       permissionSessionId: "a", chipRow: <span data-native-chip="" />,
-      inputAttachments: (next: typeof owner) => { owner = next; return <span data-plugin-attachments="" />; },
     };
-    const { container, rerender } = render(<Composer {...props} />);
-    expect(owner!.attachments[0]).toBe(image);
-    expect(card(container).querySelector("[data-native-chip]")).not.toBeNull();
-    expect(card(container).querySelector("[data-plugin-attachments]")).not.toBeNull();
-    owner!.onAddImages([file]);
-    expect(addFiles).toHaveBeenCalledWith([file]);
-    owner!.onRemoveImage(image.id as never);
-    expect(removeDraftImage).toHaveBeenCalledWith(image.id);
-    const old = owner!;
-    rerender(<Composer {...props} permissionSessionId="b" />);
-    old.onAddImages([file]); old.onRemoveImage(image.id as never);
-    expect(addFiles).toHaveBeenCalledTimes(1);
-    expect(removeDraftImage).toHaveBeenCalledTimes(1);
-    rerender(<Composer {...props} permissionSessionId="b" disabled />);
-    expect(owner!.canAcceptDrop).toBe(false);
-    owner!.onAddImages([file]); owner!.onRemoveImage(image.id as never);
-    expect(addFiles).toHaveBeenCalledTimes(1);
-    expect(removeDraftImage).toHaveBeenCalledTimes(1);
+    const { container } = render(<Composer {...props} />);
+    const frame = card(container);
+    expect(frame.querySelector("[data-native-chip]")).not.toBeNull();
+    const gallery = frame.querySelector("[data-attachment-gallery]");
+    expect(gallery).not.toBeNull();
+    expect(gallery!.textContent).toContain("a.pdf");
+    // Images render as bounded preview tiles (name rides on the img alt),
+    // files as compact chips — one shared gallery, no separate capsule row.
+    const img = gallery!.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute("alt")).toBe("photo.png");
   });
 
-  it("costs no markup when the registered renderer is empty", () => {
+  it("renders no gallery row when nothing is staged", () => {
     const props = { value: "", onChange: () => {}, onSubmit: () => {} };
-    const { container, rerender } = render(<Composer {...props} />);
-    const before = container.innerHTML;
-    rerender(<Composer {...props} inputAttachments={() => null} />);
-    expect(container.innerHTML).toBe(before);
+    const { container } = render(<Composer {...props} />);
+    expect(card(container).querySelector("[data-attachment-gallery]")).toBeNull();
   });
 });

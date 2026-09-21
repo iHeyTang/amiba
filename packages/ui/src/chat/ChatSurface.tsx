@@ -326,7 +326,6 @@ export interface ChatSurfaceProps {
      * is byte-identical to before.
      */
     inputOverlay?: ReactNode;
-    inputAttachments?: import("./Composer").ComposerAttachmentsRenderer;
     inputDock?: ReactNode;
     composerDock?: ReactNode;
     inputLeft?: ReactNode;
@@ -346,6 +345,7 @@ export interface ChatSurfaceProps {
      * every unclaimed tool name.
      */
     messageImages?: (images: NonNullable<import("@amiba/app-runtime/protocol").ChatMessage["images"]>) => ReactNode;
+    messageImageLoader?: (attachment: import("@amiba/extension-sdk").ImageAttachmentRef) => Promise<string>;
     approvalDetail?: (callId: string) => ReactNode;
     assistantActions?: (messageId: string) => ReactNode;
     turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
@@ -2352,7 +2352,6 @@ export default function ChatSurface({
       approvalModePicker
       planSeat={slots?.planSeat}
       inputOverlay={slots?.inputOverlay}
-      inputAttachments={slots?.inputAttachments}
       inputDock={slots?.inputDock}
       composerDock={slots?.composerDock}
       inputLeft={slots?.inputLeft}
@@ -2559,6 +2558,7 @@ export default function ChatSurface({
                         <WorkspaceUrlOpenerContext.Provider value={workspaceUrlOpener}>
                           <MessageTurns
                             messageImages={slots?.messageImages}
+                            messageImageLoader={slots?.messageImageLoader}
                             assistantActions={slots?.assistantActions}
                             messageText={slots?.messageText}
                             turnTail={slots?.turnTail}

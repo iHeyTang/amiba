@@ -899,6 +899,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "conversation.composer.dock": { kind: "list", scope: "session" },
           "tool.view.cordis": { kind: "keyed", scope: "session" },
           "conversation.chat.commandview": { kind: "keyed", scope: "session" },
+          // Official vocabulary: the composer's draft-attachment seat. Kept
+          // declared so third-party hosts can still dispatch it; Amiba's
+          // composer renders the unified AttachmentGallery natively (files +
+          // images in one compact row, matching the user-message bubble), so
+          // it no longer forwards this seat from ChatSurface.
           "conversation.input.attachments": { kind: "single", scope: "session-maybe" },
           "conversation.input.left": { kind: "list", scope: "session" },
           "conversation.input.right": { kind: "list", scope: "session" },
@@ -1107,13 +1112,14 @@ export async function apply(ctx: ClientContext): Promise<void> {
       { name: "conversation.session.header.actions", id: "amiba-transcript", order: 10 },
       TrajectoryHeaderAction,
     );
-    // Amiba's default presence for the OFFICIAL `conversation.message.images`
-    // slot: a capsule that matches the native file capsules, so the
-    // attachment row shows files and images uniformly while the official
-    // seat and payload stay intact. Registered at priority 100 because cell
-    // shadowing elects the LOWEST priority occupant — a plugin registering
-    // at the conventional 0 (or lower) takes over this seat and replaces the
-    // capsule with its own image presentation inside the same attachment row.
+    // Amiba's fallback presence for the OFFICIAL `conversation.message.images`
+    // slot: hosts that render this seat WITHOUT a session-bound image loader
+    // (the Amiba bubble uses `messageImageLoader` whenever the shell provides
+    // one and renders the unified AttachmentGallery instead) still get a
+    // capsule that matches the native file capsules. Registered at priority
+    // 100 because cell shadowing elects the LOWEST priority occupant — a
+    // plugin registering at the conventional 0 (or lower) takes over this
+    // seat and replaces the capsule with its own image presentation.
     const disposeMessageImagesDefault = ctx.slots.register(
       // This official slot's occupant spec takes no `id` — the seat is a
       // single cell, and shadowing is decided purely by priority (lowest
