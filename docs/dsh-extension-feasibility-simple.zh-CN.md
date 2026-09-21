@@ -26,7 +26,7 @@
 | 19 | `conversation.input.overlay` | 已接入，依赖另核对；具体未完成项见详细表。 |
 | 20 | `conversation.input.plan` | 已接入，依赖另核对；具体未完成项见详细表。 |
 | 21 | `conversation.input.right` | 入口已接入，桌面验证通过；具体未完成项见详细表。 |
-| 22 | `conversation.message.images` | 持久图片已接入，实时插件消息和历史重新打开通过真实 Host 验证；按会话授权读取、缓存、释放及插件卸载回退已验证。本人发送回显、preview 及独立 Web 仍待补齐；工具和轨迹分别见第 62、29 项。 |
+| 22 | `conversation.message.images` | 持久图片已接入，实时插件消息和历史重新打开通过真实 Host 验证；按会话授权读取、缓存、释放及插件卸载回退已验证。2026-09-21 起按消息整组调用一次（owner.images 为整组），默认 occupant 为 `MessageImagesGallery`（`SHADOW_PRIORITY` -1，低于官方隐式 0），与文件 chip 共处同一 AttachmentGallery 行；第三方以 ≤ -2 注册可接管图片侧渲染。本人发送回显、preview 及独立 Web 仍待补齐；工具和轨迹分别见第 62、29 项。 |
 | 25 | `conversation.session.header.actions` | 已接入，依赖另核对；具体未完成项见详细表。 |
 | 26 | `conversation.session.header.corner` | 会话角标已通过真实插件桌面验证；空内容、报错及卸载不增加宽度，保留原标题和控件。新版右侧栏服务及独立 Web 另核对。 |
 | 27 | `conversation.session.header.lineage` | 真实多层祖先导航已接入，保留原可编辑标题；常规 Host 配置启用/停用、官方目录组件、浅深色弹层及 720/960/1600px 布局通过桌面验证。后续版本与独立 Web 仍另验证。 |

@@ -919,6 +919,15 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // same pattern the adopted conversation.* seats use; only the
           // declaration site differs, never the key/kind/scope/owner.
           "conversation.view": { kind: "list", scope: "session" },
+          // Official vocabulary: a message's attached images, dispatched once
+          // per message by the user bubble (files render as native chips
+          // alongside). Amiba's default occupant is the shared
+          // `MessageImagesGallery` (compact tiles, the same presentation the
+          // composer uses), registered at SHADOW_PRIORITY — below the official
+          // ui-attachment occupant's implicit 0 — so a plugin registering
+          // strictly below the shadow priority (≤ -2) replaces the image side
+          // while Amiba owns the default look. Owners carry images/loadImage/
+          // align/compact straight off the official contract.
           "conversation.message.images": { kind: "single", scope: "session" },
           "tool.call.images": { kind: "single", scope: "session" },
           "conversation.approval.detail": { kind: "single", scope: "session" },

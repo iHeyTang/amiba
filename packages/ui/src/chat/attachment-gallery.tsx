@@ -34,9 +34,10 @@ export type AttachmentGalleryItem =
       onRemove?: () => void;
       /**
        * Already-rendered presentation node — the user bubble invokes the
-       * `conversation.message.images` seat per image and embeds its output
-       * here, so plugins can take over the tile without Amiba re-framing it.
-       * When set, the gallery places the node verbatim (no own tile chrome).
+       * `conversation.message.images` seat once for the message's images and
+       * embeds its output here, so plugins can take over the presentation
+       * without Amiba re-framing it. When set, the gallery places the node
+       * verbatim (no own tile chrome).
        */
       node?: ReactNode;
     }
