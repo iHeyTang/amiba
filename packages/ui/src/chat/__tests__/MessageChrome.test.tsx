@@ -6,7 +6,8 @@ vi.mock("@amiba/i18n", () => ({
   useT: () => ({ t: (key: string) => key }),
 }));
 
-import { Bubble, MessageTurns } from "../bubble/Bubble";
+import { Bubble, MessageTurns, type ConversationTurnsWindow } from "../bubble/Bubble";
+import { MESSAGE_TURN_WINDOW } from "../turn-window";
 import type { UiMessage } from "../internal/types";
 import { WorkspaceControl } from "../WorkspaceControl";
 import { WorkspaceTextMentionsContext, WorkspaceFileOpenerContext } from "../workspace-file-links";
@@ -1886,4 +1887,44 @@ it("windows long conversations to the newest turns and reveals the rest on deman
   rerender(<MessageTurns messages={messages.slice(-4)} />);
   expect(container.querySelector("[data-turn-window-sentinel]")).toBeNull();
   expect(container.querySelector('[data-conversation-user-turn="u58"]')).not.toBeNull();
+});
+
+it("reports the rendered turn window so the conversation rail stays aligned with the DOM", () => {
+  const messages: UiMessage[] = [];
+  for (let turn = 0; turn < 30; turn += 1) {
+    messages.push({ uiId: `u${turn}`, role: "user", content: `q${turn}`, runtimeSeq: turn * 2 });
+    messages.push({ uiId: `a${turn}`, role: "assistant", content: `a${turn}`, runtimeSeq: turn * 2 + 1 });
+  }
+  const seen: ConversationTurnsWindow[] = [];
+  const record = (window: ConversationTurnsWindow) => {
+    seen.push(window);
+  };
+
+  const view = render(
+    <MessageTurns messages={messages} onTurnsWindowChange={record} />,
+  );
+  expect(seen.length).toBeGreaterThan(0);
+  const latest = seen[seen.length - 1]!;
+  // Same rule as the DOM: the newest MESSAGE_TURN_WINDOW turns are rendered,
+  // everything older is folded away.
+  expect(latest.hidden).toBe(messages.length / 2 - MESSAGE_TURN_WINDOW);
+  expect(latest.visible).toHaveLength(MESSAGE_TURN_WINDOW);
+  expect(latest.visible[0]?.user?.uiId).toBe("u6");
+  expect(latest.visible.at(-1)?.user?.uiId).toBe("u29");
+
+  // A re-render that does not change the conversation must not fabricate a
+  // new snapshot (or the rail would re-render on every unrelated paint).
+  const calls = seen.length;
+  view.rerender(<MessageTurns messages={messages} onTurnsWindowChange={record} />);
+  expect(seen.length).toBe(calls);
+
+  // A genuinely different conversation reports a fresh, whole window.
+  view.rerender(<MessageTurns messages={messages.slice(-4)} onTurnsWindowChange={record} />);
+  expect(seen.length).toBe(calls + 1);
+  const fresh = seen.at(-1)!;
+  expect(fresh.hidden).toBe(0);
+  expect(fresh.visible.map((turn) => turn.user?.uiId)).toEqual([
+    "u28",
+    "u29",
+  ]);
 });

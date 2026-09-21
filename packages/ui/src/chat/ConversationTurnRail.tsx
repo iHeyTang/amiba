@@ -15,6 +15,7 @@ import {
   TooltipTrigger,
   cn,
 } from "../primitives";
+import type { ConversationTurn } from "./bubble/Bubble";
 import {
   bubbleTextContent,
   stripManagedResourceContext,
@@ -24,6 +25,9 @@ import type { UiMessage } from "./internal/types";
 const RAIL_LEFT_PX = 8; // matches `left-2` on the rail nav
 const RAIL_WIDTH_PX = 24; // matches `w-6` on the rail nav
 const MIN_CONTENT_GAP_PX = 16;
+// Landing a jump target a few pixels below the viewport top keeps the sticky
+// user bubble clear of the edge instead of butting flush against it.
+const JUMP_TOP_MARGIN_PX = 8;
 
 function visibleMessageText(content: unknown): string {
   let text = stripManagedResourceContext(bubbleTextContent(content));
@@ -58,31 +62,50 @@ function markerWidthClass(distanceFromHover: number | null): string {
   return "w-2.5";
 }
 
+/**
+ * The vertical scroll coordinate of `element` inside `viewport`, independent
+ * of whichever ancestor happens to be the element's offsetParent. The turn
+ * rows live inside a Radix ScrollArea viewport under several positioned
+ * wrappers; `offsetTop` is meaningless across those, while this rect-based
+ * measurement is exact for every rendered turn (the message list only renders
+ * a window of turns, so forcing layout of the handful in the DOM is cheap).
+ */
+function scrollCoordinateOf(
+  element: HTMLElement,
+  viewport: HTMLElement,
+): number {
+  const viewportRect = viewport.getBoundingClientRect();
+  return (
+    element.getBoundingClientRect().top -
+    viewportRect.top +
+    viewport.scrollTop
+  );
+}
+
 export function ConversationTurnRail({
-  messages,
+  turns,
   viewportRef,
   contentRef,
   containerRef,
 }: {
-  messages: UiMessage[];
+  /**
+   * The turn window the bubble renderer currently has in the DOM. Only turns
+   * in here can have markers: long histories are windowed, so any marker for
+   * a turn outside this list would neither highlight nor jump anywhere.
+   */
+  turns: readonly ConversationTurn[];
   viewportRef: RefObject<HTMLDivElement | null>;
   contentRef: RefObject<HTMLDivElement | null>;
   containerRef: RefObject<HTMLDivElement | null>;
 }) {
   const { t } = useT();
-  const userMessages = useMemo(
-    () =>
-      messages.filter(
-        // Only messages that actually START a user turn belong on the rail.
-        // The bubble renderer starts a turn for a user-role message unless it
-        // carries a `notice` — a plugin's one-off account of something that
-        // just happened (a background task report, a guard's reminder), which
-        // renders as a collapsed context row instead of a user bubble. The
-        // rail must mirror that rule or its markers — and their 1:1 alignment
-        // with the DOM turns below — drift.
-        (message) => message.role === "user" && !message.notice,
-      ),
-    [messages],
+  // One marker per rendered turn that carries a user prompt. Assistant-only
+  // rows (a host-started reply) get no marker; markers stay 1:1 with the DOM
+  // turns below because MessageTurns groups the same way (a user-role notice
+  // never starts a turn and is folded into the current turn's replies).
+  const markers = useMemo(
+    () => turns.filter((turn): turn is ConversationTurn & { user: UiMessage } => turn.user != null),
+    [turns],
   );
   const [activeIndex, setActiveIndex] = useState(0);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -126,28 +149,47 @@ export function ConversationTurnRail({
   const updateActiveTurn = useCallback(() => {
     const viewport = viewportRef.current;
     const content = contentRef.current;
-    if (!viewport || !content || userMessages.length === 0) return;
+    if (!viewport || !content || markers.length === 0) return;
 
-    const turns = Array.from(
+    const domTurns = Array.from(
       content.querySelectorAll<HTMLElement>("[data-conversation-user-turn]"),
     );
-    if (turns.length === 0) return;
+    if (domTurns.length === 0) return;
+
+    // Address DOM turns by their user-message uiId instead of positional
+    // index: assistant-only rows sit between user turns in the DOM, so a
+    // count-based mapping would drift the highlight.
+    const markerIndexByUiId = new Map<string, number>();
+    markers.forEach((marker, index) =>
+      markerIndexByUiId.set(marker.user.uiId, index),
+    );
 
     const readingLine =
       viewport.scrollTop + Math.min(112, viewport.clientHeight * 0.2);
-    let nextIndex = 0;
-    for (let index = 0; index < turns.length; index += 1) {
-      if ((turns[index]?.offsetTop ?? 0) <= readingLine) nextIndex = index;
-      else break;
+    // The marker of the most recent user turn at or above the reading line.
+    // Starts at the first marker so a window opening with only assistant-only
+    // rows above the line still has a sensible highlight.
+    let current = 0;
+    for (const turn of domTurns) {
+      // A turn below the reading line has not been read yet: break BEFORE it
+      // could claim its marker, keeping the highlight on the previous user
+      // turn.
+      if (scrollCoordinateOf(turn, viewport) > readingLine) break;
+      const userUiId = turn.getAttribute("data-conversation-user-turn");
+      const mapped = userUiId ? markerIndexByUiId.get(userUiId) : undefined;
+      if (mapped !== undefined) current = mapped;
     }
+    // Pinned to the bottom (auto-scroll following a live stream, or the
+    // reader at the end of the history): the newest rendered turn wins, even
+    // when the final turn is short enough to sit above the reading line.
     if (
       viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <=
       2
     ) {
-      nextIndex = turns.length - 1;
+      current = markers.length - 1;
     }
-    setActiveIndex(nextIndex);
-  }, [contentRef, userMessages.length, viewportRef]);
+    setActiveIndex(current);
+  }, [contentRef, markers, viewportRef]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -176,27 +218,49 @@ export function ConversationTurnRail({
         frameRef.current = null;
       }
     };
-  }, [contentRef, updateActiveTurn, viewportRef]);
+    // `markers` changes when the conversation switches or the turn window
+    // expands; re-evaluate so a freshly opened session starts with the marker
+    // of the turn actually on screen (the tail), not whatever the previous
+    // conversation left highlighted.
+  }, [contentRef, markers, updateActiveTurn, viewportRef]);
 
   const jumpToTurn = useCallback(
     (index: number) => {
       const viewport = viewportRef.current;
       const content = contentRef.current;
-      const turn = content?.querySelectorAll<HTMLElement>(
+      const marker = markers[index];
+      if (!viewport || !content || !marker) return;
+
+      // Resolve by uiId: the DOM turn for this marker is always rendered
+      // (markers only cover the rendered window), but positional indexing
+      // could hit an assistant-only row sitting between user turns.
+      let turn: HTMLElement | null = null;
+      for (const candidate of content.querySelectorAll<HTMLElement>(
         "[data-conversation-user-turn]",
-      )[index];
-      if (!viewport || !turn) return;
+      )) {
+        if (
+          candidate.getAttribute("data-conversation-user-turn") ===
+          marker.user.uiId
+        ) {
+          turn = candidate;
+          break;
+        }
+      }
+      if (!turn) return;
 
       const reduceMotion = window.matchMedia(
         "(prefers-reduced-motion: reduce)",
       ).matches;
       viewport.scrollTo({
-        top: Math.max(0, turn.offsetTop - 8),
+        top: Math.max(
+          0,
+          scrollCoordinateOf(turn, viewport) - JUMP_TOP_MARGIN_PX,
+        ),
         behavior: reduceMotion ? "auto" : "smooth",
       });
       setActiveIndex(index);
     },
-    [contentRef, viewportRef],
+    [contentRef, markers, viewportRef],
   );
 
   const markersRef = useRef<HTMLDivElement | null>(null);
@@ -212,13 +276,16 @@ export function ConversationTurnRail({
     }
   }, [activeIndex]);
 
-  if (userMessages.length === 0 || !hasContentClearance) return null;
+  if (markers.length === 0 || !hasContentClearance) return null;
 
   return (
     <nav
       data-conversation-turn-rail
       aria-label={t("conversationRail.label")}
-      className="pointer-events-none absolute inset-y-3 left-2 z-30 flex w-6 flex-col"
+      // z-40: the composer dock overlays the panel's bottom edge at z-30, and
+      // without a higher rail the bottom markers are covered by its
+      // full-width (but transparent) hit area and cannot be clicked.
+      className="pointer-events-none absolute inset-y-3 left-2 z-40 flex w-6 flex-col"
     >
       <TooltipProvider delayDuration={120} skipDelayDuration={80}>
         <div
@@ -226,23 +293,27 @@ export function ConversationTurnRail({
           data-conversation-turn-markers
           className="m-auto flex max-h-full w-full flex-col gap-px overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {userMessages.map((message, index) => {
+          {markers.map((marker, index) => {
             const active = index === activeIndex;
             const preview =
-              messagePreview(message) || t("conversationRail.messageFallback");
+              messagePreview(marker.user) ||
+              t("conversationRail.messageFallback");
             const distanceFromActive = Math.abs(index - activeIndex);
             const distanceFromHover =
               hoveredIndex === null ? null : Math.abs(index - hoveredIndex);
 
             return (
-              <Tooltip key={message.uiId}>
+              <Tooltip key={marker.user.uiId}>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
                     data-conversation-turn-marker
                     aria-current={active ? "location" : undefined}
                     aria-label={t("conversationRail.jumpTo", {
-                      index: index + 1,
+                      // userOrdinal counts user turns across the WHOLE
+                      // history, so numbering stays truthful even when the
+                      // window only renders the newest slice.
+                      index: marker.userOrdinal + 1,
                       message: preview,
                     })}
                     onClick={() => jumpToTurn(index)}
