@@ -1,12 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-export interface PluginStartupState {
-  phase: "preparing" | "prompt" | "loading" | "safe" | "ready";
-  count: number;
-  deadline?: number;
-  reason?: "interrupted" | "inspection-failed" | "failed";
-}
+import type { PluginStartupState } from "../shared/plugin-startup.ts";
 
 /** Main-process gate: background consumers cannot start DSH ahead of the window. */
 export class PluginStartupGate {

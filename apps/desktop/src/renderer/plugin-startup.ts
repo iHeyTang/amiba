@@ -1,4 +1,4 @@
-import type { PluginStartupState } from "../main/plugin-startup-gate";
+import type { PluginStartupState } from "../shared/plugin-startup";
 
 /** Static startup chrome; does not import DSH, React, or user plugin modules. */
 export async function preparePluginStartup(): Promise<() => void> {

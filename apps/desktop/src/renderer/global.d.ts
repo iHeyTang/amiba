@@ -43,10 +43,10 @@ interface AmibaBridgeApi {
     standaloneTitleBar?: boolean;
   };
   pluginStartup: {
-    present(): Promise<import("../main/plugin-startup-gate").PluginStartupState>;
+    present(): Promise<import("../shared/plugin-startup").PluginStartupState>;
     choose(choice: "continue" | "safe"): Promise<void>;
     ready(): Promise<void>;
-    onState(callback: (state: import("../main/plugin-startup-gate").PluginStartupState) => void): () => void;
+    onState(callback: (state: import("../shared/plugin-startup").PluginStartupState) => void): () => void;
   };
   dshClient: {
     uploadOpen(url: string): Promise<string>;

@@ -95,8 +95,8 @@ const api = {
     present: () => ipcRenderer.invoke("plugin-startup:present"),
     choose: (choice: "continue" | "safe") => ipcRenderer.invoke("plugin-startup:choose", choice),
     ready: () => ipcRenderer.invoke("plugin-startup:ready"),
-    onState: (callback: (state: import("../main/plugin-startup-gate").PluginStartupState) => void) => {
-      const listener = (_event: unknown, state: import("../main/plugin-startup-gate").PluginStartupState) => callback(state);
+    onState: (callback: (state: import("../shared/plugin-startup").PluginStartupState) => void) => {
+      const listener = (_event: unknown, state: import("../shared/plugin-startup").PluginStartupState) => callback(state);
       ipcRenderer.on("plugin-startup:state", listener);
       return () => ipcRenderer.removeListener("plugin-startup:state", listener);
     },

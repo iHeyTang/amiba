@@ -95,7 +95,7 @@ export class DshRuntimeController {
   }
   async choosePluginStartup(choice: "continue" | "safe"): Promise<void> {
     if (choice !== "continue" && choice !== "safe") throw new Error("Invalid startup choice")
-    const loading = this.gate.state.phase === "loading"
+    const loading = this.gate.state.phase === "loading" || Boolean(this.starting || this.handle)
     if (choice === "safe" && loading) return this.recoverSafeStartup()
     await this.gate.choose(choice)
   }
