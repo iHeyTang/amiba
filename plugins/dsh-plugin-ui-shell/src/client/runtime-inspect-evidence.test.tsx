@@ -47,10 +47,8 @@ describe("runtime inspection evidence", () => {
       "capabilityName",
       "purpose",
       "operations",
-      "conditions",
       "openPanel",
       "closePanel",
-      "availability",
     ])
       expect(screen.getByText(`shell.inspect.${key}`)).toBeTruthy();
     const body = container.querySelector("[data-runtime-result] > div")!;
@@ -61,6 +59,8 @@ describe("runtime inspection evidence", () => {
       "Service.listService",
     ])
       expect(body.textContent).not.toContain(technical);
+    expect(screen.queryByText("shell.inspect.conditions")).toBeNull();
+    expect(screen.queryByText("shell.inspect.availability")).toBeNull();
     expect(container.querySelectorAll("details")).toHaveLength(1);
     expect(container.querySelector("details")?.open).toBe(false);
     expect(container.querySelector("pre")?.textContent).toBe(text);

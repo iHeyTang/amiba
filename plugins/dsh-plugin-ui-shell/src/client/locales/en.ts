@@ -28,8 +28,6 @@ export const en = {
   "shell.inspect.capabilityName": "Capability",
   "shell.inspect.purpose": "Purpose",
   "shell.inspect.operations": "Available actions",
-  "shell.inspect.conditions": "Requirements",
-  "shell.inspect.availability": "Before calling it, the AI must check that this capability is available.",
   "shell.inspect.openPanel": "Open panel",
   "shell.inspect.openPanelDescription": "Open a panel in the workspace.",
   "shell.inspect.closePanel": "Close panel",

@@ -43,7 +43,6 @@ function ServiceSummary({ service }: { service: Record<string, unknown> }) {
         return [];
       })
     : [];
-  const optional = recordOf(recordOf(service.access)?.optional);
   return (
     <div className="space-y-4">
       <div>
@@ -87,14 +86,6 @@ function ServiceSummary({ service }: { service: Record<string, unknown> }) {
               </li>
             ))}
           </ul>
-        </div>
-      )}
-      {optional?.requiresUndefinedCheck === true && (
-        <div>
-          <h4 className="mb-1 text-[10px] text-muted-foreground">
-            {t("shell.inspect.conditions")}
-          </h4>
-          <p>{t("shell.inspect.availability")}</p>
         </div>
       )}
     </div>

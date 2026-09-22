@@ -23,8 +23,6 @@ export const zhCN: ShellMessages = {
   "shell.inspect.capabilityName": "功能名称",
   "shell.inspect.purpose": "用途",
   "shell.inspect.operations": "可用操作",
-  "shell.inspect.conditions": "使用条件",
-  "shell.inspect.availability": "调用前，AI 需要确认这个功能模块可用。",
   "shell.inspect.openPanel": "打开面板",
   "shell.inspect.openPanelDescription": "在工作区中打开一个面板。",
   "shell.inspect.closePanel": "关闭面板",
