@@ -2,7 +2,7 @@ import { fireEvent, renderHook } from "@testing-library/react";
 import { expect, it } from "vitest";
 import { useConversationAutoScroll } from "../use-conversation-auto-scroll";
 
-function setup() {
+function setup(scope = {}) {
   const viewport = document.createElement("div");
   let height = 1000;
   let top = 0;
@@ -19,11 +19,12 @@ function setup() {
   const ref = { current: viewport };
   const hook = renderHook(
     ({ sessionId, content, clearance }) =>
-      useConversationAutoScroll(ref, sessionId, content, clearance),
+      useConversationAutoScroll(ref, sessionId, content, clearance, scope),
     { initialProps: { sessionId: "first", content: 0, clearance: 60 } },
   );
   return {
     viewport,
+    unmount: hook.unmount,
     rerender: hook.rerender,
     grow: () => {
       height += 100;
@@ -61,4 +62,45 @@ it("pauses on wheel intent before scroll arrives and resets for another conversa
   expect(viewport.scrollTop).toBe(600);
   rerender({ sessionId: "second", content: 2, clearance: 60 });
   expect(viewport.scrollTop).toBe(700);
+});
+
+it("restores each conversation and does not follow output while reading history", () => {
+  const { viewport, grow, rerender } = setup();
+  viewport.scrollTop = 120;
+  fireEvent.scroll(viewport);
+  rerender({ sessionId: "second", content: 0, clearance: 60 });
+  expect(viewport.scrollTop).toBe(600);
+  grow();
+  rerender({ sessionId: "first", content: 1, clearance: 60 });
+  expect(viewport.scrollTop).toBe(120);
+  grow();
+  rerender({ sessionId: "first", content: 2, clearance: 60 });
+  expect(viewport.scrollTop).toBe(120);
+});
+
+it("restores a reading position after the conversation view is unmounted", () => {
+  const scope = {};
+  const first = setup(scope);
+  first.viewport.scrollTop = 240;
+  fireEvent.scroll(first.viewport);
+  first.unmount();
+  const reopened = setup(scope);
+  expect(reopened.viewport.scrollTop).toBe(240);
+});
+
+it("waits for content height before completing restoration", () => {
+  const scope = {};
+  const first = setup(scope);
+  first.grow(); first.grow(); first.grow();
+  first.viewport.scrollTop = 800;
+  fireEvent.scroll(first.viewport);
+  // Move up to mark this as history reading, not following the bottom.
+  first.viewport.scrollTop = 790;
+  fireEvent.scroll(first.viewport);
+  first.unmount();
+  const reopened = setup(scope);
+  expect(reopened.viewport.scrollTop).toBe(600);
+  reopened.grow(); reopened.grow();
+  reopened.rerender({ sessionId: "first", content: 1, clearance: 60 });
+  expect(reopened.viewport.scrollTop).toBe(790);
 });

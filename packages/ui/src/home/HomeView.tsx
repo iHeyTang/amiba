@@ -120,8 +120,10 @@ function Home({
   // The session id scopes the host attachment staging directory;
   // we use a stable HomeView-scoped one so re-uploads land in the same
   // bucket and clean up cleanly on chat hand-off.
+  const [input, setInput, , draftSource] = useSessionComposerDraft(null);
   const homeUploadSessionRef = useRef<string>(shortId("home"));
   const att = useComposerAttachments({
+    draftScope: draftSource,
     getSessionId: () => homeUploadSessionRef.current,
   });
 
@@ -139,7 +141,6 @@ function Home({
     [t],
   );
 
-  const [input, setInput, , draftSource] = useSessionComposerDraft(null);
   const [agent, setAgent] = useState<AgentExecutionContext>({
     profileId: "default",
   });
