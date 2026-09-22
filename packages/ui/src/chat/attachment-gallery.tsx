@@ -10,7 +10,7 @@ import { ImagePreviewDialog, KindIcon } from "./bubble/chips";
  * One gallery entry. The union lets a durable message image, a composer
  * draft image, and a plain file all flow through the SAME presentation, so
  * the bubble and the composer render attachments identically instead of
- * pills in one place and a gallery in another.
+ * different image sizes and file heights on different surfaces.
  */
 export type AttachmentGalleryItem =
   | {
@@ -58,42 +58,30 @@ export interface AttachmentGalleryProps {
   /** Keep the row aligned with entries that already use `justify-end`. */
   align?: "start" | "end";
   className?: string;
-  /** Force compact tiles even for a lone image. */
+  /** @deprecated All attachments now share a fixed-height presentation. */
   compact?: boolean;
 }
 
-/**
- * One compact gallery row for mixed attachments — files as chips, images as
- * bounded preview tiles. A lone image is capped at a modest preview so it
- * never towers over the surrounding text; several images collapse to uniform
- * tiles (the same language as the official composer rail). Used by the user
- * message bubble, the composer, and the empty-state composer.
- *
- * Images click-to-zoom through the shared `ImagePreviewDialog`; editable
- * entries (composer mode) show upload spinner / remove / retry affordances.
- */
+// The draft, optimistic bubble and durable bubble share these dimensions.
+// Attachment count never changes an image's presentation.
+const attachmentFrame =
+  "relative h-16 shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted/30";
+const attachmentAction =
+  "grid h-5 w-5 shrink-0 place-items-center rounded-md bg-background/90 text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+
+/** A wrapping row of equal-height, uncropped images and file cards. */
 export function AttachmentGallery({
   items,
   align = "start",
   className,
-  compact = false,
 }: AttachmentGalleryProps) {
   if (items.length === 0) return null;
-  const first = items[0];
-  // A lone native image (no pre-rendered `node`) gets the larger bounded
-  // preview; anything pre-rendered by a seat/plugin keeps its own size.
-  const loneImage =
-    !compact &&
-    items.length === 1 &&
-    first.kind === "image" &&
-    first.node === undefined &&
-    !first.uploading;
   return (
     <div
       data-attachment-gallery
       data-align={align}
       className={cn(
-        "flex flex-wrap items-center gap-1.5",
+        "flex min-w-0 flex-wrap items-start gap-2",
         align === "end" && "justify-end",
         className,
       )}
@@ -101,15 +89,13 @@ export function AttachmentGallery({
       {items.map((item) =>
         item.kind === "image" ? (
           item.node !== undefined ? (
-            // Layout responsibility stays with the pre-rendered node (the
-            // seat's output) — when the renderer returns nothing, nothing
-            // mounts, so the row stays byte-identical to having no image.
+            // Seat occupants retain full control over their presentation.
             <Fragment key={item.id}>{item.node}</Fragment>
           ) : (
-            <AttachmentImageTile key={item.id} item={item} size={loneImage ? "large" : "tile"} />
+            <AttachmentImageTile key={item.id} item={item} />
           )
         ) : (
-          <GalleryFileChip key={item.id} item={item} />
+          <GalleryFileCard key={item.id} item={item} />
         ),
       )}
     </div>
@@ -117,138 +103,98 @@ export function AttachmentGallery({
 }
 
 /**
- * Bounded image preview. `large` is the lone-image presentation (capped so a
- * single screenshot reads clearly without dominating the row); `tile` is the
- * multi-image mode (uniform squares, matching the composer rail).
- *
- * Exported so the shell's default `conversation.message.images` occupant can
- * render the exact same tile the composer draws.
+ * A constant-height image whose width follows its aspect ratio. Very wide or
+ * tall images fit inside the bounded frame without cropping their contents.
+ * Shared with the shell's default conversation.message.images seat occupant.
  */
 export function AttachmentImageTile({
   item,
-  size,
 }: {
   item: Extract<AttachmentGalleryItem, { kind: "image" }>;
-  size: "large" | "tile";
+  /** @deprecated Accepted for existing plugin callers; tiles are always equal-height. */
+  size?: "large" | "tile";
 }) {
   const { t } = useT();
-  const [url, setUrl] = useState<string | null>(item.thumbUrl ?? null);
+  const [loaded, setLoaded] = useState<{ id: string; url: string } | null>(
+    null,
+  );
   useEffect(() => {
     let alive = true;
-    if (!item.loadImage) return;
-    void item
-      .loadImage()
-      .then((value) => {
-        if (alive && typeof value === "string") setUrl(value);
+    const loader = item.loadImage;
+    if (!loader) return;
+    void loader()
+      .then((url) => {
+        if (alive && typeof url === "string") setLoaded({ id: item.id, url });
       })
       .catch(() => {
-        /* authorization failure / revoked draft: keep the placeholder */
+        // Authorization failure / revoked draft: clear the prior preview.
+        if (alive) setLoaded(null);
       });
     return () => {
       alive = false;
     };
-  }, [item.loadImage]);
+  }, [item.id, item.loadImage]);
 
-  const thumb = url ?? item.thumbUrl ?? null;
-  const preview = item.previewUrl ?? thumb;
-  const boxClass = size === "large" ? "h-32 w-52 max-w-full" : "h-16 w-16";
-
-  const body = (
-    <span
+  const thumb = item.thumbUrl ?? (loaded?.id === item.id ? loaded.url : null);
+  const preview = item.uploading ? null : (item.previewUrl ?? thumb);
+  const content = thumb ? (
+    <img
+      src={thumb}
+      alt={item.name ?? ""}
       className={cn(
-        "relative inline-grid shrink-0 place-items-center overflow-hidden rounded-lg border border-border/60 bg-muted/40",
-        boxClass,
+        "block h-full w-auto max-w-40 object-contain",
+        item.uploading && "opacity-50",
       )}
+    />
+  ) : (
+    <span
+      aria-hidden
+      className="grid h-full w-16 place-items-center text-muted-foreground/70"
     >
-      {item.uploading ? (
-        <Loader2
-          className="h-4 w-4 animate-spin text-muted-foreground"
-          aria-label={t("sidepanel.attachment.uploading")}
-        />
-      ) : thumb ? (
-        <img src={thumb} alt={item.name ?? ""} className="h-full w-full object-cover" />
-      ) : (
-        <span
-          aria-hidden
-          className="inline-grid h-full w-full place-items-center text-muted-foreground/70"
-        >
-          <KindIcon kind="image" className="h-5 w-5" />
-        </span>
-      )}
-      {item.onRemove && (
-        <button
-          type="button"
-          onClick={item.onRemove}
-          aria-label={t("sidepanel.attachment.removeAria", { name: item.name ?? "" })}
-          title={t("sidepanel.attachment.remove")}
-          className="absolute right-1 top-1 z-[1] grid h-4 w-4 place-items-center rounded-full bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/80 focus:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
-        >
-          <X className="h-2.5 w-2.5" />
-        </button>
-      )}
+      {!item.uploading && <KindIcon kind="image" className="h-5 w-5" />}
     </span>
   );
 
-  // Zoom only when there is an actual preview; an uploading / placeholder tile
-  // stays inert so the click target never promises an image that is not there.
-  if (!preview) return body;
-  return (
-    <ImagePreviewDialog src={preview} alt={item.name ?? ""}>
-      <button
-        type="button"
-        className="group cursor-zoom-in rounded-lg ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-      >
-        {body}
-      </button>
-    </ImagePreviewDialog>
-  );
-}
-
-/**
- * Compact file entry — the gallery twin of the image tiles, so a user message
- * that mixed screenshots, PDFs and notes reads as one cohesive row.
- */
-function GalleryFileChip({ item }: { item: Extract<AttachmentGalleryItem, { kind: "file" }> }) {
-  const { t } = useT();
   return (
     <span
-      className="group inline-flex h-8 max-w-56 items-center gap-1.5 rounded-lg border border-border/60 bg-background/70 pl-1.5 pr-1.5 text-[11px] text-muted-foreground"
-      title={item.name}
+      data-attachment-kind="image"
+      className={cn(attachmentFrame, "group inline-flex min-w-10 max-w-full")}
     >
-      {item.uploading ? (
-        <span className="grid h-4 w-4 shrink-0 place-items-center">
+      {preview ? (
+        <ImagePreviewDialog src={preview} alt={item.name ?? ""}>
+          <button
+            type="button"
+            title={item.name}
+            className="flex h-full w-full min-w-0 items-center justify-center cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          >
+            {content}
+          </button>
+        </ImagePreviewDialog>
+      ) : (
+        <span className="inline-flex h-full w-full items-center justify-center">
+          {content}
+        </span>
+      )}
+      {item.uploading && (
+        <span className="pointer-events-none absolute inset-0 grid place-items-center">
           <Loader2
-            className="h-3.5 w-3.5 animate-spin text-foreground"
+            className="h-4 w-4 animate-spin text-muted-foreground"
             aria-label={t("sidepanel.attachment.uploading")}
           />
         </span>
-      ) : (
-        <span className="grid h-4 w-4 shrink-0 place-items-center">
-          <KindIcon kind={item.fileKind ?? "binary"} className="h-3.5 w-3.5" />
-        </span>
-      )}
-      <span className="truncate">{item.name}</span>
-      {item.size != null && (
-        <span className="shrink-0 text-muted-foreground/70">{formatBytesShort(item.size)}</span>
-      )}
-      {item.failed && item.onRetry && (
-        <button
-          type="button"
-          onClick={item.onRetry}
-          title={t("sidepanel.retry.action")}
-          aria-label={t("sidepanel.retry.action")}
-          className="grid h-4 w-4 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <RefreshCw className="h-3 w-3" />
-        </button>
       )}
       {item.onRemove && (
         <button
           type="button"
           onClick={item.onRemove}
+          aria-label={t("sidepanel.attachment.removeAria", {
+            name: item.name ?? "",
+          })}
           title={t("sidepanel.attachment.remove")}
-          aria-label={t("sidepanel.attachment.removeAria", { name: item.name })}
-          className="grid h-4 w-4 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className={cn(
+            attachmentAction,
+            "absolute right-1 top-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100",
+          )}
         >
           <X className="h-3 w-3" />
         </button>
@@ -257,37 +203,103 @@ function GalleryFileChip({ item }: { item: Extract<AttachmentGalleryItem, { kind
   );
 }
 
+/** File details occupy the same height as an image, even with a short name. */
+function GalleryFileCard({
+  item,
+}: {
+  item: Extract<AttachmentGalleryItem, { kind: "file" }>;
+}) {
+  const { t } = useT();
+  const extension = /\.([a-z\d]{1,12})$/i.exec(item.name)?.[1]?.toUpperCase();
+  const details = [
+    extension,
+    item.size != null ? formatBytesShort(item.size) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <span
+      data-attachment-kind="file"
+      className={cn(
+        attachmentFrame,
+        "group inline-flex w-56 max-w-full items-center gap-2.5 px-3",
+        (item.onRemove || (item.failed && item.onRetry)) && "pr-7",
+        item.failed && "border-destructive/40",
+      )}
+      title={item.name}
+    >
+      <span className="grid h-8 w-7 shrink-0 place-items-center text-muted-foreground">
+        {item.uploading ? (
+          <Loader2
+            className="h-5 w-5 animate-spin"
+            aria-label={t("sidepanel.attachment.uploading")}
+          />
+        ) : (
+          <KindIcon kind={item.fileKind ?? "binary"} className="h-5 w-5" />
+        )}
+      </span>
+      <span className="min-w-0 flex-1 text-left">
+        <span className="block truncate text-xs font-medium leading-5 text-foreground/90">
+          {item.name}
+        </span>
+        {details && (
+          <span className="block truncate text-[11px] leading-4 text-muted-foreground">
+            {details}
+          </span>
+        )}
+      </span>
+      <span className="absolute right-1 top-1 flex flex-col gap-1">
+        {item.onRemove && (
+          <button
+            type="button"
+            onClick={item.onRemove}
+            title={t("sidepanel.attachment.remove")}
+            aria-label={t("sidepanel.attachment.removeAria", {
+              name: item.name,
+            })}
+            className={attachmentAction}
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+        {item.failed && item.onRetry && (
+          <button
+            type="button"
+            onClick={item.onRetry}
+            title={t("sidepanel.retry.action")}
+            aria-label={t("sidepanel.retry.action")}
+            className={attachmentAction}
+          >
+            <RefreshCw className="h-3 w-3" />
+          </button>
+        )}
+      </span>
+    </span>
+  );
+}
+
 /** The official `conversation.message.images` seat owner shape (subset). */
 export interface MessageImagesOwner {
-  images: readonly { attachment: import("@amiba/extension-sdk").ImageAttachmentRef }[];
-  loadImage?: (attachment: import("@amiba/extension-sdk").ImageAttachmentRef) => Promise<string>;
+  images: readonly {
+    attachment: import("@amiba/extension-sdk").ImageAttachmentRef;
+  }[];
+  loadImage?: (
+    attachment: import("@amiba/extension-sdk").ImageAttachmentRef,
+  ) => Promise<string>;
   align?: "start" | "end";
   compact?: boolean;
 }
 
 /**
- * Amiba's single presentation for a message's images: uniform compact tiles
- * (a lone image gets the larger bounded preview, several images collapse to
- * square tiles), exactly the language the composer and the file chips already
- * use. Registered as the default occupant of the official
- * `conversation.message.images` seat at a shadow priority, so third-party
- * plugins can still take the seat over (register below the shadow priority)
- * while Amiba owns the default look.
- *
- * Renders one self-spacing inline-flex group so multiple tiles sit beside
- * each other without the caller's row gap leaking between them; the user
- * bubble mounts this group per message inside its `AttachmentGallery` row.
+ * Default image-seat occupant. `contents` lets each image participate in the
+ * outer attachment row's wrapping, alongside file cards. Third-party seat
+ * occupants remain unwrapped and continue to own their layout.
  */
-export function MessageImagesGallery({
-  owner,
-}: {
-  owner: MessageImagesOwner;
-}) {
-  const { images, loadImage, compact } = owner;
+export function MessageImagesGallery({ owner }: { owner: MessageImagesOwner }) {
+  const { images, loadImage } = owner;
   if (images.length === 0) return null;
-  const lone = !compact && images.length === 1;
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className="contents">
       {images.map((image) => (
         <AttachmentImageTile
           key={image.attachment.attachmentId}
@@ -295,9 +307,10 @@ export function MessageImagesGallery({
             kind: "image",
             id: image.attachment.attachmentId,
             name: image.attachment.name,
-            loadImage: loadImage ? () => loadImage(image.attachment) : undefined,
+            loadImage: loadImage
+              ? () => loadImage(image.attachment)
+              : undefined,
           }}
-          size={lone ? "large" : "tile"}
         />
       ))}
     </span>
