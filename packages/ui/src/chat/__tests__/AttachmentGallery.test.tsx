@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@amiba/i18n", () => ({
@@ -13,9 +13,15 @@ import {
 } from "../attachment-gallery";
 
 describe("AttachmentGallery", () => {
-  it("renders file items as compact chips", () => {
+  it("renders file names and sizes", () => {
     const items: AttachmentGalleryItem[] = [
-      { kind: "file", id: "f1", name: "合同.pdf", fileKind: "pdf", size: 123456 },
+      {
+        kind: "file",
+        id: "f1",
+        name: "合同.pdf",
+        fileKind: "pdf",
+        size: 123456,
+      },
     ];
     const { container } = render(<AttachmentGallery items={items} />);
     const row = container.querySelector("[data-attachment-gallery]")!;
@@ -23,17 +29,22 @@ describe("AttachmentGallery", () => {
     expect(row.textContent).toContain("121 KB");
   });
 
-  it("renders a lone image as a bounded preview tile", () => {
+  it("keeps the same image when a file is added to the row", () => {
     const items: AttachmentGalleryItem[] = [
       { kind: "image", id: "i1", name: "shot.png", thumbUrl: "blob:thumb" },
     ];
-    const { container } = render(<AttachmentGallery items={items} />);
+    const { container, rerender } = render(<AttachmentGallery items={items} />);
     const img = container.querySelector("img");
     expect(img).not.toBeNull();
     expect(img!.getAttribute("src")).toBe("blob:thumb");
     expect(img!.getAttribute("alt")).toBe("shot.png");
-    // One image: the large (bounded) variant, not the small tile.
-    expect(container.querySelector("[data-attachment-gallery] span")?.className).toContain("h-32");
+    rerender(
+      <AttachmentGallery
+        items={[...items, { kind: "file", id: "f1", name: "brief.pdf" }]}
+      />,
+    );
+    expect(container.querySelector("img")).toBe(img);
+    expect(img!.getAttribute("src")).toBe("blob:thumb");
   });
 
   it("renders multiple images as uniform compact tiles", () => {
@@ -43,7 +54,9 @@ describe("AttachmentGallery", () => {
     ];
     const { container } = render(<AttachmentGallery items={items} />);
     expect(container.querySelectorAll("img")).toHaveLength(2);
-    expect(container.querySelector("[data-attachment-gallery] span")?.className).toContain("h-16");
+    expect(
+      [...container.querySelectorAll("img")].map((img) => img.alt),
+    ).toEqual(["a.png", "b.png"]);
   });
 
   it("resolves image URLs through an async loader", async () => {
@@ -53,7 +66,9 @@ describe("AttachmentGallery", () => {
     ];
     const { container } = render(<AttachmentGallery items={items} />);
     await waitFor(() => {
-      expect(container.querySelector("img")?.getAttribute("src")).toBe("blob:loaded");
+      expect(container.querySelector("img")?.getAttribute("src")).toBe(
+        "blob:loaded",
+      );
     });
     expect(loadImage).toHaveBeenCalledTimes(1);
   });
@@ -68,17 +83,68 @@ describe("AttachmentGallery", () => {
     expect(img).not.toBeNull();
     expect(img!.getAttribute("src")).toBe("blob:seat");
     // The pre-rendered node is not re-wrapped in a tile frame.
-    expect(container.querySelector("[data-attachment-gallery] span[class*=h-32]")).toBeNull();
-    expect(container.querySelector("[data-attachment-gallery] span[class*=h-16]")).toBeNull();
+    expect(img!.parentElement).toBe(
+      container.querySelector("[data-attachment-gallery]"),
+    );
   });
 
   it("respects end alignment", () => {
     const items: AttachmentGalleryItem[] = [
       { kind: "file", id: "f1", name: "a.txt", fileKind: "text" },
     ];
-    const { container } = render(<AttachmentGallery items={items} align="end" />);
-    expect(container.querySelector("[data-attachment-gallery]")?.getAttribute("data-align")).toBe("end");
-    expect(container.querySelector("[data-attachment-gallery]")?.className).toContain("justify-end");
+    const { container } = render(
+      <AttachmentGallery items={items} align="end" />,
+    );
+    expect(
+      container
+        .querySelector("[data-attachment-gallery]")
+        ?.getAttribute("data-align"),
+    ).toBe("end");
+    expect(
+      container.querySelector("[data-attachment-gallery]")?.className,
+    ).toContain("justify-end");
+  });
+
+  it("removes an image without opening its preview or nesting buttons", () => {
+    const onRemove = vi.fn();
+    const { container, getByRole, queryByRole } = render(
+      <AttachmentGallery
+        items={[
+          {
+            kind: "image",
+            id: "i1",
+            name: "shot.png",
+            thumbUrl: "blob:thumb",
+            onRemove,
+          },
+        ]}
+      />,
+    );
+    expect(container.querySelector("button button")).toBeNull();
+    fireEvent.click(
+      getByRole("button", { name: "sidepanel.attachment.removeAria" }),
+    );
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(queryByRole("dialog")).toBeNull();
+    fireEvent.click(getByRole("button", { name: "shot.png" }));
+    expect(getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("updates a draft thumbnail without keeping the previous URL", () => {
+    const item: AttachmentGalleryItem = {
+      kind: "image",
+      id: "i1",
+      thumbUrl: "blob:before",
+    };
+    const { container, rerender } = render(
+      <AttachmentGallery items={[item]} />,
+    );
+    rerender(
+      <AttachmentGallery items={[{ ...item, thumbUrl: "blob:after" }]} />,
+    );
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "blob:after",
+    );
   });
 
   it("returns null for an empty item list", () => {
@@ -90,7 +156,8 @@ describe("AttachmentGallery", () => {
 describe("MessageImagesGallery (default conversation.message.images occupant)", () => {
   const ref = (id: string) => ({
     attachment: {
-      attachmentId: id as import("@amiba/extension-sdk").ImageAttachmentRef["attachmentId"],
+      attachmentId:
+        id as import("@amiba/extension-sdk").ImageAttachmentRef["attachmentId"],
       mediaType: "image/png" as const,
       bytes: 1,
       width: 1,
@@ -98,7 +165,7 @@ describe("MessageImagesGallery (default conversation.message.images occupant)", 
     },
   });
 
-  it("renders a lone image as the larger bounded tile", async () => {
+  it("resolves a lone durable image through the seat", async () => {
     const owner: MessageImagesOwner = {
       images: [ref("one")],
       loadImage: vi.fn().mockResolvedValue("blob:one"),
@@ -109,8 +176,7 @@ describe("MessageImagesGallery (default conversation.message.images occupant)", 
       expect(el).not.toBeNull();
       return el!;
     });
-    // The tile frame spans the image: lone → larger bounded preview.
-    expect(img.closest("span")?.className).toContain("h-32");
+    expect(img.getAttribute("src")).toBe("blob:one");
   });
 
   it("renders several images as compact tiles", async () => {
@@ -125,7 +191,7 @@ describe("MessageImagesGallery (default conversation.message.images occupant)", 
       expect(els).toHaveLength(2);
       return els;
     });
-    expect(imgs[0]!.closest("span")?.className).toContain("h-16");
+    expect(imgs[0]!.getAttribute("src")).toBe("blob:loaded");
     expect(loadImage).toHaveBeenCalledTimes(2);
   });
 });
