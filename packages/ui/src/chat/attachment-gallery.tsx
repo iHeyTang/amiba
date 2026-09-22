@@ -66,13 +66,13 @@ export interface AttachmentGalleryProps {
 // The draft, optimistic bubble and durable bubble share these dimensions.
 // Attachment count never changes an image's presentation.
 const attachmentFrame =
-  "group relative inline-flex h-16 w-56 max-w-full shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted/30";
+  "group relative inline-flex h-12 w-36 max-w-full shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted/30";
 const attachmentAction =
   "grid h-5 w-5 shrink-0 place-items-center rounded-md bg-background/90 text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
-const attachmentBody = "flex min-w-0 items-center gap-2.5 px-3";
+const attachmentBody = "flex min-w-0 items-center gap-1.5 px-2";
 const attachmentIcon =
-  "relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-md text-muted-foreground";
+  "relative grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded text-muted-foreground";
 
 /** A wrapping row of fixed-size attachment cards. */
 export function AttachmentGallery({
@@ -151,7 +151,7 @@ export function AttachmentImageTile({
             src={thumb}
             alt={name}
             className={cn(
-              "block h-10 w-10 object-cover",
+              "block h-6 w-6 object-cover",
               item.uploading && "opacity-50",
             )}
           />
@@ -244,12 +244,12 @@ function GalleryFileCard({
           <KindIcon
             kind={item.fileKind ?? "binary"}
             name={item.name}
-            className="h-7 w-7"
+            className="h-6 w-6"
           />
         )}
       </span>
       <AttachmentDetails name={item.name} size={item.size} />
-      <span className="absolute right-1 top-1 flex flex-col gap-1">
+      <span className="absolute right-1 top-0.5 flex flex-col gap-1">
         {item.onRemove && (
           <button
             type="button"
