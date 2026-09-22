@@ -133,3 +133,15 @@ export function sessionComposerDraft(storage: StorageAdapter, sessionId: string)
   if (!source) { source = createComposerDraftSource(storage, sessionId); sessions.set(sessionId, source); }
   return source;
 }
+
+// Home has no session ID. Keep its draft outside the mounted chat surface so
+// navigation can restore it without sharing a session's draft or storage key.
+const homeStores = new WeakMap<StorageAdapter, NativeComposerDraftSource>();
+export function homeComposerDraft(storage: StorageAdapter): NativeComposerDraftSource {
+  let source = homeStores.get(storage);
+  if (!source) {
+    source = createComposerDraftSource();
+    homeStores.set(storage, source);
+  }
+  return source;
+}
