@@ -17,6 +17,7 @@ export type AttachmentGalleryItem =
       kind: "image";
       id: string;
       name?: string;
+      size?: number;
       /**
        * Ready thumbnail URL (composer drafts carry `thumbDataUrl`, bubble
        * items carry a loaded object URL). When absent AND `loadImage` is
@@ -65,11 +66,15 @@ export interface AttachmentGalleryProps {
 // The draft, optimistic bubble and durable bubble share these dimensions.
 // Attachment count never changes an image's presentation.
 const attachmentFrame =
-  "relative h-16 shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted/30";
+  "group relative inline-flex h-16 w-56 max-w-full shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted/30";
 const attachmentAction =
   "grid h-5 w-5 shrink-0 place-items-center rounded-md bg-background/90 text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
-/** A wrapping row of equal-height, uncropped images and file cards. */
+const attachmentBody = "flex min-w-0 items-center gap-2.5 px-3";
+const attachmentIcon =
+  "relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-md text-muted-foreground";
+
+/** A wrapping row of fixed-size attachment cards. */
 export function AttachmentGallery({
   items,
   align = "start",
@@ -103,8 +108,8 @@ export function AttachmentGallery({
 }
 
 /**
- * A constant-height image whose width follows its aspect ratio. Very wide or
- * tall images fit inside the bounded frame without cropping their contents.
+ * Images use the same card as files; only the fixed icon slot becomes a
+ * cropped thumbnail. The original image stays available in the lightbox.
  * Shared with the shell's default conversation.message.images seat occupant.
  */
 export function AttachmentImageTile({
@@ -137,50 +142,61 @@ export function AttachmentImageTile({
 
   const thumb = item.thumbUrl ?? (loaded?.id === item.id ? loaded.url : null);
   const preview = item.uploading ? null : (item.previewUrl ?? thumb);
-  const content = thumb ? (
-    <img
-      src={thumb}
-      alt={item.name ?? ""}
-      className={cn(
-        "block h-full w-auto max-w-40 object-contain",
-        item.uploading && "opacity-50",
-      )}
-    />
-  ) : (
-    <span
-      aria-hidden
-      className="grid h-full w-16 place-items-center text-muted-foreground/70"
-    >
-      {!item.uploading && <KindIcon kind="image" className="h-5 w-5" />}
-    </span>
+  const name = item.name || t("sidepanel.attachment.imageName");
+  const content = (
+    <>
+      <span className={attachmentIcon}>
+        {thumb ? (
+          <img
+            src={thumb}
+            alt={name}
+            className={cn(
+              "block h-10 w-10 object-cover",
+              item.uploading && "opacity-50",
+            )}
+          />
+        ) : (
+          <KindIcon kind="image" className="h-6 w-6" />
+        )}
+        {item.uploading && (
+          <span className="absolute inset-0 grid place-items-center">
+            <Loader2
+              className="h-4 w-4 animate-spin text-muted-foreground"
+              aria-label={t("sidepanel.attachment.uploading")}
+            />
+          </span>
+        )}
+      </span>
+      <AttachmentDetails name={name} size={item.size} />
+    </>
   );
 
   return (
-    <span
-      data-attachment-kind="image"
-      className={cn(attachmentFrame, "group inline-flex min-w-10 max-w-full")}
-    >
+    <span data-attachment-kind="image" className={attachmentFrame} title={name}>
       {preview ? (
-        <ImagePreviewDialog src={preview} alt={item.name ?? ""}>
+        <ImagePreviewDialog src={preview} alt={name}>
           <button
             type="button"
-            title={item.name}
-            className="flex h-full w-full min-w-0 items-center justify-center cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            aria-label={name}
+            className={cn(
+              attachmentBody,
+              "h-full w-full",
+              item.onRemove && "pr-7",
+              "cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+            )}
           >
             {content}
           </button>
         </ImagePreviewDialog>
       ) : (
-        <span className="inline-flex h-full w-full items-center justify-center">
+        <span
+          className={cn(
+            attachmentBody,
+            "h-full w-full",
+            item.onRemove && "pr-7",
+          )}
+        >
           {content}
-        </span>
-      )}
-      {item.uploading && (
-        <span className="pointer-events-none absolute inset-0 grid place-items-center">
-          <Loader2
-            className="h-4 w-4 animate-spin text-muted-foreground"
-            aria-label={t("sidepanel.attachment.uploading")}
-          />
         </span>
       )}
       {item.onRemove && (
@@ -188,13 +204,10 @@ export function AttachmentImageTile({
           type="button"
           onClick={item.onRemove}
           aria-label={t("sidepanel.attachment.removeAria", {
-            name: item.name ?? "",
+            name,
           })}
           title={t("sidepanel.attachment.remove")}
-          className={cn(
-            attachmentAction,
-            "absolute right-1 top-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100",
-          )}
+          className={cn(attachmentAction, "absolute right-1 top-1")}
         >
           <X className="h-3 w-3" />
         </button>
@@ -210,44 +223,32 @@ function GalleryFileCard({
   item: Extract<AttachmentGalleryItem, { kind: "file" }>;
 }) {
   const { t } = useT();
-  const extension = /\.([a-z\d]{1,12})$/i.exec(item.name)?.[1]?.toUpperCase();
-  const details = [
-    extension,
-    item.size != null ? formatBytesShort(item.size) : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
   return (
     <span
       data-attachment-kind="file"
       className={cn(
         attachmentFrame,
-        "group inline-flex w-56 max-w-full items-center gap-2.5 px-3",
+        attachmentBody,
         (item.onRemove || (item.failed && item.onRetry)) && "pr-7",
         item.failed && "border-destructive/40",
       )}
       title={item.name}
     >
-      <span className="grid h-8 w-7 shrink-0 place-items-center text-muted-foreground">
+      <span className={attachmentIcon}>
         {item.uploading ? (
           <Loader2
             className="h-5 w-5 animate-spin"
             aria-label={t("sidepanel.attachment.uploading")}
           />
         ) : (
-          <KindIcon kind={item.fileKind ?? "binary"} className="h-5 w-5" />
+          <KindIcon
+            kind={item.fileKind ?? "binary"}
+            name={item.name}
+            className="h-7 w-7"
+          />
         )}
       </span>
-      <span className="min-w-0 flex-1 text-left">
-        <span className="block truncate text-xs font-medium leading-5 text-foreground/90">
-          {item.name}
-        </span>
-        {details && (
-          <span className="block truncate text-[11px] leading-4 text-muted-foreground">
-            {details}
-          </span>
-        )}
-      </span>
+      <AttachmentDetails name={item.name} size={item.size} />
       <span className="absolute right-1 top-1 flex flex-col gap-1">
         {item.onRemove && (
           <button
@@ -274,6 +275,26 @@ function GalleryFileCard({
           </button>
         )}
       </span>
+    </span>
+  );
+}
+
+/** Shared text geometry for images and every file type. */
+function AttachmentDetails({ name, size }: { name: string; size?: number }) {
+  const extension = /\.([a-z\d]{1,12})$/i.exec(name)?.[1]?.toUpperCase();
+  const details = [extension, size != null ? formatBytesShort(size) : null]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <span className="min-w-0 flex-1 text-left">
+      <span className="block truncate text-xs font-medium leading-5 text-foreground/90">
+        {name}
+      </span>
+      {details && (
+        <span className="block truncate text-[11px] leading-4 text-muted-foreground">
+          {details}
+        </span>
+      )}
     </span>
   );
 }
@@ -307,6 +328,7 @@ export function MessageImagesGallery({ owner }: { owner: MessageImagesOwner }) {
             kind: "image",
             id: image.attachment.attachmentId,
             name: image.attachment.name,
+            size: image.attachment.bytes,
             loadImage: loadImage
               ? () => loadImage(image.attachment)
               : undefined,

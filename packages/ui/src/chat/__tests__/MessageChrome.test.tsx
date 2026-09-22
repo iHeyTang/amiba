@@ -2017,7 +2017,7 @@ describe("ordered attachment row (files + images in original order)", () => {
     expect(row.textContent).not.toContain("img-a");
   });
 
-  it("renders a live badge-only image as a thumbnail tile, not a file capsule", () => {
+  it("renders a live badge-only image with thumbnail, filename and size", () => {
     // Optimistic bubbles carry images as badges (no durable refs yet): the
     // image must render as the same tile the composer/durable row uses.
     const imageBadge = {
@@ -2044,8 +2044,8 @@ describe("ordered attachment row (files + images in original order)", () => {
     const img = row.querySelector("img");
     expect(img).not.toBeNull();
     expect(img!.getAttribute("src")).toBe("data:image/png;base64,AA");
-    // No file-capsule chrome for the image badge.
-    expect(row.textContent).not.toContain("22");
+    expect(row.textContent).toContain("shot.png");
+    expect(row.textContent).toContain("PNG · 22.0 B");
   });
 });
 

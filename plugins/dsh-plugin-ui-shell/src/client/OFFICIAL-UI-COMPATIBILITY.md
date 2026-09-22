@@ -18,8 +18,8 @@ Do not replace `Menu` positioning with hand-authored coordinates.
 ## Attachment seats
 
 Amiba renders attachments — the user bubble, the composer and the empty-state
-composer — through the shared `AttachmentGallery` component (equal-height uncropped
-image previews and two-line file cards, independent of attachment count). The official seats stay part of the vocabulary and
+composer — through the shared `AttachmentGallery` component (fixed-size two-line file cards with cropped image thumbnails in the icon slot,
+independent of image aspect ratio and attachment count). The official seats stay part of the vocabulary and
 keep their takeover semantics:
 
 - `conversation.message.images`: the user bubble dispatches this seat once per

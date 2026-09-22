@@ -520,6 +520,7 @@ export const zhCN: UiMessages = {
   "sidepanel.permission.chip.requested": "请求时间：{time}",
   "sidepanel.permission.chip.decided": "决定时间：{time}",
   "sidepanel.permission.dismissError": "关闭错误提示",
+  "sidepanel.attachment.imageName": "图片",
   "sidepanel.attachment.uploading": "上传中",
   "sidepanel.attachment.removeAria": "移除 {name}",
   "sidepanel.attachment.openInBrowser": "在浏览器中打开 {name}",
