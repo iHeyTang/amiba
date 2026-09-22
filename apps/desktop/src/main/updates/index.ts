@@ -7,16 +7,18 @@ import { createManualUpdateController } from "./manual";
 import { fetchLatestRelease } from "./github-release";
 import { downloadVerified, pruneInstallers } from "./download";
 import { openInstallerAfterExit } from "./handoff";
+import { scheduleUpdateChecks } from "./schedule";
 
 // Both halves must start with an alphanumeric character, so a value such as
 // `../etc` cannot rewrite the API path it is interpolated into.
 const REPOSITORY = /^[A-Za-z0-9][\w.-]*\/[A-Za-z0-9][\w.-]*$/;
 
-/** The four operations the renderer can ask of whichever update path is live. */
+/** The operations the renderer can ask of whichever update path is live. */
 type UpdateHost = {
   getState: () => UpdateState;
   check: () => Promise<UpdateState>;
   download: () => Promise<UpdateState>;
+  cancel: () => Promise<UpdateState>;
   install: () => void;
 };
 
@@ -71,14 +73,14 @@ function createUpdateHost(
       currentVersion,
       assetName: (version) => `Amiba-${version}-mac-${process.arch}.dmg`,
       fetchRelease: () => fetchLatestRelease(repository),
-      download: async (asset, onProgress) => {
+      download: async (asset, onProgress, signal) => {
         const directory = path.join(app.getPath("userData"), "updates");
         const result = await downloadVerified({
           url: asset.url,
           sha256: asset.sha256,
           size: asset.size,
           filePath: path.join(directory, asset.name),
-        }, { onProgress });
+        }, { onProgress, signal });
         // Superseded installers are dead weight once the new one is verified.
         await pruneInstallers(directory, asset.name);
         return result;
@@ -90,6 +92,7 @@ function createUpdateHost(
       getState: () => manual.getState(),
       check: () => manual.check(),
       download: () => manual.download(),
+      cancel: () => manual.cancel(),
       install: () => manual.install(),
     };
   }
@@ -104,9 +107,9 @@ function createUpdateHost(
   return {
     getState: () => legacy.getState(),
     check: () => legacy.check(`latest-${process.arch}`),
-    // electron-updater downloads as soon as it sees a release; the renderer only
-    // reaches for this on builds that ask first.
-    download: () => Promise.resolve(legacy.getState()),
+    // Explicit retry after cancellation; periodic checks only detect that version.
+    download: () => legacy.check(`latest-${process.arch}`, true),
+    cancel: () => legacy.cancel(),
     install: () => legacy.install(),
   };
 }
@@ -121,10 +124,13 @@ export function registerAppUpdates() {
   ipcMain.handle("app-updates:state", () => host.getState());
   ipcMain.handle("app-updates:check", check);
   ipcMain.handle("app-updates:download", () => host.download());
+  ipcMain.handle("app-updates:cancel", () => host.cancel());
   ipcMain.handle("app-updates:install", () => host.install());
-  const initial = setTimeout(() => { void check(); }, 30_000);
-  const interval = setInterval(() => { void check(); }, 6 * 60 * 60 * 1000);
-  initial.unref();
-  interval.unref();
-  app.once("before-quit", () => { clearTimeout(initial); clearInterval(interval); });
+  const schedule = scheduleUpdateChecks(check);
+  const onFocus = () => { void schedule.checkIfDue(); };
+  app.on("browser-window-focus", onFocus);
+  app.once("before-quit", () => {
+    schedule.dispose();
+    app.removeListener("browser-window-focus", onFocus);
+  });
 }

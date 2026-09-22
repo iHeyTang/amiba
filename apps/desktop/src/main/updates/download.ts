@@ -3,7 +3,8 @@ import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import https from "node:https";
 import path from "node:path";
-import type { Readable } from "node:stream";
+import { Transform, type Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 export type InstallerStream = { stream: Readable; length: number };
 
@@ -22,10 +23,11 @@ export function nextHopUrl(location: string, base: string): string {
 }
 
 /** Stream a URL, following redirects (GitHub release assets redirect to a CDN). */
-export async function openSecureStream(url: string, redirects = 5): Promise<InstallerStream> {
+export async function openSecureStream(url: string, redirects = 5, signal?: AbortSignal): Promise<InstallerStream> {
   const target = assertSecureUrl(url);
   return new Promise((resolve, reject) => {
     const request = https.get(target, {
+      signal,
       headers: { Accept: "application/octet-stream", "User-Agent": "Amiba-Desktop" },
     }, (response) => {
       const status = response.statusCode ?? 0;
@@ -36,7 +38,9 @@ export async function openSecureStream(url: string, redirects = 5): Promise<Inst
           reject(new Error("Installer download redirected too many times"));
           return;
         }
-        openSecureStream(nextHopUrl(location, target.href), redirects - 1).then(resolve, reject);
+        try {
+          openSecureStream(nextHopUrl(location, target.href), redirects - 1, signal).then(resolve, reject);
+        } catch (error) { reject(error); }
         return;
       }
       if (status !== 200) {
@@ -52,10 +56,10 @@ export async function openSecureStream(url: string, redirects = 5): Promise<Inst
   });
 }
 
-async function hashFile(filePath: string): Promise<string> {
+async function hashFile(filePath: string, signal?: AbortSignal): Promise<string> {
   const hash = createHash("sha256");
   await new Promise<void>((resolve, reject) => {
-    createReadStream(filePath).on("error", reject).on("data", (chunk) => hash.update(chunk)).on("end", resolve);
+    createReadStream(filePath, { signal }).on("error", reject).on("data", (chunk) => hash.update(chunk)).on("end", resolve);
   });
   return hash.digest("hex");
 }
@@ -74,46 +78,32 @@ async function ensureSpace(directory: string, size: number): Promise<void> {
   if (available < size) throw new Error("Not enough free disk space for the update");
 }
 
-function pump(stream: Readable, destination: string, size: number, length: number, onProgress: (percent: number) => void): Promise<void> {
+async function pump(stream: Readable, destination: string, size: number, length: number, onProgress: (percent: number) => void, signal?: AbortSignal): Promise<void> {
   const total = length > 0 ? length : size;
-  return new Promise<void>((resolve, reject) => {
-    const file = createWriteStream(destination);
-    let received = 0;
-    let lastPercent = -1;
-    let settled = false;
-    const fail = (error: unknown) => {
-      if (settled) return;
-      settled = true;
-      file.destroy();
-      stream.destroy();
-      reject(error instanceof Error ? error : new Error(String(error)));
-    };
-    stream.on("data", (chunk: Buffer) => {
+  let received = 0;
+  let lastPercent = -1;
+  const progress = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
       received += chunk.length;
       if (size > 0 && received > size) {
-        fail(new Error("Installer download exceeded the published size"));
+        callback(new Error("Installer download exceeded the published size"));
         return;
       }
-      if (total <= 0) return;
-      const percent = Math.min(99, Math.floor((received / total) * 100));
-      if (percent !== lastPercent) {
-        lastPercent = percent;
-        onProgress(percent);
+      if (total > 0) {
+        const percent = Math.min(99, Math.floor((received / total) * 100));
+        if (percent !== lastPercent) {
+          lastPercent = percent;
+          onProgress(percent);
+        }
       }
-    });
-    stream.on("error", fail);
-    file.on("error", fail);
-    file.on("finish", () => {
-      if (settled) return;
-      if (size > 0 && received !== size) {
-        fail(new Error(`Installer download is incomplete (${received} of ${size} bytes)`));
-        return;
-      }
-      settled = true;
-      resolve();
-    });
-    stream.pipe(file);
+      callback(null, chunk);
+    },
   });
+  // pipeline aborts both ends and waits for the file to close before cleanup.
+  await pipeline(stream, progress, createWriteStream(destination), { signal });
+  if (size > 0 && received !== size) {
+    throw new Error(`Installer download is incomplete (${received} of ${size} bytes)`);
+  }
 }
 
 /** Drop installers the new download supersedes. Opportunistic: never fails an update. */
@@ -139,15 +129,18 @@ export async function pruneInstallers(directory: string, keep: string): Promise<
  */
 export async function downloadVerified(
   request: { url: string; sha256: string; size: number; filePath: string },
-  options: { onProgress: (percent: number) => void; open?: (url: string) => Promise<InstallerStream> },
+  options: { onProgress: (percent: number) => void; signal?: AbortSignal; open?: (url: string, signal?: AbortSignal) => Promise<InstallerStream> },
 ): Promise<{ filePath: string }> {
+  const { signal } = options;
+  signal?.throwIfAborted();
   const expected = request.sha256.toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(expected)) throw new Error("Refusing to download an installer without a published digest");
   if (!path.isAbsolute(request.filePath)) throw new Error("Installer path must be absolute");
   assertSecureUrl(request.url);
   await fs.mkdir(path.dirname(request.filePath), { recursive: true });
   // A verified file from an interrupted session is reused instead of refetched.
-  if (existsSync(request.filePath) && await hashFile(request.filePath) === expected) {
+  if (existsSync(request.filePath) && await hashFile(request.filePath, signal) === expected) {
+    signal?.throwIfAborted();
     options.onProgress(100);
     return { filePath: request.filePath };
   }
@@ -155,16 +148,19 @@ export async function downloadVerified(
   const partial = `${request.filePath}.part`;
   await fs.rm(partial, { force: true });
   try {
-    const open = options.open ?? openSecureStream;
-    const { stream, length } = await open(request.url);
-    await pump(stream, partial, request.size, length, options.onProgress);
-    if (await hashFile(partial) !== expected) throw new Error("Downloaded installer failed integrity verification");
+    signal?.throwIfAborted();
+    const open = options.open ?? ((url, signal) => openSecureStream(url, 5, signal));
+    const { stream, length } = await open(request.url, signal);
+    await pump(stream, partial, request.size, length, options.onProgress, signal);
+    if (await hashFile(partial, signal) !== expected) throw new Error("Downloaded installer failed integrity verification");
+    signal?.throwIfAborted();
     await fs.rm(request.filePath, { force: true });
     await fs.rename(partial, request.filePath);
   } catch (error) {
     await fs.rm(partial, { force: true }).catch(() => {});
     throw error;
   }
+  signal?.throwIfAborted();
   options.onProgress(100);
   return { filePath: request.filePath };
 }

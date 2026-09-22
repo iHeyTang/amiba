@@ -35,3 +35,36 @@ test('all sources failing is retryable; disabled builds do not access network', 
   const disabled = createUpdateController({ updater: new FakeUpdater(), sources: [], currentVersion: '0.3.0', notify: () => {}, quit: () => {} });
   assert.equal((await disabled.check('latest-x64')).status, 'disabled');
 });
+
+test('cancels the transfer, ignores late events and does not retry another source', async () => {
+  const updater = new FakeUpdater();
+  let rejectDownload;
+  let downloads = 0;
+  const token = { cancelled: false, cancel() { this.cancelled = true; rejectDownload(new Error('cancelled')); } };
+  updater.checkForUpdates = async function () {
+    this.attempts.push(this.url);
+    this.emit('update-available', { version: '0.4.0' });
+    return { cancellationToken: token };
+  };
+  updater.downloadUpdate = async function (receivedToken) {
+    assert.equal(receivedToken, token);
+    downloads++;
+    if (downloads === 1) return new Promise((_, reject) => { rejectDownload = reject; });
+    this.emit('update-downloaded', { version: '0.4.0' });
+  };
+  const controller = createUpdateController({ updater, sources: ['https://cdn', 'https://fallback'], currentVersion: '0.3.0', notify: () => {}, quit: () => {} });
+  const pending = controller.check('latest-arm64');
+  await Promise.resolve();
+  assert.equal((await controller.cancel()).status, 'cancelled');
+  assert.equal((await pending).status, 'cancelled');
+  assert.equal(token.cancelled, true);
+  assert.deepEqual(updater.attempts, ['https://cdn']);
+  updater.emit('download-progress', { percent: 90 });
+  updater.emit('update-downloaded', { version: '0.4.0' });
+  assert.equal(controller.getState().status, 'cancelled');
+  assert.throws(() => controller.install());
+  assert.equal((await controller.check('latest-arm64')).status, 'cancelled');
+  assert.equal(downloads, 1, 'automatic detection must not resume a cancelled version');
+  assert.equal((await controller.check('latest-arm64', true)).status, 'downloaded');
+  assert.equal(downloads, 2);
+});
