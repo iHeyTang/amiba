@@ -1,3 +1,4 @@
+import { RuntimeInspectEvidence } from "./runtime-inspect-evidence";
 import type { ToolCallOwnerProps } from "@amiba/extension-sdk";
 import { useT, type TranslateFn } from "@amiba/i18n";
 import {
@@ -142,7 +143,7 @@ const SPECS: Record<string, SemanticToolSpec<Parameters<TranslateFn>[0]>> = {
   },
   job_output: {
     icon: Terminal,
-    action: (args) => args.wait ? "shell.tool.waitJob" : "shell.tool.readJob",
+    action: (args) => (args.wait ? "shell.tool.waitJob" : "shell.tool.readJob"),
     evidence: codeText,
   },
   job_list: {
@@ -314,10 +315,20 @@ for (const key of [
 ]) {
   SPECS[key] = {
     icon: Search,
-    action: "shell.tool.inspectRuntime",
+    action: (args) =>
+      args.provider === "Service" && args.method === "listService"
+        ? "shell.inspect.serviceAction"
+        : args.provider === "Theme" && args.method === "listTokens"
+          ? "shell.inspect.themeAction"
+          : "shell.tool.inspectRuntime",
     target: (args) =>
-      oneline(stringValue(args, "query", "name", "packageName")),
-    evidence: codeText,
+      oneline(
+        [args.provider, args.method]
+          .filter((value) => typeof value === "string" && value)
+          .join(".") ||
+          stringValue(args, "query", "name", "packageName", "pluginId"),
+      ),
+    evidence: (ctx) => <RuntimeInspectEvidence {...ctx} />,
   };
 }
 for (const [key, action] of Object.entries({

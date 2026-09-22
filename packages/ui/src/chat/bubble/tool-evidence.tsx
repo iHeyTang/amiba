@@ -333,3 +333,18 @@ export function StructuredEvidence({ value }: { value: unknown }) {
     </section>
   );
 }
+
+/** Lightweight argument text for calls that do not own a richer pending view. */
+export function CompactArguments({ value }: { value: Record<string, unknown> }) {
+  if (Object.keys(value).length === 0) return null;
+  return (
+    <div data-tool-arguments className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-[11px] leading-relaxed text-muted-foreground">
+      {Object.entries(value).map(([key, item]) => (
+        <span key={key} className="min-w-0 whitespace-pre-wrap break-all font-mono">
+          <span className="text-muted-foreground/60">{key}=</span>
+          {typeof item === "string" ? item : JSON.stringify(item)}
+        </span>
+      ))}
+    </div>
+  );
+}

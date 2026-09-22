@@ -18,6 +18,8 @@ export const en = {
   "shell.tool.submitPlan": "Submit plan",
   "shell.tool.runWorkflow": "Run workflow",
   "shell.tool.reportProgress": "Report progress",
+  "shell.inspect.serviceAction": "Query app capabilities",
+  "shell.inspect.themeAction": "Query theme variables",
   "shell.tool.inspectRuntime": "Inspect runtime",
   "shell.tool.defineRuntime": "Define runtime module",
   "shell.tool.runRuntime": "Run module",
