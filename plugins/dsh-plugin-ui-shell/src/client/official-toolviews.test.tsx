@@ -69,12 +69,16 @@ const added = [
   "cordis_inspect_list",
   "cordis_inspect_query",
   "cordis_inspect_self",
-  "cordis_define",
-  "cordis_run",
-  "cordis_stop",
-  "cordis_undefine",
 ];
 describe("tool views", () => {
+  it.each(["cordis_define", "cordis_run", "cordis_stop", "cordis_undefine"])(
+    "leaves %s lifecycle and approval UI to the official Cordis plugin",
+    (name) => {
+      expect(OFFICIAL_TOOLVIEWS.some(entry => entry.key === name)).toBe(false);
+      render(<>{renderOfficialToolFallback(owner(name), <span>official owner unavailable</span>)}</>);
+      expect(screen.getByText("official owner unavailable")).toBeTruthy();
+    },
+  );
   it("keeps intrinsic Bash semantics when the session-scoped slot falls back", () => {
     render(
       <>

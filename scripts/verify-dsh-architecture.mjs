@@ -1215,7 +1215,6 @@ for (const [dispatch, what] of [
 // new main/tool/command keys must not make arbitrary keyed settings legal.
 const KEYED_CHILD_DECLARATIONS = new Set([
   "main",
-  "tool.view.cordis",
   "conversation.chat.commandview",
   "amiba.conversation.notice",
   "tool.call.toolview",

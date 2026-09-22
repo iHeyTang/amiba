@@ -299,7 +299,6 @@ type AmibaRootProps = PropsRuntime<"root"> &
     summarySource: ContributionsSource<WorkbenchSummaryContribution>;
     directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
     conversationViews: ContributionsSource<ConversationViewEntry>;
-    cordisPackages: import("./cordis-business.js").CordisPackages;
     legacyToolDetailsAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
     toolImagesAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
     lineageAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
@@ -341,7 +340,6 @@ function AmibaRoot({
   summarySource,
   directoryFlows,
   conversationViews,
-  cordisPackages,
   commandRowKeys,
   legacyToolDetailsAvailable,
   toolImagesAvailable,
@@ -378,7 +376,6 @@ function AmibaRoot({
         ? <SessionProvider empty={() => options?.fallback ?? null}>{renderSlot(name, owner, options)}</SessionProvider>
         : renderSlot(name, owner, options)) as typeof renderSlot}
       renderSlotChain={((...args) => <SessionProvider>{renderSlotChain(...args)}</SessionProvider>) as typeof renderSlotChain}
-      cordisPackages={cordisPackages}
       commandRowKeys={commandRowKeys}
       legacyToolDetailsAvailable={legacyToolDetailsAvailable}
       toolImagesAvailable={toolImagesAvailable}
@@ -897,7 +894,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "conversation.input.overlay": { kind: "list", scope: "session" },
           "conversation.input.dock": { kind: "list", scope: "session" },
           "conversation.composer.dock": { kind: "list", scope: "session" },
-          "tool.view.cordis": { kind: "keyed", scope: "session" },
           "conversation.chat.commandview": { kind: "keyed", scope: "session" },
           // Official vocabulary: the composer's draft-attachment seat. Kept
           // declared so third-party hosts can still dispatch it; Amiba's
@@ -1006,20 +1002,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
           directoryFlows,
           conversationViews,
           fileMentions: (...args: Parameters<import("@deepseek-ai/dsh-client-ui-chat/client").ChatFileMentions["forClosing"]>) => ctx.get("chatFileMentions")?.forClosing(...args),
-          cordisPackages: (() => {
-            const empty: readonly import("./cordis-business.js").CordisBusinessOwner[] = [];
-            const runner = () => ctx.get("dynamicCordisRunner" as never) as unknown as import("./cordis-business.js").CordisPackages | undefined;
-            return {
-              getSnapshot: () => runner()?.getSnapshot() ?? empty,
-              subscribe: (listener: () => void) => {
-                const fiber = ctx.inject(["dynamicCordisRunner" as never], scope => {
-                  scope.effect(() => runner()?.subscribe(listener) ?? (() => {}), "Cordis loaded packages");
-                  listener();
-                });
-                return () => { fiber.dispose(); };
-              },
-            };
-          })(),
           legacyToolDetailsAvailable: {
             getSnapshot: () => ctx.slots.entriesOfSlot("conversation.details.tool").length > 0,
             subscribe: (listener: () => void) => ctx.slots.subscribe("conversation.details.tool", listener),
