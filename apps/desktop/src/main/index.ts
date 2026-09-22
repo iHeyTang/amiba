@@ -228,7 +228,7 @@ function installPermissionRequestHandler(): void {
 // and protocol-URL handling.
 let mainWindow: BrowserWindow | null = null;
 const nativeExtensions = new DesktopExtensionHost({
-  profileManifest: () => managedDshPaths().profileManifest,
+  profileManifest: () => dshRuntime.activeProfileManifest,
   context: {
     hostContentsId: () =>
       mainWindow && !mainWindow.isDestroyed()
@@ -383,6 +383,7 @@ function registerQuickAskIpcHandlers(summon: () => void): void {
  */
 function installRendererDiagnostics(win: BrowserWindow): void {
   win.webContents.on("render-process-gone", (_event, details) => {
+    void dshRuntime.pluginStartupFailed().catch(console.error);
     console.error(
       `[main] renderer process gone: reason=${details.reason} exitCode=${details.exitCode}`,
     );

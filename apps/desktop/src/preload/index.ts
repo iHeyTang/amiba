@@ -91,6 +91,16 @@ const api = {
   },
   windowChrome: getWindowChrome(process.platform),
 
+  pluginStartup: {
+    present: () => ipcRenderer.invoke("plugin-startup:present"),
+    choose: (choice: "continue" | "safe") => ipcRenderer.invoke("plugin-startup:choose", choice),
+    ready: () => ipcRenderer.invoke("plugin-startup:ready"),
+    onState: (callback: (state: import("../main/plugin-startup-gate").PluginStartupState) => void) => {
+      const listener = (_event: unknown, state: import("../main/plugin-startup-gate").PluginStartupState) => callback(state);
+      ipcRenderer.on("plugin-startup:state", listener);
+      return () => ipcRenderer.removeListener("plugin-startup:state", listener);
+    },
+  },
   dshClient: {
     uploadOpen: (url: string): Promise<string> => ipcRenderer.invoke('dsh-client:upload-open', url),
     uploadWrite: (id: string, bytes: Uint8Array): Promise<void> => ipcRenderer.invoke('dsh-client:upload-write', id, bytes),
