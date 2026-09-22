@@ -114,6 +114,10 @@ export class DshRuntimeController {
       this.startupWatchdog = undefined
       await this.stop()
       await this.starting?.catch(() => {})
+      await this.developmentServer?.close()
+      this.developmentServer = undefined
+      await developmentProfile?.dispose()
+      developmentProfile = undefined
       await this.ensureStarted()
       for (const win of BrowserWindow.getAllWindows()) {
         if (!win.isDestroyed()) win.webContents.reload()
@@ -231,7 +235,7 @@ export class DshRuntimeController {
   }
 
   assertPluginMutationAllowed(): void {
-    if (developmentProfile) throw new Error("Finish local plugin development before installing, updating, or removing published plugins.")
+    if (developmentProfile && !this.gate.safe) throw new Error("Finish local plugin development before installing, updating, or removing published plugins.")
   }
 
   async ensureManagedProfile(): Promise<void> {
