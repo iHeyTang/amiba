@@ -1,3 +1,4 @@
+import { useSessionComposerDraft } from "../chat/use-session-composer-draft";
 import { useNewChatWorkspace } from "../chat/new-chat-workspace";
 import { useDirectoryChooser } from "../directory-chooser";
 import { InteractionRegion } from "../primitives/interaction-region";
@@ -138,7 +139,7 @@ function Home({
     [t],
   );
 
-  const [input, setInput] = useState("");
+  const [input, setInput, , draftSource] = useSessionComposerDraft(null);
   const [agent, setAgent] = useState<AgentExecutionContext>({
     profileId: "default",
   });
@@ -265,6 +266,7 @@ function Home({
     if (att.attachmentUploading) return;
     if (!trimmed && readyAttachments.length === 0) return;
     if (busy || !sessions.ready) return;
+    const submittedDocument = draftSource.getDocument();
     setBusy(true);
     try {
       // HomeView only carries the *intent* to start a chat — the
@@ -324,6 +326,7 @@ function Home({
                 }))
             : undefined,
       });
+      draftSource.commitSend(submittedDocument);
       // Hand-off done — drop them from the composer state without
       // deleting the files (the chat surface now owns them). Mint a
       // new staging session for the next round.
@@ -437,6 +440,7 @@ function Home({
             triggerRuntime={triggerRuntime}
             ref={inputRef}
             value={input}
+            draftSource={draftSource}
             onChange={setInput}
             onSubmit={(text) => void submitToChat(text)}
             busy={busy}
