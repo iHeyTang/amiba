@@ -94,11 +94,12 @@ function Example({
   );
 }
 function Demo() {
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState(true);
+  const [example, setExample] = useState("service");
   const [dark, setDark] = useState(false);
   return (
     <main style={{ maxWidth: 680, margin: "24px auto", padding: "0 8px 40px" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 600 }}>运行环境 · 工具卡片</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 600 }}>AI 正在了解什么？</h1>
       <p
         style={{
           marginTop: 8,
@@ -106,7 +107,7 @@ function Demo() {
           color: "hsl(var(--muted-foreground))",
         }}
       >
-        实际 UI 组件，使用演示数据。可切换完成状态、展开详情和原始 JSON。
+        这里只展示一次查询。切换示例查看不同查询，点击按钮对比进行中和完成后。
       </p>
       <div
         style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18 }}
@@ -120,7 +121,7 @@ function Demo() {
           }}
           onClick={() => setDone((value) => !value)}
         >
-          {done ? "重新查看" : "模拟查询完成"}
+          {done ? "查看进行中" : "查看已完成"}
         </button>
         <button
           style={{
@@ -137,13 +138,29 @@ function Demo() {
           {dark ? "浅色" : "深色"}
         </button>
       </div>
+      <div style={{ marginTop: 20, fontSize: 13 }}>
+        <label>
+          查询示例：
+          <select
+            value={example}
+            onChange={(event) => setExample(event.target.value)}
+            style={{
+              background: "hsl(var(--background))",
+              padding: 6,
+              border: "1px solid hsl(var(--border))",
+              borderRadius: 4,
+            }}
+          >
+            <option value="service">应用功能说明</option>
+            <option value="theme">主题样式变量</option>
+          </select>
+        </label>
+      </div>
       <Example
-        title={done ? "已查看运行环境" : "正在查看运行环境"}
-        args={serviceArgs}
-        text={done ? service : ""}
+        title={`${done ? "已" : "正在"}查询${example === "service" ? "应用功能说明" : "主题样式变量"}`}
+        args={example === "service" ? serviceArgs : tokenArgs}
+        text={done ? (example === "service" ? service : tokens) : ""}
       />
-      <Example title="已查看运行环境" args={serviceArgs} text={service} />
-      <Example title="已查看运行环境" args={tokenArgs} text={tokens} />
     </main>
   );
 }

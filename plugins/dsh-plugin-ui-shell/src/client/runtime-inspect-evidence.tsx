@@ -227,52 +227,96 @@ export function RuntimeInspectEvidence({
   const data = wrapped ? envelope.data : decoded;
   const record = recordOf(data);
   const service = record?.mode === "service" && recordOf(record.service);
-  const otherData =
+  const serviceQuery =
+    args.provider === "Service" && args.method === "listService";
+  const themeQuery = args.provider === "Theme" && args.method === "listTokens";
+  const purpose = serviceQuery
+    ? t("shell.inspect.servicePurpose")
+    : themeQuery
+      ? t("shell.inspect.themePurpose")
+      : "";
+  const knownLayout =
     service &&
-    Object.fromEntries(
-      Object.entries(record!).filter(
-        ([key]) => key !== "mode" && key !== "service",
-      ),
-    );
-  const envelopeExtras =
-    wrapped &&
-    Object.fromEntries(
-      Object.entries(envelope).filter(
-        ([key]) => !["platform", "provider", "method", "data"].includes(key),
-      ),
+    service.key === "layout" &&
+    service.description ===
+      "Panel navigation and geometry actions exposed through ctx.layout.";
+  const technical = (
+    <>
+      <InspectArguments args={args} />
+      {service && (
+        <div className="mt-3">
+          <Record value={service} />
+        </div>
+      )}
+      {valid && (
+        <details className="mt-2">
+          <summary className={summaryClass}>{t("shell.inspect.raw")}</summary>
+          <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all py-2 font-mono text-[10.5px]">
+            {text}
+          </pre>
+        </details>
+      )}
+    </>
+  );
+  if (!text.trim())
+    return (
+      <div className="space-y-1 text-[11px] leading-relaxed text-muted-foreground">
+        {purpose && <p>{purpose}</p>}
+        {purpose ? (
+          <details>
+            <summary className={summaryClass}>
+              {t("shell.inspect.technical")}
+            </summary>
+            <InspectArguments args={args} />
+          </details>
+        ) : (
+          <InspectArguments args={args} />
+        )}
+      </div>
     );
   return (
-    <div className="space-y-2">
-      <InspectArguments args={args} />
-      {text.trim() && (
-        <section
-          data-runtime-result
-          className="min-w-0 overflow-hidden rounded-md border border-border/45 bg-muted/10 text-[11px] leading-relaxed text-foreground/80"
-        >
-          <div className="max-h-80 space-y-3 overflow-auto p-3">
-            <div className="text-[10px] text-muted-foreground">
-              {service ? "Service" : t("shell.inspect.result")}
+    <section
+      data-runtime-result
+      className="min-w-0 overflow-hidden rounded-md border border-border/45 bg-muted/10 text-[11px] leading-relaxed text-foreground/80"
+    >
+      <div className="max-h-80 space-y-2 overflow-auto p-3">
+        {service ? (
+          <>
+            <div className="text-xs font-medium text-foreground">
+              {knownLayout
+                ? t("shell.inspect.layoutName")
+                : stringValue(service, "key", "name", "id") ||
+                  t("shell.inspect.result")}
             </div>
-            <Record value={service || data} />
-            {otherData && Object.keys(otherData).length > 0 && (
-              <Value value={otherData} />
+            {knownLayout ? (
+              <p className="text-muted-foreground">
+                {t("shell.inspect.layoutDescription")}
+              </p>
+            ) : (
+              stringValue(service, "description") && (
+                <p className="whitespace-pre-wrap break-words text-muted-foreground">
+                  {stringValue(service, "description")}
+                </p>
+              )
             )}
-            {envelopeExtras && Object.keys(envelopeExtras).length > 0 && (
-              <Value value={envelopeExtras} />
-            )}
-          </div>
-          {valid && (
-            <details className="border-t border-border/40 px-3 py-1">
-              <summary className={summaryClass}>
-                {t("shell.inspect.raw")}
-              </summary>
-              <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all py-2 font-mono text-[10.5px]">
-                {text}
-              </pre>
-            </details>
-          )}
-        </section>
-      )}
-    </div>
+          </>
+        ) : (
+          <>
+            <div className="text-xs font-medium">
+              {themeQuery
+                ? t("shell.inspect.themeAction")
+                : t("shell.inspect.result")}
+            </div>
+            <Record value={data} />
+          </>
+        )}
+      </div>
+      <details className="border-t border-border/40 px-3 py-1">
+        <summary className={summaryClass}>
+          {t("shell.inspect.technical")}
+        </summary>
+        <div className="max-h-80 overflow-auto py-2">{technical}</div>
+      </details>
+    </section>
   );
 }

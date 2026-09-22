@@ -51,11 +51,38 @@ describe("runtime inspection evidence", () => {
       ),
     );
     expect(screen.getByText("client · Service.listService")).toBeTruthy();
-    expect(screen.getByText("layout")).toBeTruthy();
+    expect(screen.getAllByText("layout").length).toBeGreaterThan(0);
     expect(screen.getByText('ctx.get("layout")')).toBeTruthy();
     expect(screen.getByText("shell.inspect.optional")).toBeTruthy();
     expect(
       container.querySelector("details:last-child")?.hasAttribute("open"),
+    ).toBe(false);
+  });
+  it("shows a readable layout summary and collapses implementation details", () => {
+    const { container } = render(
+      view(
+        JSON.stringify({
+          ...args,
+          data: {
+            mode: "service",
+            service: {
+              key: "layout",
+              description:
+                "Panel navigation and geometry actions exposed through ctx.layout.",
+              access: { optional: { expression: 'ctx.get("layout")' } },
+            },
+          },
+        }),
+      ),
+    );
+    expect(screen.getByText("shell.inspect.layoutName")).toBeTruthy();
+    expect(screen.getByText("shell.inspect.layoutDescription")).toBeTruthy();
+    const expression = screen.getByText('ctx.get("layout")');
+    expect(expression.closest("details")?.open).toBe(false);
+    expect(
+      container
+        .querySelector("[data-runtime-result] > details")
+        ?.hasAttribute("open"),
     ).toBe(false);
   });
   it("pages long lists without dropping later entries", () => {
