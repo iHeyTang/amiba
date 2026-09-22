@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   CodeEvidence,
   EvidenceShell,
-  StructuredEvidence,
+  CompactArguments,
   unwrapUntrustedToolResult,
 } from "./tool-evidence";
 import {
@@ -82,7 +82,7 @@ export function SemanticToolRow<Key extends string>({
     // evidence against the running args (the full command, path, …), falling
     // back to the raw argument record.
     (spec.evidence?.({ args, text: "", block }) ?? (
-      <StructuredEvidence value={args} />
+      <CompactArguments value={args} />
     ))
   ) : spec.quietSuccess ? null : (
     (spec.evidence?.({ args, text, block }) ?? null)

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@uiw/react-json-view": "2.0.0-alpha.43",
     "zod": "^4.1.5",
     "streamdown": "^2.5.0",
     "shiki": "4.4.3",

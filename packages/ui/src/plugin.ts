@@ -179,3 +179,5 @@ export { ConversationSubmitProvider } from "./chat/conversation-submit";
 export { ToolImageEvidenceProvider } from "./chat/bubble/tool-image-evidence";
 
 export { useDocumentTheme } from "./theme";
+
+export { CompactArguments } from "./chat/bubble/tool-evidence";
