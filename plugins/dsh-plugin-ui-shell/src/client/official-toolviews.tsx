@@ -1,3 +1,4 @@
+import { RuntimeInspectEvidence } from "./runtime-inspect-evidence";
 import type { ToolCallOwnerProps } from "@amiba/extension-sdk";
 import { useT, type TranslateFn } from "@amiba/i18n";
 import {
@@ -317,7 +318,7 @@ for (const key of [
     action: "shell.tool.inspectRuntime",
     target: (args) =>
       oneline(stringValue(args, "query", "name", "packageName")),
-    evidence: codeText,
+    evidence: (ctx) => <RuntimeInspectEvidence {...ctx} />,
   };
 }
 for (const [key, action] of Object.entries({
