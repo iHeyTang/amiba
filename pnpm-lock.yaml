@@ -251,6 +251,9 @@ overrides:
   jsdom>nwsapi: 2.2.23
 
 patchedDependencies:
+  '@deepseek-ai/dsh-client-ui-cordis@0.1.5-rc.1':
+    hash: zjsnumqj35iyow7fmj57p6q6ny
+    path: patches/@deepseek-ai__dsh-client-ui-cordis@0.1.5-rc.1.patch
   '@deepseek-ai/dsh-api-session-controller@0.1.5-rc.1':
     hash: bpip6ltniyp4c5nt6jnd2jdan4
     path: patches/@deepseek-ai__dsh-api-session-controller@0.1.5-rc.1.patch
@@ -12467,7 +12470,7 @@ snapshots:
       '@deepseek-ai/cordis': 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
       '@deepseek-ai/schemastery': 3.18.2
 
-  '@deepseek-ai/dsh-client-ui-cordis@0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)':
+  '@deepseek-ai/dsh-client-ui-cordis@0.1.5-rc.1(patch_hash=zjsnumqj35iyow7fmj57p6q6ny)(@deepseek-ai/cordis@4.0.2)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
 
@@ -13839,7 +13842,7 @@ snapshots:
       '@deepseek-ai/dsh-client-ui-chat': 0.1.5-rc.1(patch_hash=74wqweys2npoy4vneqcoserfca)(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-commands': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-conversation': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
-      '@deepseek-ai/dsh-client-ui-cordis': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-client-ui-cordis': 0.1.5-rc.1(patch_hash=zjsnumqj35iyow7fmj57p6q6ny)(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-deliverables': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-directory-picker-browse': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-directory-picker-native': 0.1.5-rc.1(@deepseek-ai/cordis@4.0.2)

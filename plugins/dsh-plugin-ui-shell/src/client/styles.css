@@ -1,4 +1,5 @@
 @import "./official-controls.css";
+@import "./official-cordis.css";
 @import "./official-theme.css";
 @import "./official-menu.css";
 @import "./official-trajectory.css";
@@ -11,6 +12,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* The official Cordis panel defaults to z-index: 30, the same as our
+ * composer dock. Use the shell's popover layer so approval actions remain
+ * reachable when the panel extends over the conversation. The attribute
+ * selector avoids coupling this integration to upstream CSS-module names. */
+body [data-cordis-panel] {
+  z-index: var(--z-popover);
+}
 
 html,
 body,

@@ -383,6 +383,9 @@ export function Sidebar({
         </TopSection>
       </ScrollArea>
 
+      <div className="px-2">
+        {sidebarFooterActions?.({ wide })}
+      </div>
       <div className="mt-1 border-t border-border/30 p-2">
         <ProfileMenu
           wide={wide}
@@ -390,7 +393,6 @@ export function Sidebar({
           settingsTrigger={settingsTrigger}
           onOpenSettings={onOpenSettings}
         />
-        {sidebarFooterActions?.({ wide })}
       </div>
     </nav>
   );

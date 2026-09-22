@@ -1,0 +1,79 @@
+/* Presentation adapter for @deepseek-ai/dsh-client-ui-cordis 0.1.5-rc.1.
+ * Match Amiba ToolRowFrame (11px, 28px rows, 12px icons) and CodeEvidence.
+ * CSS-module names below belong to that pinned version; review on upgrade.
+ * Only official lifecycle chrome is targeted, never panel or business UI. */
+body :is([data-tool="cordis_define"], [data-tool="cordis_run"], [data-tool="cordis_stop"], [data-tool="cordis_undefine"]) {
+  min-width: 0;
+  font-family: inherit;
+}
+
+body [data-tool="cordis_define"] [data-disclosure-row],
+body [data-tool] > .cvtE3a_row {
+  box-sizing: border-box;
+  height: auto;
+  min-height: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+}
+
+body [data-tool="cordis_define"] [data-disclosure-row][data-expandable]:hover {
+  background: hsl(var(--muted) / 0.45);
+}
+
+body [data-tool="cordis_define"] [data-disclosure-row]:focus-visible {
+  outline: 2px solid hsl(var(--ring) / 0.4);
+  outline-offset: -2px;
+}
+
+body [data-tool="cordis_define"] :is(.gNWCoW_title, .gNWCoW_name, .gNWCoW_purpose, .gNWCoW_errorSummary, .gNWCoW_statusLabel, .gNWCoW_requestError, .gNWCoW_approvalPrompt, .gNWCoW_notice),
+body [data-tool] > .cvtE3a_row > :is(.cvtE3a_title, .cvtE3a_summary, .cvtE3a_error, .cvtE3a_status) {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 400;
+}
+
+body [data-tool="cordis_define"] .gNWCoW_title,
+body [data-tool] > .cvtE3a_row > .cvtE3a_title {
+  color: hsl(var(--foreground) / 0.75);
+}
+
+body [data-tool="cordis_define"] .gNWCoW_name,
+body [data-tool] > .cvtE3a_row > .cvtE3a_summary {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color: hsl(var(--foreground) / 0.65);
+}
+
+body [data-tool="cordis_define"] .gNWCoW_purpose {
+  color: hsl(var(--muted-foreground));
+}
+
+body [data-tool="cordis_define"] .gNWCoW_separator,
+body [data-tool] > .cvtE3a_row > .cvtE3a_separator {
+  background: hsl(var(--muted-foreground) / 0.45);
+}
+
+body [data-tool="cordis_define"] [data-disclosure-row] > :first-child,
+body [data-tool] > .cvtE3a_row > .cvtE3a_icon {
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  color: hsl(var(--muted-foreground));
+}
+
+body [data-tool="cordis_define"] [data-disclosure-row] > :first-child svg:not([data-state]),
+body [data-tool] > .cvtE3a_row > .cvtE3a_icon svg:not([data-state]) {
+  width: 12px;
+  height: 12px;
+  color: hsl(var(--muted-foreground));
+}
+
+body [data-tool] > .cvtE3a_output,
+body [data-tool="cordis_define"] .gNWCoW_output {
+  max-height: 18rem;
+  padding: 8px 12px;
+  border-color: hsl(var(--border) / 0.3);
+  background: hsl(var(--muted) / 0.3);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1.6;
+}

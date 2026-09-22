@@ -1,0 +1,13 @@
+diff --git a/lib/client.js b/lib/client.js
+index 08318d3066df0489cf15386cf9f5e8e5f59d0ff7..944ebae3813494e8623e43bbf44204b3a561df2b 100644
+--- a/lib/client.js
++++ b/lib/client.js
+@@ -491,7 +491,7 @@ window.__ModuleLoader__.load({
+ 			const reading = card.pluginId !== null && inventory.removed.has(card.pluginId) ? "removed" : superseded ? "superseded" : awaitingApproval ? "awaiting-approval" : attempt?.status === "failed" ? "failed" : row !== void 0 && card.packageId !== null ? cordisVisibleStatus(row, card.packageId, loaded) : "idle";
+ 			const status = t(READING_LABELS[reading]);
+ 			const summary = card.errorSummary ?? (card.pluginId === null ? callId : `${card.pluginId}${card.packageId === null ? "" : ` · ${card.packageId}`}`);
+-			const showBusiness = reading === "running" && key !== null;
++			const showBusiness = reading === "running" && key !== null && row?.activeRun?.pluginRunId === card.pluginRunId;
+ 			return (0, react_jsx_runtime.jsxs)("div", {
+ 				className: CordisRunRow_module_css_default.card,
+ 				"data-tool": "cordis_run",

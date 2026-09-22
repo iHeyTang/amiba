@@ -16,6 +16,7 @@ export function cordisBusinessFixture(profile, canonicalProfile) {
   }};`;
   return `
     let cordisSession:any, cordisReceipt:any, nextCordisReceipt:any;
+    const requestedRuns=new Set<string>();
     ctx.on('session/created',(s:any)=>{
       if(s.header.origin==='subagent'||!${JSON.stringify([profile,canonicalProfile])}.includes(s.header.cwd)||cordisReceipt)return;
       cordisSession=s;
@@ -27,21 +28,33 @@ export function cordisBusinessFixture(profile, canonicalProfile) {
       const watcher=watch(${JSON.stringify(profile)},()=>{
         const s=cordisSession;
         if(!s)return;
+        for(const name of ['cordis-request-decline','cordis-request-approve']) {
+          const trigger=${JSON.stringify(profile)}+'/'+name;
+          if(!existsSync(trigger)||requestedRuns.has(name))continue;
+          requestedRuns.add(name);
+          void (async()=>{
+            const agent=ctx.agents.get(s.id);
+            if(!agent)throw new Error('Cordis fixture agent is unavailable');
+            const result=await ctx.dynamicCordisRunner.run(agent,cordisReceipt.pluginId,cordisReceipt.packageId,'run');
+            writeFileSync(trigger+'.json',JSON.stringify(result));
+          })().catch(error=>writeFileSync(trigger+'.json',JSON.stringify({error:String(error)})));
+        }
         if(!nextCordisReceipt&&existsSync(${JSON.stringify(path.join(profile,'cordis-update'))})) {
           nextCordisReceipt=ctx.dynamicCordisRunner.define({sessionId:s.id,plugin:{kind:'existing',pluginId:cordisReceipt.pluginId},
             name:'Compatibility business view v2',purpose:'Verify package update',code:{host:${JSON.stringify(hostCode.replace("origin:'Host'", "origin:'Host-v2'"))},client:${JSON.stringify(code.replace("'COMPAT_DYNAMIC '", "'COMPAT_DYNAMIC_V2 '"))}}});
           writeFileSync(${JSON.stringify(path.join(profile,'cordis-next-definition.json'))},JSON.stringify(nextCordisReceipt));
         }
         const appendCard=(receipt:any,file:string,callId:string,turn:number,mode:string)=>{
-          if(!receipt||!existsSync(file)||s.events.some((e:any)=>e.type==='tool/call'&&e.data.callId===callId))return;
+          if(!receipt||!existsSync(file)||s.snapshotEvents().some((e:any)=>e.type==='tool/call'&&e.data.callId===callId))return;
           let run:any;
           try { run=JSON.parse(readFileSync(file,'utf8')); } catch { return; }
           if(typeof run.pluginRunId!=='string')return;
           const meta={pluginId:receipt.pluginId,packageId:receipt.packageId,pluginRunId:run.pluginRunId};
           s.append('turn/start',{turn});
+          s.append('user/message',{id:callId+'-user',role:'user',source:{kind:'user'},content:[{type:'text',text:'Run the compatibility plugin'}]},{surfaceOp:'append'});
           s.append('step/start',{turn,step:1});
-          s.append('tool/call',{turn,step:1,callId,name:'cordis_run',arguments:JSON.stringify({...meta,mode})});
-          s.append('tool/result',{turn,step:1,meta,message:{id:callId+'-result',role:'user',source:{kind:'tool',callId},content:[{type:'tool-result',toolCallId:callId,content:[{type:'text',text:'COMPAT_DYNAMIC_OUTPUT'}]}]}},{surfaceOp:'append'});
+          const call=s.append('tool/call',{turn,step:1,callId,name:'cordis_run',arguments:JSON.stringify({...meta,mode})});
+          s.append('tool/result',{turn,step:1,meta,message:{id:callId+'-result',role:'user',source:{kind:'tool',callId},content:[{type:'tool-result',toolCallId:callId,content:[{type:'text',text:'COMPAT_DYNAMIC_OUTPUT'}],isError:false}]}},{surfaceOp:'append',sourceEventSeqs:[call.seq]});
           s.append('step/end',{turn,step:1});
           s.append('turn/end',{turn,reason:{kind:'completed'}});
         };

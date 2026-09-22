@@ -5,7 +5,6 @@ import { LegacyToolDetails } from "./legacy-tool-details.js";
 import { sessionLineage, equalSessionLineage } from "./session-lineage.js";
 import { useSessionImageLoader } from "./session-image-loader.js";
 import { useTrajectoryInspection } from "./trajectory-inspection.js";
-import { CordisBusiness, type CordisPackages } from "./cordis-business.js";
 import { createConversationRowsSource } from "./conversation-rows-source.js";
 import { InputRegion } from "./input-region.js";
 import { TurnTail, TurnText } from "./turn-tail.js";
@@ -198,7 +197,6 @@ export type AmibaShellSlot =
   | "conversation.input.overlay"
   | "conversation.input.dock"
   | "conversation.composer.dock"
-  | "tool.view.cordis"
   | "conversation.chat.commandview"
   | "conversation.input.attachments"
   | "conversation.input.left"
@@ -395,7 +393,6 @@ interface ProductShellProps {
   mainPanels: MainPanelNavigation;
   mainPanelList: ContributionsSource<MainPanelRow>;
   renderSlotChain: PropsRenderSlots<AmibaShellSlot>["renderSlotChain"];
-  cordisPackages: CordisPackages;
   legacyToolDetailsAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
   toolImagesAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
   commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
@@ -457,7 +454,6 @@ function ProductShellInner({
   mainPanels,
   mainPanelList,
   renderSlotChain,
-  cordisPackages,
   commandRowKeys,
   legacyToolDetailsAvailable,
   toolImagesAvailable,
@@ -730,11 +726,9 @@ function ProductShellInner({
         render={hasToolImages && loadMessageImage ? images => renderSlot("tool.call.images", { images, loadImage: loadMessageImage, align: "start" }) : undefined}>
         {row}
       </ToolImageEvidenceProvider>;
-      return request.owner.toolName === "cordis_run" ? <>{withImages}<CordisBusiness owner={owner}
-        source={conversationSource(sessions.activeId)} packages={cordisPackages}
-        render={owner => renderSlot("tool.view.cordis", owner, { entryKey: `${owner.pluginId}.${owner.packageId}` })} /></> : withImages;
+      return withImages;
     },
-    [renderSlot, conversationSource, sessions.activeId, cordisPackages, trajectory.inspectCall, hasToolImages, loadMessageImage],
+    [renderSlot, trajectory.inspectCall, hasToolImages, loadMessageImage],
   );
 
   // Amiba's KEYED per-question seat. Dispatched once per pending request with
@@ -1131,7 +1125,9 @@ function ProductShellInner({
               sidebarHeaderHeightPx={topBarHeightPx}
             />
           </SettingsDialog>
-          <div className="pointer-events-none absolute inset-0 z-[var(--z-shell-overlay)]">
+          {/* Match DSH AppFrame: empty overlay space is click-through,
+              while each slot occupant receives pointer input by default. */}
+          <div data-shell-overlay className="pointer-events-none absolute inset-0 z-[var(--z-shell-overlay)] [&>*]:pointer-events-auto">
             {renderSlot("shell.overlay", {})}
           </div>
           {/*

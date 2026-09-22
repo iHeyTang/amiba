@@ -331,19 +331,8 @@ for (const key of [
     evidence: (ctx) => <RuntimeInspectEvidence {...ctx} />,
   };
 }
-for (const [key, action] of Object.entries({
-  cordis_define: "shell.tool.defineRuntime",
-  cordis_run: "shell.tool.runRuntime",
-  cordis_stop: "shell.tool.stopRuntime",
-  cordis_undefine: "shell.tool.removeRuntime",
-})) {
-  SPECS[key] = {
-    icon: Terminal,
-    action: action as Parameters<TranslateFn>[0],
-    target: (args) => oneline(stringValue(args, "pluginId", "name", "id")),
-    evidence: codeText,
-  };
-}
+// Dynamic Cordis lifecycle rows belong to the official ui-cordis plugin.
+// A generic success row would hide approval and activation state.
 
 /** One component per wire name, closing over its spec. */
 export const OFFICIAL_TOOLVIEWS: Array<{

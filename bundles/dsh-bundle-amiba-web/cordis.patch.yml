@@ -53,8 +53,8 @@
 - id: ui-tool
   disabled: true
 
-- id: ui-cordis
-  disabled: true
+# Keep ui-cordis enabled: it owns dynamic plugin approval, lifecycle cards,
+# the footer inventory panel and package-owned business views.
 
 - id: ui-workflow-run
   disabled: true
