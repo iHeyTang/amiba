@@ -7,7 +7,10 @@ vi.mock("@amiba/i18n", async (original) => ({
   ...(await original<typeof import("@amiba/i18n")>()),
   useT: () => ({ t: (key: string) => key }),
 }));
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 function view(value: unknown, args: Record<string, unknown> = {}) {
   return (
     <RuntimeInspectEvidence
@@ -19,9 +22,7 @@ function view(value: unknown, args: Record<string, unknown> = {}) {
 }
 function revealAll(container: HTMLElement) {
   for (let pass = 0; pass < 30; pass++) {
-    const buttons = [
-      ...container.querySelectorAll('button[aria-expanded="false"]'),
-    ];
+    const buttons = [...container.querySelectorAll(".w-rjv-ellipsis")];
     if (!buttons.length) return;
     buttons.forEach((button) => fireEvent.click(button));
   }
@@ -30,35 +31,37 @@ function revealAll(container: HTMLElement) {
 function content(container: HTMLElement) {
   return container.querySelector("[data-json-viewer]")!.textContent!;
 }
+function leaves(value: unknown): string[] {
+  if (value !== null && typeof value === "object")
+    return Object.values(value).flatMap(leaves);
+  return [String(value)];
+}
 describe("folding JSON results", () => {
   it.each(fixtures)("preserves the complete JSON for $label", (fixture) => {
     const { container } = render(view(fixture.result, fixture.args));
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    fireEvent.mouseEnter(container.querySelector(".w-rjv-inner")!);
+    fireEvent.click(container.querySelector(".w-rjv-copied")!);
+    expect(JSON.parse(writeText.mock.calls[0][0])).toEqual(fixture.result);
     revealAll(container);
-    expect(JSON.parse(content(container))).toEqual(fixture.result);
-    expect(content(container)).toBe(
-      JSON.stringify(fixture.result, null, 2) + "\n",
-    );
+    for (const value of leaves(fixture.result))
+      expect(content(container)).toContain(value);
+    expect(container.querySelector(".w-json-view-container")).toBeTruthy();
     expect(container.querySelector("table,input,details")).toBeNull();
   });
-  it("toggles nested collections independently without changing their values", () => {
+  it("uses the library to expand and collapse nested collections", () => {
     const { container } = render(
-      view({ data: { first: { secret: "hello" }, second: [1, 2] } }),
+      view({ data: { first: { nested: { secret: "hello" } } } }),
     );
     expect(content(container)).not.toContain("hello");
-    const first = screen.getByRole("button", {
-      name: 'shell.inspect.expand $["data"]["first"]',
-    });
-    fireEvent.click(first);
-    expect(content(container)).toContain('"secret": "hello"');
-    expect(
-      screen.getByRole("button", {
-        name: 'shell.inspect.expand $["data"]["second"]',
-      }),
-    ).toBeTruthy();
-    fireEvent.click(first);
+    revealAll(container);
+    expect(content(container)).toContain("hello");
+    fireEvent.click(container.querySelector(".w-rjv-arrow")!);
     expect(content(container)).not.toContain("hello");
-    fireEvent.click(first);
-    expect(content(container)).toContain('"secret": "hello"');
+    fireEvent.click(container.querySelector(".w-rjv-arrow")!);
+    revealAll(container);
+    expect(content(container)).toContain("hello");
   });
   it.each([
     null,
@@ -72,19 +75,25 @@ describe("folding JSON results", () => {
   ])("preserves root value %j", (value) => {
     const { container } = render(view(value));
     revealAll(container);
-    expect(JSON.parse(content(container))).toEqual(value);
+    if (value === null || typeof value !== "object")
+      expect(JSON.parse(content(container))).toEqual(value);
+    else
+      for (const leaf of leaves(value))
+        expect(content(container)).toContain(leaf);
   });
   it("retains escaped keys, long strings and unknown nested fields", () => {
     const value = { 'a"\nb': { a: { b: { c: "x".repeat(5000) } } }, empty: "" };
     const { container } = render(view(value));
     revealAll(container);
-    expect(JSON.parse(content(container))).toEqual(value);
+    for (const leaf of leaves(value))
+      expect(content(container)).toContain(leaf);
   });
   it("resets folded state and content when the result changes", () => {
     const { container, rerender } = render(view({ old: true }));
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(container.querySelector(".w-rjv-arrow")!);
     rerender(view({ fresh: false }));
-    expect(JSON.parse(content(container))).toEqual({ fresh: false });
+    expect(content(container)).toContain("fresh");
+    expect(content(container)).not.toContain("old");
   });
   it("keeps pending parameters lightweight", () => {
     const { container } = render(

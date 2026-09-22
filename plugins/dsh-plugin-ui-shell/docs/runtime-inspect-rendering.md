@@ -29,12 +29,13 @@ Query responses wrap provider data with `platform`, `provider`, `method`, `data`
 
 ## Shared display rules
 
-All results use the same folding JSON viewer. Provider, platform and method do not select different layouts. The complete envelope and original field names and values remain in their original hierarchy; no descriptions are translated, inferred, reordered or summarized.
+Results use [`@uiw/react-json-view`](https://github.com/uiwjs/react-json-view), pinned to `2.0.0-alpha.43` (the registry's current v2 release). It supports the project's React 18 peer dependency. The app wrapper only parses the output, configures the library and connects theme colors; it contains no recursive renderer.
 
-- Objects and arrays can be expanded or collapsed using the arrow beside their opening bracket. The first two levels start expanded; deeper collections start collapsed and mount only when expanded.
-- Indentation, quoted keys and strings, brackets, commas, and scalar values follow JSON syntax. Empty collections remain inline. Collapsed collections show an ellipsis between brackets.
-- Long lines scroll inside the viewer. There are no tables, cards, search, pagination or provider-specific sections.
-- Invalid JSON and plain text remain visible verbatim. Pending calls retain compact arguments.
+- All platforms/providers use the same component with the complete result envelope.
+- Library defaults handle object/array folding and copying JSON. Copy preserves the entire selected value even when descendants are folded.
+- Type labels and object-size annotations are disabled. Long strings are not truncated. Field names, values and ordering are not translated or summarized.
+- The viewer is read-only. Primitive JSON roots and invalid/plain-text output remain verbatim text. Pending calls retain compact arguments.
+- Syntax colors and borders work in light/dark mode; overflow is contained within the result.
 
 ## Fixtures and limits
 
@@ -42,4 +43,4 @@ All results use the same folding JSON viewer. Provider, platform and method do n
 
 The original demo's `openPanel`/`closePanel` methods and bare theme color list were illustrative and did not represent the installed query outputs. They have been replaced by the catalog/shape-based cases above.
 
-Tests fully expand all 18 fixtures and parse the displayed JSON to verify that the complete result is preserved. They also cover independent nested toggles, escaped strings, empty collections, primitive roots, long strings, unknown providers and malformed output. These checks do not replace a live desktop end-to-end run.
+Tests expand all 18 fixtures and verify scalar content remains reachable, and verify the library's copy output matches each complete fixture. Integration checks also cover folding, changed results, primitive roots, long strings and invalid output. These checks do not replace a live desktop end-to-end run.

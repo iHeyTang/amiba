@@ -20,8 +20,6 @@ export const en = {
   "shell.tool.reportProgress": "Report progress",
   "shell.inspect.serviceAction": "Query app capabilities",
   "shell.inspect.themeAction": "Query theme variables",
-  "shell.inspect.expand": "Expand",
-  "shell.inspect.collapse": "Collapse",
   "shell.tool.inspectRuntime": "Inspect runtime",
   "shell.tool.defineRuntime": "Define runtime module",
   "shell.tool.runRuntime": "Run module",

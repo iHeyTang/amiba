@@ -15,8 +15,6 @@ export const zhCN: ShellMessages = {
   "shell.tool.reportProgress": "汇报进展",
   "shell.inspect.serviceAction": "查询应用功能说明",
   "shell.inspect.themeAction": "查询主题样式变量",
-  "shell.inspect.expand": "展开",
-  "shell.inspect.collapse": "折叠",
   "shell.tool.inspectRuntime": "查看运行环境",
   "shell.tool.defineRuntime": "定义运行模块",
   "shell.tool.runRuntime": "运行模块",
