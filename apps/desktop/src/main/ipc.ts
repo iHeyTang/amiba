@@ -114,6 +114,9 @@ export function registerIpcHandlers() {
   // DSH Client Web Shell boot + Electron transport seam. The graph is
   // composed by DSH's client-modules service; Electron only carries it across
   // the isolated preload boundary and forwards API fetches from a file origin.
+  ipcMain.handle("plugin-startup:present", () => dshRuntime.presentPluginStartup());
+  ipcMain.handle("plugin-startup:choose", (_event, choice) => dshRuntime.choosePluginStartup(choice));
+  ipcMain.handle("plugin-startup:ready", () => dshRuntime.pluginStartupReady());
   ipcMain.handle("dsh-client:boot", () => loadDshClientBoot(dshRuntime));
   ipcMain.handle(
     "dsh-client:fetch",

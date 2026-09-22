@@ -89,6 +89,19 @@
       .amiba-startup-progress::after { content: ""; display: block; height: 100%; width: 40%; background: #808080; animation: startup-loading 1.25s ease-in-out infinite alternate; }
       @keyframes startup-loading { to { transform: translateX(150%); } }
       @media (prefers-reduced-motion: reduce) { .amiba-startup-progress::after { animation: none; width: 100%; } }
+      .amiba-plugin-startup {
+        position: absolute; bottom: max(32px, 7vh); left: 16px; right: 16px;
+        text-align: center; font-size: 12px; line-height: 1.6;
+        color: color-mix(in srgb, var(--amiba-boot-ink) 55%, var(--amiba-boot-canvas));
+        -webkit-app-region: no-drag;
+      }
+      .amiba-plugin-startup[hidden] { display: none; }
+      .amiba-plugin-startup button {
+        margin: 6px 4px 0; padding: 4px 10px; border: 0; border-radius: 4px;
+        background: transparent; color: inherit; font: inherit; cursor: pointer;
+      }
+      .amiba-plugin-startup button:hover { background: #8881; color: var(--amiba-boot-ink); }
+      .amiba-plugin-startup button:focus-visible { outline: 1px solid currentColor; outline-offset: 2px; }
       .amiba-startup-mark {
         display: block;
         width: 160px;

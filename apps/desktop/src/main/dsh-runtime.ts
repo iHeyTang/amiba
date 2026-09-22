@@ -4,7 +4,9 @@ import { existsSync } from "node:fs"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import { app } from "electron"
+import { app, BrowserWindow } from "electron"
+import { PluginStartupGate } from "./plugin-startup-gate"
+import { prepareSafeProfile, countUserStartupPlugins } from "./plugin-startup-profile"
 import { DshApiClient } from "@amiba/app-runtime/dsh-client"
 import type { AgentRuntimeLogEntry, AgentRuntimeLogLevel } from "@amiba/app-runtime/platform"
 import NodeWebSocket from "ws"
@@ -63,6 +65,65 @@ export function managedDshPaths(): ReturnType<typeof resolveManagedDshPaths> {
 }
 
 export class DshRuntimeController {
+  private safeProfile?: Awaited<ReturnType<typeof prepareSafeProfile>>
+  private startupGate?: PluginStartupGate
+  private recovering?: Promise<void>
+  private startupWatchdog?: ReturnType<typeof setTimeout>
+  private startupGeneration = 0
+  private get gate(): PluginStartupGate {
+    return this.startupGate ??= new PluginStartupGate(
+      path.join(app.getPath("userData"), "plugin-startup.json"),
+      async () => {
+        const paths = installedDshPaths()
+        this.safeProfile = await prepareSafeProfile(paths)
+        await ensureManagedDshProfile(paths)
+        return countUserStartupPlugins(paths, this.safeProfile.name)
+      },
+      state => {
+        for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send("plugin-startup:state", state)
+        if (state.phase === "loading" && !this.startupWatchdog) {
+          this.startupWatchdog = setTimeout(() => { void this.recoverSafeStartup().catch(console.error) }, 90_000)
+        }
+      },
+    )
+  }
+  presentPluginStartup() { return this.gate.present() }
+  get activeProfileManifest(): string {
+    return this.gate.safe && this.safeProfile
+      ? path.join(installedDshPaths().home, "profiles", this.safeProfile.name, "package.json")
+      : managedDshPaths().profileManifest
+  }
+  async choosePluginStartup(choice: "continue" | "safe"): Promise<void> {
+    if (choice !== "continue" && choice !== "safe") throw new Error("Invalid startup choice")
+    const loading = this.gate.state.phase === "loading" || Boolean(this.starting || this.handle)
+    if (choice === "safe" && loading) return this.recoverSafeStartup()
+    await this.gate.choose(choice)
+  }
+  async pluginStartupReady(): Promise<void> {
+    clearTimeout(this.startupWatchdog)
+    this.startupWatchdog = undefined
+    await this.gate.ready()
+  }
+  async pluginStartupFailed(): Promise<void> { await this.gate.failed() }
+  recoverSafeStartup(): Promise<void> {
+    return this.recovering ??= (async () => {
+      await this.gate.failed()
+      await this.gate.choose("safe")
+      this.startupGeneration++
+      clearTimeout(this.startupWatchdog)
+      this.startupWatchdog = undefined
+      await this.stop()
+      await this.starting?.catch(() => {})
+      await this.developmentServer?.close()
+      this.developmentServer = undefined
+      await developmentProfile?.dispose()
+      developmentProfile = undefined
+      await this.ensureStarted()
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.reload()
+      }
+    })().finally(() => { this.recovering = undefined })
+  }
   private transition: Promise<unknown> | null = null
   private closing = false
   private withTransition<T>(action: () => Promise<T>): Promise<T> {
@@ -174,7 +235,7 @@ export class DshRuntimeController {
   }
 
   assertPluginMutationAllowed(): void {
-    if (developmentProfile) throw new Error("Finish local plugin development before installing, updating, or removing published plugins.")
+    if (developmentProfile && !this.gate.safe) throw new Error("Finish local plugin development before installing, updating, or removing published plugins.")
   }
 
   async ensureManagedProfile(): Promise<void> {
@@ -214,8 +275,10 @@ export class DshRuntimeController {
   private ensureStartedUnblocked(): Promise<DshRuntimeHandle> {
     if (this.handle && this.child?.exitCode === null) return Promise.resolve(this.handle)
     if (this.starting) return this.starting
+    const generation = this.startupGeneration
     this.starting = this.start()
       .catch((error) => {
+        if (generation !== this.startupGeneration) throw new Error("Startup replaced by safe mode")
         this.lastError = error instanceof Error ? error.message : String(error)
         this.appendLog("system", this.lastError, "error")
         throw error
@@ -227,7 +290,9 @@ export class DshRuntimeController {
   }
 
   private async start(): Promise<DshRuntimeHandle> {
-    if (!this.authorProjects) {
+    await this.gate.wait()
+    const generation = this.startupGeneration
+    if (!this.gate.safe && !this.authorProjects) {
       this.authorProjects = !app.isPackaged && process.env.AMIBA_DSH_DEV_PROJECTS
         ? JSON.parse(process.env.AMIBA_DSH_DEV_PROJECTS) : []
       if (this.authorProjects!.length) {
@@ -236,7 +301,7 @@ export class DshRuntimeController {
         developmentProfile = await createDevelopmentProfile(base, this.authorProjects!, this.authorProjects!)
       }
     }
-    const managed = managedDshPaths()
+    const managed = this.gate.safe ? installedDshPaths() : managedDshPaths()
     this.appendLog("system", `Starting managed DSH ${MANAGED_DSH_RUNTIME.version}.`)
     await Promise.all([
       mkdir(managed.home, { recursive: true }),
@@ -258,18 +323,19 @@ export class DshRuntimeController {
     if (!runtimeGatewayUrl || !runtimeGatewayToken) {
       throw new Error("Amiba runtime gateway is unavailable before DSH startup.")
     }
-    await this.ensureManagedProfile()
+    if (!this.gate.safe) await this.ensureManagedProfile()
     const launch = { node: managed.node, entrypoint: managed.entrypoint }
     const listenPort = resolveDshListenPort(app.isPackaged)
 
+    if (generation !== this.startupGeneration) throw new Error("Startup replaced by safe mode")
     const child = spawn(
       launch.node,
       [
-        ...(developmentProfile ? ["--import", pathToFileURL(developmentProfile.preload).href] : []),
-        launch.entrypoint,
-        "--profile",
-        managed.profileName,
-        ...(developmentProfile ? ["--patch", developmentProfile.overlay] : []),
+        ...(this.gate.safe ? [this.safeProfile!.launcher] : [
+          ...(developmentProfile ? ["--import", pathToFileURL(developmentProfile.preload).href] : []),
+          launch.entrypoint, "--profile", managed.profileName,
+          ...(developmentProfile ? ["--patch", developmentProfile.overlay] : []),
+        ]),
         "--host",
         "127.0.0.1",
         "--port",
@@ -325,6 +391,7 @@ export class DshRuntimeController {
         this.handle = null
         this.startedAt = null
         if (!this.stopping && code !== 0) {
+          void this.gate.failed().catch(console.error)
           this.lastError = `DSH runtime exited (code=${code ?? "null"}, signal=${signal ?? "none"}).`
           this.appendLog("system", this.lastError, "error")
         } else {
@@ -367,6 +434,7 @@ export class DshRuntimeController {
       }),
       pluginToken,
     }
+    if (generation !== this.startupGeneration) throw new Error("Startup replaced by safe mode")
     this.handle = handle
     // The plugin-development discovery server is only useful while authoring
     // local plugins (`amiba plugin dev` + hot reload). It was previously
@@ -374,7 +442,7 @@ export class DshRuntimeController {
     // server + 5s lease timer + discovery-file writes for nothing. Gate it on
     // an actual development profile (only created when
     // `!app.isPackaged && AMIBA_DSH_DEV_PROJECTS` is set).
-    if (developmentProfile && !this.developmentServer) {
+    if (!this.gate.safe && developmentProfile && !this.developmentServer) {
       this.developmentServer = await servePluginDevelopment({
         home: installedDshPaths().home,
         change: directories => this.changeDevelopmentProjects(directories),

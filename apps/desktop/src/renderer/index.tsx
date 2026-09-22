@@ -1,3 +1,4 @@
+import { preparePluginStartup } from "./plugin-startup";
 import { setPlatform } from "@amiba/app-runtime/platform";
 import { seedDocumentLanguage } from "@amiba/i18n";
 
@@ -125,7 +126,9 @@ function waitForReveal(timeoutMs = 12_000): Promise<void> {
 }
 
 void (async () => {
+  let disposePluginStartup: (() => void) | undefined;
   try {
+    disposePluginStartup = await preparePluginStartup();
     const boot = await window.amiba.dshClient.boot();
     installDshClientTransport(boot.baseUrl);
     // DSH client rebuild SSE + auto-reload is a development affordance. In
@@ -222,10 +225,15 @@ void (async () => {
     // surfaces behind it are warm — the startup screen is the only place where
     // waiting is honest.
     await waitForReveal();
+    await window.amiba.pluginStartup.ready();
+    disposePluginStartup?.();
     removeStartupScreen();
   } catch (error) {
+    // Main is replacing the cancelled boot and will reload this window. Keep
+    // the quiet startup surface instead of flashing the old process's logs.
+    if (String(error).includes("Startup replaced by safe mode")) return;
     console.error("[renderer] DSH Client Web Shell boot failed:", error);
-    // The overlay is opaque and fixed; it must go or it hides the failure.
+    disposePluginStartup?.();
     removeStartupScreen();
     root.replaceChildren();
     const failure = document.createElement("pre");
@@ -233,5 +241,10 @@ void (async () => {
     failure.textContent =
       error instanceof Error ? error.message : String(error);
     root.append(failure);
+    const recover = document.createElement("button");
+    recover.textContent = navigator.language.startsWith("zh") ? "以安全模式重试" : "Retry in safe mode";
+    recover.className = "m-6 text-sm underline";
+    recover.onclick = () => { void window.amiba.pluginStartup.choose("safe").then(() => window.location.reload()); };
+    root.append(recover);
   }
 })();
