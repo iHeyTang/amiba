@@ -31,10 +31,12 @@ describe("AttachmentGallery", () => {
 
   it("keeps the same image when a file is added to the row", () => {
     const items: AttachmentGalleryItem[] = [
-      { kind: "image", id: "i1", name: "shot.png", thumbUrl: "blob:thumb" },
+      { kind: "image", id: "i1", name: "shot.png", size: 1024, thumbUrl: "blob:thumb" },
     ];
     const { container, rerender } = render(<AttachmentGallery items={items} />);
     const img = container.querySelector("img");
+    expect(container.textContent).toContain("shot.png");
+    expect(container.textContent).toContain("PNG · 1.0 KB");
     expect(img).not.toBeNull();
     expect(img!.getAttribute("src")).toBe("blob:thumb");
     expect(img!.getAttribute("alt")).toBe("shot.png");
@@ -47,7 +49,7 @@ describe("AttachmentGallery", () => {
     expect(img!.getAttribute("src")).toBe("blob:thumb");
   });
 
-  it("renders multiple images as uniform compact tiles", () => {
+  it("renders multiple images with their filenames", () => {
     const items: AttachmentGalleryItem[] = [
       { kind: "image", id: "i1", name: "a.png", thumbUrl: "blob:a" },
       { kind: "image", id: "i2", name: "b.png", thumbUrl: "blob:b" },
@@ -159,7 +161,8 @@ describe("MessageImagesGallery (default conversation.message.images occupant)", 
       attachmentId:
         id as import("@amiba/extension-sdk").ImageAttachmentRef["attachmentId"],
       mediaType: "image/png" as const,
-      bytes: 1,
+      bytes: 1024,
+      name: `${id}.png`,
       width: 1,
       height: 1,
     },
@@ -173,13 +176,15 @@ describe("MessageImagesGallery (default conversation.message.images occupant)", 
     const { container } = render(<MessageImagesGallery owner={owner} />);
     const img = await waitFor(() => {
       const el = container.querySelector("img");
-      expect(el).not.toBeNull();
+      expect(el?.getAttribute("src")).toBe("blob:one");
       return el!;
     });
     expect(img.getAttribute("src")).toBe("blob:one");
+    expect(container.textContent).toContain("one.png");
+    expect(container.textContent).toContain("PNG · 1.0 KB");
   });
 
-  it("renders several images as compact tiles", async () => {
+  it("resolves multiple image references without confusing fallback icons for thumbnails", async () => {
     const loadImage = vi.fn().mockResolvedValue("blob:loaded");
     const owner: MessageImagesOwner = {
       images: [ref("a"), ref("b")],
@@ -187,7 +192,7 @@ describe("MessageImagesGallery (default conversation.message.images occupant)", 
     };
     const { container } = render(<MessageImagesGallery owner={owner} />);
     const imgs = await waitFor(() => {
-      const els = container.querySelectorAll("img");
+      const els = container.querySelectorAll('img[src="blob:loaded"]');
       expect(els).toHaveLength(2);
       return els;
     });

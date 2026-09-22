@@ -565,6 +565,7 @@ export const en = {
   "sidepanel.permission.chip.requested": "Requested: {time}",
   "sidepanel.permission.chip.decided": "Decided: {time}",
   "sidepanel.permission.dismissError": "Dismiss error",
+  "sidepanel.attachment.imageName": "Image",
   "sidepanel.attachment.uploading": "Uploading",
   "sidepanel.attachment.removeAria": "Remove {name}",
   "sidepanel.attachment.openInBrowser": "Open {name} in your browser",

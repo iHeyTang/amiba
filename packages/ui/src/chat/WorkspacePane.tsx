@@ -1,3 +1,4 @@
+import { FileTypeIcon } from "./file-type-icon";
 import { createPortal } from "react-dom";
 import { fitWorkspaceWidth, preferredWorkspaceWidth, workspaceWidthBounds } from "./workspace-pane-layout";
 import { useDirectoryChooser } from "../directory-chooser";
@@ -43,26 +44,21 @@ import {
   type WorkspaceTreeEntry,
 } from "@amiba/app-runtime/platform";
 import {
-  Atom,
-  Braces,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   CircleAlert,
   Code2,
-  CodeXml,
   Columns2,
   Copy,
   File,
   ExternalLink,
   FileCode2,
   FileDiff,
-  FileText,
   FolderOpen,
   FolderTree,
   GitBranch,
   GitCommitHorizontal,
-  Hash,
   History,
   List,
   MoreHorizontal,
@@ -520,26 +516,7 @@ function WorkspaceTabIcon({
     );
   }
 
-  const path = resource.path.toLowerCase();
-  let Icon: LucideIcon = FileCode2;
-  let tone = "text-sky-600/75 dark:text-sky-300/75";
-  if (/\.[jt]sx$/.test(path)) {
-    Icon = Atom;
-    tone = "text-cyan-600/75 dark:text-cyan-300/75";
-  } else if (/\.jsonc?$/.test(path)) {
-    Icon = Braces;
-    tone = "text-amber-600/75 dark:text-amber-300/75";
-  } else if (/\.(html?|xml|svg)$/.test(path)) {
-    Icon = CodeXml;
-    tone = "text-orange-600/75 dark:text-orange-300/75";
-  } else if (/\.(css|scss|less)$/.test(path)) {
-    Icon = Hash;
-    tone = "text-violet-600/70 dark:text-violet-300/75";
-  } else if (/\.(mdx?|txt)$/.test(path)) {
-    Icon = FileText;
-    tone = "text-muted-foreground/80";
-  }
-  return <Icon className={cn(tone, className)} aria-hidden />;
+  return <FileTypeIcon name={resource.path} className={className} />;
 }
 
 function WorkspaceTabButton({
@@ -2347,7 +2324,7 @@ function ReviewFileSection({
             <ChevronDown className="h-3.5 w-3.5" />
           )}
         </button>
-        <FileCode2 className="h-3.5 w-3.5 shrink-0 text-sky-600/75 dark:text-sky-300/75" />
+        <FileTypeIcon name={file.path} className="h-3.5 w-3.5 shrink-0" />
         <button
           type="button"
           onClick={() => onOpenFile(file.path)}
@@ -2986,11 +2963,7 @@ function WorkspaceTreeRows({
             ) : (
               <span className="w-3" />
             )}
-            {entry.isDirectory ? (
-              <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground/75" />
-            ) : (
-              <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground/65" />
-            )}
+            <FileTypeIcon name={entry.name} directory={entry.isDirectory} expanded={Boolean(expanded[entry.path])} className="h-3.5 w-3.5 shrink-0" />
             <span className="min-w-0 flex-1 truncate">{entry.name}</span>
           </button>
           {entry.isDirectory && children[entry.path] ? (
@@ -3136,7 +3109,7 @@ export function WorkspaceFileWorkspace({
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col bg-background">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/35 px-3">
-        <FileCode2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+        <FileTypeIcon name={path} directory={!resource} className="h-3.5 w-3.5 shrink-0" />
         <span
           className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-foreground/72"
           title={path}

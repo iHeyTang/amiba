@@ -755,6 +755,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 kind: "image" as const,
                 id: a.uiId,
                 name: a.name,
+                size: a.size,
                 thumbUrl: a.thumbDataUrl ?? null,
                 previewUrl: a.previewDataUrl ?? null,
                 uploading,

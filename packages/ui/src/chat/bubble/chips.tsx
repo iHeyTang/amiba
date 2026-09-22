@@ -18,14 +18,13 @@ import {
   ArrowRight,
   CircleAlert,
   ExternalLink,
-  File as FileIcon,
-  FileText,
   History,
-  ImageIcon,
   Loader2,
   Plus,
   X
 } from "lucide-react"
+
+import { FileTypeIcon } from "../file-type-icon"
 
 import { hostnameOf } from "../internal/helpers"
 import { resolveChatErrorPresentation } from "../internal/error-presentation"
@@ -157,25 +156,13 @@ export function AgentDestinationChip({ url, title, onOpen }: AgentDestinationChi
 
 export interface KindIconProps {
   kind: AttachmentKind
+  name?: string
   className?: string
 }
 
-/**
- * Single-source-of-truth icon picker for an attachment kind. Used by both
- * the live chip and the persisted-on-bubble badge so they stay visually
- * consistent.
- */
-export function KindIcon({ kind, className }: KindIconProps) {
-  switch (kind) {
-    case "image":
-      return <ImageIcon className={className} />
-    case "text":
-      return <FileText className={className} />
-    case "pdf":
-    case "binary":
-    default:
-      return <FileIcon className={className} />
-  }
+/** Shared open-source file icons; legacy callers can still supply only kind. */
+export function KindIcon({ kind, name = "", className }: KindIconProps) {
+  return <FileTypeIcon name={name} kind={kind} className={className} />
 }
 
 /**
@@ -301,7 +288,7 @@ export function AttachmentChip({ attachment, onRemove }: AttachmentChipProps) {
         </ImagePreviewDialog>
       ) : (
         <span className="ml-1 inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
-          <KindIcon kind={attachment.kind} className="h-3 w-3" />
+          <KindIcon kind={attachment.kind} name={attachment.name} className="h-3 w-3" />
         </span>
       )}
       <span className="truncate">
@@ -362,7 +349,7 @@ export function AttachmentBadgeView({ badge }: AttachmentBadgeViewProps) {
         className="h-3.5 w-3.5 shrink-0 rounded-full border border-border object-cover"
       />
     ) : (
-      <KindIcon kind={badge.kind} className="h-2.5 w-2.5 shrink-0" />
+      <KindIcon kind={badge.kind} name={badge.name} className="h-2.5 w-2.5 shrink-0" />
     )
 
   const body = (

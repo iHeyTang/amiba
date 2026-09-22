@@ -220,7 +220,7 @@ export interface BubbleProps {
    * `conversation.message.images` seat. The default occupant renders compact
    * gallery tiles; a plugin taking the seat over replaces just the image
    * side. The second argument preserves the official compact hint for plugin
-   * occupants. Amiba uses equal-height previews in every attachment row. With
+   * occupants. Amiba uses fixed-size cards in every attachment row. With
    * no renderer (loader-less hosts), durable images are omitted and files
    * keep their cards.
    */
@@ -314,7 +314,7 @@ function BubbleUnmemoized({
     // badge on an optimistic live bubble has no session-readable ref yet, so
     // it renders straight from its 256px thumbnail as the same tile shape.
     // Preserve the official compact hint for third-party seat occupants. Our
-    // default occupant uses the same fixed height regardless of this hint.
+    // default occupant uses the same fixed card dimensions regardless of this hint.
     const durableImages: NonNullable<UiMessage["images"]> =
       m.images?.length
         ? m.images
@@ -341,6 +341,7 @@ function BubbleUnmemoized({
         kind: "image",
         id: badge.uiId,
         name: badge.name,
+        size: badge.size,
         thumbUrl: badge.thumbDataUrl ?? null,
         previewUrl: badge.thumbDataUrl ?? null,
       });
