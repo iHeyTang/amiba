@@ -20,7 +20,7 @@ function Demo() {
   const fixture = fixtures.find((item) => item.id === selected)!;
   return (
     <main style={{ maxWidth: 760, margin: "24px auto", padding: "0 8px 40px" }}>
-      <h1 style={{ fontSize: 22, fontWeight: 600 }}>运行环境查询 · 查找与比较</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 600 }}>运行环境查询 · JSON 折叠查看</h1>
       <p
         style={{
           marginTop: 8,

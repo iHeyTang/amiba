@@ -29,21 +29,12 @@ Query responses wrap provider data with `platform`, `provider`, `method`, `data`
 
 ## Shared display rules
 
-The body chooses a presentation from the returned structure, not a provider name. Original field values are never translated or inferred.
+All results use the same folding JSON viewer. Provider, platform and method do not select different layouts. The complete envelope and original field names and values remain in their original hierarchy; no descriptions are translated, inferred, reordered or summarized.
 
-- Identified record arrays (name/key/id/signature/pluginId/packageId) share up to three comparison columns. A row's remaining fields are accessible from its Details button. Method signatures stay beside their descriptions, and long text wraps without truncation.
-- Named nodes with children use a tree: expand the node name directly. Node metadata is separate from topology; malformed descendants fall back to ordinary records.
-- A runtime with host/client diagnostic objects presents state, status, errors and nonempty waiting lists before package metadata and source. Empty diagnostic collections stay reachable in Details.
-- Other fields retain the aligned structural fallback. Empty arrays/objects are inline values rather than clickable empty groups.
-- Search traverses the complete JSON, including envelope extensions, folded branches, schemas and unpaged records. Results show the matching record in context with an exact JSON property path. Clearing search restores browsing.
-- Arrays, object fields and search results page after 20 entries; nested branches mount lazily. Every value remains reachable, and the original JSON is unchanged.
-- Comparison tables can scroll horizontally on narrow screens, with a visible hint. The page itself must not overflow horizontally.
-
-## Usability checks
-
-At the same desktop preview width, the 13-token fixture previously occupied about 2106px and showed two complete items within the first 384px of content. The comparison table occupies about 721px and shows six complete records in that same height. This is a fixture layout measurement, not a user study.
-
-Task checks cover finding record 45 without paging, finding a folded schema description with its exact path, comparing records under shared column headers, seeing an error before opening package/source details, and expanding tree nodes without children/index wrapper levels. Desktop Service/Theme/diagnostic views and the 375px table were visually checked. All 18 fixtures had no document-level horizontal overflow at 375px.
+- Objects and arrays can be expanded or collapsed using the arrow beside their opening bracket. The first two levels start expanded; deeper collections start collapsed and mount only when expanded.
+- Indentation, quoted keys and strings, brackets, commas, and scalar values follow JSON syntax. Empty collections remain inline. Collapsed collections show an ellipsis between brackets.
+- Long lines scroll inside the viewer. There are no tables, cards, search, pagination or provider-specific sections.
+- Invalid JSON and plain text remain visible verbatim. Pending calls retain compact arguments.
 
 ## Fixtures and limits
 
@@ -51,4 +42,4 @@ Task checks cover finding record 45 without paging, finding a folded schema desc
 
 The original demo's `openPanel`/`closePanel` methods and bare theme color list were illustrative and did not represent the installed query outputs. They have been replaced by the catalog/shape-based cases above.
 
-Tests fully expand and paginate each fixture, verify every scalar is reachable outside the raw JSON, and preserve the exact JSON text. They also cover platform/provider independence, long strings, deep unknown fields, metadata extensions and malformed/plain-text output. These checks do not replace a live desktop end-to-end run.
+Tests fully expand all 18 fixtures and parse the displayed JSON to verify that the complete result is preserved. They also cover independent nested toggles, escaped strings, empty collections, primitive roots, long strings, unknown providers and malformed output. These checks do not replace a live desktop end-to-end run.
