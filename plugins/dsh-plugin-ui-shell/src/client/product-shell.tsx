@@ -1125,7 +1125,9 @@ function ProductShellInner({
               sidebarHeaderHeightPx={topBarHeightPx}
             />
           </SettingsDialog>
-          <div className="pointer-events-none absolute inset-0 z-[var(--z-shell-overlay)]">
+          {/* Match DSH AppFrame: empty overlay space is click-through,
+              while each slot occupant receives pointer input by default. */}
+          <div data-shell-overlay className="pointer-events-none absolute inset-0 z-[var(--z-shell-overlay)] [&>*]:pointer-events-auto">
             {renderSlot("shell.overlay", {})}
           </div>
           {/*
