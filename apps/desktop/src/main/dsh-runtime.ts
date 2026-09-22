@@ -275,8 +275,10 @@ export class DshRuntimeController {
   private ensureStartedUnblocked(): Promise<DshRuntimeHandle> {
     if (this.handle && this.child?.exitCode === null) return Promise.resolve(this.handle)
     if (this.starting) return this.starting
+    const generation = this.startupGeneration
     this.starting = this.start()
       .catch((error) => {
+        if (generation !== this.startupGeneration) throw new Error("Startup replaced by safe mode")
         this.lastError = error instanceof Error ? error.message : String(error)
         this.appendLog("system", this.lastError, "error")
         throw error

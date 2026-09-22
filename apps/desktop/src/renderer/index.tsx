@@ -229,6 +229,9 @@ void (async () => {
     disposePluginStartup?.();
     removeStartupScreen();
   } catch (error) {
+    // Main is replacing the cancelled boot and will reload this window. Keep
+    // the quiet startup surface instead of flashing the old process's logs.
+    if (String(error).includes("Startup replaced by safe mode")) return;
     console.error("[renderer] DSH Client Web Shell boot failed:", error);
     disposePluginStartup?.();
     removeStartupScreen();
