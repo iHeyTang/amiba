@@ -76,6 +76,7 @@ const api = {
   appUpdates: {
     getState: (): Promise<import("@amiba/app-runtime/platform").AppUpdateState> => ipcRenderer.invoke("app-updates:state"),
     check: (): Promise<import("@amiba/app-runtime/platform").AppUpdateState> => ipcRenderer.invoke("app-updates:check"),
+    cancel: (): Promise<import("@amiba/app-runtime/platform").AppUpdateState> => ipcRenderer.invoke("app-updates:cancel"),
     download: (): Promise<import("@amiba/app-runtime/platform").AppUpdateState> => ipcRenderer.invoke("app-updates:download"),
     install: (): Promise<void> => ipcRenderer.invoke("app-updates:install"),
     onChanged: (listener: (state: import("@amiba/app-runtime/platform").AppUpdateState) => void) => {

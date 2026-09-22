@@ -54,7 +54,7 @@ export function createManualUpdateController({ currentVersion, assetName, fetchR
   assetName: (version: string) => string;
   fetchRelease: () => Promise<ManualRelease>;
   /** Downloads and verifies the asset, or rejects without leaving a partial file. */
-  download: (asset: ManualReleaseAsset, onProgress: (percent: number) => void) => Promise<{ filePath: string }>;
+  download: (asset: ManualReleaseAsset, onProgress: (percent: number) => void, signal: AbortSignal) => Promise<{ filePath: string }>;
   /** Hands the verified installer to the OS, then lets the host quit. */
   install: (filePath: string) => void;
   notify: (state: UpdateState) => void;
@@ -63,6 +63,8 @@ export function createManualUpdateController({ currentVersion, assetName, fetchR
   let active: Promise<UpdateState> | undefined;
   let selected: ManualReleaseAsset | undefined;
   let installerPath: string | undefined;
+  let downloadAbort: AbortController | undefined;
+  let cancelledVersion: string | undefined;
 
   const emit = (patch: Partial<UpdateState>) => {
     state = { ...state, ...patch };
@@ -95,17 +97,20 @@ export function createManualUpdateController({ currentVersion, assetName, fetchR
     // a hash published by the release host. Without it there is nothing to pin.
     if (!/^[a-f0-9]{64}$/.test(asset.sha256)) throw new Error(`Release asset ${asset.name} has no sha256 digest`);
     selected = asset;
-    emit({ status: "offered", version, percent: undefined, error: undefined });
+    emit({ status: version === cancelledVersion ? "cancelled" : "offered", version, percent: undefined, error: undefined });
   }
 
   async function fetchUpdate() {
-    if (state.status !== "offered" || !selected) throw new Error("No update is ready to download");
+    if (!["offered", "cancelled"].includes(state.status) || !selected) throw new Error("No update is ready to download");
     const asset = selected;
     const version = state.version;
+    const abort = new AbortController();
+    downloadAbort = abort;
     emit({ status: "downloading", percent: 0 });
     const result = await download(asset, (percent) => {
-      if (state.status === "downloading") emit({ percent });
-    });
+      if (!abort.signal.aborted && state.status === "downloading") emit({ percent });
+    }, abort.signal);
+    abort.signal.throwIfAborted();
     installerPath = result.filePath;
     emit({ status: "ready", version, percent: 100, error: undefined });
   }
@@ -122,8 +127,16 @@ export function createManualUpdateController({ currentVersion, assetName, fetchR
     },
     download(): Promise<UpdateState> {
       if (active) return active;
-      active = fetchUpdate().then(() => ({ ...state })).catch(fail).finally(() => { active = undefined; });
+      active = fetchUpdate().then(() => ({ ...state })).catch(error => downloadAbort?.signal.aborted ? { ...state } : fail(error)).finally(() => { active = undefined; downloadAbort = undefined; });
       return active;
+    },
+    async cancel(): Promise<UpdateState> {
+      if (state.status !== "downloading" || !downloadAbort) return { ...state };
+      cancelledVersion = state.version;
+      downloadAbort.abort();
+      emit({ status: "cancelled", percent: undefined, error: undefined });
+      await active;
+      return { ...state };
     },
     install() {
       if (state.status !== "ready" || !installerPath) throw new Error("No verified installer is ready to open");

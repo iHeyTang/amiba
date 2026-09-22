@@ -301,3 +301,55 @@ test("the packaged config layout keeps the manual feed out of signed builds", ()
   assert.equal(config.manual.repository, "owner/amiba");
   assert.equal(existsSync(path.join(resources, "release-config.json")), true);
 });
+
+test("cancels manual downloads, ignores late completion, and permits an explicit retry", async () => {
+  let complete;
+  let progress;
+  let signal;
+  let attempts = 0;
+  const controller = createManualUpdateController({
+    currentVersion: "0.1.5",
+    assetName: version => `Amiba-${version}-mac-arm64.dmg`,
+    fetchRelease: async () => release("0.1.6", [installer("0.1.6", digestOf("dmg"))]),
+    download: async (_asset, onProgress, abortSignal) => {
+      attempts++;
+      signal = abortSignal;
+      progress = onProgress;
+      if (attempts === 1) return new Promise(resolve => { complete = resolve; });
+      return { filePath: "/tmp/retry.dmg" };
+    },
+    install: () => {}, notify: () => {},
+  });
+  await controller.check();
+  const pending = controller.download();
+  const cancelled = controller.cancel();
+  assert.equal(signal.aborted, true);
+  progress(90);
+  complete({ filePath: "/tmp/late.dmg" });
+  assert.equal((await pending).status, "cancelled");
+  assert.equal((await cancelled).status, "cancelled");
+  assert.equal(controller.getState().percent, undefined);
+  assert.throws(() => controller.install());
+  assert.equal((await controller.check()).status, "cancelled");
+  assert.equal(attempts, 1);
+  assert.equal((await controller.download()).status, "ready");
+  assert.equal(attempts, 2);
+});
+
+test("abort closes the transfer and removes its partial file before retry", async () => {
+  const directory = workspace();
+  const filePath = path.join(directory, "update.dmg");
+  const abort = new AbortController();
+  const stream = new Readable({ read() { this.push(Buffer.from("first")); } });
+  await assert.rejects(downloadVerified({ url: "https://example.invalid/update.dmg", sha256: digestOf("firstsecond"), size: 11, filePath }, {
+    signal: abort.signal,
+    open: async () => ({ stream, length: 11 }),
+    onProgress: () => abort.abort(),
+  }), { name: "AbortError" });
+  assert.equal(stream.destroyed, true);
+  assert.deepEqual(readdirSync(directory), []);
+  await downloadVerified({ url: "https://example.invalid/update.dmg", sha256: digestOf("firstsecond"), size: 11, filePath }, {
+    open: async () => ({ stream: Readable.from([Buffer.from("firstsecond")]), length: 11 }), onProgress: () => {},
+  });
+  assert.equal(readFileSync(filePath, "utf8"), "firstsecond");
+});

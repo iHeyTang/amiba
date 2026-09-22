@@ -766,7 +766,7 @@ export interface WorkspaceDevelopmentAdapter {
 }
 
 export type AppUpdateState = {
-  status: "idle" | "disabled" | "checking" | "available" | "offered" | "downloading" | "downloaded" | "ready" | "error";
+  status: "idle" | "disabled" | "checking" | "available" | "offered" | "downloading" | "cancelled" | "downloaded" | "ready" | "error";
   currentVersion: string;
   version?: string;
   percent?: number;
@@ -778,10 +778,11 @@ export interface PlatformAdapter {
     getState(): Promise<AppUpdateState>;
     check(): Promise<AppUpdateState>;
     /**
-     * Download an offered update. Hosts that install in place fetch their own
-     * update and never emit `offered`, so they may omit this.
+     * Download an offered update, or retry a cancelled download.
      */
     download?(): Promise<AppUpdateState>;
+    /** Stop the transfer and wait for its temporary files to be released. */
+    cancel?(): Promise<AppUpdateState>;
     install(): Promise<void>;
     onChanged(listener: (state: AppUpdateState) => void): () => void;
   };
