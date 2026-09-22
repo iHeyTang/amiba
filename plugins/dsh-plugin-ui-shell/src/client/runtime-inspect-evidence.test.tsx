@@ -31,11 +31,10 @@ function view(text: string, theme = false) {
   );
 }
 describe("runtime inspection evidence", () => {
-  it("shows purpose without a technical parameter card while running", () => {
+  it("shows compact original arguments while running", () => {
     const { container } = render(view(""));
-    expect(screen.getByText("shell.inspect.servicePurpose")).toBeTruthy();
+    expect(screen.getByText("listService", { exact: false })).toBeTruthy();
     expect(container.querySelector("section, details, dl, table")).toBeNull();
-    expect(container.textContent).not.toContain("listService");
   });
   it("organizes readable service information and keeps code only in raw JSON", () => {
     const text = JSON.stringify({
@@ -43,14 +42,12 @@ describe("runtime inspection evidence", () => {
       data: { mode: "service", service },
     });
     const { container } = render(view(text));
-    for (const key of [
-      "capabilityName",
-      "purpose",
-      "operations",
-      "openPanel",
-      "closePanel",
-    ])
+    for (const key of ["capabilityName", "purpose", "operations"])
       expect(screen.getByText(`shell.inspect.${key}`)).toBeTruthy();
+    expect(screen.getByText("layout")).toBeTruthy();
+    expect(screen.getByText(service.description)).toBeTruthy();
+    expect(screen.getByText("openPanel")).toBeTruthy();
+    expect(screen.getByText("Open a panel in the workspace.")).toBeTruthy();
     const body = container.querySelector("[data-runtime-result] > div")!;
     for (const technical of [
       "ctx.get",
@@ -68,12 +65,33 @@ describe("runtime inspection evidence", () => {
   it("does not invent capabilities when metadata is unfamiliar", () => {
     const text = JSON.stringify({
       mode: "service",
-      service: { ...service, description: "A different service", methods: [] },
+      service: {
+        ...service,
+        key: "custom",
+        description: "A different service",
+        methods: [{ name: "customMethod", description: "A custom operation." }],
+      },
     });
     render(view(text));
     expect(screen.queryByText("shell.inspect.layoutDescription")).toBeNull();
     expect(screen.queryByText("shell.inspect.openPanel")).toBeNull();
-    expect(screen.getByText("shell.inspect.unrecognized")).toBeTruthy();
+    expect(screen.getByText("A different service")).toBeTruthy();
+    expect(screen.getByText("customMethod")).toBeTruthy();
+    expect(screen.getByText("A custom operation.")).toBeTruthy();
+  });
+  it("preserves original theme names without a translation map", () => {
+    render(
+      view(
+        JSON.stringify([
+          { name: "background", value: "#ffffff" },
+          { name: "primary", value: "#7755ee" },
+        ]),
+        true,
+      ),
+    );
+    expect(screen.getByText("background")).toBeTruthy();
+    expect(screen.getByText("primary")).toBeTruthy();
+    expect(screen.queryByText("shell.inspect.background")).toBeNull();
   });
   it("pages theme values with explicit column meanings", () => {
     render(

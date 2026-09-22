@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useT } from "@amiba/i18n";
 import {
+  CompactArguments,
   recordOf,
   stringValue,
   type SemanticEvidenceContext,
@@ -9,84 +10,64 @@ import {
 const summaryClass =
   "cursor-pointer rounded-sm py-1 text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring";
 
-/** Only verified descriptions are localized; unfamiliar definitions stay in the raw result. */
+/** Presentation labels are translated; service content is always returned verbatim. */
 function ServiceSummary({ service }: { service: Record<string, unknown> }) {
   const { t } = useT();
-  const knownLayout =
-    service.key === "layout" &&
-    service.description ===
-      "Panel navigation and geometry actions exposed through ctx.layout.";
+  const name = stringValue(service, "key", "name", "id");
+  const description = stringValue(service, "description");
   const methods = Array.isArray(service.methods) ? service.methods : [];
-  const operations = knownLayout
-    ? methods.flatMap((item) => {
-        const method = recordOf(item);
-        if (
-          method?.name === "openPanel" &&
-          method.description === "Open a panel in the workspace."
-        )
-          return [
-            {
-              name: t("shell.inspect.openPanel"),
-              description: t("shell.inspect.openPanelDescription"),
-            },
-          ];
-        if (
-          method?.name === "closePanel" &&
-          method.description === "Close a workspace panel."
-        )
-          return [
-            {
-              name: t("shell.inspect.closePanel"),
-              description: t("shell.inspect.closePanelDescription"),
-            },
-          ];
-        return [];
-      })
-    : [];
+  const operations = methods.flatMap((item) => {
+    if (typeof item === "string") return [{ name: item, description: "" }];
+    const method = recordOf(item);
+    if (!method) return [];
+    const name = stringValue(method, "name", "key", "id");
+    const description = stringValue(method, "description");
+    return name || description ? [{ name, description }] : [];
+  });
   return (
     <div className="space-y-4">
-      <div>
-        <p className="mb-1 text-[10px] text-muted-foreground">
-          {t("shell.inspect.capabilityName")}
-        </p>
-        <h3 className="text-xs font-medium text-foreground">
-          {knownLayout
-            ? t("shell.inspect.layoutName")
-            : stringValue(service, "key", "name", "id") ||
-              t("shell.inspect.result")}
-        </h3>
-      </div>
-      <div>
-        <h4 className="mb-1 text-[10px] text-muted-foreground">
-          {t("shell.inspect.purpose")}
-        </h4>
-        <p>
-          {knownLayout
-            ? t("shell.inspect.layoutDescription")
-            : t("shell.inspect.unrecognized")}
-        </p>
-      </div>
+      {name && (
+        <div>
+          <p className="mb-1 text-[10px] text-muted-foreground">
+            {t("shell.inspect.capabilityName")}
+          </p>
+          <h3 className="break-all font-mono text-xs font-medium text-foreground">
+            {name}
+          </h3>
+        </div>
+      )}
+      {description && (
+        <div>
+          <h4 className="mb-1 text-[10px] text-muted-foreground">
+            {t("shell.inspect.purpose")}
+          </h4>
+          <p className="whitespace-pre-wrap break-words">{description}</p>
+        </div>
+      )}
       {operations.length > 0 && (
         <div>
           <h4 className="mb-1 text-[10px] text-muted-foreground">
             {t("shell.inspect.operations")}
           </h4>
           <ul className="divide-y divide-border/40">
-            {operations.map((operation) => (
+            {operations.map((operation, index) => (
               <li
-                key={operation.name}
-                className="grid gap-1 py-2 sm:grid-cols-[6rem_minmax(0,1fr)] sm:gap-3"
+                key={index}
+                className="grid gap-1 py-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-3"
               >
-                <span className="font-medium text-foreground">
+                <span className="break-all font-mono text-foreground">
                   {operation.name}
                 </span>
-                <span className="text-muted-foreground">
+                <span className="whitespace-pre-wrap break-words text-muted-foreground">
                   {operation.description}
                 </span>
               </li>
             ))}
           </ul>
         </div>
+      )}
+      {!name && !description && !operations.length && (
+        <p>{t("shell.inspect.unrecognized")}</p>
       )}
     </div>
   );
@@ -102,15 +83,7 @@ function ThemeSummary({ items }: { items: unknown[] }) {
     const value = record.value;
     if (!name || !["string", "number", "boolean"].includes(typeof value))
       return [];
-    const label =
-      name === "background"
-        ? t("shell.inspect.background")
-        : name === "foreground"
-          ? t("shell.inspect.foreground")
-          : name === "primary"
-            ? t("shell.inspect.primary")
-            : name;
-    return [{ name, label, value: String(value) }];
+    return [{ name, value: String(value) }];
   });
   return (
     <div>
@@ -127,7 +100,7 @@ function ThemeSummary({ items }: { items: unknown[] }) {
             key={`${row.name}-${index}`}
             className="grid grid-cols-2 gap-3 py-2"
           >
-            <span className="break-all">{row.label}</span>
+            <span className="break-all">{row.name}</span>
             <span className="min-w-0 break-all font-mono">
               {/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(
                 row.value,
@@ -187,16 +160,7 @@ export function RuntimeInspectEvidence({
   const record = recordOf(data);
   const service = record?.mode === "service" && recordOf(record.service);
   const themeQuery = args.provider === "Theme" && args.method === "listTokens";
-  if (!text.trim())
-    return (
-      <p className="text-[11px] leading-relaxed text-muted-foreground">
-        {t(
-          themeQuery
-            ? "shell.inspect.themePurpose"
-            : "shell.inspect.servicePurpose",
-        )}
-      </p>
-    );
+  if (!text.trim()) return <CompactArguments value={args} />;
   return (
     <section
       data-runtime-result
