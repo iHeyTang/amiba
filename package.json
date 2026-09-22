@@ -1,6 +1,6 @@
 {
   "name": "amiba",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "private": true,
   "description": "DSH-native desktop agent workspace with plugin-owned host capabilities.",
   "author": "iHeyTang",

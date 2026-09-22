@@ -219,11 +219,10 @@ export interface BubbleProps {
    * Renderer for the message's images — the shell's dispatch of the official
    * `conversation.message.images` seat. The default occupant renders compact
    * gallery tiles; a plugin taking the seat over replaces just the image
-   * side. The second argument mirrors the row's lone-image rule: `true` when
-   * the row holds more than one attachment, so a mixed row collapses to
-   * small tiles exactly like the composer/empty-state input. With no
-   * renderer (loader-less hosts) images are omitted and files keep their
-   * chips.
+   * side. The second argument preserves the official compact hint for plugin
+   * occupants. Amiba uses equal-height previews in every attachment row. With
+   * no renderer (loader-less hosts), durable images are omitted and files
+   * keep their cards.
    */
   messageImages?: (images: NonNullable<UiMessage["images"]>, compact?: boolean) => ReactNode;
   /** Turn-level renderers use this after moving execution details into one summary. */
@@ -307,16 +306,15 @@ function BubbleUnmemoized({
       ...(m.images ?? []).map((image) => ({ kind: "image" as const, image })),
     ];
     const hasContent = bodyText.length > 0;
-    // ONE attachment presentation everywhere: file chips natively, images as
+    // ONE attachment presentation everywhere: file cards natively, images as
     // a single seat invocation (the default `conversation.message.images`
     // occupant renders the same compact tiles the composer uses; a plugin
     // taking the seat over replaces just the image side, still inside the
     // shared row). Only DURABLE image refs go through the seat — an image
     // badge on an optimistic live bubble has no session-readable ref yet, so
     // it renders straight from its 256px thumbnail as the same tile shape.
-    // The compact flag mirrors the row's lone-image rule so a lone image is
-    // the larger bounded preview and a mixed row collapses to small tiles,
-    // exactly like the composer/empty-state input.
+    // Preserve the official compact hint for third-party seat occupants. Our
+    // default occupant uses the same fixed height regardless of this hint.
     const durableImages: NonNullable<UiMessage["images"]> =
       m.images?.length
         ? m.images
