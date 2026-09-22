@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useT } from "@amiba/i18n";
 import {
-  CompactArguments,
   recordOf,
   stringValue,
   type SemanticEvidenceContext,
@@ -10,195 +9,165 @@ import {
 const summaryClass =
   "cursor-pointer rounded-sm py-1 text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring";
 
-function Branch({ name, value }: { name: string; value: unknown }) {
-  const [open, setOpen] = useState(false);
-  const count = Array.isArray(value)
-    ? value.length
-    : Object.keys(recordOf(value) ?? {}).length;
-  return (
-    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary className={summaryClass}>
-        {name} <span className="text-muted-foreground/60">({count})</span>
-      </summary>
-      {open && (
-        <div className="ml-1 border-l border-border/45 pl-3">
-          <Value value={value} />
-        </div>
-      )}
-    </details>
-  );
-}
-
-/** Lazy branches and paged lists keep every field reachable without flooding the timeline. */
-function Value({ value }: { value: unknown }) {
+/** Only verified descriptions are localized; unfamiliar definitions stay in the raw result. */
+function ServiceSummary({ service }: { service: Record<string, unknown> }) {
   const { t } = useT();
-  const [visible, setVisible] = useState(20);
-  if (Array.isArray(value)) {
-    return value.length ? (
-      <div className="divide-y divide-border/40">
-        {value.slice(0, visible).map((item, index) => (
-          <div key={index} className="py-2">
-            <Record value={item} />
-          </div>
-        ))}
-        {visible < value.length && (
-          <button
-            type="button"
-            className={summaryClass}
-            onClick={() => setVisible((n) => n + 20)}
-          >
-            {t("shell.inspect.more")} ({value.length - visible})
-          </button>
-        )}
-      </div>
-    ) : (
-      <span className="text-muted-foreground">{t("shell.inspect.empty")}</span>
-    );
-  }
-  const record = recordOf(value);
-  if (record)
-    return Object.keys(record).length ? (
-      <div className="space-y-1">
-        {Object.entries(record).map(([key, item]) =>
-          item !== null && typeof item === "object" ? (
-            <Branch key={key} name={key} value={item} />
-          ) : (
-            <div key={key} className="flex min-w-0 flex-wrap gap-x-3 gap-y-0.5">
-              <span className="font-mono text-muted-foreground">{key}</span>
-              <span className="min-w-0 whitespace-pre-wrap break-all">
-                <Value value={item} />
-              </span>
-            </div>
-          ),
-        )}
-      </div>
-    ) : (
-      <span className="text-muted-foreground">{"{}"}</span>
-    );
-  const color =
-    typeof value === "string" &&
-    /^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value)
-      ? value
-      : undefined;
+  const knownLayout =
+    service.key === "layout" &&
+    service.description ===
+      "Panel navigation and geometry actions exposed through ctx.layout.";
+  const methods = Array.isArray(service.methods) ? service.methods : [];
+  const operations = knownLayout
+    ? methods.flatMap((item) => {
+        const method = recordOf(item);
+        if (
+          method?.name === "openPanel" &&
+          method.description === "Open a panel in the workspace."
+        )
+          return [
+            {
+              name: t("shell.inspect.openPanel"),
+              description: t("shell.inspect.openPanelDescription"),
+            },
+          ];
+        if (
+          method?.name === "closePanel" &&
+          method.description === "Close a workspace panel."
+        )
+          return [
+            {
+              name: t("shell.inspect.closePanel"),
+              description: t("shell.inspect.closePanelDescription"),
+            },
+          ];
+        return [];
+      })
+    : [];
+  const optional = recordOf(recordOf(service.access)?.optional);
   return (
-    <span className="whitespace-pre-wrap break-all">
-      {color && (
-        <span
-          aria-hidden
-          className="mr-2 inline-block h-3 w-3 rounded-sm border border-border align-middle"
-          style={{ backgroundColor: color }}
-        />
-      )}
-      {String(value)}
-    </span>
-  );
-}
-
-function Record({ value }: { value: unknown }) {
-  const { t } = useT();
-  const record = recordOf(value);
-  if (!record) return <Value value={value} />;
-  const titleKey = ["key", "name", "id"].find(
-    (key) => typeof record[key] === "string" && record[key],
-  );
-  if (!titleKey) return <Value value={record} />;
-  const title = String(record[titleKey]);
-  const description = stringValue(record, "description");
-  const access = recordOf(record.access);
-  const optional = recordOf(access?.optional);
-  const expression = stringValue(optional ?? {}, "expression");
-  const remaining = Object.fromEntries(
-    Object.entries(record).filter(
-      ([key]) =>
-        key !== titleKey &&
-        !(key === "description" && description) &&
-        !(key === "access" && expression),
-    ),
-  );
-  const extraAccess =
-    access &&
-    Object.fromEntries(
-      Object.entries(access).filter(
-        ([key]) => key !== "optional" && key !== "hardDependency",
-      ),
-    );
-  const extraOptional =
-    optional &&
-    Object.fromEntries(
-      Object.entries(optional).filter(
-        ([key]) =>
-          key !== "expression" &&
-          !(
-            key === "requiresUndefinedCheck" &&
-            optional.requiresUndefinedCheck === true
-          ),
-      ),
-    );
-  return (
-    <div className="space-y-2">
-      <div className="break-all font-mono text-xs font-medium text-foreground">
-        {title}
-      </div>
-      {description && (
-        <p className="whitespace-pre-wrap break-words text-muted-foreground">
-          {description}
+    <div className="space-y-4">
+      <div>
+        <p className="mb-1 text-[10px] text-muted-foreground">
+          {t("shell.inspect.capabilityName")}
         </p>
-      )}
-      {expression && (
-        <div className="space-y-1">
-          <div className="flex flex-wrap gap-x-3">
-            <span className="text-muted-foreground">
-              {t("shell.inspect.access")}
-            </span>
-            <code className="break-all">{expression}</code>
-          </div>
-          {optional?.requiresUndefinedCheck === true && (
-            <p className="text-muted-foreground">
-              {t("shell.inspect.optional")}
-            </p>
-          )}
-          {extraOptional && Object.keys(extraOptional).length > 0 && (
-            <Branch name="optional" value={extraOptional} />
-          )}
-          {access?.hardDependency !== undefined && (
-            <Branch
-              name={t("shell.inspect.dependency")}
-              value={access.hardDependency}
-            />
-          )}
-          {extraAccess && Object.keys(extraAccess).length > 0 && (
-            <Value value={extraAccess} />
-          )}
+        <h3 className="text-xs font-medium text-foreground">
+          {knownLayout
+            ? t("shell.inspect.layoutName")
+            : stringValue(service, "key", "name", "id") ||
+              t("shell.inspect.result")}
+        </h3>
+      </div>
+      <div>
+        <h4 className="mb-1 text-[10px] text-muted-foreground">
+          {t("shell.inspect.purpose")}
+        </h4>
+        <p>
+          {knownLayout
+            ? t("shell.inspect.layoutDescription")
+            : t("shell.inspect.unrecognized")}
+        </p>
+      </div>
+      {operations.length > 0 && (
+        <div>
+          <h4 className="mb-1 text-[10px] text-muted-foreground">
+            {t("shell.inspect.operations")}
+          </h4>
+          <ul className="divide-y divide-border/40">
+            {operations.map((operation) => (
+              <li
+                key={operation.name}
+                className="grid gap-1 py-2 sm:grid-cols-[6rem_minmax(0,1fr)] sm:gap-3"
+              >
+                <span className="font-medium text-foreground">
+                  {operation.name}
+                </span>
+                <span className="text-muted-foreground">
+                  {operation.description}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
-      {Object.keys(remaining).length > 0 && <Value value={remaining} />}
+      {optional?.requiresUndefinedCheck === true && (
+        <div>
+          <h4 className="mb-1 text-[10px] text-muted-foreground">
+            {t("shell.inspect.conditions")}
+          </h4>
+          <p>{t("shell.inspect.availability")}</p>
+        </div>
+      )}
     </div>
   );
 }
 
-function InspectArguments({ args }: { args: Record<string, unknown> }) {
-  const invocation = [args.provider, args.method]
-    .filter((item) => typeof item === "string" && item)
-    .join(".");
-  const remaining = Object.fromEntries(
-    Object.entries(args).filter(
-      ([key, value]) =>
-        !(
-          ["platform", "provider", "method"].includes(key) &&
-          typeof value === "string"
-        ),
-    ),
-  );
-  if (!invocation) return <CompactArguments value={args} />;
+function ThemeSummary({ items }: { items: unknown[] }) {
+  const { t } = useT();
+  const [visible, setVisible] = useState(20);
+  const rows = items.flatMap((item) => {
+    const record = recordOf(item);
+    if (!record) return [];
+    const name = stringValue(record, "name", "key");
+    const value = record.value;
+    if (!name || !["string", "number", "boolean"].includes(typeof value))
+      return [];
+    const label =
+      name === "background"
+        ? t("shell.inspect.background")
+        : name === "foreground"
+          ? t("shell.inspect.foreground")
+          : name === "primary"
+            ? t("shell.inspect.primary")
+            : name;
+    return [{ name, label, value: String(value) }];
+  });
   return (
-    <div className="space-y-1">
-      <div className="break-all font-mono text-[11px] leading-relaxed text-muted-foreground">
-        {typeof args.platform === "string" && args.platform
-          ? `${args.platform} · `
-          : ""}
-        {invocation}
+    <div>
+      <h3 className="mb-2 text-xs font-medium text-foreground">
+        {t("shell.inspect.themeValues")}
+      </h3>
+      <div className="grid grid-cols-2 gap-3 border-b border-border/40 pb-2 text-[10px] text-muted-foreground">
+        <span>{t("shell.inspect.variable")}</span>
+        <span>{t("shell.inspect.value")}</span>
       </div>
-      <CompactArguments value={remaining} />
+      <ul className="divide-y divide-border/40">
+        {rows.slice(0, visible).map((row, index) => (
+          <li
+            key={`${row.name}-${index}`}
+            className="grid grid-cols-2 gap-3 py-2"
+          >
+            <span className="break-all">{row.label}</span>
+            <span className="min-w-0 break-all font-mono">
+              {/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(
+                row.value,
+              ) && (
+                <span
+                  aria-hidden
+                  className="mr-2 inline-block h-3 w-3 rounded-sm border border-border align-middle"
+                  style={{ backgroundColor: row.value }}
+                />
+              )}
+              {row.value}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {visible < rows.length && (
+        <button
+          type="button"
+          className={summaryClass}
+          onClick={() => setVisible((n) => n + 20)}
+        >
+          {t("shell.inspect.more")} ({rows.length - visible})
+        </button>
+      )}
+      {!rows.length && (
+        <p className="pt-2 text-muted-foreground">
+          {t(
+            items.length ? "shell.inspect.unrecognized" : "shell.inspect.empty",
+          )}
+        </p>
+      )}
     </div>
   );
 }
@@ -217,7 +186,6 @@ export function RuntimeInspectEvidence({
     decoded = text;
   }
   const envelope = recordOf(decoded);
-  // Only unwrap the known inspect envelope; unfamiliar records retain every field.
   const wrapped =
     envelope &&
     typeof envelope.platform === "string" &&
@@ -227,96 +195,41 @@ export function RuntimeInspectEvidence({
   const data = wrapped ? envelope.data : decoded;
   const record = recordOf(data);
   const service = record?.mode === "service" && recordOf(record.service);
-  const serviceQuery =
-    args.provider === "Service" && args.method === "listService";
   const themeQuery = args.provider === "Theme" && args.method === "listTokens";
-  const purpose = serviceQuery
-    ? t("shell.inspect.servicePurpose")
-    : themeQuery
-      ? t("shell.inspect.themePurpose")
-      : "";
-  const knownLayout =
-    service &&
-    service.key === "layout" &&
-    service.description ===
-      "Panel navigation and geometry actions exposed through ctx.layout.";
-  const technical = (
-    <>
-      <InspectArguments args={args} />
-      {service && (
-        <div className="mt-3">
-          <Record value={service} />
-        </div>
-      )}
-      {valid && (
-        <details className="mt-2">
-          <summary className={summaryClass}>{t("shell.inspect.raw")}</summary>
-          <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all py-2 font-mono text-[10.5px]">
-            {text}
-          </pre>
-        </details>
-      )}
-    </>
-  );
   if (!text.trim())
     return (
-      <div className="space-y-1 text-[11px] leading-relaxed text-muted-foreground">
-        {purpose && <p>{purpose}</p>}
-        {purpose ? (
-          <details>
-            <summary className={summaryClass}>
-              {t("shell.inspect.technical")}
-            </summary>
-            <InspectArguments args={args} />
-          </details>
-        ) : (
-          <InspectArguments args={args} />
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        {t(
+          themeQuery
+            ? "shell.inspect.themePurpose"
+            : "shell.inspect.servicePurpose",
         )}
-      </div>
+      </p>
     );
   return (
     <section
       data-runtime-result
       className="min-w-0 overflow-hidden rounded-md border border-border/45 bg-muted/10 text-[11px] leading-relaxed text-foreground/80"
     >
-      <div className="max-h-80 space-y-2 overflow-auto p-3">
+      <div className="max-h-96 overflow-auto p-3">
         {service ? (
-          <>
-            <div className="text-xs font-medium text-foreground">
-              {knownLayout
-                ? t("shell.inspect.layoutName")
-                : stringValue(service, "key", "name", "id") ||
-                  t("shell.inspect.result")}
-            </div>
-            {knownLayout ? (
-              <p className="text-muted-foreground">
-                {t("shell.inspect.layoutDescription")}
-              </p>
-            ) : (
-              stringValue(service, "description") && (
-                <p className="whitespace-pre-wrap break-words text-muted-foreground">
-                  {stringValue(service, "description")}
-                </p>
-              )
-            )}
-          </>
+          <ServiceSummary service={service} />
+        ) : themeQuery && Array.isArray(data) ? (
+          <ThemeSummary items={data} />
         ) : (
-          <>
-            <div className="text-xs font-medium">
-              {themeQuery
-                ? t("shell.inspect.themeAction")
-                : t("shell.inspect.result")}
-            </div>
-            <Record value={data} />
-          </>
+          <p className="whitespace-pre-wrap break-words">
+            {valid ? t("shell.inspect.unrecognized") : text}
+          </p>
         )}
       </div>
-      <details className="border-t border-border/40 px-3 py-1">
-        <summary className={summaryClass}>
-          {t("shell.inspect.technical")}
-        </summary>
-        <div className="max-h-80 overflow-auto py-2">{technical}</div>
-      </details>
+      {valid && (
+        <details className="border-t border-border/40 px-3 py-2">
+          <summary className={summaryClass}>{t("shell.inspect.raw")}</summary>
+          <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all py-2 font-mono text-[10.5px]">
+            {text}
+          </pre>
+        </details>
+      )}
     </section>
   );
 }

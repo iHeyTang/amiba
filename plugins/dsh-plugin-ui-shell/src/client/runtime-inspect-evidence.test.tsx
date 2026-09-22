@@ -1,91 +1,81 @@
 // @vitest-environment jsdom
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RuntimeInspectEvidence } from "./runtime-inspect-evidence";
-import type { SemanticEvidenceContext } from "@amiba/ui/plugin";
 vi.mock("@amiba/i18n", async (original) => ({
   ...(await original<typeof import("@amiba/i18n")>()),
   useT: () => ({ t: (key: string) => key }),
 }));
 afterEach(cleanup);
 const args = { platform: "client", provider: "Service", method: "listService" };
-function view(text: string) {
+const service = {
+  key: "layout",
+  description:
+    "Panel navigation and geometry actions exposed through ctx.layout.",
+  access: {
+    optional: { expression: 'ctx.get("layout")', requiresUndefinedCheck: true },
+    hardDependency: { inject: ["layout"] },
+  },
+  methods: [
+    { name: "openPanel", description: "Open a panel in the workspace." },
+    { name: "closePanel", description: "Close a workspace panel." },
+  ],
+};
+function view(text: string, theme = false) {
   return (
     <RuntimeInspectEvidence
-      args={args}
+      args={theme ? { provider: "Theme", method: "listTokens" } : args}
       text={text}
-      block={{} as SemanticEvidenceContext["block"]}
+      block={{} as never}
     />
   );
 }
 describe("runtime inspection evidence", () => {
-  it("retains lightweight arguments when results arrive", () => {
-    const { container, rerender } = render(view(""));
-    expect(screen.getByText("client · Service.listService")).toBeTruthy();
-    expect(container.querySelector("section, dl, table")).toBeNull();
-    rerender(
-      view(
-        JSON.stringify({
-          ...args,
-          data: {
-            mode: "service",
-            service: {
-              key: "layout",
-              description: "Panel navigation",
-              access: {
-                optional: {
-                  expression: 'ctx.get("layout")',
-                  requiresUndefinedCheck: true,
-                },
-                hardDependency: { inject: ["layout"] },
-              },
-            },
-          },
-        }),
-      ),
-    );
-    expect(screen.getByText("client · Service.listService")).toBeTruthy();
-    expect(screen.getAllByText("layout").length).toBeGreaterThan(0);
-    expect(screen.getByText('ctx.get("layout")')).toBeTruthy();
-    expect(screen.getByText("shell.inspect.optional")).toBeTruthy();
-    expect(
-      container.querySelector("details:last-child")?.hasAttribute("open"),
-    ).toBe(false);
+  it("shows purpose without a technical parameter card while running", () => {
+    const { container } = render(view(""));
+    expect(screen.getByText("shell.inspect.servicePurpose")).toBeTruthy();
+    expect(container.querySelector("section, details, dl, table")).toBeNull();
+    expect(container.textContent).not.toContain("listService");
   });
-  it("shows a readable layout summary and collapses implementation details", () => {
-    const { container } = render(
-      view(
-        JSON.stringify({
-          ...args,
-          data: {
-            mode: "service",
-            service: {
-              key: "layout",
-              description:
-                "Panel navigation and geometry actions exposed through ctx.layout.",
-              access: { optional: { expression: 'ctx.get("layout")' } },
-            },
-          },
-        }),
-      ),
-    );
-    expect(screen.getByText("shell.inspect.layoutName")).toBeTruthy();
-    expect(screen.getByText("shell.inspect.layoutDescription")).toBeTruthy();
-    const expression = screen.getByText('ctx.get("layout")');
-    expect(expression.closest("details")?.open).toBe(false);
-    expect(
-      container
-        .querySelector("[data-runtime-result] > details")
-        ?.hasAttribute("open"),
-    ).toBe(false);
+  it("organizes readable service information and keeps code only in raw JSON", () => {
+    const text = JSON.stringify({
+      ...args,
+      data: { mode: "service", service },
+    });
+    const { container } = render(view(text));
+    for (const key of [
+      "capabilityName",
+      "purpose",
+      "operations",
+      "conditions",
+      "openPanel",
+      "closePanel",
+      "availability",
+    ])
+      expect(screen.getByText(`shell.inspect.${key}`)).toBeTruthy();
+    const body = container.querySelector("[data-runtime-result] > div")!;
+    for (const technical of [
+      "ctx.get",
+      "inject",
+      "methods",
+      "Service.listService",
+    ])
+      expect(body.textContent).not.toContain(technical);
+    expect(container.querySelectorAll("details")).toHaveLength(1);
+    expect(container.querySelector("details")?.open).toBe(false);
+    expect(container.querySelector("pre")?.textContent).toBe(text);
   });
-  it("pages long lists without dropping later entries", () => {
+  it("does not invent capabilities when metadata is unfamiliar", () => {
+    const text = JSON.stringify({
+      mode: "service",
+      service: { ...service, description: "A different service", methods: [] },
+    });
+    render(view(text));
+    expect(screen.queryByText("shell.inspect.layoutDescription")).toBeNull();
+    expect(screen.queryByText("shell.inspect.openPanel")).toBeNull();
+    expect(screen.getByText("shell.inspect.unrecognized")).toBeTruthy();
+  });
+  it("pages theme values with explicit column meanings", () => {
     render(
       view(
         JSON.stringify(
@@ -94,36 +84,28 @@ describe("runtime inspection evidence", () => {
             value: "#aabbcc",
           })),
         ),
+        true,
       ),
     );
+    expect(screen.getByText("shell.inspect.variable")).toBeTruthy();
+    expect(screen.getByText("shell.inspect.value")).toBeTruthy();
     expect(screen.queryByText("token-44")).toBeNull();
     fireEvent.click(screen.getByRole("button"));
     fireEvent.click(screen.getByRole("button"));
     expect(screen.getByText("token-44")).toBeTruthy();
-    expect(screen.queryByRole("button")).toBeNull();
   });
-  it("allows expansion beyond the previous three-level limit", async () => {
-    render(view('{"one":{"two":{"three":{"four":"deep value"}}}}'));
-    for (const key of ["one", "two", "three"]) {
-      const summary = screen.getByText(key, {
-        exact: false,
-        selector: "summary",
-      });
-      const details = summary.parentElement as HTMLDetailsElement;
-      details.open = true;
-      fireEvent(details, new Event("toggle"));
-      await waitFor(() => expect(details.querySelector("div")).toBeTruthy());
-    }
-    expect(screen.getByText("deep value")).toBeTruthy();
-  });
-  it.each(['{"broken":', "plain text output", "null", "[]", "{}"])(
-    "preserves unusual output %s",
+  it.each(['{"deep":{"a":{"b":{"c":42}}}}', "null", "[]", "{}"])(
+    "retains the complete unfamiliar result %s",
     (text) => {
       const { container } = render(view(text));
-      expect(container.querySelector("[data-runtime-result]")).toBeTruthy();
-      if (text === "plain text output" || text === '{"broken":')
-        expect(screen.getByText(text)).toBeTruthy();
-      else expect(container.querySelector("pre")?.textContent).toBe(text);
+      expect(container.querySelector("pre")?.textContent).toBe(text);
+    },
+  );
+  it.each(['{"broken":', "plain text output"])(
+    "preserves non-JSON output %s",
+    (text) => {
+      render(view(text));
+      expect(screen.getByText(text)).toBeTruthy();
     },
   );
 });
