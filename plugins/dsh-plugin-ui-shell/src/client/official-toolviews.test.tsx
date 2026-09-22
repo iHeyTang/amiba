@@ -75,6 +75,21 @@ const added = [
   "cordis_undefine",
 ];
 describe("tool views", () => {
+  it("identifies arbitrary runtime providers in the row title", () => {
+    render(
+      <>
+        {renderOfficialToolFallback(
+          owner("cordis_inspect_query", {
+            platform: "host",
+            provider: "Event",
+            method: "listEvents",
+          }),
+          null,
+        )}
+      </>,
+    );
+    expect(screen.getByText("Event.listEvents")).toBeTruthy();
+  });
   it("keeps intrinsic Bash semantics when the session-scoped slot falls back", () => {
     render(
       <>

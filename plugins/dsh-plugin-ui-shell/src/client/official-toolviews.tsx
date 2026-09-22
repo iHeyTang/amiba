@@ -322,7 +322,12 @@ for (const key of [
           ? "shell.inspect.themeAction"
           : "shell.tool.inspectRuntime",
     target: (args) =>
-      oneline(stringValue(args, "query", "name", "packageName")),
+      oneline(
+        [args.provider, args.method]
+          .filter((value) => typeof value === "string" && value)
+          .join(".") ||
+          stringValue(args, "query", "name", "packageName", "pluginId"),
+      ),
     evidence: (ctx) => <RuntimeInspectEvidence {...ctx} />,
   };
 }

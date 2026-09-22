@@ -1,0 +1,987 @@
+[
+  {
+    "id": "client-services",
+    "label": "client · Service · 目录",
+    "args": {
+      "platform": "client",
+      "provider": "Service",
+      "method": "listService"
+    },
+    "result": {
+      "platform": "client",
+      "provider": "Service",
+      "method": "listService",
+      "data": {
+        "mode": "catalog",
+        "services": [
+          {
+            "key": "layout",
+            "description": "Panel navigation and geometry actions exposed through ctx.layout.",
+            "methods": [
+              {
+                "signature": "selectPanel(panelId: MainPanelId | null): void"
+              },
+              {
+                "signature": "beginNavigation(): AbortSignal"
+              },
+              {
+                "signature": "toggleSidebar(): void"
+              },
+              {
+                "signature": "openRightbar(track: boolean, fullscreen: boolean): void"
+              },
+              {
+                "signature": "closeRightbar(): void"
+              }
+            ]
+          },
+          {
+            "key": "locale",
+            "description": "Dictionary registry plus locale preference.",
+            "methods": [
+              {
+                "signature": "getLocale(): LocaleSnapshot"
+              },
+              {
+                "signature": "getSnapshot(): LocaleSnapshot"
+              },
+              {
+                "signature": "subscribe(fn: () => void): () => void"
+              },
+              {
+                "signature": "setLocale(id: string): void"
+              },
+              {
+                "signature": "addLanguage(input: LanguageRegistration): () => void"
+              },
+              {
+                "signature": "register<N extends Extract<keyof LocaleNamespaceMap, string>>(ns: N, dicts: Record<BuiltInLocaleId, LocaleDictOf<N>>): () => void"
+              },
+              {
+                "signature": "register(ns: string, locale: string, dict: LocaleDict): () => void"
+              },
+              {
+                "signature": "bind<N extends Extract<keyof LocaleNamespaceMap, string>>(ns: N): TranslateNS<N>"
+              },
+              {
+                "signature": "bind(ns: string): Translate"
+              }
+            ]
+          },
+          {
+            "key": "sessions",
+            "description": "The sessions-service face injected as `ctx.sessions`.",
+            "methods": [
+              {
+                "signature": "open(id: SessionId): void"
+              },
+              {
+                "signature": "openSubagent(address: SubagentAddress): void"
+              },
+              {
+                "signature": "setSubagentCatalogOpen(parentSessionId: SessionId, open: boolean): void"
+              },
+              {
+                "signature": "refreshSubagents(parentSessionId: SessionId): Promise<void>"
+              },
+              {
+                "signature": "search( query: string, signal: AbortSignal, ): Promise<RemoteResult<{ items: SessionSearchResultItem[]; hasMore: boolean }>>"
+              },
+              {
+                "signature": "fork(opts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }): Promise<SessionId>"
+              },
+              {
+                "signature": "scope(id: SessionId): AgentContext | undefined"
+              },
+              {
+                "signature": "binding(id: SessionId): SessionBinding | undefined"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "client-service",
+    "label": "client · Service · 单项详情",
+    "args": {
+      "platform": "client",
+      "provider": "Service",
+      "method": "listService",
+      "input": {
+        "service": "layout"
+      }
+    },
+    "result": {
+      "platform": "client",
+      "provider": "Service",
+      "method": "listService",
+      "data": {
+        "mode": "service",
+        "service": {
+          "key": "layout",
+          "description": "Panel navigation and geometry actions exposed through ctx.layout.",
+          "access": {
+            "optional": {
+              "expression": "ctx.get(\"layout\")",
+              "requiresUndefinedCheck": true
+            },
+            "hardDependency": {
+              "inject": [
+                "layout"
+              ],
+              "expression": "ctx.layout"
+            }
+          },
+          "methods": [
+            {
+              "signature": "selectPanel(panelId: MainPanelId | null): void",
+              "description": "Select a global central panel without changing the current Session.",
+              "parameters": [
+                {
+                  "name": "panelId",
+                  "description": "registered main key, or null to show the Conversation."
+                }
+              ],
+              "throws": [
+                "if the selected main key is not registered; preserves the current selection."
+              ]
+            },
+            {
+              "signature": "beginNavigation(): AbortSignal",
+              "description": "Start an asynchronous navigation, superseding any earlier pending navigation.",
+              "parameters": [],
+              "returns": "a signal aborted by the next navigation or layout disposal; check it before committing UI state."
+            },
+            {
+              "signature": "toggleSidebar(): void",
+              "description": "Toggle the sidebar panel (closed ⟷ contract default width).",
+              "parameters": []
+            },
+            {
+              "signature": "openRightbar(track: boolean, fullscreen: boolean): void",
+              "description": "Report the right panel's presentation without changing its expanded state.",
+              "parameters": [
+                {
+                  "name": "track",
+                  "description": "whether the normal panel width reserves a grid track, including beneath a fullscreen overlay."
+                },
+                {
+                  "name": "fullscreen",
+                  "description": "whether the panel covers the frame and hides its outer resize handle; independent of the underlying grid track."
+                }
+              ]
+            },
+            {
+              "signature": "closeRightbar(): void",
+              "description": "Report the right panel as hidden: no track, no handle.",
+              "parameters": []
+            }
+          ]
+        },
+        "referencedTypes": []
+      }
+    }
+  },
+  {
+    "id": "client-events",
+    "label": "client · Event · 目录",
+    "args": {
+      "platform": "client",
+      "provider": "Event",
+      "method": "listEvents"
+    },
+    "result": {
+      "platform": "client",
+      "provider": "Event",
+      "method": "listEvents",
+      "data": {
+        "mode": "catalog",
+        "events": [
+          {
+            "name": "connection/reset",
+            "description": "A connection generation was established.",
+            "mode": "emit",
+            "signature": "'connection/reset'(): void"
+          },
+          {
+            "name": "locale/change",
+            "description": "The active locale switched.",
+            "mode": "emit",
+            "signature": "'locale/change'(snapshot: LocaleSnapshot): void"
+          },
+          {
+            "name": "slots/changed",
+            "description": "A slot declaration or registration set changed.",
+            "mode": "emit",
+            "signature": "'slots/changed'(key: string): void"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "client-event",
+    "label": "client · Event · 参数详情",
+    "args": {
+      "platform": "client",
+      "provider": "Event",
+      "method": "listEvents",
+      "input": {
+        "event": "connection/reset"
+      }
+    },
+    "result": {
+      "platform": "client",
+      "provider": "Event",
+      "method": "listEvents",
+      "data": {
+        "mode": "event",
+        "event": {
+          "name": "connection/reset",
+          "description": "A connection generation was established. Wire-derived caches must repull; long-lived streams own their own resume and baseline lifecycle.",
+          "mode": "emit",
+          "signature": "'connection/reset'(): void",
+          "parameters": []
+        },
+        "referencedTypes": []
+      }
+    }
+  },
+  {
+    "id": "host-services",
+    "label": "host · Service · 目录",
+    "args": {
+      "platform": "host",
+      "provider": "Service",
+      "method": "listService"
+    },
+    "result": {
+      "platform": "host",
+      "provider": "Service",
+      "method": "listService",
+      "data": {
+        "mode": "catalog",
+        "services": [
+          {
+            "key": "agentDefaultModel",
+            "description": "Owns the default model selection independently of any Host or transport.",
+            "methods": [
+              {
+                "signature": "currentSelection(): ModelSelection"
+              },
+              {
+                "signature": "async saveSelection(next: ModelSelection): Promise<void>"
+              }
+            ]
+          },
+          {
+            "key": "agentLoop",
+            "description": "Concrete agent factory and driver service.",
+            "methods": [
+              {
+                "signature": "readonly config: ResolvedConfig"
+              },
+              {
+                "signature": "async create(id: SessionId, options: AgentOptions = {}, meta: Pick<SessionHeader, 'cwd'> = {}): Promise<Agent>"
+              },
+              {
+                "signature": "async createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle>"
+              },
+              {
+                "signature": "async resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandle>"
+              }
+            ]
+          },
+          {
+            "key": "agentPresets",
+            "description": "Registry over the deployment's agent presets.",
+            "methods": [
+              {
+                "signature": "async list(): Promise<AgentPreset[]>"
+              },
+              {
+                "signature": "@Remote('list') async remoteExportList(): Promise<AgentPresetRoster>"
+              },
+              {
+                "signature": "async compositionInventory(): Promise<AgentPresetComposition[]>"
+              },
+              {
+                "signature": "async resolve(id?: string): Promise<AgentPreset>"
+              },
+              {
+                "signature": "async mount(agentCtx: Context, id?: string): Promise<AgentPreset>"
+              },
+              {
+                "signature": "composeFrom(agentCtx: Context, parentCtx: Context): string | undefined"
+              },
+              {
+                "signature": "composedPreset(agentCtx: Context): string | undefined"
+              },
+              {
+                "signature": "async read(id: string): Promise<string>"
+              },
+              {
+                "signature": "@Remote('read') async readDocument(agentPreset: string): Promise<AgentPresetDocument>"
+              },
+              {
+                "signature": "async copy(from: string, id: string, name?: string): Promise<void>"
+              },
+              {
+                "signature": "@Remote('copy') async remoteExportCopy(from: string, id: string, name?: string): Promise<void>"
+              },
+              {
+                "signature": "async remove(id: string): Promise<void>"
+              },
+              {
+                "signature": "@Remote('deletePreset') async remoteExportDelete(id: string): Promise<void>"
+              },
+              {
+                "signature": "serviceFor<K extends string & keyof Context>(agent: { ctx: Context }, name: K): Context[K] | undefined"
+              },
+              {
+                "signature": "async recompose(agentCtx: Context, id: string): Promise<AgentPreset>"
+              },
+              {
+                "signature": "@Remote('select') async select(agent: Agent, agentPreset: string): Promise<string>"
+              },
+              {
+                "signature": "async standingKeyFor(id?: string): Promise<ScopeKey>"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "host-service",
+    "label": "host · Service · 单项详情",
+    "args": {
+      "platform": "host",
+      "provider": "Service",
+      "method": "listService",
+      "input": {
+        "service": "agentDefaultModel"
+      }
+    },
+    "result": {
+      "platform": "host",
+      "provider": "Service",
+      "method": "listService",
+      "data": {
+        "mode": "service",
+        "service": {
+          "key": "agentDefaultModel",
+          "description": "Owns the default model selection independently of any Host or transport. The composition entry remains usable without a settings provider; when one is mounted, its user layer is read live.",
+          "access": {
+            "optional": {
+              "expression": "ctx.get(\"agentDefaultModel\")",
+              "requiresUndefinedCheck": true
+            },
+            "hardDependency": {
+              "inject": [
+                "agentDefaultModel"
+              ],
+              "expression": "ctx.agentDefaultModel"
+            }
+          },
+          "methods": [
+            {
+              "signature": "currentSelection(): ModelSelection",
+              "description": "Read the current default model selection.",
+              "parameters": [],
+              "returns": "a detached provider, model, and optional reasoning selection."
+            },
+            {
+              "signature": "async saveSelection(next: ModelSelection): Promise<void>",
+              "description": "Save the complete default model selection. A deployment without a settings provider keeps its composition entry.",
+              "parameters": [
+                {
+                  "name": "next",
+                  "description": "resolved selection accepted by an entry point."
+                }
+              ],
+              "returns": "fulfillment after the optional settings write settles."
+            }
+          ]
+        },
+        "referencedTypes": []
+      }
+    }
+  },
+  {
+    "id": "host-events",
+    "label": "host · Event · 目录",
+    "args": {
+      "platform": "host",
+      "provider": "Event",
+      "method": "listEvents"
+    },
+    "result": {
+      "platform": "host",
+      "provider": "Event",
+      "method": "listEvents",
+      "data": {
+        "mode": "catalog",
+        "events": [
+          {
+            "name": "agent-loop/config-start-failed",
+            "description": "A declarative agent entry failed before it could publish a live agent.",
+            "mode": "emit",
+            "signature": "'agent-loop/config-start-failed'(payload: { sessionId: SessionId; error: unknown }): void"
+          },
+          {
+            "name": "agent-preset/selected",
+            "description": "One session committed a different agent preset to its durable log.",
+            "mode": "emit",
+            "signature": "'agent-preset/selected'(sessionId: SessionId, agentPreset: string): void"
+          },
+          {
+            "name": "agent/assistant-stream",
+            "description": "Process-local assistant-stream publication.",
+            "mode": "emit",
+            "signature": "'agent/assistant-stream'(this: Scoped<Agent>, payload: { agent: Agent; frame: AssistantStreamFrame }): void"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "host-event",
+    "label": "host · Event · 参数详情",
+    "args": {
+      "platform": "host",
+      "provider": "Event",
+      "method": "listEvents",
+      "input": {
+        "event": "agent-loop/config-start-failed"
+      }
+    },
+    "result": {
+      "platform": "host",
+      "provider": "Event",
+      "method": "listEvents",
+      "data": {
+        "mode": "event",
+        "event": {
+          "name": "agent-loop/config-start-failed",
+          "description": "A declarative agent entry failed before it could publish a live agent. Consumers that buffer work for the configured identity use this transient signal to reject that work instead of waiting forever. Normal factory teardown suppresses failures from the cancelled startup attempt.",
+          "mode": "emit",
+          "signature": "'agent-loop/config-start-failed'(payload: { sessionId: SessionId; error: unknown }): void",
+          "parameters": [
+            {
+              "name": "payload",
+              "description": ".error - persistence, setup, or publication failure."
+            }
+          ]
+        },
+        "referencedTypes": []
+      }
+    }
+  },
+  {
+    "id": "theme",
+    "label": "client · Theme · Token 元数据",
+    "args": {
+      "platform": "client",
+      "provider": "Theme",
+      "method": "listTokens"
+    },
+    "result": {
+      "platform": "client",
+      "provider": "Theme",
+      "method": "listTokens",
+      "data": {
+        "tokens": [
+          {
+            "name": "--dsw-alias-bg-base",
+            "description": "Application base background.",
+            "valueType": "CSS color",
+            "requiresLightAndDark": true,
+            "cssVariable": "--dsw-alias-bg-base"
+          },
+          {
+            "name": "--dsw-alias-bg-layer-1",
+            "description": "Primary raised surface background.",
+            "valueType": "CSS color",
+            "requiresLightAndDark": true,
+            "cssVariable": "--dsw-alias-bg-layer-1"
+          },
+          {
+            "name": "--dsw-alias-bg-layer-2",
+            "description": "Secondary nested surface background.",
+            "valueType": "CSS color",
+            "requiresLightAndDark": true,
+            "cssVariable": "--dsw-alias-bg-layer-2"
+          },
+          {
+            "name": "--dsw-alias-bg-overlay",
+            "description": "Overlay and popover background.",
+            "valueType": "CSS color",
+            "requiresLightAndDark": true,
+            "cssVariable": "--dsw-alias-bg-overlay"
+          },
+          {
+            "name": "--dsw-alias-border-l1",
+            "description": "Primary subtle border.",
+            "valueType": "CSS color",
+            "requiresLightAndDark": true,
+            "cssVariable": "--dsw-alias-border-l1"
+          },
+          {
+            "name": "--dsw-alias-border-l2",
+            "description": "Secondary stronger border.",
+            "valueType": "CSS color",
+            "requiresLightAndDark": true,
+            "cssVariable": "--dsw-alias-border-l2"
+          },
+          {
+            "name": "--dsw-alias-brand-primary",
+            "description": "Primary brand accent.",
+            "valueType": "CSS color",
+            "requiresLightAndDark": true,
+            "cssVariable": "--dsw-alias-brand-primary"
+          },
+          {
+            "name": "--dsw-alias-label-primary",
+            "description": "Primary text color.",
+            "valueType": "CSS color",
+            "requiresLightAndDark": true,
+            "cssVariable": "--dsw-alias-label-primary"
+          },
+          {
+            "name": "--dsw-alias-label-secondary",
+            "description": "Secondary text color.",
+            "valueType": "CSS color",
+            "requiresLightAndDark": true,
+            "cssVariable": "--dsw-alias-label-secondary"
+          },
+          {
+            "name": "--dsw-alias-state-error-primary",
+            "description": "Primary error state color.",
+            "valueType": "CSS color",
+            "requiresLightAndDark": true,
+            "cssVariable": "--dsw-alias-state-error-primary"
+          },
+          {
+            "name": "--dsw-alias-state-success-primary",
+            "description": "Primary success state color.",
+            "valueType": "CSS color",
+            "requiresLightAndDark": true,
+            "cssVariable": "--dsw-alias-state-success-primary"
+          },
+          {
+            "name": "--dsw-alias-state-warn-primary",
+            "description": "Primary warning state color.",
+            "valueType": "CSS color",
+            "requiresLightAndDark": true,
+            "cssVariable": "--dsw-alias-state-warn-primary"
+          },
+          {
+            "name": "--dsw-specific-sidebar-fill",
+            "description": "Sidebar column and title-row background.",
+            "valueType": "CSS color",
+            "requiresLightAndDark": true,
+            "cssVariable": "--dsw-specific-sidebar-fill"
+          }
+        ],
+        "referencedTypes": []
+      }
+    }
+  },
+  {
+    "id": "host-builtin",
+    "label": "host · Builtin · 签名列表",
+    "args": {
+      "platform": "host",
+      "provider": "Builtin",
+      "method": "listBuiltins"
+    },
+    "result": {
+      "platform": "host",
+      "provider": "Builtin",
+      "method": "listBuiltins",
+      "data": {
+        "builtins": [
+          {
+            "name": "ctx",
+            "description": "Restricted Cordis Context. Prefer ctx.get(name) with an undefined check; use inject for hard dependencies.",
+            "signatures": [
+              "ctx.get(name: string): unknown | undefined",
+              "ctx.on(name: string, listener: Function): () => void",
+              "ctx.provide(name: string, value: unknown): () => void",
+              "ctx.effect(callback: Function, label?: string): () => void"
+            ]
+          },
+          {
+            "name": "harness",
+            "description": "Host helpers for Package-private Client RPC and model-visible dynamic Tools.",
+            "signatures": [
+              "harness.handle(method: string, handler: (args: JsonValue) => JsonValue | Promise<JsonValue>): () => void",
+              "harness.defineTool(definition: ToolDefinition): ToolDefinition",
+              "harness.registerTool(ctx: Context, tool: ToolDefinition): () => void"
+            ]
+          },
+          {
+            "name": "console",
+            "description": "Package-tagged Host logging.",
+            "signatures": [
+              "console.log(...values): void",
+              "console.error(...values): void"
+            ]
+          },
+          {
+            "name": "btoa",
+            "description": "Encode UTF-8 text as base64.",
+            "signatures": [
+              "btoa(value: string): string"
+            ]
+          },
+          {
+            "name": "atob",
+            "description": "Decode base64 as UTF-8 text.",
+            "signatures": [
+              "atob(value: string): string"
+            ]
+          },
+          {
+            "name": "TextEncoder",
+            "description": "Standard UTF-8 encoder constructor.",
+            "signatures": [
+              "new TextEncoder()"
+            ]
+          },
+          {
+            "name": "TextDecoder",
+            "description": "Standard text decoder constructor.",
+            "signatures": [
+              "new TextDecoder(label?: string)"
+            ]
+          }
+        ],
+        "referencedTypes": []
+      }
+    }
+  },
+  {
+    "id": "builtin",
+    "label": "client · Builtin · 签名列表",
+    "args": {
+      "platform": "client",
+      "provider": "Builtin",
+      "method": "listBuiltins"
+    },
+    "result": {
+      "platform": "client",
+      "provider": "Builtin",
+      "method": "listBuiltins",
+      "data": {
+        "builtins": [
+          {
+            "name": "ctx",
+            "description": "Restricted Cordis Context. Prefer ctx.get(name) with an undefined check; use inject only for hard dependencies.",
+            "signatures": [
+              "ctx.get(name: string): unknown | undefined",
+              "ctx.on(name: string, listener: Function): () => void",
+              "ctx.provide(name: string, value: unknown): () => void",
+              "ctx.effect(callback: Function, label?: string): () => void"
+            ]
+          },
+          {
+            "name": "React",
+            "description": "React runtime exposed without JSX transformation.",
+            "signatures": [
+              "React.createElement(type, props, ...children): ReactElement",
+              "React.useState(initial)",
+              "React.useEffect(effect, deps)"
+            ]
+          },
+          {
+            "name": "host",
+            "description": "Package-private JSON RPC from Client to this Package's Host half.",
+            "signatures": [
+              "host.call(method: string, args?: JsonValue): Promise<JsonValue>"
+            ]
+          },
+          {
+            "name": "styles",
+            "description": "Package-owned stylesheet insertion cleaned up with the Client run.",
+            "signatures": [
+              "styles.insert(css: string): () => void"
+            ]
+          },
+          {
+            "name": "console",
+            "description": "Package-tagged browser logging.",
+            "signatures": [
+              "console.log(...values): void",
+              "console.error(...values): void"
+            ]
+          }
+        ],
+        "referencedTypes": []
+      }
+    }
+  },
+  {
+    "id": "tools",
+    "label": "host · Tool · JSON Schema",
+    "args": {
+      "platform": "host",
+      "provider": "Tool",
+      "method": "listTools"
+    },
+    "result": {
+      "platform": "host",
+      "provider": "Tool",
+      "method": "listTools",
+      "data": {
+        "tools": [
+          {
+            "name": "demo_tool",
+            "description": "Illustrative tool schema.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "path"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "slots",
+    "label": "client · Slots · 嵌套树",
+    "args": {
+      "platform": "client",
+      "provider": "Slots",
+      "method": "listSubTree",
+      "input": {
+        "root": "demo.root"
+      }
+    },
+    "result": {
+      "platform": "client",
+      "provider": "Slots",
+      "method": "listSubTree",
+      "data": {
+        "requestedRoot": {
+          "name": "demo.root",
+          "available": true
+        },
+        "trees": [
+          {
+            "name": "demo.root",
+            "kind": "single",
+            "scope": "session",
+            "children": [
+              {
+                "name": "demo.child",
+                "kind": "multi",
+                "scope": "session",
+                "children": []
+              }
+            ]
+          }
+        ],
+        "selected": {
+          "name": "demo.root",
+          "kind": "single",
+          "scope": "session",
+          "occupants": [],
+          "catalog": {
+            "description": "Illustrative live slot.",
+            "registration": [],
+            "ownerProps": [
+              "interface Owner { sessionId: string }"
+            ],
+            "standardProps": []
+          }
+        },
+        "referencedTypes": []
+      }
+    }
+  },
+  {
+    "id": "providers",
+    "label": "inspect_list · Provider 目录",
+    "args": {},
+    "result": {
+      "providers": [
+        {
+          "platform": "client",
+          "id": "Theme",
+          "description": "Current theme token names and light/dark override requirements.",
+          "methods": [
+            {
+              "name": "listTokens",
+              "description": "Current theme token names and light/dark override requirements.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "outputSchema": {
+                "description": "JSON data owned by this inspect provider."
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "self",
+    "label": "inspect_self · 包和诊断",
+    "args": {
+      "pluginId": "demo-1",
+      "packageId": "package-1"
+    },
+    "result": {
+      "mode": "package",
+      "plugin": {
+        "pluginId": "demo-1",
+        "name": "Example",
+        "packageCount": 1,
+        "state": "failed"
+      },
+      "packageId": "package-1",
+      "name": "Example",
+      "purpose": "Preview only.",
+      "code": {
+        "host": "return { apply(ctx) {\n  throw new Error(\"demo\");\n} };",
+        "client": null
+      },
+      "runtime": {
+        "state": "failed",
+        "host": {
+          "status": "failed",
+          "provides": [],
+          "waitingFor": [],
+          "handlers": [],
+          "error": {
+            "message": "demo",
+            "stack": "Error: demo\n at apply (demo.js:2)"
+          }
+        },
+        "client": {
+          "status": "absent",
+          "waitingFor": []
+        }
+      }
+    }
+  },
+  {
+    "id": "future",
+    "label": "未知 Provider · 混合结构",
+    "args": {
+      "platform": "host",
+      "provider": "FutureProvider",
+      "method": "inspect"
+    },
+    "result": {
+      "platform": "host",
+      "provider": "FutureProvider",
+      "method": "inspect",
+      "data": {
+        "enabled": false,
+        "count": 0,
+        "nothing": null,
+        "empty": "",
+        "mixed": [
+          1,
+          "two",
+          null,
+          {},
+          [],
+          {
+            "newField": {
+              "nested": "Still accessible"
+            }
+          }
+        ],
+        "dictionary": {
+          "field0": 0,
+          "field1": 1,
+          "field2": 2,
+          "field3": 3,
+          "field4": 4,
+          "field5": 5,
+          "field6": 6,
+          "field7": 7,
+          "field8": 8,
+          "field9": 9,
+          "field10": 10,
+          "field11": 11,
+          "field12": 12,
+          "field13": 13,
+          "field14": 14,
+          "field15": 15,
+          "field16": 16,
+          "field17": 17,
+          "field18": 18,
+          "field19": 19,
+          "field20": 20,
+          "field21": 21,
+          "field22": 22,
+          "field23": 23,
+          "field24": 24
+        }
+      }
+    }
+  },
+  {
+    "id": "self-list",
+    "label": "inspect_self · 插件目录",
+    "args": {},
+    "result": {
+      "mode": "plugins",
+      "plugins": [
+        {
+          "pluginId": "demo-1",
+          "name": "Example",
+          "packageCount": 1,
+          "state": "stopped",
+          "currentPackageId": "package-1"
+        }
+      ]
+    }
+  },
+  {
+    "id": "self-plugin",
+    "label": "inspect_self · 版本列表",
+    "args": {
+      "pluginId": "demo-1"
+    },
+    "result": {
+      "mode": "plugin",
+      "pluginId": "demo-1",
+      "name": "Example",
+      "packageCount": 1,
+      "state": "stopped",
+      "currentPackageId": "package-1",
+      "packages": [
+        {
+          "packageId": "package-1",
+          "isCurrent": true,
+          "isNext": false,
+          "hasHostHalf": true,
+          "hasClientHalf": false
+        }
+      ]
+    }
+  }
+]

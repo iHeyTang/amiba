@@ -2,127 +2,152 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RuntimeInspectEvidence } from "./runtime-inspect-evidence";
+import fixtures from "../dev/runtime-inspect-fixtures.json";
 vi.mock("@amiba/i18n", async (original) => ({
   ...(await original<typeof import("@amiba/i18n")>()),
   useT: () => ({ t: (key: string) => key }),
 }));
 afterEach(cleanup);
-const args = { platform: "client", provider: "Service", method: "listService" };
-const service = {
-  key: "layout",
-  description:
-    "Panel navigation and geometry actions exposed through ctx.layout.",
-  access: {
-    optional: { expression: 'ctx.get("layout")', requiresUndefinedCheck: true },
-    hardDependency: { inject: ["layout"] },
-  },
-  methods: [
-    { name: "openPanel", description: "Open a panel in the workspace." },
-    { name: "closePanel", description: "Close a workspace panel." },
-  ],
-};
-function view(text: string, theme = false) {
+function view(value: unknown, args: Record<string, unknown> = {}) {
   return (
     <RuntimeInspectEvidence
-      args={theme ? { provider: "Theme", method: "listTokens" } : args}
-      text={text}
+      args={args}
+      text={JSON.stringify(value)}
       block={{} as never}
     />
   );
 }
-describe("runtime inspection evidence", () => {
-  it("shows compact original arguments while running", () => {
-    const { container } = render(view(""));
-    expect(screen.getByText("listService", { exact: false })).toBeTruthy();
-    expect(container.querySelector("section, details, dl, table")).toBeNull();
-  });
-  it("organizes readable service information and keeps code only in raw JSON", () => {
-    const text = JSON.stringify({
-      ...args,
-      data: { mode: "service", service },
-    });
-    const { container } = render(view(text));
-    for (const key of ["capabilityName", "purpose", "operations"])
-      expect(screen.getByText(`shell.inspect.${key}`)).toBeTruthy();
-    expect(screen.getByText("layout")).toBeTruthy();
-    expect(screen.getByText(service.description)).toBeTruthy();
-    expect(screen.getByText("openPanel")).toBeTruthy();
-    expect(screen.getByText("Open a panel in the workspace.")).toBeTruthy();
-    const body = container.querySelector("[data-runtime-result] > div")!;
-    for (const technical of [
-      "ctx.get",
-      "inject",
-      "methods",
-      "Service.listService",
-    ])
-      expect(body.textContent).not.toContain(technical);
-    expect(screen.queryByText("shell.inspect.conditions")).toBeNull();
-    expect(screen.queryByText("shell.inspect.availability")).toBeNull();
-    expect(container.querySelectorAll("details")).toHaveLength(1);
-    expect(container.querySelector("details")?.open).toBe(false);
-    expect(container.querySelector("pre")?.textContent).toBe(text);
-  });
-  it("does not invent capabilities when metadata is unfamiliar", () => {
-    const text = JSON.stringify({
-      mode: "service",
-      service: {
-        ...service,
-        key: "custom",
-        description: "A different service",
-        methods: [{ name: "customMethod", description: "A custom operation." }],
-      },
-    });
-    render(view(text));
-    expect(screen.queryByText("shell.inspect.layoutDescription")).toBeNull();
-    expect(screen.queryByText("shell.inspect.openPanel")).toBeNull();
-    expect(screen.getByText("A different service")).toBeTruthy();
-    expect(screen.getByText("customMethod")).toBeTruthy();
-    expect(screen.getByText("A custom operation.")).toBeTruthy();
-  });
-  it("preserves original theme names without a translation map", () => {
-    render(
-      view(
-        JSON.stringify([
-          { name: "background", value: "#ffffff" },
-          { name: "primary", value: "#7755ee" },
-        ]),
-        true,
+function revealAll(container: HTMLElement) {
+  for (let pass = 0; pass < 30; pass++) {
+    const groups = [
+      ...container.querySelectorAll<HTMLDetailsElement>(
+        "[data-runtime-result] > div details:not([open])",
       ),
+    ];
+    const buttons = [
+      ...container.querySelectorAll<HTMLButtonElement>(
+        "[data-runtime-result] > div button",
+      ),
+    ];
+    if (!groups.length && !buttons.length) return;
+    for (const details of groups) {
+      details.open = true;
+      fireEvent(details, new Event("toggle"));
+    }
+    for (const button of buttons) fireEvent.click(button);
+  }
+  throw new Error("Fixture did not fully expand");
+}
+function leaves(value: unknown): string[] {
+  if (value && typeof value === "object")
+    return Object.values(value).flatMap(leaves);
+  return [value === "" ? '""' : String(value)];
+}
+describe("structural runtime inspection", () => {
+  it.each(fixtures)("retains all content for $label", (fixture) => {
+    const { container } = render(view(fixture.result, fixture.args));
+    revealAll(container);
+    const result = fixture.result as Record<string, unknown>;
+    const data = "data" in result ? result.data : result;
+    const body = container.querySelector(
+      "[data-runtime-result] > div:last-of-type",
+    )!;
+    for (const leaf of leaves(data)) expect(body.textContent).toContain(leaf);
+    expect(container.querySelector("pre")?.textContent).toBe(
+      JSON.stringify(fixture.result),
     );
-    expect(screen.getByText("background")).toBeTruthy();
-    expect(screen.getByText("primary")).toBeTruthy();
-    expect(screen.queryByText("shell.inspect.background")).toBeNull();
+    expect(
+      container
+        .querySelector("[data-runtime-result] > details")
+        ?.hasAttribute("open"),
+    ).toBe(false);
   });
-  it("pages theme values with explicit column meanings", () => {
-    render(
-      view(
-        JSON.stringify(
-          Array.from({ length: 45 }, (_, i) => ({
-            name: `token-${i}`,
-            value: "#aabbcc",
-          })),
+  it("renders the same unknown shape for any platform or provider", () => {
+    const data = {
+      signature: "custom(): void",
+      description: "Untranslated description",
+      extra: { result: false },
+    };
+    const { container, rerender } = render(
+      view(data, { platform: "host", provider: "Custom", method: "one" }),
+    );
+    const before = container.innerHTML;
+    rerender(
+      view(data, { platform: "other", provider: "Future", method: "two" }),
+    );
+    expect(container.innerHTML).toBe(before);
+  });
+  it("pages both arrays and object fields without dropping the remainder", () => {
+    const { container } = render(
+      view({
+        list: Array.from({ length: 45 }, (_, i) => `item-${i}`),
+        fields: Object.fromEntries(
+          Array.from({ length: 45 }, (_, i) => [`key-${i}`, i]),
         ),
-        true,
-      ),
+      }),
     );
-    expect(screen.getByText("shell.inspect.variable")).toBeTruthy();
-    expect(screen.getByText("shell.inspect.value")).toBeTruthy();
-    expect(screen.queryByText("token-44")).toBeNull();
-    fireEvent.click(screen.getByRole("button"));
-    fireEvent.click(screen.getByRole("button"));
-    expect(screen.getByText("token-44")).toBeTruthy();
+    expect(screen.queryByText("item-44")).toBeNull();
+    revealAll(container);
+    expect(screen.getByText("item-44")).toBeTruthy();
+    expect(screen.getByText("key-44")).toBeTruthy();
   });
-  it.each(['{"deep":{"a":{"b":{"c":42}}}}', "null", "[]", "{}"])(
-    "retains the complete unfamiliar result %s",
-    (text) => {
-      const { container } = render(view(text));
-      expect(container.querySelector("pre")?.textContent).toBe(text);
-    },
-  );
+  it("retains long text, nulls, empty values, booleans and deep unknown fields", () => {
+    const long = "x".repeat(1200);
+    const { container } = render(
+      view({
+        long,
+        zero: 0,
+        no: false,
+        nil: null,
+        blank: "",
+        emptyArray: [],
+        emptyObject: {},
+        a: { b: { c: { d: { e: "deep value" } } } },
+      }),
+    );
+    revealAll(container);
+    for (const text of [
+      long,
+      "0",
+      "false",
+      "null",
+      '""',
+      "[]",
+      "{}",
+      "deep value",
+    ])
+      expect(screen.getByText(text)).toBeTruthy();
+  });
+  it("preserves envelope extensions alongside the data", () => {
+    render(
+      view({
+        platform: "client",
+        provider: "Custom",
+        method: "read",
+        revision: 7,
+        data: { ok: true },
+      }),
+    );
+    expect(screen.getByText("revision=", { exact: false })).toBeTruthy();
+    expect(screen.getByText("true")).toBeTruthy();
+  });
+  it("shows compact parameters without a card while running", () => {
+    const { container } = render(
+      <RuntimeInspectEvidence
+        args={{ provider: "Custom", method: "read" }}
+        text=""
+        block={{} as never}
+      />,
+    );
+    expect(screen.getByText("Custom", { exact: false })).toBeTruthy();
+    expect(container.querySelector("section,table,details")).toBeNull();
+  });
   it.each(['{"broken":', "plain text output"])(
-    "preserves non-JSON output %s",
+    "keeps non-JSON output %s",
     (text) => {
-      render(view(text));
+      render(
+        <RuntimeInspectEvidence args={{}} text={text} block={{} as never} />,
+      );
       expect(screen.getByText(text)).toBeTruthy();
     },
   );

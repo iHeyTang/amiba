@@ -3,134 +3,145 @@ import { useT } from "@amiba/i18n";
 import {
   CompactArguments,
   recordOf,
-  stringValue,
   type SemanticEvidenceContext,
 } from "@amiba/ui/plugin";
 
+const PAGE_SIZE = 20;
 const summaryClass =
   "cursor-pointer rounded-sm py-1 text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring";
+// These are presentation defaults only: every field remains expandable and in the raw JSON.
+const initiallyCollapsed = new Set([
+  "access",
+  "referencedTypes",
+  "inputSchema",
+  "outputSchema",
+  "code",
+  "parameters",
+  "ownerProps",
+  "standardProps",
+]);
 
-/** Presentation labels are translated; service content is always returned verbatim. */
-function ServiceSummary({ service }: { service: Record<string, unknown> }) {
-  const { t } = useT();
-  const name = stringValue(service, "key", "name", "id");
-  const description = stringValue(service, "description");
-  const methods = Array.isArray(service.methods) ? service.methods : [];
-  const operations = methods.flatMap((item) => {
-    if (typeof item === "string") return [{ name: item, description: "" }];
-    const method = recordOf(item);
-    if (!method) return [];
-    const name = stringValue(method, "name", "key", "id");
-    const description = stringValue(method, "description");
-    return name || description ? [{ name, description }] : [];
-  });
+function Scalar({ value }: { value: unknown }) {
+  const text = value === "" ? '""' : String(value);
+  const color =
+    typeof value === "string" &&
+    /^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value);
   return (
-    <div className="space-y-4">
-      {name && (
-        <div>
-          <p className="mb-1 text-[10px] text-muted-foreground">
-            {t("shell.inspect.capabilityName")}
-          </p>
-          <h3 className="break-all font-mono text-xs font-medium text-foreground">
-            {name}
-          </h3>
-        </div>
+    <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+      {color && (
+        <span
+          aria-hidden
+          className="mr-2 inline-block h-3 w-3 rounded-sm border border-border align-middle"
+          style={{ backgroundColor: value }}
+        />
       )}
-      {description && (
-        <div>
-          <h4 className="mb-1 text-[10px] text-muted-foreground">
-            {t("shell.inspect.purpose")}
-          </h4>
-          <p className="whitespace-pre-wrap break-words">{description}</p>
-        </div>
-      )}
-      {operations.length > 0 && (
-        <div>
-          <h4 className="mb-1 text-[10px] text-muted-foreground">
-            {t("shell.inspect.operations")}
-          </h4>
-          <ul className="divide-y divide-border/40">
-            {operations.map((operation, index) => (
-              <li
-                key={index}
-                className="grid gap-1 py-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-3"
-              >
-                <span className="break-all font-mono text-foreground">
-                  {operation.name}
-                </span>
-                <span className="whitespace-pre-wrap break-words text-muted-foreground">
-                  {operation.description}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {!name && !description && !operations.length && (
-        <p>{t("shell.inspect.unrecognized")}</p>
-      )}
-    </div>
+      {text}
+    </span>
   );
 }
 
-function ThemeSummary({ items }: { items: unknown[] }) {
-  const { t } = useT();
-  const [visible, setVisible] = useState(20);
-  const rows = items.flatMap((item) => {
-    const record = recordOf(item);
-    if (!record) return [];
-    const name = stringValue(record, "name", "key");
-    const value = record.value;
-    if (!name || !["string", "number", "boolean"].includes(typeof value))
-      return [];
-    return [{ name, value: String(value) }];
-  });
+function Group({
+  name,
+  value,
+  depth,
+}: {
+  name: string;
+  value: unknown;
+  depth: number;
+}) {
+  const [open, setOpen] = useState(depth < 2 && !initiallyCollapsed.has(name));
+  const count = Array.isArray(value)
+    ? value.length
+    : Object.keys(recordOf(value) ?? {}).length;
   return (
-    <div>
-      <h3 className="mb-2 text-xs font-medium text-foreground">
-        {t("shell.inspect.themeValues")}
-      </h3>
-      <div className="grid grid-cols-2 gap-3 border-b border-border/40 pb-2 text-[10px] text-muted-foreground">
-        <span>{t("shell.inspect.variable")}</span>
-        <span>{t("shell.inspect.value")}</span>
-      </div>
-      <ul className="divide-y divide-border/40">
-        {rows.slice(0, visible).map((row, index) => (
-          <li
-            key={`${row.name}-${index}`}
-            className="grid grid-cols-2 gap-3 py-2"
-          >
-            <span className="break-all">{row.name}</span>
-            <span className="min-w-0 break-all font-mono">
-              {/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(
-                row.value,
-              ) && (
-                <span
-                  aria-hidden
-                  className="mr-2 inline-block h-3 w-3 rounded-sm border border-border align-middle"
-                  style={{ backgroundColor: row.value }}
-                />
-              )}
-              {row.value}
-            </span>
-          </li>
-        ))}
-      </ul>
-      {visible < rows.length && (
+    <details
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      className="border-t border-border/35 pt-2"
+    >
+      <summary className={summaryClass}>
+        <span className="break-all font-mono text-foreground/80">{name}</span>
+        <span className="ml-2 text-[10px] text-muted-foreground">
+          ({count})
+        </span>
+      </summary>
+      {open && (
+        <div className="mt-2 min-w-0 border-l border-border/40 pl-3">
+          <InspectionValue value={value} depth={depth + 1} />
+        </div>
+      )}
+    </details>
+  );
+}
+
+/** Structural rendering, independent of provider/platform/method. No content translation or key loss. */
+export function InspectionValue({
+  value,
+  depth = 0,
+}: {
+  value: unknown;
+  depth?: number;
+}) {
+  const { t } = useT();
+  const [visible, setVisible] = useState(PAGE_SIZE);
+  if (value === null || typeof value !== "object")
+    return <Scalar value={value} />;
+  const array = Array.isArray(value);
+  const entries: Array<[string, unknown]> = array
+    ? value.map((item, index) => [String(index + 1), item])
+    : Object.entries(value);
+  if (!entries.length)
+    return (
+      <span className="font-mono text-muted-foreground">
+        {array ? "[]" : "{}"}
+      </span>
+    );
+  return (
+    <div className="min-w-0">
+      {array ? (
+        <ol className="divide-y divide-border/40">
+          {entries.slice(0, visible).map(([index, item]) => (
+            <li key={index} className="flex min-w-0 gap-3 py-3 first:pt-0">
+              <span className="w-4 shrink-0 pt-0.5 text-[10px] tabular-nums text-muted-foreground">
+                {index}
+              </span>
+              <div className="min-w-0 flex-1">
+                <InspectionValue value={item} depth={depth + 1} />
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <div className="space-y-2.5">
+          {entries.slice(0, visible).map(([name, item]) => {
+            if (item !== null && typeof item === "object")
+              return (
+                <Group key={name} name={name} value={item} depth={depth} />
+              );
+            return (
+              <dl
+                key={name}
+                className="grid min-w-0 gap-1 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-4"
+              >
+                <dt className="break-all font-mono text-[10.5px] text-muted-foreground">
+                  {name}
+                </dt>
+                <dd className="min-w-0 text-foreground/85">
+                  <Scalar value={item} />
+                </dd>
+              </dl>
+            );
+          })}
+        </div>
+      )}
+      {visible < entries.length && (
         <button
           type="button"
-          className={summaryClass}
-          onClick={() => setVisible((n) => n + 20)}
+          className={`${summaryClass} mt-2 text-[11px]`}
+          onClick={() => setVisible((n) => n + PAGE_SIZE)}
         >
-          {t("shell.inspect.more")} ({rows.length - visible})
+          {t("shell.inspect.more")} ({entries.length - visible})
         </button>
-      )}
-      {!rows.length && (
-        <p className="pt-2 text-muted-foreground">
-          {t(
-            items.length ? "shell.inspect.unrecognized" : "shell.inspect.empty",
-          )}
-        </p>
       )}
     </div>
   );
@@ -149,6 +160,7 @@ export function RuntimeInspectEvidence({
   } catch {
     decoded = text;
   }
+  if (!text.trim()) return <CompactArguments value={args} />;
   const envelope = recordOf(decoded);
   const wrapped =
     envelope &&
@@ -156,26 +168,23 @@ export function RuntimeInspectEvidence({
     typeof envelope.provider === "string" &&
     typeof envelope.method === "string" &&
     "data" in envelope;
-  const data = wrapped ? envelope.data : decoded;
-  const record = recordOf(data);
-  const service = record?.mode === "service" && recordOf(record.service);
-  const themeQuery = args.provider === "Theme" && args.method === "listTokens";
-  if (!text.trim()) return <CompactArguments value={args} />;
+  const metadata = wrapped
+    ? Object.fromEntries(
+        Object.entries(envelope).filter(([key]) => key !== "data"),
+      )
+    : null;
   return (
     <section
       data-runtime-result
       className="min-w-0 overflow-hidden rounded-md border border-border/45 bg-muted/10 text-[11px] leading-relaxed text-foreground/80"
     >
+      {metadata && (
+        <div className="border-b border-border/40 px-3 py-2">
+          <CompactArguments value={metadata} />
+        </div>
+      )}
       <div className="max-h-96 overflow-auto p-3">
-        {service ? (
-          <ServiceSummary service={service} />
-        ) : themeQuery && Array.isArray(data) ? (
-          <ThemeSummary items={data} />
-        ) : (
-          <p className="whitespace-pre-wrap break-words">
-            {valid ? t("shell.inspect.unrecognized") : text}
-          </p>
-        )}
+        <InspectionValue value={wrapped ? envelope.data : decoded} />
       </div>
       {valid && (
         <details className="border-t border-border/40 px-3 py-2">
