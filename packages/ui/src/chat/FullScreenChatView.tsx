@@ -927,6 +927,7 @@ function FullScreenChatViewInner({
   // separate bottom row so it can span the active workspace like an IDE pane.
   return (
     <div
+      data-background-surface="layout"
       className="flex h-screen min-h-0 w-full bg-background text-foreground"
       style={
         viewportTopInsetPx
@@ -944,6 +945,7 @@ function FullScreenChatViewInner({
       >
         <div
           data-testid="main-sidebar-content"
+          data-background-surface="navigation"
           className="flex h-full min-h-0 shrink-0 flex-col bg-muted/30"
           style={{ width: sidebarWidth }}
         >

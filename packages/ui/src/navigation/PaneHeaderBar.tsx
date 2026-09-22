@@ -28,6 +28,7 @@ export function PaneHeaderBar({
 }: PaneHeaderBarProps) {
   return (
     <header
+      data-background-surface="header"
       className={cn(
         "flex shrink-0 items-center bg-background pr-3",
         bordered && "border-b border-border/45",

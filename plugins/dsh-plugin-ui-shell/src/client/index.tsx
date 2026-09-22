@@ -1,3 +1,7 @@
+import { BACKGROUND_REMOTE } from "../background/remote.js";
+import { createBackgroundController, type BackgroundController } from "./background/controller.js";
+import { BackgroundFrame } from "./background/BackgroundFrame.js";
+import { BackgroundSettings } from "./background/BackgroundSettings.js";
 import { TrajectoryHeaderAction } from "./trajectory-header-action.js";
 import {
   MessageImagesGallery,
@@ -292,6 +296,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     messageSources: ContributionsSource<MessageSourceRow>;
     markdownSource: ContributionsSource<MarkdownExtension>;
     surfaces: SurfaceSelections;
+    background: BackgroundController;
     mainPanels: MainPanelNavigation;
     mainPanelList: ContributionsSource<MainPanelRow>;
     workbenchSource: ContributionsSource<WorkbenchViewExtension>;
@@ -347,6 +352,7 @@ function AmibaRoot({
   conversationSource,
   fileMentions,
   surfaces,
+  background,
   mainPanels,
   mainPanelList,
   reportMarkdown,
@@ -367,7 +373,7 @@ function AmibaRoot({
   }, []);
 
   return (
-    <ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench} shells={workbenchShells}><MarkdownProvider extensions={markdown} report={reportMarkdown}><SummaryContributionsProvider contributions={summary}><AmibaProductShell
+    <BackgroundFrame controller={background}><ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench} shells={workbenchShells}><MarkdownProvider extensions={markdown} report={reportMarkdown}><SummaryContributionsProvider contributions={summary}><AmibaProductShell
       mainPanelList={mainPanelList}
       mainPanels={mainPanels}
       dshClient={dshClient}
@@ -396,7 +402,7 @@ function AmibaRoot({
       messageSources={messageSources}
       useOfficialSessions={useSessions}
       useOfficialWorkspaces={useWorkspaces}
-    /></SummaryContributionsProvider></MarkdownProvider></WorkbenchExtensionsProvider></ConversationSubmitProvider>
+    /></SummaryContributionsProvider></MarkdownProvider></WorkbenchExtensionsProvider></ConversationSubmitProvider></BackgroundFrame>
   );
 }
 
@@ -478,9 +484,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // Typert owns descriptors by package, so all shell namespaces mount together.
   const disposeShellRemote = await ctx.remote.$mount({
     package: MARKDOWN_REMOTE.package,
-    descriptors: [...MARKDOWN_REMOTE.descriptors, ...CONVERSATION_ENTRY_REMOTE.descriptors],
+    descriptors: [...MARKDOWN_REMOTE.descriptors, ...CONVERSATION_ENTRY_REMOTE.descriptors, ...BACKGROUND_REMOTE.descriptors],
   });
   ctx.effect(() => disposeShellRemote);
+  const background = createBackgroundController(ctx);
+  ctx.effect(() => () => background.dispose());
   const reportMarkdown = await createMarkdownReporter(ctx);
   const prepareConversation = await createConversationPreparer(ctx);
   const baseUrl =
@@ -1046,6 +1054,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
             };
           })(),
           surfaces,
+          background,
           reportMarkdown,
           prepareConversation,
           settingsSections: sectionsSource,
@@ -1068,6 +1077,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // elects Amiba's component per cell while the official SERVICES stay
     // live. Registered after the root because the root's children table is
     // what declares the seat.
+    const disposeBackgroundSettings = ctx.slots.register({ name: "settings.general.item", id: "background", order: 40, inject: () => ({ background }) }, BackgroundSettings);
     const disposeSurfaceSettings = ctx.slots.register({ name: "settings.general.item", id: "surface-providers", order: 30, inject: () => ({ surfaces }) }, SurfaceSettings);
     const disposeSlashMenu = ctx.slots.register(
       {
@@ -1186,6 +1196,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       disposeMessageImagesDefault();
       disposeCommandPopup();
       disposeSurfaceSettings();
+      disposeBackgroundSettings();
       disposeSlashMenu();
       void localeFiber.dispose();
       void messagesFiber.dispose();

@@ -2403,7 +2403,7 @@ export default function ChatSurface({
   );
 
   return (
-    <InteractionRegion activity={surfaceActivity.activity}
+    <InteractionRegion activity={surfaceActivity.activity} data-background-surface="reading"
       className={cn(
         "relative flex flex-col bg-background text-foreground",
         // The surface is mounted inside a flex column and consumes the remaining
