@@ -26,7 +26,8 @@ export async function preparePluginStartup(): Promise<() => void> {
     if (!current) return;
     controls.hidden = current.phase === "ready" && !current.reason;
     next.hidden = current.phase !== "prompt";
-    safe.hidden = current.phase !== "prompt" && current.phase !== "loading";
+    safe.hidden = current.phase !== "prompt";
+    actions.hidden = current.phase !== "prompt";
     if (current.phase === "prompt") {
       const seconds = Math.max(1, Math.ceil(((current.deadline ?? Date.now() + 3000) - Date.now()) / 1000));
       status.textContent = chinese ? `即将加载用户插件 · ${seconds} 秒` : `Loading your plugins in ${seconds}s`;

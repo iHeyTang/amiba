@@ -242,7 +242,7 @@ void (async () => {
       error instanceof Error ? error.message : String(error);
     root.append(failure);
     const recover = document.createElement("button");
-    recover.textContent = navigator.language.startsWith("zh") ? "安全启动" : "Safe start";
+    recover.textContent = navigator.language.startsWith("zh") ? "以安全模式重试" : "Retry in safe mode";
     recover.className = "m-6 text-sm underline";
     recover.onclick = () => { void window.amiba.pluginStartup.choose("safe").then(() => window.location.reload()); };
     root.append(recover);
