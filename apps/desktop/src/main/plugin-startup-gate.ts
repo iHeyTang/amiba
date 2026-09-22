@@ -18,12 +18,13 @@ export class PluginStartupGate {
   private timer?: ReturnType<typeof setTimeout>;
   private writes = Promise.resolve();
   private completed = false;
-  constructor(
-    private readonly marker: string,
-    private readonly inspect: () => Promise<number>,
-    private readonly changed: (state: PluginStartupState) => void = () => {},
-    private readonly delay = 3000,
-  ) {}
+  private readonly marker: string;
+  private readonly inspect: () => Promise<number>;
+  private readonly changed: (state: PluginStartupState) => void;
+  private readonly delay: number;
+  constructor(marker: string, inspect: () => Promise<number>, changed: (state: PluginStartupState) => void = () => {}, delay = 3000) {
+    this.marker = marker; this.inspect = inspect; this.changed = changed; this.delay = delay;
+  }
   private publish(state: PluginStartupState) { this.state = state; this.changed({ ...state }); }
   private persist(pending: boolean) {
     this.writes = this.writes.catch(() => {}).then(async () => {
