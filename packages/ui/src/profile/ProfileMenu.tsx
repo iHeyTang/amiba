@@ -322,7 +322,7 @@ export function ProfileMenu({
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
               {update.status === "downloading" ? (
                 <><LoaderCircle className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />{t("options.personal.update.backgroundDownloading")}</>
-              ) : updater && ["idle", "checking", "available", "offered"].includes(update.status) ? t("options.personal.update.automatic") : null}
+              ) : null}
             </span>
             {update.status === "downloading" && updater?.cancel ? (
               <Button variant="outline" size="sm" disabled={cancelling} onClick={() => { void cancelDownload(); }}>

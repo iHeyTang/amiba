@@ -225,7 +225,6 @@ export const en = {
   "options.personal.update.cancelled": "Download cancelled",
   "options.personal.update.retryDownload": "Download again",
   "options.personal.update.backgroundDownloading": "Downloading in background",
-  "options.personal.update.automatic": "Automatic update checks are on",
   "options.personal.update.sidebarDownloading": "Downloading update · {percent}",
   "options.personal.update.sidebarReady": "Update ready to install",
   "options.personal.update.sidebarAvailable": "Update available",

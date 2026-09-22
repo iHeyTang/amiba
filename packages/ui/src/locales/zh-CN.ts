@@ -199,7 +199,6 @@ export const zhCN: UiMessages = {
   "options.personal.update.cancelled": "下载已取消",
   "options.personal.update.retryDownload": "重新下载",
   "options.personal.update.backgroundDownloading": "正在后台下载",
-  "options.personal.update.automatic": "已开启自动检测更新",
   "options.personal.update.sidebarDownloading": "正在下载更新 · {percent}",
   "options.personal.update.sidebarReady": "更新已就绪",
   "options.personal.update.sidebarAvailable": "有可用更新",
