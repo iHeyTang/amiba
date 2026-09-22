@@ -2,7 +2,7 @@ import { fireEvent, renderHook } from "@testing-library/react";
 import { expect, it } from "vitest";
 import { useConversationAutoScroll } from "../use-conversation-auto-scroll";
 
-function setup(scope = {}) {
+function setup(scope = {}, turnOffset?: number) {
   const viewport = document.createElement("div");
   let height = 1000;
   let top = 0;
@@ -16,6 +16,12 @@ function setup(scope = {}) {
       },
     },
   });
+  if (turnOffset !== undefined) {
+    const turn = document.createElement("div");
+    turn.dataset.conversationUserTurn = "saved-turn";
+    turn.getBoundingClientRect = () => ({ top: turnOffset - top, bottom: turnOffset - top + 600 }) as DOMRect;
+    viewport.append(turn);
+  }
   const ref = { current: viewport };
   const hook = renderHook(
     ({ sessionId, content, clearance }) =>
@@ -103,4 +109,14 @@ it("waits for content height before completing restoration", () => {
   reopened.grow(); reopened.grow();
   reopened.rerender({ sessionId: "first", content: 1, clearance: 60 });
   expect(reopened.viewport.scrollTop).toBe(790);
+});
+
+it("restores the same message offset when content above it changes height", () => {
+  const scope = {};
+  const first = setup(scope, 100);
+  first.viewport.scrollTop = 180;
+  fireEvent.scroll(first.viewport);
+  first.unmount();
+  const reopened = setup(scope, 220);
+  expect(reopened.viewport.scrollTop).toBe(300);
 });

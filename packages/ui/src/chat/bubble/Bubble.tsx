@@ -2172,7 +2172,7 @@ export function MessageTurns({
   // memoized so its identity only changes when the window contents actually
   // change — `onTurnsWindowChange` (read by the ConversationTurnRail) must not
   // fire on every render of a streaming conversation.
-  const [turnWindow, expandTurnWindow] = useConversationTurnWindow(sessionId, viewStateScope);
+  const [turnWindow, expandTurnWindow] = useConversationTurnWindow(sessionId, viewStateScope, turns.length);
   const windowSentinelRef = useRef<HTMLDivElement>(null);
   const { visible: visibleTurns, hidden: hiddenTurns } = useMemo(
     () => windowTurns(turns, turnWindow),
