@@ -4,4 +4,3 @@ export interface PluginStartupState {
   deadline?: number;
   reason?: "interrupted" | "inspection-failed" | "failed";
 }
-
