@@ -27,8 +27,7 @@ export function BackgroundSettings({
 }: {
   background: BackgroundController;
 }) {
-  const fileInput = useRef<HTMLInputElement>(null),
-    posterInput = useRef<HTMLInputElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const state = useSyncExternalStore(
     background.subscribe,
     background.getSnapshot,
@@ -53,7 +52,6 @@ export function BackgroundSettings({
   };
   const upload = async (
     event: ChangeEvent<HTMLInputElement>,
-    poster: boolean,
   ) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -63,13 +61,7 @@ export function BackgroundSettings({
     setProgress(0);
     try {
       const asset = await background.upload(file, setProgress);
-      if (poster && isVideo(asset.id))
-        throw new Error(zh ? "封面需要图片" : "Poster must be an image");
-      change(
-        poster
-          ? { posterId: asset.id }
-          : { assetId: asset.id, posterId: null, enabled: true },
-      );
+      change({ assetId: asset.id, posterId: null, enabled: true });
     } catch (error) {
       setError(String(error));
     } finally {
@@ -129,7 +121,7 @@ export function BackgroundSettings({
           hidden
           type="file"
           accept="image/png,image/jpeg,image/webp,video/mp4,video/webm"
-          onChange={(event) => void upload(event, false)}
+          onChange={(event) => void upload(event)}
         />
       </div>
       <p className="text-xs text-muted-foreground">
@@ -145,38 +137,6 @@ export function BackgroundSettings({
         <>
           {isVideo(draft.assetId) && (
             <>
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span>
-                  {zh ? "暂停时的封面（可选）" : "Paused poster (optional)"}
-                </span>
-                <div className="flex gap-2">
-                  {draft.posterId && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => change({ posterId: null })}
-                    >
-                      {zh ? "移除" : "Remove"}
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => posterInput.current?.click()}
-                  >
-                    {zh ? "选择封面" : "Choose poster"}
-                  </Button>
-                </div>
-                <input
-                  ref={posterInput}
-                  hidden
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  onChange={(event) => void upload(event, true)}
-                />
-              </div>
               <Choice
                 label={zh ? "动态播放" : "Motion"}
                 value={draft.motion}
@@ -271,11 +231,6 @@ export function BackgroundSettings({
           {error || state.error}
         </p>
       )}
-      <p className="text-xs text-muted-foreground">
-        {zh
-          ? "也可以对 Agent 说：“把这张图生成一段缓慢运动的视频，并应用为我的背景。”"
-          : "You can ask your Agent: “Animate this image into a slow video and apply it as my background.”"}
-      </p>
     </section>
   );
 }

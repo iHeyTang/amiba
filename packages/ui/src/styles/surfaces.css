@@ -430,7 +430,7 @@
 [data-amiba-product-shell] [data-user-message-chrome] [data-assistant-glass-material] {
   transform: scaleX(-1);
 }
-[data-amiba-product-shell] [data-action-align="left"] { padding-inline: 16px; }
+[data-amiba-product-shell] [data-action-align="left"] { padding-left: 12px; padding-right: 16px; }
 [data-amiba-product-shell] [data-action-align="right"] { padding-left: 16px; }
 
 /* A flat canvas needs tonal separation; translucent white alone disappears.

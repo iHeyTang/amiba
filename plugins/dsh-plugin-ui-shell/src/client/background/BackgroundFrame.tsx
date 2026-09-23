@@ -23,9 +23,6 @@ export function BackgroundFrame({
     snapshot: { config },
   } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const [media, setMedia] = useState<{ id: string; url: string } | null>(null);
-  const [poster, setPoster] = useState<{ id: string; url: string } | null>(
-    null,
-  );
   const [readyId, setReadyId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [reduced, setReduced] = useState(
@@ -72,25 +69,6 @@ export function BackgroundFrame({
       if (url) URL.revokeObjectURL(url);
     };
   }, [controller, enabled, config.assetId]);
-  useEffect(() => {
-    setPoster(null);
-    if (!enabled || !config.posterId) return;
-    const abort = new AbortController();
-    let url: string | undefined;
-    const id = config.posterId;
-    void controller
-      .loadAsset(id, abort.signal)
-      .then((blob) => {
-        if (abort.signal.aborted) return;
-        url = URL.createObjectURL(blob);
-        setPoster({ id, url });
-      })
-      .catch(() => {});
-    return () => {
-      abort.abort();
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [controller, enabled, config.posterId]);
   const active =
     enabled &&
     !!media &&
@@ -166,9 +144,6 @@ export function BackgroundFrame({
               onLoad={() => setReadyId(media.id)}
               onError={failed}
             />
-          )}
-          {paused && isVideo(media.id) && poster?.id === config.posterId && (
-            <img src={poster.url} alt="" style={{ objectFit: "cover" }} />
           )}
           <div className="amiba-background-dim" />
         </div>
