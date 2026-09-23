@@ -741,3 +741,9 @@
   [data-composer-card] [data-composer-toolbar-start] > button,
   [data-composer-card] [data-composer-model-trigger], [data-composer-card] [data-composer-effort-trigger] { padding-inline: 6px; }
 }
+
+/* Clip scrolled bubbles at the message column's padded edges, so their
+ * rounded corners do not become square when they pass the viewport top. */
+[data-conversation-scroll-region] > [data-radix-scroll-area-viewport] {
+  clip-path: inset(0 12px round 12px);
+}
