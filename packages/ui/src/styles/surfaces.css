@@ -42,7 +42,7 @@
   -webkit-backdrop-filter: none;
 }
 [data-amiba-product-shell] [data-section-header="rail"] {
-  border-radius: 0;
+  border-radius: 8px;
   background: hsl(var(--background) / 0.72);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -77,5 +77,31 @@
     --amiba-input-opacity: 1;
     --amiba-glass-blur: 0px;
     --amiba-reading-blur: 0px;
+  }
+}
+
+/* Sidebar compact groups: equal-width inset surfaces, rounded outside only.
+ * A transparent row does not join its neighbours. Hover/focus follows the
+ * same rule as the persistent active state, including a section's first row. */
+[data-session-row] { border-radius: 8px; }
+[data-session-row]:is([data-active="true"], :hover, :focus-within):has(+ [data-session-row]:is([data-active="true"], :hover, :focus-within)) {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+[data-session-row]:is([data-active="true"], :hover, :focus-within) + [data-session-row]:is([data-active="true"], :hover, :focus-within) {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+/* Direct group rows and the two transparent wrappers in SessionsListView. */
+[data-sidebar-section="rail"]:has(> [data-section-content] > [data-session-rows] > [data-session-row]:first-child:is([data-active="true"], :hover, :focus-within)),
+[data-sidebar-section="rail"]:has(> [data-section-content] > div:first-child > div:first-child > [data-session-rows] > [data-session-row]:first-child:is([data-active="true"], :hover, :focus-within)) {
+  > [data-section-header="rail"] {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  > [data-section-content] > [data-session-rows] > [data-session-row]:first-child,
+  > [data-section-content] > div:first-child > div:first-child > [data-session-rows] > [data-session-row]:first-child {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
   }
 }

@@ -248,7 +248,7 @@ export function Sidebar({
       </div>
 
       {/* History groups share one scroll area and follow their content height. */}
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea className="min-h-0 flex-1 px-2">
         <TopSection
           headerTestId="sessions-header"
           label={selectingSessions

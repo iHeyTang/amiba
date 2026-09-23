@@ -386,7 +386,7 @@ export function SessionRowsList({
 
   return (
     <>
-      <nav className="flex flex-col gap-0.5">
+      <nav data-session-rows className="flex flex-col">
         {visible.map((s) => (
           <SessionRow
             key={s.id}
@@ -574,8 +574,10 @@ function SessionRow({
   if (editing) {
     return (
       <div
+        data-session-row
+        data-active={active ? "true" : undefined}
         className={cn(
-          "flex h-8 items-center pr-2",
+          "flex h-8 items-center rounded-md pr-2",
           nested ? "pl-10" : "pl-4",
           active && "bg-secondary",
         )}
@@ -594,11 +596,13 @@ function SessionRow({
 
   return (
     <div
+      data-session-row
+      data-active={active ? "true" : undefined}
       className={cn(
-        "group relative flex h-8 items-center",
+        "group relative flex h-8 items-center rounded-md",
         active
           ? "bg-secondary text-secondary-foreground"
-          : "text-foreground/80 hover:bg-accent/70 hover:text-foreground",
+          : "text-foreground/80 hover:bg-accent/70 focus-within:bg-accent/70 hover:text-foreground",
       )}
     >
       {nested && (selecting || statusLabel) ? (

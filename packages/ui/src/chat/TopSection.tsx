@@ -112,9 +112,9 @@ export function TopSection({
     </div>
   );
   return (
-    <section className={cn(!rail && "border-b border-border/60")}>
+    <section data-sidebar-section={rail ? "rail" : undefined} className={cn(!rail && "border-b border-border/60")}>
       {header}
-      {!collapsed ? <div>{children}</div> : null}
+      {!collapsed ? <div data-section-content>{children}</div> : null}
     </section>
   );
 }
