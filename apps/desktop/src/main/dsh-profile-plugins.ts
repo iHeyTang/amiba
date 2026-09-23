@@ -351,6 +351,12 @@ export class DshProfilePluginManager {
     let internal: Record<string, string> = {};
     try { internal = JSON.parse(await readFile(runtimeManifest, "utf8")).dependencies ?? {}; }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    // Amiba's shipped workspace plugins are copied into node_modules during
+    // runtime assembly, without becoming app/package.json dependencies.
+    for (const name of Object.keys(manifest.dependencies ?? {})) {
+      const bundledManifest = path.resolve(this.paths.runtimeAppBinDir, "..", name, "package.json");
+      if (existsSync(bundledManifest)) internal[name] = "bundled";
+    }
     const development = new Set<string>(manifest.amibaDevelopmentPackages ?? []);
     const temporary = profileManifest !== this.paths.profileManifest;
     const packages = await listDshProfilePlugins(activePaths);

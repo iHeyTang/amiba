@@ -236,7 +236,10 @@ test("inventory follows the active profile and uses runtime inventory for packag
     await mkdir(path.dirname(runtimeManifest), { recursive: true });
     const browser = "@amiba/dsh-plugin-browser-provider-electron";
     const external = "@amiba/dsh-plugin-user-example";
-    await writeFile(runtimeManifest, JSON.stringify({ dependencies: { [browser]: "1" } }));
+    await writeFile(runtimeManifest, JSON.stringify({ dependencies: {} }));
+    const bundledBrowser = path.resolve(paths.runtimeAppBinDir, "..", browser, "package.json");
+    await mkdir(path.dirname(bundledBrowser), { recursive: true });
+    await writeFile(bundledBrowser, JSON.stringify({ name: browser }));
     let activeProfileManifest = paths.profileManifest;
     const manager = new DshProfilePluginManager({ paths, runtime: {
       get activeProfileManifest() { return activeProfileManifest; },
