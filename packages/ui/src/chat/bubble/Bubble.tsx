@@ -2342,6 +2342,7 @@ function WorkspaceChangesCard({
   // the workbench when the shell can open files.
   return (
     <section
+      data-background-surface="assistant-message"
       aria-label={t("workspacePane.filesChanged", {
         count: review.files.length,
       })}

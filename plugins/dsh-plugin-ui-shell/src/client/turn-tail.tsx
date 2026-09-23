@@ -47,7 +47,12 @@ export function TurnTail({
     });
   }, [openFile]);
   const owner = turnTailOwner(snapshot, runtimeTurn, requestOpenFile);
-  return owner ? <>{render(owner)}{fileError ? <p role="alert" className="text-xs text-destructive">{fileError}</p> : null}</> : null;
+  return owner ? (
+    <div data-background-surface="assistant-message" className="min-w-0 space-y-2 px-4 py-3 text-sm empty:hidden">
+      {render(owner)}
+      {fileError ? <p role="alert" className="text-xs text-destructive">{fileError}</p> : null}
+    </div>
+  ) : null;
 }
 
 function useConversationSnapshot(source?: ObservableSnapshot<ConversationSnapshot | undefined>) {
