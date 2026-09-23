@@ -192,12 +192,8 @@ export interface FullScreenChatViewProps {
     sidebarBrandName?: (fallback: ReactNode) => ReactNode;
     sidebarWorkspaces?: (owner: { wide: boolean; expandSidebar: () => void }, fallback: ReactNode) => ReactNode;
     sidebarSettings?: (owner: { wide: boolean }, fallback: ReactNode) => ReactNode;
-    /** Additive DSH entries before built-in navigation rows. */
-    navigationBefore?: ReactNode;
     /** DSH workspace plugin entries, rendered inside the existing sidebar. */
     workspaceNavigation?: (activeView: string, visibleSessionId: string) => ReactNode;
-    /** Additive DSH entries after built-in navigation rows. */
-    navigationAfter?: ReactNode;
     /** Active DSH workspace plugin body, keyed by the selected destination. */
     workspaceView?: (
       viewId: string,
@@ -228,8 +224,6 @@ export interface FullScreenChatViewProps {
     headerAfter?: ReactNode;
     /** Optional session corner control after the existing right-edge controls. */
     headerCorner?: ReactNode;
-    /** Frame-wide overlay for chat modules; entries opt into pointer events. */
-    contentOverlay?: ReactNode;
     /**
      * renderSlot-backed composer model-picker renderer, forwarded through
      * ChatSurface to the internal Composer.
@@ -978,9 +972,7 @@ function FullScreenChatViewInner({
             className={topBarClassName}
           />
           <Sidebar
-            navigationBefore={slots?.navigationBefore}
             workspaceNavigation={slots?.workspaceNavigation?.(slots?.mainPanel ? "" : sidebarView, visibleSessionId)}
-            navigationAfter={slots?.navigationAfter}
             onNewChat={() => void onNewChatAndShow()}
             onNewWorkspaceChat={(path) => void onNewChatAndShow(path)}
             sessions={chatSessions}
@@ -1175,14 +1167,6 @@ function FullScreenChatViewInner({
             )}
           </div>
         )}
-        {slots?.contentOverlay ? (
-          <div
-            data-amiba-slot="amiba.chat.content.overlay"
-            className="pointer-events-none absolute inset-0 z-[var(--z-app-overlay)]"
-          >
-            {slots.contentOverlay}
-          </div>
-        ) : null}
       </section>
       <CommandPalette
         open={palette.open}

@@ -509,18 +509,14 @@ export interface EmptyStateVisualOwner {
 export const AMIBA_ROOT_SLOTS = [
   "amiba.session.observer",
   "amiba.emptyState.visual",
-  "amiba.navigation.before",
-  "amiba.navigation.after",
   "amiba.workspace.navigation",
   "amiba.workspace.view",
   // amiba.chat.header.after is RETIRED: the seat's official equivalent is
   // `conversation.session.header.utilities` (list, session scope, empty
   // owner), inherited from @deepseek-ai/dsh-client-ui-conversation above.
-  "amiba.chat.content.overlay",
   // The session-less hero model seat; its session-scoped counterpart is the
   // official `conversation.input.model` (see AmibaComposerModelPickerOwner).
   "amiba.composer.modelPicker",
-  "amiba.settings.content.overlay",
   "amiba.agentPreset.section",
   // The KEYED per-question seat: one entry per question id, so a plugin
   // claims exactly its own question kind and every other question keeps
@@ -694,8 +690,6 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
     "main": { kind: "keyed"; scope: "root" };
     "sidebar.panellist": { kind: "list"; scope: "root"; owner: { size: number; active: boolean } };
     "amiba.emptyState.visual": { kind: "list"; scope: "root"; owner: EmptyStateVisualOwner };
-    "amiba.navigation.before": { kind: "list"; scope: "root" };
-    "amiba.navigation.after": { kind: "list"; scope: "root" };
     "amiba.workspace.navigation": {
       kind: "list";
       scope: "root";
@@ -708,13 +702,11 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
       scope: "root";
       owner: AmibaWorkspaceViewOwner;
     };
-    "amiba.chat.content.overlay": { kind: "list"; scope: "root" };
     "amiba.composer.modelPicker": {
       kind: "list";
       scope: "root";
       owner: AmibaComposerModelPickerOwner;
     };
-    "amiba.settings.content.overlay": { kind: "list"; scope: "root" };
     "amiba.models.extension": { kind: "list"; scope: "root"; owner: AmibaModelsExtensionOwner };
     "amiba.agentPreset.section": {
       kind: "list";

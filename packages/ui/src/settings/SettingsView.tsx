@@ -71,8 +71,6 @@ export interface SettingsViewProps {
      * side-channel is needed.
      */
     section?: (sectionId: string) => React.ReactNode;
-    /** Settings content overlay; entries opt into pointer events. */
-    contentOverlay?: React.ReactNode;
     /**
      * The official `settings.header` seat: the panel title text, rendered in
      * the navigation heading row. The dialog's accessible name points at that
@@ -378,14 +376,6 @@ export function SettingsView({
               generalItems={slots?.generalItem}
             />
           </SettingsPageScaffold>
-        ) : null}
-        {slots?.contentOverlay ? (
-          <div
-            data-amiba-slot="amiba.settings.content.overlay"
-            className="pointer-events-none absolute inset-0 z-[var(--z-app-overlay)]"
-          >
-            {slots.contentOverlay}
-          </div>
         ) : null}
       </main>
     </div>

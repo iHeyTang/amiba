@@ -58,9 +58,7 @@ export interface SidebarProps {
   workspaceRegion?: (owner: { wide: boolean; expandSidebar: () => void }, fallback: ReactNode) => ReactNode;
   settingsRegion?: (owner: { wide: boolean }, fallback: ReactNode) => ReactNode;
   expandSidebar?: () => void;
-  navigationBefore?: ReactNode;
   workspaceNavigation?: ReactNode;
-  navigationAfter?: ReactNode;
   onNewChat: () => void;
   onNewWorkspaceChat?: (path: string) => void;
   sessions: SessionMeta[];
@@ -115,9 +113,7 @@ export function Sidebar({
   workspaceRegion,
   settingsRegion,
   expandSidebar,
-  navigationBefore,
   workspaceNavigation,
-  navigationAfter,
   onNewChat,
   onNewWorkspaceChat,
   sessions,
@@ -243,7 +239,6 @@ export function Sidebar({
     >
       {/* Top (fixed): new-chat + nav rows. Search lives in the pane header. */}
       <div className="flex shrink-0 flex-col gap-0.5 p-2 pb-1">
-        {navigationBefore}
         <SidebarItem
           id="new-chat"
           icon={<Plus className="h-4 w-4" />}
@@ -251,7 +246,6 @@ export function Sidebar({
           onClick={onNewChat}
         />
         {workspaceNavigation}
-        {navigationAfter}
       </div>
 
       {/* History groups share one scroll area and follow their content height. */}

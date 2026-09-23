@@ -999,7 +999,6 @@ function ProductShellInner({
                   content: renderSlot("main", {}, { entryKey: activePanelId }),
                 },
                 onNativeNavigation: leaveMainPanel,
-                navigationBefore: renderSlot("amiba.navigation.before", {}),
                 workspaceNavigation: (activeView, visibleSessionId) => <>
                   {renderSlot("amiba.workspace.navigation", {
                     activeView,
@@ -1013,7 +1012,6 @@ function ProductShellInner({
                   <MainPanelList source={mainPanelList} navigation={mainPanels} conversationActive={activeView === "chats"}
                     renderIcon={(id, owner) => renderSlot("sidebar.panellist", owner, { only: id })} />
                 </>,
-                navigationAfter: renderSlot("amiba.navigation.after", {}),
                 workspaceView: (viewId, owner) =>
                   renderSlot(
                     "amiba.workspace.view",
@@ -1061,7 +1059,6 @@ function ProductShellInner({
                     {renderSlot("conversation.session.header.actions", {})}
                   </TrajectoryNavigationContext.Provider>
                 ),
-                contentOverlay: renderSlot("amiba.chat.content.overlay", {}),
               }}
             />
           </div>
@@ -1128,10 +1125,6 @@ function ProductShellInner({
                 ),
                 action: renderSlot("settings.action", {}),
                 generalItem: renderSlot("settings.general.item", {}),
-                contentOverlay: renderSlot(
-                  "amiba.settings.content.overlay",
-                  {},
-                ),
               }}
               // No OS-chrome reserve inside the dialog. `topBarLeftInset` /
               // `topBarHeightPx` still go to the chat surface above (which does

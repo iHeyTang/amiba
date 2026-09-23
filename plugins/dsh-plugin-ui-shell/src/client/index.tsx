@@ -255,9 +255,7 @@ export interface MessageSourceContribution {
  * `SessionMenuContribution` are each REGISTRANT's own per-entry business
  * face, supplied the ordinary way via that entry's own `options.inject`
  * factory (`register`'s `I extends object` overload, structurally inferred,
- * independent of whatever `SlotMap[K]` declares) — exactly like
- * `amiba.navigation.before`/`.after` below, which also carry no `inject` in
- * `SlotMap` yet support per-entry business faces freely. Adding `inject`
+ * independent of whatever `SlotMap[K]` declares). Adding `inject`
  * here instead makes root's own `{ kind: "list", scope: "root" }` children
  * entry fail to typecheck (`Property 'inject' is missing`) since it would
  * then have to supply ONE shared contribution for every plugin, which is
@@ -815,8 +813,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "sidebar.workspaces.directoryFlow": { kind: "single", scope: "root" },
           "sidebar.footer.action": { kind: "list", scope: "root" },
           "amiba.emptyState.visual": { kind: "list", scope: "root" },
-          "amiba.navigation.before": { kind: "list", scope: "root" },
-          "amiba.navigation.after": { kind: "list", scope: "root" },
           // The two generic session-list extension points (a "group" that
           // pulls claimed sessions into their own section, and row "more"
           // menu items). List/root scope, same shape as
@@ -871,7 +867,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
             kind: "list",
             scope: "session",
           },
-          "amiba.chat.content.overlay": { kind: "list", scope: "root" },
           // The session-less hero model seat (vendor) and its official
           // session-scoped counterpart: the composer dispatches
           // conversation.input.model while it has a session id, the hero
@@ -982,10 +977,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // Appearance page). Empty owner by contract — a row draws its own
           // internals, including its label.
           "settings.general.item": { kind: "list", scope: "root" },
-          "amiba.settings.content.overlay": {
-            kind: "list",
-            scope: "root",
-          },
           // amiba.agentPreset.section is deliberately NOT declared here:
           // dsh-plugin-agent-preset declares it as a child of its own
           // settings-section entry (the amiba.tools.panel pattern).
