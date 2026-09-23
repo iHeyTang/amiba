@@ -8,6 +8,15 @@ export function validateDependencyLock(manifest, recordedManifest, lock) {
     throw new Error("Distribution dependencies changed. Run pnpm runtime:lock and commit the host and plugin distribution manifests and locks.");
   }
   if (lock.lockfileVersion !== 3) throw new Error("Runtime requires an npm v3 lockfile");
+  for (const [name, specifier] of Object.entries(manifest.dependencies ?? {})) {
+    const override = manifest.overrides?.[name];
+    const replacement = typeof override === "string" ? override : override?.["."];
+    const resolved = replacement?.startsWith("$")
+      ? manifest.dependencies[replacement.slice(1)] : replacement;
+    if (replacement !== undefined && resolved !== specifier) {
+      throw new Error(`Distribution override for ${name} conflicts with direct dependency ${specifier}. Align the versions and run pnpm runtime:lock.`);
+    }
+  }
   for (const [location, entry] of Object.entries(lock.packages)) {
     if (!location) continue;
     if (!location.startsWith("node_modules/") || location.split("/").includes("..") || entry.link || entry.extraneous ||
