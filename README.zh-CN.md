@@ -1,6 +1,6 @@
 # Amiba
 
-[DSH 官方插槽兼容维护台账](docs/dsh-slot-compatibility.md) — 官方版本对照、Amiba 支持程度、接入与退役决策的长期维护入口。
+[DSH 官方插槽兼容维护台账](DSH-SLOT-COMPATIBILITY.md) — 官方版本对照、Amiba 支持程度、接入与退役决策的长期维护入口。
 
 **以 DSH 为唯一智能体内核的桌面工作台。** · [English](./README.md)
 

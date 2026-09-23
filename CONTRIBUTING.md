@@ -36,4 +36,6 @@ Desktop Release (`desktop-release.yml`) is manual-only and runs CI before packag
 
 ## DSH slot compatibility maintenance
 
-Changes to the DSH version, slot declarations, dispatch, compatibility bridges, or slot retirement must update the existing [DSH slot compatibility ledger](docs/dsh-slot-compatibility.md) in the same PR. Record the exact upstream version, Amiba implementation status, adoption/retirement decision, source and validation evidence, and known limits. Keep removed names as historical rows. Do not create a separate date- or version-specific document for the current compatibility state, and do not equate entry coverage with behavioral compatibility.
+The repository-root `DSH-SLOT-COMPATIBILITY.md` is the permanent cross-package maintenance ledger; `docs/` contains historical reports and is not the home for current slot status.
+
+Changes to the DSH version, slot declarations, dispatch, compatibility bridges, or slot retirement must update the existing [DSH slot compatibility ledger](DSH-SLOT-COMPATIBILITY.md) in the same PR. Record the exact upstream version, Amiba implementation status, adoption/retirement decision, source and validation evidence, and known limits. Keep removed names as historical rows. Do not create a separate date- or version-specific document for the current compatibility state, and do not equate entry coverage with behavioral compatibility.
