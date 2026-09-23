@@ -20,8 +20,6 @@ official DSH equivalent carry the OFFICIAL slot name and contract;
 `amiba.*` names are reserved for vendor extensions with no official
 counterpart.
 
-- `amiba.navigation.before`
-- `amiba.navigation.after`
 - `amiba.workspace.navigation`
 - `amiba.workspace.view`
 - `conversation.session.header.utilities` — official name from
@@ -44,15 +42,12 @@ counterpart.
   connector message sync; Trajectory no longer adds a separate tab strip.
   Actions follow the conversation column when the workbench opens. When it is
   closed, the gap before its toggle matches the gap between actions.
-- `amiba.chat.content.overlay`
-- `amiba.composer.modelPicker` — the session-less HERO model seat (root
-  scope, list), dispatched through the composer's `modelPicker` render prop
-  while the composer has no session; the owner share carries the
-  surface-held draft selection and picker chrome
 - `conversation.input.model` — official name from
   `@deepseek-ai/dsh-client-ui-conversation`: the composer's named model seat
   (single, SESSION scope, owner `{ locked }`), dispatched through the same
-  render prop once the composer has a session. The occupant reads
+  render prop for both prepared empty home sessions and active conversations.
+  Home prepares a real session before sending and carries its ID in the prompt
+  handoff; blank sessions remain outside the ordinary history index. The occupant reads
   `sessionId` from the framework session kit and its engine data over the
   official `session.models`/`session.selectModel` wire — engine data no
   longer rides owner props
@@ -120,7 +115,6 @@ counterpart.
   `priority: -1`, so the product's ONLY 语言 control uses `@amiba/ui`'s
   standard Select while the official locale service remains its state owner —
   see "The language authority" below
-- `amiba.settings.content.overlay`
 - `shell.overlay` — official name from `@deepseek-ai/dsh-client-ui-layout`:
   the frame-wide click-through floating layer
 - `tool.call.toolview` — official name from

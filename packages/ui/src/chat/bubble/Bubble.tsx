@@ -1,3 +1,4 @@
+import { useConversationTurnWindow } from "../use-conversation-turn-window";
 import type { AssistantTimelineItem, MessageAttachment } from "@amiba/app-runtime/protocol";
 import { toolCallTreeContains } from "./nested-tool-calls";
 import { toolCallBlockFromProgress } from "./tool-call-block";
@@ -45,7 +46,7 @@ import {
   type ReactNode,
 } from "react";
 import { ChatMarkdown as Streamdown } from "@amiba/markdown";
-import { MESSAGE_TURN_WINDOW, windowTurns } from "../turn-window";
+import { windowTurns } from "../turn-window";
 import { useT } from "@amiba/i18n";
 
 import {
@@ -2191,6 +2192,7 @@ export function MessageTurns({
   messageImages,
   messages,
   sessionId,
+  viewStateScope,
   onOpenAgentDestination,
   onReviewWorkspaceChanges,
   onBranchUserMessage,
@@ -2207,6 +2209,7 @@ export function MessageTurns({
   openTurnFile?: (path: string) => void;
   messages: UiMessage[];
   sessionId?: string;
+  viewStateScope?: object;
   onOpenAgentDestination?: BubbleProps["onOpenAgentDestination"];
   onReviewWorkspaceChanges?: (
     resource: WorkspaceReviewResource,
@@ -2303,16 +2306,12 @@ export function MessageTurns({
   // memoized so its identity only changes when the window contents actually
   // change — `onTurnsWindowChange` (read by the ConversationTurnRail) must not
   // fire on every render of a streaming conversation.
-  const [turnWindow, setTurnWindow] = useState(MESSAGE_TURN_WINDOW);
+  const [turnWindow, expandTurnWindow] = useConversationTurnWindow(sessionId, viewStateScope, turns.length);
   const windowSentinelRef = useRef<HTMLDivElement>(null);
   const { visible: visibleTurns, hidden: hiddenTurns } = useMemo(
     () => windowTurns(turns, turnWindow),
     [turns, turnWindow],
   );
-  useEffect(() => {
-    // A different conversation starts from its own tail again.
-    setTurnWindow(MESSAGE_TURN_WINDOW);
-  }, [sessionId]);
   useEffect(() => {
     onTurnsWindowChange?.({ visible: visibleTurns, hidden: hiddenTurns });
   }, [onTurnsWindowChange, visibleTurns, hiddenTurns]);
@@ -2323,14 +2322,14 @@ export function MessageTurns({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting))
-          setTurnWindow((current) => current + MESSAGE_TURN_WINDOW);
+          expandTurnWindow();
       },
       // Preload before the user actually reaches the top of the history.
       { rootMargin: "400px 0px 0px 0px" },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [hiddenTurns]);
+  }, [hiddenTurns, expandTurnWindow]);
 
   return (
     <>

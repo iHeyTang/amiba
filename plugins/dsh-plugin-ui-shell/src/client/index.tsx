@@ -2,11 +2,15 @@ import { BACKGROUND_REMOTE } from "../background/remote.js";
 import { createBackgroundController, type BackgroundController } from "./background/controller.js";
 import { BackgroundFrame } from "./background/BackgroundFrame.js";
 import { BackgroundSettings } from "./background/BackgroundSettings.js";
+import { createRegisteredHeroPresetReader } from "./hero-preset-entry.js";
+import { OFFICIAL_REPLACEMENTS, NativeOfficialPresentation, NATIVE_REPLACEMENT_PRIORITY } from "./official-replacements.js";
 import { TrajectoryHeaderAction } from "./trajectory-header-action.js";
 import {
   MessageImagesGallery,
   type MessageImagesOwner,
 } from "@amiba/ui";
+export type { HeroPreset } from "./hero-preset.js";
+import { createHeroPreset, type HeroPreset } from "./hero-preset.js";
 import { conversationSnapshotSource } from "./conversation-snapshot.js";
 import { UiConversation, ConversationController } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type { UiSession } from "@deepseek-ai/dsh-client-ui-session/client";
@@ -26,7 +30,8 @@ import { sessionPendingQueue } from "@amiba/ui/composer-runtime";
 import { createInputActionsProvider } from "./input-actions-provider.js";
 import { createSnapshotStore } from "@deepseek-ai/dsh-client-store";
 import { createDraftImageRegistry } from "./draft-image-registry.js";
-import { EMPTY_CHAT_SNAPSHOT, registerConversationNodes } from "@deepseek-ai/dsh-client-ui-chat/client";
+import { mountOfficialChatPresentation, officialChatRequested, RootSlotDispatch } from "./official-chat-presentation.js";
+import { EMPTY_CHAT_SNAPSHOT, registerConversationNodes, apply as applyOfficialChat } from "@deepseek-ai/dsh-client-ui-chat/client";
 import { createDirectoryFlow, type DirectoryFlow } from "./directory-flow.js";
 import { createConversationViewSource, type ConversationViewEntry } from "./conversation-view-source.js";
 import { CONVERSATION_ENTRY_REMOTE } from "../conversation-remote.js";
@@ -151,8 +156,6 @@ if (typeof document !== "undefined") {
 
 export type {
   AmibaAgentPresetSectionOwner,
-  AmibaComposerModelPickerOwner,
-  AmibaComposerModelSelection,
   AmibaRootSlot,
   AmibaWorkspaceNavigationOwner,
   AmibaWorkspaceViewOwner,
@@ -252,9 +255,7 @@ export interface MessageSourceContribution {
  * `SessionMenuContribution` are each REGISTRANT's own per-entry business
  * face, supplied the ordinary way via that entry's own `options.inject`
  * factory (`register`'s `I extends object` overload, structurally inferred,
- * independent of whatever `SlotMap[K]` declares) — exactly like
- * `amiba.navigation.before`/`.after` below, which also carry no `inject` in
- * `SlotMap` yet support per-entry business faces freely. Adding `inject`
+ * independent of whatever `SlotMap[K]` declares). Adding `inject`
  * here instead makes root's own `{ kind: "list", scope: "root" }` children
  * entry fail to typecheck (`Property 'inject' is missing`) since it would
  * then have to supply ONE shared contribution for every plugin, which is
@@ -270,9 +271,6 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
     "amiba.sessions.item.menu": { kind: "list"; scope: "root" };
     "amiba.message.source": { kind: "list"; scope: "root" };
     "amiba.conversation.notice": { kind: "keyed"; scope: "session"; owner: { source: string; summary: string; body: string; reference?: NoticeReference } };
-    "amiba.tool.execution": { kind: "single"; scope: "session"; owner: import("@amiba/extension-sdk").ToolCallOwnerProps & { fallback: import("react").ReactNode } };
-    "amiba.tool.activity": { kind: "list"; scope: "session"; owner: { callId: string } };
-    "amiba.conversation.progress": { kind: "list"; scope: "session" };
     "amiba.workbench.panel": { kind: "list"; scope: "session"; owner: import("@amiba/extension-sdk").WorkbenchPanelOwner };
   }
 }
@@ -300,9 +298,10 @@ type AmibaRootProps = PropsRuntime<"root"> &
     workbenchSource: ContributionsSource<WorkbenchViewExtension>;
     workbenchShellSource: ContributionsSource<WorkbenchShellExtension>;
     summarySource: ContributionsSource<WorkbenchSummaryContribution>;
+    officialChat: import("@deepseek-ai/dsh-client-store").ObservableSnapshot<boolean>;
+    heroPreset: HeroPreset;
     directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
     conversationViews: ContributionsSource<ConversationViewEntry>;
-    legacyToolDetailsAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
     toolImagesAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
     lineageAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
     commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
@@ -342,9 +341,10 @@ function AmibaRoot({
   workbenchShellSource,
   summarySource,
   directoryFlows,
+  heroPreset,
+  officialChat,
   conversationViews,
   commandRowKeys,
-  legacyToolDetailsAvailable,
   toolImagesAvailable,
   lineageAvailable,
   conversationSource,
@@ -357,6 +357,7 @@ function AmibaRoot({
   prepareConversation,
   renderSlotChain,
   useSessions,
+  useSessionPendingInteraction,
   openLineageSession,
   useWorkspaces,
 }: AmibaRootProps): ReactNode {
@@ -371,7 +372,8 @@ function AmibaRoot({
   }, []);
 
   return (
-    <BackgroundFrame controller={background}><ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench} shells={workbenchShells}><MarkdownProvider extensions={markdown} report={reportMarkdown}><SummaryContributionsProvider contributions={summary}><AmibaProductShell
+    <BackgroundFrame controller={background}><RootSlotDispatch.Provider value={{ renderSlot: renderSlot as never, renderSlotChain: renderSlotChain as never }}><ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench} shells={workbenchShells}><MarkdownProvider extensions={markdown} report={reportMarkdown}><SummaryContributionsProvider contributions={summary}><AmibaProductShell
+      usePendingInteraction={useSessionPendingInteraction}
       mainPanelList={mainPanelList}
       mainPanels={mainPanels}
       dshClient={dshClient}
@@ -381,7 +383,6 @@ function AmibaRoot({
         : renderSlot(name, owner, options)) as typeof renderSlot}
       renderSlotChain={((...args) => <SessionProvider>{renderSlotChain(...args)}</SessionProvider>) as typeof renderSlotChain}
       commandRowKeys={commandRowKeys}
-      legacyToolDetailsAvailable={legacyToolDetailsAvailable}
       toolImagesAvailable={toolImagesAvailable}
       lineageAvailable={lineageAvailable}
       conversationSource={conversationSource}
@@ -396,11 +397,13 @@ function AmibaRoot({
       sessionItemMenuItems={sessionItemMenuItems}
       surfaces={surfaces}
       directoryFlows={directoryFlows}
+      heroPreset={heroPreset}
+      officialChat={officialChat}
       conversationViews={conversationViews}
       messageSources={messageSources}
       useOfficialSessions={useSessions}
       useOfficialWorkspaces={useWorkspaces}
-    /></SummaryContributionsProvider></MarkdownProvider></WorkbenchExtensionsProvider></ConversationSubmitProvider></BackgroundFrame>
+    /></SummaryContributionsProvider></MarkdownProvider></WorkbenchExtensionsProvider></ConversationSubmitProvider></RootSlotDispatch.Provider></BackgroundFrame>
   );
 }
 
@@ -795,14 +798,25 @@ export async function apply(ctx: ClientContext): Promise<void> {
     const panelNavigation = mainPanels;
     const mainPanelList = createMainPanelListSource(ctx.slots, id => ctx.slots.entriesOfSlot("main").some(entry => entry.options.key === id));
     const disposePanelInfo = ctx.slots.provideRoot({ hooks: { panelInfo: panelNavigation } });
+    const heroPreset = createHeroPreset(() => {
+      const presets = getPlatform().agentPresets;
+      if (!presets) throw new Error("Agent preset service unavailable");
+      return presets.list();
+    }, createRegisteredHeroPresetReader(ctx.slots));
+    ctx.effect(() => ctx.reflect.provide("heroAgentPreset", heroPreset), "hero preset selection");
+    ctx.effect(() => {
+      const offSettings = ctx.remote.$on("settings/document-updated", ns => {
+        if (ns === "agent-presets") void heroPreset.load();
+      });
+      const offReset = ctx.on("connection/reset", () => { void heroPreset.load(); });
+      return () => { offSettings(); offReset(); };
+    }, "hero preset roster invalidation");
     const shellChildren = {
           "conversation.chat.turnTail": { kind: "chain", scope: "session" },
           "conversation.hero.workspace.directoryFlow": { kind: "single", scope: "root" },
           "sidebar.workspaces.directoryFlow": { kind: "single", scope: "root" },
           "sidebar.footer.action": { kind: "list", scope: "root" },
           "amiba.emptyState.visual": { kind: "list", scope: "root" },
-          "amiba.navigation.before": { kind: "list", scope: "root" },
-          "amiba.navigation.after": { kind: "list", scope: "root" },
           // The two generic session-list extension points (a "group" that
           // pulls claimed sessions into their own section, and row "more"
           // menu items). List/root scope, same shape as
@@ -857,13 +871,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
             kind: "list",
             scope: "session",
           },
-          "amiba.chat.content.overlay": { kind: "list", scope: "root" },
           // The session-less hero model seat (vendor) and its official
           // session-scoped counterpart: the composer dispatches
           // conversation.input.model while it has a session id, the hero
           // seat otherwise. Same root-declares-session-child shape as the
           // header utilities above.
-          "amiba.composer.modelPicker": { kind: "list", scope: "root" },
           "conversation.input.model": { kind: "single", scope: "session" },
           // Official vocabulary: the named plan-status seat in the composer
           // tool row, immediately right of the access-mode control (single,
@@ -874,9 +886,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // ("unoccupied, the seat renders nothing at all").
           "conversation.input.plan": { kind: "single", scope: "session" },
           "amiba.conversation.notice": { kind: "keyed", scope: "session" },
-          "amiba.tool.execution": { kind: "single", scope: "session" },
-          "amiba.tool.activity": { kind: "list", scope: "session" },
-          "amiba.conversation.progress": { kind: "list", scope: "session" },
           "amiba.workbench.panel": { kind: "list", scope: "session" },
           "amiba.workbench.view": { kind: "list", scope: "root" },
           "amiba.workbench.shell": { kind: "list", scope: "root" },
@@ -897,16 +906,12 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // declaration site differs. The render site is the composer card
           // (`[data-composer-card]`), which is the anchor the official
           // occupants position against and probe with `closest()`.
+          ...OFFICIAL_REPLACEMENTS,
           "conversation.input.overlay": { kind: "list", scope: "session" },
           "conversation.input.dock": { kind: "list", scope: "session" },
+          "conversation.composer": { kind: "chain", scope: "session" },
           "conversation.composer.dock": { kind: "list", scope: "session" },
           "conversation.chat.commandview": { kind: "keyed", scope: "session" },
-          // Official vocabulary: the composer's draft-attachment seat. Kept
-          // declared so third-party hosts can still dispatch it; Amiba's
-          // composer renders the unified AttachmentGallery natively (files +
-          // images in one compact row, matching the user-message bubble), so
-          // it no longer forwards this seat from ChatSurface.
-          "conversation.input.attachments": { kind: "single", scope: "session-maybe" },
           "conversation.input.left": { kind: "list", scope: "session" },
           "conversation.input.right": { kind: "list", scope: "session" },
           // Official vocabulary: the KEYED per-tool call row, from
@@ -934,7 +939,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "tool.call.images": { kind: "single", scope: "session" },
           "conversation.approval.detail": { kind: "single", scope: "session" },
           "conversation.chat.assistant-actions": { kind: "list", scope: "session" },
-          "conversation.details.tool": { kind: "single", scope: "session" },
           "tool.call.toolview": { kind: "keyed", scope: "session" },
           // Amiba's keyed question seat: one entry per question id (a
           // plugin-owned question kind claims exactly its own id), `fallback`
@@ -976,10 +980,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // Appearance page). Empty owner by contract — a row draws its own
           // internals, including its label.
           "settings.general.item": { kind: "list", scope: "root" },
-          "amiba.settings.content.overlay": {
-            kind: "list",
-            scope: "root",
-          },
           // amiba.agentPreset.section is deliberately NOT declared here:
           // dsh-plugin-agent-preset declares it as a child of its own
           // settings-section entry (the amiba.tools.panel pattern).
@@ -1006,12 +1006,10 @@ export async function apply(ctx: ClientContext): Promise<void> {
           workbenchShellSource,
           summarySource,
           directoryFlows,
+          heroPreset,
+          officialChat: officialChatRequested(ctx.slots),
           conversationViews,
           fileMentions: (...args: Parameters<import("@deepseek-ai/dsh-client-ui-chat/client").ChatFileMentions["forClosing"]>) => ctx.get("chatFileMentions")?.forClosing(...args),
-          legacyToolDetailsAvailable: {
-            getSnapshot: () => ctx.slots.entriesOfSlot("conversation.details.tool").length > 0,
-            subscribe: (listener: () => void) => ctx.slots.subscribe("conversation.details.tool", listener),
-          },
           toolImagesAvailable: {
             getSnapshot: () => ctx.slots.entriesOfSlot("tool.call.images").length > 0,
             subscribe: (listener: () => void) => ctx.slots.subscribe("tool.call.images", listener),
@@ -1070,6 +1068,12 @@ export async function apply(ctx: ClientContext): Promise<void> {
       },
       AmibaRoot,
     );
+    // Native presentation is a fallback. Ordinary official registrations at 0
+    // must work without an Amiba-specific negative-priority override.
+    const disposeReplacements = (Object.keys(OFFICIAL_REPLACEMENTS) as (keyof typeof OFFICIAL_REPLACEMENTS)[]).map(name =>
+      ctx.slots.register({ name, priority: NATIVE_REPLACEMENT_PRIORITY }, NativeOfficialPresentation),
+    );
+
     // CELL SHADOWS of the two official `conversation.input.overlay` entries.
     // Same ids, `priority: -1` against their implicit `0`, so the ledger
     // elects Amiba's component per cell while the official SERVICES stay
@@ -1163,6 +1167,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // generic ToolRowFrame — the reference pattern for any plugin that wants
     // a bespoke row for its own tool. Registered after the root because the
     // root's children table is what declares the seat.
+    const officialChatFiber = ctx.inject(["uiConversation", "locale", "settingsScope", "remote", "sidebarRight"], scope => {
+      mountOfficialChatPresentation(scope, applyOfficialChat);
+    });
     const sidebarRightFiber = ctx.inject(['locale'], scope => {
       scope.effect(() => registerSidebarRight(scope, sidebarRightTabs, resources), 'amiba-ui-shell: optional sidebar panel');
       const files = getPlatform().workspaceFiles;
@@ -1184,7 +1191,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
         ),
     );
     return () => {
+      for (const dispose of disposeReplacements) dispose();
       for (const dispose of disposeOfficialToolviews) dispose();
+      void officialChatFiber.dispose();
       void sidebarRightFiber.dispose();
       disposeAskToolview();
       void languageRowFiber.dispose();

@@ -29,6 +29,8 @@ export interface PendingPromptResult {
   workspacePath?: string;
   agent?: AgentExecutionContext;
   modelSelection?: AgentModelSelection;
+  /** Exact prepared session; never create another on receipt. */
+  sessionId?: string;
 }
 
 export interface PendingPromptCapability {

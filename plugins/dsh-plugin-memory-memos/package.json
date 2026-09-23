@@ -61,20 +61,20 @@
     "@deepseek-ai/cordis": "catalog:",
     "@deepseek-ai/dsh-agent": "catalog:",
     "@deepseek-ai/dsh-api-remotes": "catalog:",
-    "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.1",
-    "@deepseek-ai/dsh-tools": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-tools": "0.1.5-rc.2",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "@deepseek-ai/dsh-util-values": "0.1.5-rc.1"
+    "@deepseek-ai/dsh-util-values": "0.1.5-rc.2"
   },
   "devDependencies": {
     "@testing-library/react": "^16.0.1",
     "jsdom": "^25.0.1",
     "@deepseek-ai/cordis": "catalog:",
     "@deepseek-ai/dsh-agent": "catalog:",
-    "@deepseek-ai/dsh-tools": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-tools": "0.1.5-rc.2",
     "@deepseek-ai/dsh-api-remotes": "catalog:",
-    "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.2",
     "@types/node": "22.9.0",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
@@ -84,18 +84,18 @@
     "vite": "^5.4.11",
     "vitest": "^2.1.4",
     "lucide-react": "^0.460.0",
-    "@deepseek-ai/dsh-util-values": "0.1.5-rc.1"
+    "@deepseek-ai/dsh-util-values": "0.1.5-rc.2"
   },
   "amiba": {
     "distribution": {
       "overrides": {
         "@memtensor/memos-local-plugin@2.0.18": {
-          "@deepseek-ai/dsh-agent": "0.1.5-rc.1",
-          "@deepseek-ai/dsh-llm": "0.1.5-rc.1",
-          "@deepseek-ai/dsh-session": "0.1.5-rc.1",
-          "@deepseek-ai/dsh-system-prompt": "0.1.5-rc.1",
-          "@deepseek-ai/dsh-timeout": "0.1.5-rc.1",
-          "@deepseek-ai/dsh-tools": "0.1.5-rc.1"
+          "@deepseek-ai/dsh-agent": "0.1.5-rc.2",
+          "@deepseek-ai/dsh-llm": "0.1.5-rc.2",
+          "@deepseek-ai/dsh-session": "0.1.5-rc.2",
+          "@deepseek-ai/dsh-system-prompt": "0.1.5-rc.2",
+          "@deepseek-ai/dsh-timeout": "0.1.5-rc.2",
+          "@deepseek-ai/dsh-tools": "0.1.5-rc.2"
         }
       },
       "targets": {
@@ -106,5 +106,11 @@
         }
       }
     }
+  },
+  "author": "Amiba",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iHeyTang/amiba.git",
+    "directory": "plugins/dsh-plugin-memory-memos"
   }
 }

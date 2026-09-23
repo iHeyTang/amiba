@@ -33,3 +33,9 @@ The `jsdom>nwsapi` override pins the selector engine to 2.2.23. Version 2.2.27 r
 For test installers, manually run Desktop Build (`desktop-build.yml`) on main with `mode=test` and the desired target. Use `mode=verify` with an existing `run_id` to recheck installers without rebuilding. Test artifacts expire after 7 days; no scheduled packaging is enabled.
 
 Desktop Release (`desktop-release.yml`) is manual-only and runs CI before packaging. Choose the macOS signing mode; all three platforms must pass packaging and smoke tests before publication. Builds use the run's pinned commit. No main push triggers packaging or publication.
+
+## DSH slot compatibility maintenance
+
+The repository-root `DSH-SLOT-COMPATIBILITY.md` is the permanent cross-package maintenance ledger; `docs/` contains historical reports and is not the home for current slot status.
+
+Changes to the DSH version, slot declarations, dispatch, compatibility bridges, or slot retirement must update the existing [DSH slot compatibility ledger](DSH-SLOT-COMPATIBILITY.md) in the same PR. Record the exact upstream version, Amiba implementation status, adoption/retirement decision, source and validation evidence, and known limits. Remove obsolete names from the current ledger once they are absent from both the target and comparison releases and Amiba no longer supports them; also remove retired private slots. Keep legacy bridges that are still supported visible as pending work. Record retirement and migration in the PR and SDK guidance, and use Git history for past states. Do not create a separate date- or version-specific document for the current compatibility state, and do not equate entry coverage with behavioral compatibility.

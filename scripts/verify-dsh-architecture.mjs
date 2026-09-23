@@ -380,14 +380,10 @@ if (
 // amiba.chat.header.after retired in favour of
 // conversation.session.header.utilities.
 for (const slot of [
-  "amiba.navigation.before",
-  "amiba.navigation.after",
   "amiba.workspace.navigation",
   "amiba.workspace.view",
   "conversation.session.header.utilities",
   "conversation.session.header.actions",
-  "amiba.chat.content.overlay",
-  "amiba.composer.modelPicker",
   "conversation.input.model",
   "conversation.input.plan",
   "conversation.input.overlay",
@@ -402,7 +398,6 @@ for (const slot of [
   "settings.close",
   "settings.onboarding",
   "settings.general.item",
-  "amiba.settings.content.overlay",
   "shell.overlay",
   "tool.call.toolview",
   "amiba.conversation.question",

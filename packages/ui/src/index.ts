@@ -41,3 +41,5 @@ export * from "./directory-chooser";
 
 // Native session state shared with the product shell's standard input adapter.
 export { sessionComposerDraft } from "./chat/composer-draft-store";
+
+export { TranscriptScrollPositionContext } from "./chat/transcript-scroll-position";

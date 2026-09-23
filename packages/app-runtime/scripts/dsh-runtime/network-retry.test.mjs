@@ -5,7 +5,7 @@ import { readdir } from "node:fs/promises";
 // Exercise the installed, patched native executor, not a copy of the policy.
 const modules = new URL("../../../../node_modules/.pnpm/", import.meta.url);
 const directory = (await readdir(modules)).find((name) =>
-  name.startsWith("@deepseek-ai+dsh-llm-retry@0.1.5-rc.1_patch_hash="),
+  name.startsWith("@deepseek-ai+dsh-llm-retry@0.1.5-rc.2_patch_hash="),
 );
 assert.ok(directory, "install the patched dependency before testing");
 const { apply } = await import(

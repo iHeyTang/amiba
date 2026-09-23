@@ -1,3 +1,4 @@
+import { OFFICIAL_CHAT_VIEW } from "./official-chat-presentation.js";
 import { resolveSlotLabel } from "@deepseek-ai/dsh-client-ui-slots";
 import type {
   ContributionsSource,
@@ -29,7 +30,7 @@ export function createConversationViewSource(
           .slice()
           .sort((a, b) => (a.options.order ?? 0) - (b.options.order ?? 0))
           .flatMap((entry) =>
-            entry.options.id === undefined
+            entry.options.id === undefined || entry.options.id === OFFICIAL_CHAT_VIEW
               ? []
               : [
                   {

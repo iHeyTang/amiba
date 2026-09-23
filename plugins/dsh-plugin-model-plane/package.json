@@ -58,18 +58,18 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
-    "@deepseek-ai/dsh-api-remotes": "0.1.5-rc.1",
-    "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-api-remotes": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.2",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "@amiba/dsh-plugin-onboarding": "workspace:*",
     "@amiba/extension-sdk": "^0.1.0",
-    "@deepseek-ai/dsh-util-values": "0.1.5-rc.1"
+    "@deepseek-ai/dsh-util-values": "0.1.5-rc.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "catalog:",
-    "@deepseek-ai/dsh-api-remotes": "0.1.5-rc.1",
-    "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-api-remotes": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.2",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.5.2",
@@ -85,11 +85,17 @@
     "@amiba/dsh-plugin-onboarding": "workspace:*",
     "lucide-react": "^0.460.0",
     "@amiba/extension-sdk": "workspace:*",
-    "@deepseek-ai/dsh-util-values": "0.1.5-rc.1"
+    "@deepseek-ai/dsh-util-values": "0.1.5-rc.2"
   },
   "peerDependenciesMeta": {
     "@amiba/dsh-plugin-onboarding": {
       "optional": true
     }
+  },
+  "author": "Amiba",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iHeyTang/amiba.git",
+    "directory": "plugins/dsh-plugin-model-plane"
   }
 }

@@ -1,3 +1,6 @@
+import { waitForHomeDraftHandoff } from "../home/home-draft-handoff";
+import { usePendingPromptHandoff } from "./usePendingPromptHandoff";
+import { TranscriptScrollPositionContext, readTranscriptScrollPosition } from "./transcript-scroll-position";
 import { useConversationAutoScroll } from "./use-conversation-auto-scroll";
 import { ensureSessionWorkspace } from "@amiba/app-runtime/platform";
 import { nativeSubmissionAdmission } from "./internal/native-submission-admission";
@@ -302,12 +305,14 @@ export interface ChatSurfaceProps {
     /**
      * renderSlot-backed model-picker renderer, forwarded to the internal
      * ``<Composer modelPicker>``. Hosts inside a DSH plugin runtime back it
-     * with the seat-split official dispatch (`conversation.input.model`
-     * for session requests, the vendor `amiba.composer.modelPicker` hero
-     * seat for draft requests); hosts without one (Quick-Ask) omit it and
-     * the composer renders nothing where the chip would sit.
+     * with `conversation.input.model`. Hosts without a DSH runtime
+     * (Quick-Ask) omit it and render no model picker.
      */
     modelPicker?: ComposerModelPickerRenderer;
+    transcript?: ReactNode;
+    renderComposer?: (fallback: ReactNode) => ReactNode;
+    renderAttachments?: import("./Composer").ComposerAttachmentsRenderer;
+    renderBar?: import("./Composer").ComposerBarRenderer;
     /**
      * renderSlot-backed dispatch of the official `conversation.input.plan`
      * seat, forwarded verbatim to ``<Composer planSeat>``. Hosts inside a
@@ -568,6 +573,7 @@ export default function ChatSurface({
   // the user already pressed Enter on Home, so an extra Send click here
   // would be friction.
   const [pendingAutosend, setPendingAutosend] = useState(false);
+  const pendingAutosendSession = useRef<string | undefined>(undefined);
   // Origin hint for a hand-off prompt (e.g. "Safari" from Quick-Ask
   // Spotlight). Rendered as a chip above the composer; cleared once the
   // user starts typing or sends, so it doesn't follow them around past
@@ -609,6 +615,8 @@ export default function ChatSurface({
   const draftUploadSessionRef = useRef(shortId("draft"));
   const queuedAttachmentsRef = useRef<Attachment[]>([]);
   const att = useComposerAttachments({
+    draftScope: composerDraftSource,
+    draftKey: sessions.activeId,
     isAttachmentRetained: id => queuedAttachmentsRef.current.some(a => a.attachmentId === id),
     registerDraftImage: triggerRuntime?.registerDraftImage,
     getSessionId: () => sessions.activeId || draftUploadSessionRef.current,
@@ -796,6 +804,9 @@ export default function ChatSurface({
   const conversationFrameRef = useRef<HTMLDivElement | null>(null);
   const conversationViewportRef = useRef<HTMLDivElement | null>(null);
   const conversationContentRef = useRef<HTMLDivElement | null>(null);
+  const scrollSessionRef = useRef(sessions.activeId);
+  const readTranscriptPosition = useCallback(() => readTranscriptScrollPosition(conversationViewportRef.current, scrollSessionRef.current, sessions.activeId), [sessions.activeId]);
+  useLayoutEffect(() => { scrollSessionRef.current = sessions.activeId; }, [sessions.activeId]);
   const composerDockRef = useRef<HTMLElement | null>(null);
   const composerDockHeightRef = useRef(0);
   const [composerDockHeight, setComposerDockHeight] = useState(0);
@@ -804,6 +815,7 @@ export default function ChatSurface({
     sessions.activeId,
     sessions.activeMessages,
     composerDockHeight,
+    { enabled: slots?.transcript === undefined, scope: composerDraftSource },
   );
   // The chunk-buffer / RAF-flush machinery used to live inline here; now
   // owned by `useStreamBuffer` (`stream.*`).
@@ -916,25 +928,14 @@ export default function ChatSurface({
   // whichever fields are populated, and flag the turn for auto-send.
   // The host clears the storage key atomically so renderer remounts do not
   // resubmit the same prompt.
-  useEffect(() => {
-    const drain = capabilities.pendingPrompt?.drain;
-    if (!drain) return;
-    // Re-runs whenever the active session id flips. Critical for the
-    // home-composer hand-off and programmatic fresh-session requests can
-    // change the active id while a pending prompt is being written. Re-run
-    // on that transition so whichever operation finishes last still gets a
-    // chance to drain the payload.
-    //
-    // No `cancelled` cleanup flag: `drain()` is destructive (read +
-    // remove), so a value returned from an in-flight drain that races
-    // with a deps change (typical of the home hand-off, where activeId
-    // flips while the storage write for pendingPrompt is still in
-    // flight) is *already gone from storage* — bailing here on
-    // cancellation would silently drop the user's prompt. The payload
-    // is session-agnostic; whichever effect run wins should still seed
-    // the composer.
-    void drain().then(async (payload: PendingPromptResult | null) => {
-      if (payload == null) return;
+  usePendingPromptHandoff({
+    activeId: sessions.activeId,
+    drain: capabilities.pendingPrompt?.drain,
+    tick: pendingPromptTick,
+    open: sessions.openTab,
+    onError: error => setAttachmentError(error instanceof Error ? error.message : String(error)),
+    receive: async (payload: PendingPromptResult) => {
+      await waitForHomeDraftHandoff(payload.sessionId);
       const text = payload.text?.trim() ?? "";
       const incoming = payload.attachments ?? [];
       for (const item of incoming) {
@@ -951,6 +952,9 @@ export default function ChatSurface({
         } finally {
           delete item.dataBase64;
         }
+      }
+      if (payload.sessionId && sessions.getSnapshot().activeId !== payload.sessionId) {
+        throw new Error("The active conversation changed before receiving the prompt. Reopen the prepared conversation to retry.");
       }
       const promotedAttachments: Attachment[] = incoming.filter(a => a.attachmentId).map((a) => ({
         uiId: a.uiId,
@@ -987,9 +991,9 @@ export default function ChatSurface({
       // Auto-send only when there's actual text to anchor the turn.
       // Attachment-only hand-offs (a snip with no OCR) need user input
       // — auto-sending an empty user message is a footgun.
-      if (text) setPendingAutosend(true);
-    });
-  }, [sessions.activeId, capabilities.pendingPrompt, pendingPromptTick]);
+      if (text) { pendingAutosendSession.current = payload.sessionId; setPendingAutosend(true); }
+    },
+  });
 
   // Subscribe to pending-prompt push events so the drain re-fires when
   // a new payload lands mid-session — covers the case where the
@@ -1013,12 +1017,16 @@ export default function ChatSurface({
   // landed before send() sees a stale empty string.
   useEffect(() => {
     if (!pendingAutosend) return;
+    if (pendingAutosendSession.current && pendingAutosendSession.current !== sessions.activeId) {
+      setPendingAutosend(false);
+      return;
+    }
     if (!sessions.ready || busy) return;
     if (!input.trim()) return;
     setPendingAutosend(false);
     const fn = sendRef.current;
     if (fn) void fn();
-  }, [pendingAutosend, sessions.ready, busy, input]);
+  }, [pendingAutosend, sessions.activeId, sessions.ready, busy, input]);
 
   // -------------------------------------------------------------------------
   // Chat engine subscription/snapshot/event handling.
@@ -1647,8 +1655,8 @@ export default function ChatSurface({
   // Lifecycle of an assistant bubble is owned by DSH-backed engine snapshots.
   // The UI never infers a durable run state from the volatile `streaming` flag.
 
-  // Session switch: drop panel-local stream accumulators and compose-time
-  // attachments. The previous session's DSH turn keeps running; switching
+  // Session switch: drop panel-local stream accumulators. Draft attachments
+  // remain with their session. The previous DSH turn keeps running; switching
   // back re-subscribes and rebuilds local state from the engine snapshot.
   //
   // Note we do NOT delete the outgoing session's queued attachments here:
@@ -1680,11 +1688,6 @@ export default function ChatSurface({
         // The top-level recovery card belongs to the outgoing session.
         // The incoming snapshot will restore its own error, if any.
         setError(null);
-        // Same fire-and-forget GC as `newChat` — the composer-time
-        // attachments belonged to the session we're leaving.
-        deleteUnretainedAttachments(attachments, pendingQueue.flatMap(q => q.attachments));
-        setAttachments([]);
-        setAttachmentError(null);
         // The "from <App>" source hint belongs to the hand-off prompt
         // for THIS session; dropping it on switch keeps it from
         // bleeding into an unrelated chat.
@@ -2183,8 +2186,7 @@ export default function ChatSurface({
     resetQuestions();
     // Drop any composer-time attachments and unlink their on-disk files —
     // they were tied to the old session and won't be referenced again.
-    deleteUnretainedAttachments(attachments, pendingQueue.flatMap(q => q.attachments));
-    setAttachments([]);
+    att.clearAttachments();
     setAttachmentError(null);
     pendingWorkspacePathRef.current = null;
     setWorkspaceError(null);
@@ -2277,7 +2279,7 @@ export default function ChatSurface({
   // into the persistent dock path so React keeps this exact subtree mounted
   // while the first session is created or New chat returns to empty.
   const canSubmitDraft = (text: string) => !readOnly && text.trim().length > 0 && !attachmentUploading && !attachmentBusy;
-  const composerNode = (
+  const nativeComposerNode = (
     <Composer
       ref={composerRef}
       disabled={readOnly}
@@ -2353,6 +2355,8 @@ export default function ChatSurface({
       approvalModePicker
       planSeat={slots?.planSeat}
       inputOverlay={slots?.inputOverlay}
+      renderAttachments={slots?.renderAttachments}
+      renderBar={slots?.renderBar}
       inputDock={slots?.inputDock}
       composerDock={slots?.composerDock}
       inputLeft={slots?.inputLeft}
@@ -2403,6 +2407,7 @@ export default function ChatSurface({
       chipRow={undefined}
     />
   );
+  const composerNode = slots?.renderComposer ? slots.renderComposer(nativeComposerNode) : nativeComposerNode;
 
   return (
     <InteractionRegion activity={surfaceActivity.activity} data-background-surface={hasActive ? "reading" : "canvas"}
@@ -2506,10 +2511,12 @@ export default function ChatSurface({
               </div>
             )
           ) : (
+            <TranscriptScrollPositionContext.Provider value={readTranscriptPosition}>
             <ScrollArea
               data-conversation-scroll-region
               className="min-h-0 min-w-0 flex-1"
               viewportRef={conversationViewportRef}
+              viewportProps={{ "data-conversation-scroll": "" } as import("react").HTMLAttributes<HTMLDivElement>}
               hideScrollbar={showTurnRail}
             >
               <div
@@ -2528,7 +2535,7 @@ export default function ChatSurface({
                     composer seats) and this is only the last hop down to
                     ToolChip. `cwd` is the conversation's workspace binding —
                     the `cwd` member of the official owner share. */}
-                <MessageNoticeRendererContext.Provider value={slots?.notice}>
+                {slots?.transcript !== undefined ? slots.transcript : <MessageNoticeRendererContext.Provider value={slots?.notice}>
                 <ToolCallSeatProvider
                   navigation={slots?.toolNavigation}
                   activity={slots?.toolAnnotation}
@@ -2558,6 +2565,7 @@ export default function ChatSurface({
                       >
                         <WorkspaceUrlOpenerContext.Provider value={workspaceUrlOpener}>
                           <MessageTurns
+                            viewStateScope={composerDraftSource}
                             messageImages={slots?.messageImages}
                             assistantActions={slots?.assistantActions}
                             messageText={slots?.messageText}
@@ -2590,16 +2598,17 @@ export default function ChatSurface({
                     </MessageSourceLabelContext.Provider>
                   </AwaitingUserInputContext.Provider>
                 </ToolCallSeatProvider>
-                </MessageNoticeRendererContext.Provider>
+                </MessageNoticeRendererContext.Provider>}
 
                 {error && (
                   <ErrorBlock error={error} onOpenSettings={openSettings} onRetry={error.source === "run" && sessions.activeId ? () => void retryFailedRun() : undefined} retryDisabled={busy} />
                 )}
               </div>
             </ScrollArea>
+            </TranscriptScrollPositionContext.Provider>
           )}
         </div>
-        {hasActive && showTurnRail && (
+        {hasActive && showTurnRail && slots?.transcript === undefined && (
           <ConversationTurnRail
             turns={railTurnWindow.visible}
             viewportRef={conversationViewportRef}

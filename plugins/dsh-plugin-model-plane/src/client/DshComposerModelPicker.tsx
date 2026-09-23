@@ -38,9 +38,7 @@ export interface ComposerPickerCatalog {
 }
 
 /**
- * Session-bound engine face over the official wire. Present only on the
- * official `conversation.input.model` seat; the draft (hero) seat has no
- * session and therefore no engine.
+ * Session-bound engine for the official model seat, including the homepage.
  */
 export interface ComposerPickerEngine {
   /** Fresh advisory directory truth for the bound session (throws on wire failure). */
@@ -65,7 +63,7 @@ function wireError(face: string, error: { code: string; message: string }): Erro
 /**
  * Bind the official wire to one session — the exact calls the disabled
  * official ui-model-selection plugin makes for the same seat
- * (`session.models` / `session.selectModel`).
+ * (`session.modelCatalog` / `session.selectModel`).
  */
 export function makeSessionModelEngine(
   wire: SessionModelWire,
@@ -74,7 +72,7 @@ export function makeSessionModelEngine(
   return {
     directory: async () => {
       const result = await wire.modelCatalog();
-      if (!result.ok) throw wireError("session.models", result.error);
+      if (!result.ok) throw wireError("session.modelCatalog", result.error);
       const current = wire.modelSelection(sessionId) ?? result.value.default;
       const routable = result.value.routableProviders.includes(current.provider);
       return { current, routable };
@@ -97,10 +95,8 @@ export function makeSessionModelEngine(
 export interface DshComposerModelPickerProps {
   /** Injected by the plugin's slot registration (never host-supplied). */
   catalog: ComposerPickerCatalog;
-  /** Session-bound engine over the official wire; absent = draft (session-less) mode. */
-  engine?: ComposerPickerEngine;
-  draftSelection?: AgentModelSelection;
-  onDraftSelectionChange?: (selection: AgentModelSelection) => void;
+  /** Session-bound engine over the official wire, including empty home sessions. */
+  engine: ComposerPickerEngine;
   dialogSize?: "default" | "tall";
   disabled?: boolean;
   overlayVariant?: DialogOverlayVariant;
@@ -131,13 +127,11 @@ export function DshComposerModelPicker({
   disabled = false,
   overlayVariant = "dimmed",
   refreshKey = 0,
-  draftSelection,
-  onDraftSelectionChange,
 }: DshComposerModelPickerProps) {
   const { t } = usePluginT(pickerI18n);
   const [groups, setGroups] = useState<ComposerPickerModelGroup[]>([]);
   const [current, setCurrent] = useState<AgentModelSelection | null>(
-    draftSelection ?? null,
+    null,
   );
   const [materialized, setMaterialized] = useState(false);
   const [loadState, setLoadState] = useState<ModelPickerStatus>("idle");
@@ -154,7 +148,7 @@ export function DshComposerModelPicker({
     try {
       const [snapshot, directory] = await Promise.all([
         catalog.snapshot(),
-        engine ? engine.directory() : Promise.resolve(null),
+        engine.directory(),
       ]);
       if (generation !== generationRef.current) return;
       setGroups(snapshot.groups);
@@ -165,13 +159,10 @@ export function DshComposerModelPicker({
         if (!directory.routable)
           setError(t("sidepanel.modelPicker.loadFailed"));
       } else {
-        const initialSelection = draftSelection ?? snapshot.defaultSelection;
-        setCurrent(initialSelection ?? null);
-        if (!draftSelection && initialSelection && onDraftSelectionChange) {
-          onDraftSelectionChange(initialSelection);
-        }
+        setCurrent(null);
         setMaterialized(false);
-        setLoadState("ready");
+        setLoadState("error");
+        setError(t("sidepanel.modelPicker.loadFailed"));
       }
     } catch (caught) {
       if (generation !== generationRef.current) return;
@@ -180,18 +171,17 @@ export function DshComposerModelPicker({
     }
   }, [
     catalog,
-    draftSelection,
     engine,
-    onDraftSelectionChange,
     t,
   ]);
 
   useEffect(() => {
     void load();
+    const unsubscribe = catalog.subscribe?.(() => { void load(); });
     return () => {
       generationRef.current += 1;
+      unsubscribe?.();
     };
-    return catalog.subscribe?.(() => { void load(); });
   }, [load, refreshKey, catalog]);
 
   const displayGroups = useMemo(() => pickerGroups(groups), [groups]);
@@ -213,16 +203,9 @@ export function DshComposerModelPicker({
   async function commitSelection(
     selection: AgentModelSelection,
   ): Promise<boolean> {
-    if (!engine || !materialized) {
-      if (!onDraftSelectionChange) {
-        setError(t("sidepanel.modelPicker.loadFailed"));
-        return false;
-      }
-      setCurrent(selection);
-      onDraftSelectionChange(selection);
-      setLoadState("ready");
-      setError(null);
-      return true;
+    if (!materialized) {
+      setError(t("sidepanel.modelPicker.loadFailed"));
+      return false;
     }
     setSaving(true);
     setError(null);

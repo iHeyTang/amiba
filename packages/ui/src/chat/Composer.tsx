@@ -1,4 +1,5 @@
 import { commandEnvelope } from "./composer/command-contract";
+import { ReplacementBoundary } from "./ReplacementBoundary";
 import type { ComposerDraftDocument } from "./composer-draft-document";
 import { captureComposerHistory } from "./composer/composer-history-state";
 const EMPTY_RESIDENT_SUBMISSION = Object.freeze({ pending: false, notice: null });
@@ -57,40 +58,15 @@ import type { ComposerTriggerRuntime } from "./composer/triggers/contracts";
 import type { SlashUiActionContext } from "./composer/providers/slash-ui-actions";
 import type { TriggerProvider } from "./composer/providers/types";
 import type { AgentExecutionContext } from "@amiba/app-runtime/core";
-import type { AgentModelSelection } from "@amiba/app-runtime/platform";
 import type {
-  AmibaComposerModelPickerOwner,
   ConversationInputModelOwnerProps,
   ConversationInputPlanOwnerProps,
   ComposerAttachmentsOwner,
 } from "@amiba/extension-sdk";
 
-/**
- * One model-picker dispatch request, computed by the Composer per render.
- * Two seats back the same chip position:
- *
- *   - `seat: "session"` — the composer has a session id: the OFFICIAL
- *     `conversation.input.model` seat (single, session scope, owner
- *     `{ locked }`). The occupant reads `sessionId` from the framework
- *     session kit and its engine data over the official wire; the seat
- *     renders nothing until the official current session catches up with a
- *     freshly minted draft (the shell's sessions bridge opens it once the
- *     DSH session materializes).
- *   - `seat: "hero"` — no session (home/draft composer): the vendor
- *     `amiba.composer.modelPicker` hero seat, whose owner carries the
- *     surface-held draft selection and picker chrome.
- */
-export type ComposerModelPickerRequest =
-  | { seat: "session"; owner: ConversationInputModelOwnerProps }
-  | { seat: "hero"; owner: AmibaComposerModelPickerOwner };
+/** Home and conversation composers share the official session-scoped model seat. */
+export type ComposerModelPickerRequest = { seat: "session"; owner: ConversationInputModelOwnerProps };
 
-/**
- * Renders the composer's model-picker chip from the seat request Composer
- * computes. The host builds this from the official DSH dispatch —
- * `renderSlot("conversation.input.model" | "amiba.composer.modelPicker",
- * request.owner)` — and threads it down; Composer itself has ZERO
- * model-plane knowledge.
- */
 export type ComposerModelPickerRenderer = (
   request: ComposerModelPickerRequest,
 ) => ReactNode;
@@ -108,7 +84,9 @@ export type ComposerModelPickerRenderer = (
  * no reserved space. Surfaces without a DSH plugin runtime (Quick-Ask) pass
  * no renderer and the same nothing renders.
  */
-export type ComposerAttachmentsRenderer = (owner: ComposerAttachmentsOwner) => ReactNode;
+export type ComposerBarRenderer = (owner: import("@amiba/extension-sdk").ComposerBarOwner, fallback: ReactNode) => ReactNode;
+
+export type ComposerAttachmentsRenderer = (owner: ComposerAttachmentsOwner, fallback: ReactNode) => ReactNode;
 
 export type ComposerPlanSeatRenderer = (
   owner: ConversationInputPlanOwnerProps,
@@ -247,21 +225,15 @@ export interface ComposerProps {
    * any of those pieces render.
    */
   attachments?: UseComposerAttachmentsResult;
-  /**
-   * Show a compact DSH inference-model selector beside the send controls.
-   * The picker NODE comes from `render` — the host's renderSlot-backed
-   * dispatch of the seat Composer picks per render: the official
-   * session-scoped `conversation.input.model` while `permissionSessionId`
-   * is set (owner `{ locked }` — engine data is the occupant's own wire
-   * concern), the vendor session-less `amiba.composer.modelPicker` hero
-   * seat otherwise (owner carries the surface-held draft selection and
-   * picker chrome). Surfaces without a DSH plugin runtime (Quick-Ask) pass
-   * nothing and Composer renders nothing where the chip would sit.
-   */
+  /** Official draft-attachment replacement; the renderer owns fallback selection. */
+  renderAttachments?: ComposerAttachmentsRenderer;
+  renderBar?: ComposerBarRenderer;
+  renderAgentPicker?: (fallback: ReactNode) => ReactNode;
+  /** Official model seat. Home supplies its prepared session independently of
+   * the input controller, so preparing a session cannot submit twice. */
   modelPicker?: {
     render: ComposerModelPickerRenderer;
-    draftSelection?: AgentModelSelection;
-    onDraftSelectionChange?: (selection: AgentModelSelection) => void;
+    sessionId?: string;
   };
   /** Show the active DSH permission preset as a switchable composer pill. */
   approvalModePicker?: boolean;
@@ -459,6 +431,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       onKeyDownExtra,
       onPaste,
       attachments,
+      renderAttachments,
+      renderBar,
+      renderAgentPicker,
       modelPicker,
       approvalModePicker,
       planSeat,
@@ -978,6 +953,24 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         </div>
       ) : null;
 
+    const attachmentPresentation = attachments && renderAttachments
+      ? renderAttachments({
+          attachments: attachments.getDraftImages?.() ?? attachments.draftImages ?? [],
+          uploads: attachments.fileUploads ?? {},
+          canAcceptDrop: !disabled && !attachments.attachmentBusy && !attachments.attachmentUploading,
+          onAddFiles: files => {
+            if (!disabled && !attachments.attachmentBusy && !attachments.attachmentUploading) void attachments.addFiles([...files]);
+          },
+          onRemoveAttachment: id => {
+            if (disabled) return;
+            const item = attachments.attachments.find(item => item.attachmentId === id);
+            if (item) attachments.removeAttachment(item.uiId);
+            else attachments.removeDraftImage?.(id);
+          },
+          onRetryFile: id => { if (!disabled) attachments.retryFileUpload?.(id); },
+        }, renderedGalleryRow)
+      : renderedGalleryRow;
+
     const addMenuItems = useMemo<MenuItem[]>(() => {
       if (!attachments || disabled || attachments.attachmentBusy || attachments.attachmentUploading) return [];
       return [{
@@ -991,7 +984,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       }];
     }, [attachments?.openFilePicker, attachments?.attachmentBusy, attachments?.attachmentUploading, disabled, t]);
 
-    return (
+    const nativeBar = (
       <ComposerAddMenuContext.Provider value={addMenuItems}>
       <div
         {...wrapperProps}
@@ -1076,7 +1069,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             </div>
           ) : null}
           {topAffordance}
-          {renderedGalleryRow}
+          {attachmentPresentation}
           <div className="flex items-start">
             <div className="min-w-0 flex-1">
               <RichComposerEditor
@@ -1143,7 +1136,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 disabled={disabled}
               />
               {agentPicker ? (
-                <ComposerAgentPicker
+                <ReplacementBoundary render={renderAgentPicker}><ComposerAgentPicker
                   dialogSize={pickerDialogSize}
                   disabled={disabled}
                   overlayVariant={pickerOverlayVariant}
@@ -1151,7 +1144,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   onChange={agentPicker.onChange}
                   refreshKey={pickerRefreshKey}
                   value={agentPicker.value}
-                />
+                /></ReplacementBoundary>
               ) : null}
               {approvalModePicker ? (
                 <ComposerApprovalModePicker
@@ -1168,23 +1161,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               {actionsLeft}
               {inputLeft}
             </div>
-            {modelPicker
-              ? permissionSessionId
-                ? modelPicker.render({
-                    seat: "session",
-                    owner: { locked: disabled },
-                  })
-                : modelPicker.render({
-                    seat: "hero",
-                    owner: {
-                      draftSelection: modelPicker.draftSelection,
-                      onDraftSelectionChange: modelPicker.onDraftSelectionChange,
-                      disabled,
-                      dialogSize: pickerDialogSize,
-                      overlayVariant: pickerOverlayVariant,
-                      refreshKey: pickerRefreshKey,
-                    },
-                  })
+            {modelPicker && (modelPicker.sessionId ?? permissionSessionId)
+              ? modelPicker.render({ seat: "session", owner: { locked: disabled } })
               : null}
             {inputRight}
             {sendButtonNode}
@@ -1233,6 +1211,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       </div>
       </ComposerAddMenuContext.Provider>
     );
+    // Keep input/attachment services above the replacement boundary.
+    return renderBar ? renderBar({ variant: frameVariant === "hero" ? "hero" : "composer", disabled, placeholder: resolvedPlaceholder }, nativeBar) : nativeBar;
   },
 );
 

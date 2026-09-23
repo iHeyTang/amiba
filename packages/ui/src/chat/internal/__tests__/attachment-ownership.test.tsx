@@ -38,6 +38,8 @@ it("queue deletion and original chip removal cannot delete bytes while a send is
   act(()=>result.current.setAttachments([image("shared"),image("other")]));
   await act(async()=>{result.current.removeAttachment("shared");});
   deleteUnretainedAttachments([image("shared"),image("other")],[]);
+  expect(files.remove).not.toHaveBeenCalled(); // The other chip still owns its bytes.
+  await act(async()=>{result.current.removeAttachment("other");});
   expect(files.remove.mock.calls).toEqual([["other"]]);
   finish();await sending;
   // Completion itself does not delete a file needed by sent history or a restored draft.
@@ -61,4 +63,16 @@ it("releases temporary ownership after rejected preparation without deleting the
   expect(files.remove).not.toHaveBeenCalled();
   deleteUnretainedAttachments([image("failed")],[]);
   expect(files.remove.mock.calls).toEqual([["failed"]]);
+});
+
+it("protects an offscreen draft from queue cleanup until its chip is removed", async () => {
+  const scope = {};
+  const first = renderHook(() => useComposerAttachments({ draftScope: scope, getSessionId: () => "s" }));
+  act(() => first.result.current.setAttachments([image("offscreen")]));
+  first.unmount();
+  deleteUnretainedAttachments([image("offscreen")], []);
+  expect(files.remove).not.toHaveBeenCalled();
+  const restored = renderHook(() => useComposerAttachments({ draftScope: scope, getSessionId: () => "s" }));
+  await act(async () => restored.result.current.removeAttachment("offscreen"));
+  expect(files.remove).toHaveBeenCalledWith("offscreen");
 });

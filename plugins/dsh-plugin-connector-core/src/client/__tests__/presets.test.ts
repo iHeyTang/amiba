@@ -11,7 +11,7 @@ function connectionReturning(value: unknown): PresetConnection {
 }
 
 // Fixtures mirror the REAL result envelope `agentPresets.list` resolves to on
-// DSH 0.1.5-rc.1: a bare `{ ok, value }`, with no wrapping `{ rpcId, result }`
+// DSH 0.1.5-rc.2: a bare `{ ok, value }`, with no wrapping `{ rpcId, result }`
 // carrier and no arguments.
 function envelope(value: unknown) {
   return { ok: true, value };

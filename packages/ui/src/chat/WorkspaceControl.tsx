@@ -1,9 +1,12 @@
+import type { RefObject } from "react";
 import { Folder, FolderPlus, X } from "lucide-react";
 
 import { useT } from "@amiba/i18n";
 import { cn } from "../primitives";
 
 export interface WorkspaceControlProps {
+  buttonRef?: RefObject<HTMLButtonElement>;
+  expanded?: boolean;
   path?: string | null;
   /** Present only on the id-less Home surface. Conversation workspaces are
    * immutable after the first message creates the session. */
@@ -29,6 +32,8 @@ function workspacePathParts(value: string): {
  */
 export function WorkspaceControl({
   path,
+  buttonRef,
+  expanded,
   onChoose,
   onClear,
   disabled,
@@ -49,6 +54,9 @@ export function WorkspaceControl({
       {onChoose ? (
         <button
           type="button"
+          ref={buttonRef}
+          aria-haspopup={expanded === undefined ? undefined : "menu"}
+          aria-expanded={expanded}
           onClick={onChoose}
           disabled={disabled}
           title={path || t("workspace.openFolder")}

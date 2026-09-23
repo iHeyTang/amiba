@@ -1,3 +1,5 @@
+> 本文保留历史审计／设计背景；官方插槽的当前状态及后续接入、同步、退役决策统一维护于 [DSH 官方插槽兼容维护台账](../DSH-SLOT-COMPATIBILITY.md)，不再在本文更新插槽当前状态。
+
 # 兼容分支同步 main 记录
 
 2026-09-14 将拉取到的最新 `origin/main`（`3d57d8a9c5b8ef32a4c1cd815898cde45c0c9418`）合入 `feat/dsh-extension-compat-next`。合并前兼容分支为 `e22e22d5`，工作区干净。本次是 main 进入兼容分支，不是将兼容分支发布或合入 main。

@@ -15,7 +15,7 @@ type RosterEntry = {
   broken?: string;
 };
 
-// The wire result envelope as of DSH 0.1.5-rc.1: a `remote.<namespace>` method
+// The wire result envelope as of DSH 0.1.5-rc.2: a `remote.<namespace>` method
 // resolves straight to `{ ok, value }` (the retired `{ rpcId, result }`
 // carrier is gone) and the adapter reads these fields at the top level.
 function ok<T>(value: T) {
