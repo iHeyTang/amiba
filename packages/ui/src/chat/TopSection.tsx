@@ -41,14 +41,12 @@ export function TopSection({
         rail
           ? {
               top: "var(--session-group-sticky-top, 0px)",
-              backgroundColor:
-                "color-mix(in srgb, hsl(var(--muted)) 30%, hsl(var(--background)))",
             }
           : undefined
       }
       className={
         rail
-          ? "group/topsection sticky z-20 mt-2 flex h-7 w-full shrink-0 items-center rounded-md text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70 transition-colors hover:bg-accent/60 hover:text-foreground"
+          ? "group/topsection sticky z-20 mt-2 flex h-7 w-full shrink-0 items-center text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70 transition-colors hover:bg-accent/60 hover:text-foreground"
           : "group/topsection relative flex w-full shrink-0 items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-accent/40"
       }
     >
@@ -57,7 +55,7 @@ export function TopSection({
         className={cn(
           "flex min-w-0 flex-1 items-center gap-1.5 rounded-[inherit] text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40",
           rail
-            ? "h-full w-full px-2.5 hover:bg-accent/60"
+            ? "h-full w-full px-4 hover:bg-accent/60"
             : "w-full px-2 py-1.5",
           actions && actionReplacesChevron && "pr-9",
         )}

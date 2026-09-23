@@ -43,17 +43,28 @@ app
       await wait(
         '!!document.querySelector("[data-background-active]") && document.querySelector("video").currentTime > .1',
       );
+      const mediaRect = await js('JSON.stringify(document.querySelector("video").getBoundingClientRect().toJSON())');
+      await js("window.backgroundHarness.workbench(480)");
+      await wait('document.querySelector("[data-background-surface=workbench]").getBoundingClientRect().width === 480');
+      if (mediaRect !== await js('JSON.stringify(document.querySelector("video").getBoundingClientRect().toJSON())')) throw new Error("Panel resize moved the background");
+      await assert('getComputedStyle(document.querySelector("video")).objectFit === "cover"');
+      await assert('getComputedStyle(document.querySelector("[data-background-surface=workbench]")).backdropFilter.includes("18px")');
+      await js("window.backgroundHarness.empty(true)");
+      await wait('!!document.querySelector("[data-background-surface=canvas]")');
+      await assert('getComputedStyle(document.querySelector("[data-background-surface=canvas]")).backdropFilter === "none"');
+      await js("window.backgroundHarness.empty(false); window.backgroundHarness.workbench(256)");
+      await wait('!!document.querySelector("[data-background-surface=reading]")');
       await assert(
         'document.querySelector("video").muted && document.querySelector("video").loop',
       );
       await assert(
-        'getComputedStyle(document.querySelector("[data-background-surface=navigation]")).backdropFilter.includes("24px")',
+        'getComputedStyle(document.querySelector("[data-background-surface=navigation]")).backdropFilter.includes("18px")',
       );
       await assert(
-        'getComputedStyle(document.querySelector("[data-background-surface=reading]")).backdropFilter.includes("10px")',
+        'getComputedStyle(document.querySelector("[data-background-surface=reading]")).backdropFilter.includes("8px")',
       );
       await assert(
-        'getComputedStyle(document.querySelector("[data-composer-card]")).backdropFilter.includes("28px")',
+        'getComputedStyle(document.querySelector("[data-composer-card]")).backdropFilter.includes("18px")',
       );
       win.hide();
       await wait('document.hidden && document.querySelector("video").paused');
@@ -85,6 +96,7 @@ app
         path.join(output, "settings.png"),
         (await win.webContents.capturePage()).toPNG(),
       );
+      await assert('document.querySelectorAll("[role=slider]").length === 2 && !document.querySelector("input[type=range]")');
       await js("window.backgroundHarness.settings(false)");
       await js(
         '(()=>{const c=window.backgroundHarness.controller,s=c.getSnapshot().snapshot;return window.backgroundHarness.call("configure",{...s.config,motion:"pause"},s.revision)})()',
@@ -98,7 +110,7 @@ app
       );
       await wait('!document.querySelector("video")');
       await assert(
-        'getComputedStyle(document.querySelector("[data-background-surface=layout]")).backgroundColor !== "rgba(0, 0, 0, 0)"',
+        'getComputedStyle(document.querySelector(".amiba-background-frame")).backgroundColor !== "rgba(0, 0, 0, 0)"',
       );
       if (errors.length) throw new Error(errors.join("\n"));
       console.log(

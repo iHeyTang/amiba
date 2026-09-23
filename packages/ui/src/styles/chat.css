@@ -1,3 +1,4 @@
+@import "./surfaces.css";
 
 /*
  * Shared desktop chat surface styles — used by the main conversation,
@@ -23,50 +24,6 @@
 .amiba-chat-column {
   container-name: amiba-chat-column;
   container-type: inline-size;
-}
-
-/*
- * The conversation continues behind the floating composer so its side
- * gutters remain visually open. Fade the final few lines into the canvas
- * before they reach the composer instead of ending them against a hard card
- * edge. The mask belongs to the dock rather than the composer itself so
- * approval banners and attachment errors share the same quiet landing zone.
- */
-.amiba-composer-dock::before {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  inset-block: -5rem -0.75rem;
-  /* The composer caps at 48rem. Spend at most the chat column's remaining
-   * side gutter on the fade, so opening the workbench can never leave the
-   * fixed 4rem expansion painting across the pane boundary. */
-  inset-inline: clamp(-4rem, calc((48rem - 100cqw) / 2), 0rem);
-  pointer-events: none;
-  background: hsl(var(--background) / 0.96);
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    rgb(0 0 0 / 0.04) 10%,
-    rgb(0 0 0 / 0.16) 24%,
-    rgb(0 0 0 / 0.42) 40%,
-    rgb(0 0 0 / 0.72) 56%,
-    rgb(0 0 0 / 0.94) 72%,
-    black 84%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    rgb(0 0 0 / 0.04) 10%,
-    rgb(0 0 0 / 0.16) 24%,
-    rgb(0 0 0 / 0.42) 40%,
-    rgb(0 0 0 / 0.72) 56%,
-    rgb(0 0 0 / 0.94) 72%,
-    black 84%
-  );
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
 }
 
 .amiba-composer-dock > * {

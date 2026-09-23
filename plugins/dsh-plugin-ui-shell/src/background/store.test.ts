@@ -23,6 +23,17 @@ async function upload() {
   return store.finishUpload(id);
 }
 describe("durable application backgrounds", () => {
+  it("migrates saved contain and strong settings without losing the selected asset", async () => {
+    const asset = await upload();
+    await writeFile(join(root, "background.json"), JSON.stringify({ revision: 7,
+      config: { ...DEFAULT_BACKGROUND, enabled: true, assetId: asset.id, fit: "contain", glass: "strong" } }));
+    const saved = await store.get();
+    expect(saved.config).toEqual({ ...DEFAULT_BACKGROUND, enabled: true, assetId: asset.id });
+    expect(saved.revision).toBe(7);
+    const next = await store.configure({ ...saved.config, fit: "contain", glass: "strong" }, 7);
+    expect(next.config.fit).toBe("cover");
+    expect(next.config.glass).toBe("balanced");
+  });
   it("copies a generated artifact, survives deleting its source and reopens after restart", async () => {
     const source = join(root, "generated.png");
     await writeFile(source, png);

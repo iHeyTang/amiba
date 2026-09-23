@@ -251,15 +251,15 @@ overrides:
   jsdom>nwsapi: 2.2.23
 
 patchedDependencies:
-  '@deepseek-ai/dsh-client-ui-cordis@0.1.5-rc.1':
-    hash: zjsnumqj35iyow7fmj57p6q6ny
-    path: patches/@deepseek-ai__dsh-client-ui-cordis@0.1.5-rc.1.patch
   '@deepseek-ai/dsh-api-session-controller@0.1.5-rc.1':
     hash: bpip6ltniyp4c5nt6jnd2jdan4
     path: patches/@deepseek-ai__dsh-api-session-controller@0.1.5-rc.1.patch
   '@deepseek-ai/dsh-client-ui-chat@0.1.5-rc.1':
     hash: 74wqweys2npoy4vneqcoserfca
     path: patches/@deepseek-ai__dsh-client-ui-chat@0.1.5-rc.1.patch
+  '@deepseek-ai/dsh-client-ui-cordis@0.1.5-rc.1':
+    hash: zjsnumqj35iyow7fmj57p6q6ny
+    path: patches/@deepseek-ai__dsh-client-ui-cordis@0.1.5-rc.1.patch
   '@deepseek-ai/dsh-client-ui-settings-plugins@0.1.5-rc.1':
     hash: j2z2wilpnkk34ehnypde4evi5q
     path: patches/@deepseek-ai__dsh-client-ui-settings-plugins@0.1.5-rc.1.patch
@@ -850,6 +850,9 @@ importers:
       '@radix-ui/react-separator':
         specifier: ^1.1.0
         version: 1.1.15(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-slider':
+        specifier: ^1.4.7
+        version: 1.4.7(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-slot':
         specifier: ^1.1.0
         version: 1.3.3(@types/react@18.3.12)(react@18.3.1)
@@ -883,12 +886,6 @@ importers:
       prismjs:
         specifier: ^1.30.0
         version: 1.30.0
-      react:
-        specifier: ^18.0.0
-        version: 18.3.1
-      react-dom:
-        specifier: ^18.0.0
-        version: 18.3.1(react@18.3.1)
       simple-icons:
         specifier: ^13.21.0
         version: 13.21.0
@@ -929,6 +926,12 @@ importers:
       jsdom:
         specifier: ^25.0.1
         version: 25.0.1
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: 18.3.1
+        version: 18.3.1(react@18.3.1)
       tailwindcss:
         specifier: 3.4.15
         version: 3.4.15
@@ -3689,15 +3692,6 @@ importers:
         version: 2.1.4(@types/node@22.9.0)(jsdom@25.0.1)(lightningcss@1.32.0)
 
 packages:
-
-  chroma-js@3.2.0:
-    resolution:
-      integrity: sha512-os/OippSlX1RlWWr+QDPcGUZs0uoqr32urfxESG9U93lhUfbnlyckte84Q8P1UQY/qth983AS1JONKmLS4T0nw==
-  material-icon-theme@5.38.1:
-    resolution:
-      integrity: sha512-14cFM4NJGdbuo68rIZTq9TSX0f5BtA6VF+eNX3zq23Z5NoEeVtM4Zn4PpZ0ERl++50jCBrywKFWXmOjbxf0xTA==
-    engines:
-      vscode: ^1.55.0
 
   7zip-bin@5.2.0:
     resolution: {integrity: sha512-ukTPVhqG4jNzMro2qA9HSCSSVJN3aN7tlb+hfqYCt3ER0yWroeA2VR38MNrOHLQ/cVj+DaIMad0kFCtWWowh/A==}
@@ -7292,6 +7286,19 @@ packages:
       '@types/react-dom':
         optional: true
 
+  '@radix-ui/react-slider@1.4.7':
+    resolution: {integrity: sha512-mTSLf1GC/C0moWjTbvCM6Qn/gBjvlFt1azuWF2v7MN5C3Zq2U2J2lN3ZEYkpujuOU5Ro7A28wkviSxaKnG0BYg==}
+    peerDependencies:
+      '@types/react': '*'
+      '@types/react-dom': '*'
+      react: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
+      react-dom: ^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      '@types/react-dom':
+        optional: true
+
   '@radix-ui/react-slot@1.2.4':
     resolution: {integrity: sha512-Jl+bCv8HxKnlTLVrcDE8zTMJ09R9/ukw4qBs/oZClOfoQk/cOTbDn+NceXfV7j09YPVQUryJPHurafcSg6EVKA==}
     peerDependencies:
@@ -8483,6 +8490,9 @@ packages:
   chownr@3.0.0:
     resolution: {integrity: sha512-+IxzY9BZOQd/XuYPRmrvEVjF/nqj5kgT4kEq7VofrDoM1MxoRjEWkrCC3EtLi59TVawxTAn+orJwFQcrqEN1+g==}
     engines: {node: '>=18'}
+
+  chroma-js@3.2.0:
+    resolution: {integrity: sha512-os/OippSlX1RlWWr+QDPcGUZs0uoqr32urfxESG9U93lhUfbnlyckte84Q8P1UQY/qth983AS1JONKmLS4T0nw==}
 
   chromium-pickle-js@0.2.0:
     resolution: {integrity: sha512-1R5Fho+jBq0DDydt+/vHWj5KJNJCKdARKOCwZUen84I5BreWoLqRLANH1U87eJy1tiASPtMnGqJJq0ZsLoRPOw==}
@@ -9750,6 +9760,10 @@ packages:
   matcher@3.0.0:
     resolution: {integrity: sha512-OkeDaAZ/bQCxeFAozM55PKcKU0yJMPGifLwV4Qgjitu+5MoAfSQN4lsLJeXZ1b8w0x+/Emda6MZgXS1jvsapng==}
     engines: {node: '>=10'}
+
+  material-icon-theme@5.38.1:
+    resolution: {integrity: sha512-14cFM4NJGdbuo68rIZTq9TSX0f5BtA6VF+eNX3zq23Z5NoEeVtM4Zn4PpZ0ERl++50jCBrywKFWXmOjbxf0xTA==}
+    engines: {vscode: ^1.55.0}
 
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
@@ -11470,11 +11484,6 @@ packages:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
 snapshots:
-
-  chroma-js@3.2.0: {}
-  material-icon-theme@5.38.1:
-    dependencies:
-      chroma-js: 3.2.0
 
   7zip-bin@5.2.0: {}
 
@@ -15518,6 +15527,25 @@ snapshots:
       '@types/react': 18.3.12
       '@types/react-dom': 18.3.1
 
+  '@radix-ui/react-slider@1.4.7(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      '@radix-ui/number': 1.1.3
+      '@radix-ui/primitive': 1.1.7
+      '@radix-ui/react-collection': 1.1.15(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-compose-refs': 1.1.5(@types/react@18.3.12)(react@18.3.1)
+      '@radix-ui/react-context': 1.2.2(@types/react@18.3.12)(react@18.3.1)
+      '@radix-ui/react-direction': 1.1.4(@types/react@18.3.12)(react@18.3.1)
+      '@radix-ui/react-primitive': 2.1.10(@types/react-dom@18.3.1)(@types/react@18.3.12)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@radix-ui/react-use-controllable-state': 1.2.6(@types/react@18.3.12)(react@18.3.1)
+      '@radix-ui/react-use-layout-effect': 1.1.4(@types/react@18.3.12)(react@18.3.1)
+      '@radix-ui/react-use-previous': 1.1.4(@types/react@18.3.12)(react@18.3.1)
+      '@radix-ui/react-use-size': 1.1.4(@types/react@18.3.12)(react@18.3.1)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+    optionalDependencies:
+      '@types/react': 18.3.12
+      '@types/react-dom': 18.3.1
+
   '@radix-ui/react-slot@1.2.4(@types/react@18.3.12)(react@19.3.0)':
     dependencies:
       '@radix-ui/react-compose-refs': 1.1.2(@types/react@18.3.12)(react@19.3.0)
@@ -16776,6 +16804,8 @@ snapshots:
   chownr@2.0.0: {}
 
   chownr@3.0.0: {}
+
+  chroma-js@3.2.0: {}
 
   chromium-pickle-js@0.2.0: {}
 
@@ -18202,6 +18232,10 @@ snapshots:
   matcher@3.0.0:
     dependencies:
       escape-string-regexp: 4.0.0
+
+  material-icon-theme@5.38.1:
+    dependencies:
+      chroma-js: 3.2.0
 
   math-intrinsics@1.1.0: {}
 

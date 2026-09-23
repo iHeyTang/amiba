@@ -94,7 +94,7 @@ export function installBackground(
     register({
       name: "background_configure",
       description:
-        "Apply or adjust the Amiba application background when requested by the user. Pass the complete configJson object from background_get, editing fields as needed, and its revision. Fields: enabled boolean, assetId imported id or null, posterId imported image id or null, motion play|pause, fit cover|contain, dim 0..0.65, blur 0..20 px, glass balanced|strong. For a generated video: import completed video and optional original-image poster, enable it, and set motion play. Disable with enabled false. Materials preserve reading contrast; reduced-motion preference and hidden windows pause video. Refresh on revision conflict; do not silently overwrite another change.",
+        "Apply or adjust the Amiba application background when requested by the user. Pass the complete configJson object from background_get, editing fields as needed, and its revision. Fields: enabled boolean, assetId imported id or null, posterId imported image id or null, motion play|pause, fit cover (legacy contain is normalized to cover), dim 0..0.65, blur 0..20 px, glass balanced (one shared glass material). For a generated video: import completed video and optional original-image poster, enable it, and set motion play. Disable with enabled false. Materials preserve reading contrast; reduced-motion preference and hidden windows pause video. Refresh on revision conflict; do not silently overwrite another change.",
       parameters: {
         type: "object",
         properties: {

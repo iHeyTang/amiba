@@ -130,7 +130,6 @@ export function BackgroundFrame({
     <div
       className="amiba-background-frame"
       data-background-active={active ? "true" : undefined}
-      data-background-glass={config.glass}
       style={
         {
           "--amiba-background-dim": config.dim,
@@ -154,7 +153,7 @@ export function BackgroundFrame({
               loop
               playsInline
               preload="auto"
-              style={{ objectFit: config.fit }}
+              style={{ objectFit: "cover" }}
               onLoadedData={() => setReadyId(media.id)}
               onError={failed}
             />
@@ -163,13 +162,13 @@ export function BackgroundFrame({
               key={media.id}
               src={media.url}
               alt=""
-              style={{ objectFit: config.fit }}
+              style={{ objectFit: "cover" }}
               onLoad={() => setReadyId(media.id)}
               onError={failed}
             />
           )}
           {paused && isVideo(media.id) && poster?.id === config.posterId && (
-            <img src={poster.url} alt="" style={{ objectFit: config.fit }} />
+            <img src={poster.url} alt="" style={{ objectFit: "cover" }} />
           )}
           <div className="amiba-background-dim" />
         </div>

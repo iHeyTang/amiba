@@ -120,7 +120,7 @@ describe("Sidebar", () => {
     expect(props.onOpenSession).toHaveBeenCalledWith("s1");
   });
 
-  it("fades row actions over the title with a state-matched mask", () => {
+  it("reserves row actions without painting a gradient over the glass", () => {
     setup();
     const moreButton = screen.getByRole("button", {
       name: "More actions",
@@ -128,12 +128,8 @@ describe("Sidebar", () => {
     const hoverActions = moreButton.parentElement;
     expect(hoverActions).toHaveClass(
       "pointer-events-none",
-      "bg-gradient-to-l",
-      "from-accent",
-      "to-transparent",
-      "pl-8",
     );
-    expect(hoverActions).not.toHaveClass("group-hover:pointer-events-auto");
+    expect(hoverActions).not.toHaveClass("bg-gradient-to-l", "group-hover:pointer-events-auto");
     expect(moreButton).toHaveClass(
       "pointer-events-none",
       "group-hover:pointer-events-auto",
@@ -231,7 +227,7 @@ describe("Sidebar", () => {
     });
 
     const unread = screen.getByLabelText("Unread update");
-    expect(unread).toHaveClass("left-2", "h-4", "w-4");
+    expect(unread).toHaveClass("left-4", "h-4", "w-4");
     expect(unread.firstElementChild).toHaveClass(
       "amiba-session-status-dot",
       "h-1.5",
@@ -265,7 +261,7 @@ describe("Sidebar", () => {
 
     const running = screen.getByLabelText("Running");
     expect(screen.queryByLabelText("Unread update")).not.toBeInTheDocument();
-    expect(running).toHaveClass("left-2", "h-4", "w-4");
+    expect(running).toHaveClass("left-4", "h-4", "w-4");
     expect(running.firstElementChild).toHaveClass(
       "amiba-session-status-dot",
       "h-1.5",
@@ -351,8 +347,8 @@ describe("Sidebar", () => {
 
     const workspaceGroup = screen.getByRole("button", { name: "amiba-project" });
     expect(workspaceGroup).toHaveAttribute("title", "/Users/amira/Code/amiba-project");
-    expect(workspaceGroup).toHaveClass("h-full", "w-full", "px-2.5");
-    expect(workspaceGroup.parentElement).not.toHaveClass("px-2.5");
+    expect(workspaceGroup).toHaveClass("h-full", "w-full", "px-4");
+    expect(workspaceGroup.parentElement).not.toHaveClass("px-4");
     expect(screen.getByText("superun")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Tasks" })).toBeInTheDocument();
     expect(screen.getByText("Refine workbench")).toBeInTheDocument();
@@ -370,7 +366,7 @@ describe("Sidebar", () => {
     });
     const header = screen.getByTestId("sessions-header");
     expect(header).toHaveClass("h-7");
-    expect(header.querySelector("button")).toHaveClass("px-2.5");
+    expect(header.querySelector("button")).toHaveClass("px-4");
 
     expect(
       screen.queryByRole("button", { name: "Select tasks" }),
@@ -422,15 +418,15 @@ describe("Sidebar", () => {
     );
 
     const titleButton = screen.getByRole("button", { name: "First chat" });
-    expect(titleButton).toHaveClass("pl-8");
+    expect(titleButton).toHaveClass("pl-10");
     expect(titleButton).toHaveAttribute("aria-pressed", "false");
     const selectionSlot = titleButton.previousElementSibling;
-    expect(selectionSlot).toHaveClass("absolute", "left-2", "h-4", "w-4");
+    expect(selectionSlot).toHaveClass("absolute", "left-4", "h-4", "w-4");
     expect(selectionSlot).toHaveAttribute("aria-hidden", "true");
 
     await userEvent.click(titleButton);
     expect(titleButton).toHaveAttribute("aria-pressed", "true");
-    expect(titleButton).toHaveClass("pl-8");
+    expect(titleButton).toHaveClass("pl-10");
   });
 
   it("reveals history in batches of twenty with stable copy", async () => {

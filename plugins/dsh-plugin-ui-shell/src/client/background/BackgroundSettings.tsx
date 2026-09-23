@@ -9,6 +9,7 @@ import { useT } from "@amiba/i18n";
 import {
   Button,
   Label,
+  Slider,
   Select,
   SelectTrigger,
   SelectValue,
@@ -195,42 +196,17 @@ export function BackgroundSettings({
               </p>
             </>
           )}
-          <Choice
-            label={zh ? "填充方式" : "Fit"}
-            value={draft.fit}
-            disabled={busy}
-            options={[
-              ["cover", zh ? "铺满" : "Cover"],
-              ["contain", zh ? "完整显示" : "Contain"],
-            ]}
-            onChange={(value) =>
-              change({ fit: value as BackgroundConfig["fit"] })
-            }
-          />
-          <Choice
-            label={zh ? "界面材质" : "Surface material"}
-            value={draft.glass}
-            disabled={busy}
-            options={[
-              ["balanced", zh ? "均衡毛玻璃" : "Balanced glass"],
-              ["strong", zh ? "增强可读性" : "Stronger contrast"],
-            ]}
-            onChange={(value) =>
-              change({ glass: value as BackgroundConfig["glass"] })
-            }
-          />
           <label className="flex items-center justify-between gap-4 text-sm">
             {zh ? "背景压暗" : "Background dimming"}
-            <span className="flex items-center gap-2">
-              <input
+            <span className="flex w-56 items-center gap-3">
+              <Slider
                 aria-label={zh ? "背景压暗" : "Background dimming"}
-                type="range"
-                min="0"
-                max="0.65"
-                step="0.05"
-                value={draft.dim}
+                min={0}
+                max={0.65}
+                step={0.05}
+                value={[draft.dim]}
                 disabled={busy}
-                onChange={(e) => change({ dim: Number(e.target.value) })}
+                onValueChange={([dim]) => change({ dim })}
               />
               <output className="w-10 text-right">
                 {Math.round(draft.dim * 100)}%
@@ -239,16 +215,15 @@ export function BackgroundSettings({
           </label>
           <label className="flex items-center justify-between gap-4 text-sm">
             {zh ? "背景模糊" : "Background blur"}
-            <span className="flex items-center gap-2">
-              <input
+            <span className="flex w-56 items-center gap-3">
+              <Slider
                 aria-label={zh ? "背景模糊" : "Background blur"}
-                type="range"
-                min="0"
-                max="20"
-                step="1"
-                value={draft.blur}
+                min={0}
+                max={20}
+                step={1}
+                value={[draft.blur]}
                 disabled={busy}
-                onChange={(e) => change({ blur: Number(e.target.value) })}
+                onValueChange={([blur]) => change({ blur })}
               />
               <output className="w-10 text-right">{draft.blur}px</output>
             </span>

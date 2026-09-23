@@ -94,7 +94,7 @@ it("keeps default surfaces until decoded, loops muted, pauses hidden/reduced and
   // the component so media stays out of document flow in the real desktop.
   const styles = view.container.querySelector("style[data-amiba-background-styles]");
   expect(styles?.textContent).toContain(".amiba-background-media");
-  expect(getComputedStyle(video.parentElement!).position).toBe("absolute");
+  expect(getComputedStyle(video.parentElement!).position).toBe("fixed");
   expect(getComputedStyle(view.container.firstElementChild!).position).toBe("relative");
   expect(
     view.container.firstElementChild?.hasAttribute("data-background-active"),

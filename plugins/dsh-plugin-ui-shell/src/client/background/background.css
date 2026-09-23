@@ -6,8 +6,10 @@
   background: hsl(var(--background));
 }
 .amiba-background-media {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  width: 100vw;
+  height: 100dvh;
   z-index: -1;
   overflow: hidden;
   pointer-events: none;
@@ -25,57 +27,6 @@
   inset: 0;
   background: rgb(0 0 0 / var(--amiba-background-dim));
 }
-.amiba-background-frame[data-background-active] {
-  --amiba-reading-opacity: 0.8;
-  --amiba-navigation-opacity: 0.76;
-  --amiba-input-opacity: 0.9;
-}
-.amiba-background-frame[data-background-active][data-background-glass="strong"] {
-  --amiba-reading-opacity: 0.93;
-  --amiba-navigation-opacity: 0.91;
-  --amiba-input-opacity: 0.97;
-}
-/* Only the two structural wrappers reveal the already protected background. */
-.amiba-background-frame[data-background-active] [data-amiba-product-shell],
-.amiba-background-frame[data-background-active]
-  [data-background-surface="layout"] {
-  background: transparent;
-}
-.amiba-background-frame[data-background-active]
-  [data-background-surface="navigation"] {
-  background: hsl(var(--background) / var(--amiba-navigation-opacity));
-  backdrop-filter: blur(24px) saturate(1.1);
-  -webkit-backdrop-filter: blur(24px) saturate(1.1);
-}
-/* One reading plane, not one expensive blur layer per streamed message. */
-.amiba-background-frame[data-background-active]
-  [data-background-surface="reading"] {
-  background: hsl(var(--background) / var(--amiba-reading-opacity));
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-.amiba-background-frame[data-background-active]
-  [data-background-surface="layout"]
-  [data-background-surface="header"],
-.amiba-background-frame[data-background-active]
-  [data-testid="native-window-titlebar"] {
-  background: hsl(var(--background) / 0.86);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-}
-.amiba-background-frame[data-background-active]
-  [data-background-surface="layout"]
-  [data-composer-card] {
-  background: hsl(var(--background) / var(--amiba-input-opacity));
-  backdrop-filter: blur(28px);
-  -webkit-backdrop-filter: blur(28px);
-  border-color: hsl(var(--border) / 0.7);
-}
-/* Sticky messages must occlude text scrolling underneath. Keep this solid. */
-.amiba-background-frame[data-background-active]
-  [data-background-surface="sticky-message"] {
-  background: hsl(var(--background));
-}
 .amiba-background-error {
   position: fixed;
   bottom: 12px;
@@ -92,30 +43,4 @@
 .amiba-background-error button {
   margin-left: 12px;
   text-decoration: underline;
-}
-/* Without backdrop support, deliberate opaque surfaces replace the glass. */
-@supports not (
-  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
-) {
-  .amiba-background-frame[data-background-active] {
-    --amiba-reading-opacity: 1;
-    --amiba-navigation-opacity: 1;
-    --amiba-input-opacity: 1;
-  }
-}
-@media (prefers-reduced-transparency: reduce) {
-  .amiba-background-frame[data-background-active] {
-    --amiba-reading-opacity: 1;
-    --amiba-navigation-opacity: 1;
-    --amiba-input-opacity: 1;
-  }
-}
-
-/* The sidebar already owns glass; its nested header shares that material. */
-.amiba-background-frame[data-background-active]
-  [data-background-surface="navigation"]
-  [data-background-surface="header"] {
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }

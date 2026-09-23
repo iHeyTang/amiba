@@ -106,8 +106,12 @@ async function animatedFixture() {
 (window as any).backgroundHarness = { controller, animatedFixture, call };
 function App() {
   const [text, setText] = useState(""),
-    [settings, setSettings] = useState(false);
+    [settings, setSettings] = useState(false),
+    [workbenchWidth, setWorkbenchWidth] = useState(256),
+    [empty, setEmpty] = useState(false);
   (window as any).backgroundHarness.settings = setSettings;
+  (window as any).backgroundHarness.workbench = setWorkbenchWidth;
+  (window as any).backgroundHarness.empty = setEmpty;
   return (
     <PresentationRoot>
       <BackgroundFrame controller={controller}>
@@ -140,7 +144,7 @@ function App() {
                 trailing={<span>···</span>}
               />
               <div
-                data-background-surface="reading"
+                data-background-surface={empty ? "canvas" : "reading"}
                 className="flex min-h-0 flex-1 flex-col px-10 py-8"
               >
                 <div className="mx-auto w-full max-w-3xl flex-1">
@@ -169,7 +173,7 @@ function App() {
                 </div>
               </div>
             </main>
-            <aside className="w-64 border-l border-border bg-background p-4">
+            <aside data-background-surface="workbench" style={{ width: workbenchWidth }} className="shrink-0 border-l border-border p-4">
               <PaneHeaderBar leading="工作区" />
               <p className="mt-4 text-xs text-muted-foreground">
                 代码 / 终端保持实色

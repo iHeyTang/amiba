@@ -13,8 +13,8 @@ export const backgroundConfigSchema = z.strictObject({
   dim: z.number().min(0).max(0.65),
   blur: z.number().min(0).max(20),
   glass: z.enum(["balanced", "strong"]),
-});
-export type BackgroundConfig = z.infer<typeof backgroundConfigSchema>;
+}).transform(config => ({ ...config, fit: "cover" as const, glass: "balanced" as const }));
+export type BackgroundConfig = z.input<typeof backgroundConfigSchema>;
 export const DEFAULT_BACKGROUND: BackgroundConfig = {
   enabled: false,
   assetId: null,

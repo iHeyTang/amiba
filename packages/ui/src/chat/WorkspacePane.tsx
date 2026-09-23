@@ -3107,7 +3107,7 @@ export function WorkspaceFileWorkspace({
   useEffect(() => { if (treeOpen) setTreeMounted(true); }, [treeOpen]);
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col bg-background">
+    <div data-workbench-file-surface className="flex h-full min-h-0 min-w-0 flex-col bg-background">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/35 px-3">
         <FileTypeIcon name={path} directory={!resource} className="h-3.5 w-3.5 shrink-0" />
         <span
@@ -3903,6 +3903,7 @@ export function WorkspacePane({
       )}
       <aside
         ref={previewRef}
+        data-background-surface="workbench"
         aria-label={t("workspacePane.title")}
         aria-hidden={!pane.open}
         className={cn(
