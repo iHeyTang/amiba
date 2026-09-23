@@ -154,8 +154,6 @@ if (
 
 export type {
   AmibaAgentPresetSectionOwner,
-  AmibaComposerModelPickerOwner,
-  AmibaComposerModelSelection,
   AmibaRootSlot,
   AmibaWorkspaceNavigationOwner,
   AmibaWorkspaceViewOwner,
@@ -872,7 +870,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // conversation.input.model while it has a session id, the hero
           // seat otherwise. Same root-declares-session-child shape as the
           // header utilities above.
-          "amiba.composer.modelPicker": { kind: "list", scope: "root" },
           "conversation.input.model": { kind: "single", scope: "session" },
           // Official vocabulary: the named plan-status seat in the composer
           // tool row, immediately right of the access-mode control (single,

@@ -16,7 +16,7 @@
 | 行为兼容 | **尚不能认定全部完全兼容**；专项验证、待验收、条件支持和宿主限制见逐项表 |
 | 后续新增槽 | 26 项不属于目标版本，暂不接入 |
 | 实现基线 | 插槽接入 `4d2edf82`；退役清理 `5aca2b07`、`58da9b44` · [PR #97](https://github.com/iHeyTang/amiba/pull/97)；记录时尚未合并／发布 |
-| 最近核验 | 2026-09-23；当前清单：61 个目标版本槽、26 个后续版本新增槽、21 个仍支持的私有槽 |
+| 最近核验 | 2026-09-23；当前清单：61 个目标版本槽、26 个后续版本新增槽、20 个仍支持的私有槽 |
 
 收录范围：当前目标版本的官方槽、后续对照版本仍存在的新增槽，以及 Amiba 仍支持的扩展。已停止支持且无后续对照价值的旧槽不再列出；退役迁移见 [SDK 说明](packages/extension-sdk/README.md)，完整历史查 Git。
 
@@ -30,6 +30,7 @@
 |---|---|---|---|
 | P1 | 输入区域、队列和附件 | 对下方目标版本表中“待专项验收”的真实插件补齐发送失败保留、普通文件、后台输入、Host 队列证据 | 修复确切缺口并逐行升级状态，不以入口数量关闭待办 |
 | P1 | 条件支持项 | 在实际支持的桌面／独立 Web 条件下验证目录、工作台、文档、工具、授权与卸载 | 每行记录已测宿主；不支持的宿主列明回退 |
+| P1 | 官方会话导航意图 | rc.2 `dsh-api-session-controller` 的公开打开方法未带桥接所用的旧意图标记；补齐无活动会话时的子会话打开及清空导航兼容 | 使用 rc.2 发布实现通过桥接测试；不能用测试替身的意图字段代替真实接口验收 |
 | P2 | 新增替换入口 | 补第三方整组件的会话切换、卸载、异常恢复及服务依赖验收 | 明确到插件／宿主／提交的证据，不宣称任意私有 API 通用兼容 |
 | 暂缓 | 26 个后续版本新增名 | 保留存在性记录，不向 rc.2 引入实现 | 只有目标内核升级且新目标仍有效时，才转为接入任务 |
 
@@ -84,7 +85,7 @@
 | `conversation.input.attachments`<br>附件呈现与拖放区域 | 有 | 有 | 有 | 已接入·专项验证 | 保留 |
 | `conversation.input.dock`<br>输入框上方附加区 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；补输入验收 |
 | `conversation.input.left`<br>输入工具栏左侧 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；补输入验收 |
-| `conversation.input.model`<br>当前会话模型选择 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；补 rc.2 验收 |
+| `conversation.input.model`<br>首页空会话及当前会话模型选择 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；首页准备并复用真实空会话，选择直接写入会话；补桌面端专项验收 |
 | `conversation.input.overlay`<br>触发菜单与弹层 | 有 | 有 | 有 | 已接入·宿主限制 | 保留；补键盘验收 |
 | `conversation.input.plan`<br>计划模式控件 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；补 rc.2 验收 |
 | `conversation.input.right`<br>输入工具栏右侧 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；补输入验收 |
@@ -106,6 +107,8 @@
 | `conversation.input.right` | 不晚于 0.0.1-rc.3 | list/session | InputRegion 派发真实 session/input；普通文件、原生／Host 队列及后台提交仍须按 rc.2 单独验收。 [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
 
 </details>
+
+首页模型选择的维护约束：按工作区准备真实空会话，不激活对话页、不进入普通历史索引；首次发送携带该会话 ID，接收窗口先打开它，再填入并提交。切换工作区复用各自空会话，并继承当前可用的模型选择；成功移交后，新任务不得重用已移交会话。自动测试覆盖并发准备、失败重试和目标会话交接；桌面多窗口行为仍须专项运行验收。
 
 ### 会话与消息（14 项）
 
@@ -337,20 +340,19 @@
 
 <a id="private"></a>
 
-## 5. Amiba 私有槽（21 项）
+## 5. Amiba 私有槽（20 项）
 
 私有槽不计入官方覆盖率。官方无同名不是退役理由；保留项修改时须验证注册、卸载和宿主行为，与官方能力重叠时先明确迁移方案。
 
-以下 21 项仍在维护；源码引用已核实，专项运行验收待补。已停止支持的私有槽不再列入当前清单。
+以下 20 项仍在维护；源码引用已核实，专项运行验收待补。已停止支持的私有槽不再列入当前清单。
 
-替代复核基于 `d7a66b5d` 的调用方、宿主与 rc.2 契约；`58da9b44` 已移除 4 个空置入口，其余替代迁移尚未实施。**21 项中，没有已确认可整体直接替换的私有槽。**官方槽能承载相近界面，不等于能代替业务注册表、独立窗口或生命周期。
+替代复核依据当前调用方、宿主与 rc.2 契约。首页先准备真实空会话，模型选择已统一使用 `conversation.input.model`。**剩余 20 项中，没有已确认可整体直接替换的私有槽。**官方槽能承载相近界面，不等于能代替业务注册表、独立窗口或生命周期。
 
 结论分为：**1 项可评估部分普通页面正文的迁移，1 项保留现有导航，4 项涉及框架重构应继续保留，其余 15 项无等价契约也继续保留。**部分使用者迁移后不能直接删除整个私有槽。4 个无内置注册方的空置入口已删除，不再列入当前台账；旧外部插件不再获得这些入口。
 
 | 私有插槽／源码 | 官方候选（以 rc.2 为准） | 维护建议 | 判断依据／迁移条件 |
 |---|---|---|---|
 | `amiba.agentPreset.section`<br>[源码](plugins/dsh-plugin-agent-preset/src/client/index.tsx) | 无等价槽 | 保留 | 这是预设详情的子区块；`conversation.hero.agentPreset` 替换整个首页选择器，粒度不同。 |
-| `amiba.composer.modelPicker`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | `conversation.input.model`（会话内） | 保留 | 私有槽承载首页无会话的草稿选择；官方槽为 session，不能覆盖首页场景。 |
 | `amiba.connection.access`<br>[源码](plugins/dsh-plugin-connector-core/src/client/index.tsx) | 无等价槽 | 保留 | 连接配置子区块带 ownerId/recordId；通用设置槽不提供等价配置上下文。 |
 | `amiba.conversation.notice`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 无等价槽 | 保留 | 按通知 source/reference 分派并传入正文；聊天 node/commandview 的数据契约不同。 |
 | `amiba.conversation.question`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 无等价槽 | 保留 | 按问题 ID 分派并提供 respond/cancel、错误及提交状态；toolview 是工具行，不是待回答交互。 |

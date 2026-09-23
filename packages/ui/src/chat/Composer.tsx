@@ -58,40 +58,15 @@ import type { ComposerTriggerRuntime } from "./composer/triggers/contracts";
 import type { SlashUiActionContext } from "./composer/providers/slash-ui-actions";
 import type { TriggerProvider } from "./composer/providers/types";
 import type { AgentExecutionContext } from "@amiba/app-runtime/core";
-import type { AgentModelSelection } from "@amiba/app-runtime/platform";
 import type {
-  AmibaComposerModelPickerOwner,
   ConversationInputModelOwnerProps,
   ConversationInputPlanOwnerProps,
   ComposerAttachmentsOwner,
 } from "@amiba/extension-sdk";
 
-/**
- * One model-picker dispatch request, computed by the Composer per render.
- * Two seats back the same chip position:
- *
- *   - `seat: "session"` — the composer has a session id: the OFFICIAL
- *     `conversation.input.model` seat (single, session scope, owner
- *     `{ locked }`). The occupant reads `sessionId` from the framework
- *     session kit and its engine data over the official wire; the seat
- *     renders nothing until the official current session catches up with a
- *     freshly minted draft (the shell's sessions bridge opens it once the
- *     DSH session materializes).
- *   - `seat: "hero"` — no session (home/draft composer): the vendor
- *     `amiba.composer.modelPicker` hero seat, whose owner carries the
- *     surface-held draft selection and picker chrome.
- */
-export type ComposerModelPickerRequest =
-  | { seat: "session"; owner: ConversationInputModelOwnerProps }
-  | { seat: "hero"; owner: AmibaComposerModelPickerOwner };
+/** Home and conversation composers share the official session-scoped model seat. */
+export type ComposerModelPickerRequest = { seat: "session"; owner: ConversationInputModelOwnerProps };
 
-/**
- * Renders the composer's model-picker chip from the seat request Composer
- * computes. The host builds this from the official DSH dispatch —
- * `renderSlot("conversation.input.model" | "amiba.composer.modelPicker",
- * request.owner)` — and threads it down; Composer itself has ZERO
- * model-plane knowledge.
- */
 export type ComposerModelPickerRenderer = (
   request: ComposerModelPickerRequest,
 ) => ReactNode;
@@ -254,21 +229,11 @@ export interface ComposerProps {
   renderAttachments?: ComposerAttachmentsRenderer;
   renderBar?: ComposerBarRenderer;
   renderAgentPicker?: (fallback: ReactNode) => ReactNode;
-  /**
-   * Show a compact DSH inference-model selector beside the send controls.
-   * The picker NODE comes from `render` — the host's renderSlot-backed
-   * dispatch of the seat Composer picks per render: the official
-   * session-scoped `conversation.input.model` while `permissionSessionId`
-   * is set (owner `{ locked }` — engine data is the occupant's own wire
-   * concern), the vendor session-less `amiba.composer.modelPicker` hero
-   * seat otherwise (owner carries the surface-held draft selection and
-   * picker chrome). Surfaces without a DSH plugin runtime (Quick-Ask) pass
-   * nothing and Composer renders nothing where the chip would sit.
-   */
+  /** Official model seat. Home supplies its prepared session independently of
+   * the input controller, so preparing a session cannot submit twice. */
   modelPicker?: {
     render: ComposerModelPickerRenderer;
-    draftSelection?: AgentModelSelection;
-    onDraftSelectionChange?: (selection: AgentModelSelection) => void;
+    sessionId?: string;
   };
   /** Show the active DSH permission preset as a switchable composer pill. */
   approvalModePicker?: boolean;
@@ -1196,23 +1161,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
               {actionsLeft}
               {inputLeft}
             </div>
-            {modelPicker
-              ? permissionSessionId
-                ? modelPicker.render({
-                    seat: "session",
-                    owner: { locked: disabled },
-                  })
-                : modelPicker.render({
-                    seat: "hero",
-                    owner: {
-                      draftSelection: modelPicker.draftSelection,
-                      onDraftSelectionChange: modelPicker.onDraftSelectionChange,
-                      disabled,
-                      dialogSize: pickerDialogSize,
-                      overlayVariant: pickerOverlayVariant,
-                      refreshKey: pickerRefreshKey,
-                    },
-                  })
+            {modelPicker && (modelPicker.sessionId ?? permissionSessionId)
+              ? modelPicker.render({ seat: "session", owner: { locked: disabled } })
               : null}
             {inputRight}
             {sendButtonNode}

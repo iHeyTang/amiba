@@ -1,3 +1,4 @@
+import { prepareHomeSession, consumeHomeSession } from "./prepared-session";
 import { ReplacementBoundary } from "../chat/ReplacementBoundary";
 import { useNewChatWorkspace } from "../chat/new-chat-workspace";
 import { useDirectoryChooser } from "../directory-chooser";
@@ -33,7 +34,7 @@ import {
   type ComposerHandle,
   type ComposerModelPickerRenderer,
 } from "../chat";
-import { getPlatform, type AgentModelSelection } from "@amiba/app-runtime/platform";
+import { getPlatform } from "@amiba/app-runtime/platform";
 import { shortId } from "@amiba/app-runtime/utils";
 import { useT } from "@amiba/i18n";
 import { useResolvedTheme } from "../theme";
@@ -51,6 +52,8 @@ import type { ComposerTriggerRuntime } from "../chat/composer/triggers/contracts
 export const HOME_PENDING_DRAFT_KEY = "home.pendingDraft";
 
 export interface HomeViewProps {
+  /** Bind a prepared real session to the official model seat without opening chat. */
+  onPreparedSession?: (id: string) => void;
   heroPreset?: { store: import("@amiba/extension-sdk").ObservableSnapshot<{ current: string }>; load(): Promise<void>; select(id: string): Promise<string | undefined>; reset(): void; prepareSubmission?(): Promise<{ profileId: string; commit(): void }> };
   renderAgentPreset?: (fallback: ReactNode) => ReactNode;
   workspacePicker?: (request: { anchorRef?: import("react").RefObject<HTMLButtonElement>; open: boolean; path: string | null; onPick(path: string): void; onClose(): void }, fallback: ReactNode) => ReactNode;
@@ -93,8 +96,8 @@ export interface HomeViewProps {
   panelMode?: boolean;
   /**
    * renderSlot-backed composer model-picker renderer, forwarded to
-   * ``<Composer modelPicker>`` together with HomeView's own draft-selection
-   * state. Hosts without a DSH plugin runtime omit it; the composer then
+   * ``<Composer modelPicker>`` together with HomeView's prepared session id.
+   * Hosts without a DSH plugin runtime omit it; the composer then
    * renders nothing where the chip would sit.
    */
   modelPicker?: ComposerModelPickerRenderer;
@@ -110,6 +113,7 @@ export default function HomeView(props: HomeViewProps) {
 // ---------------------------------------------------------------------------
 
 function Home({
+  onPreparedSession,
   heroPreset,
   renderAgentPreset,
   workspacePicker,
@@ -155,8 +159,11 @@ function Home({
   const [agent, setAgent] = useState<AgentExecutionContext>({
     profileId: "default",
   });
-  const [draftModelSelection, setDraftModelSelection] =
-    useState<AgentModelSelection>();
+  const [preparedId, setPreparedId] = useState("");
+  const preparationRevision = useRef(0);
+  const lastPrepared = useRef<{ id: string; cwd: string } | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [handedOff, setHandedOff] = useState(false);
   const [busy, setBusy] = useState(false);
   const newChatWorkspace = useNewChatWorkspace();
   const [workspacePath, setWorkspacePath] = useState<string | null>(newChatWorkspace?.path ?? null);
@@ -254,6 +261,31 @@ function Home({
     onOpenChat();
   }
 
+  useEffect(() => {
+    if (!onPreparedSession || handedOff) return;
+    let live = true;
+    const revision = ++preparationRevision.current;
+    setPreparedId("");
+    onPreparedSession("");
+    setPreparing(Boolean(workspacePath && sessions.ready));
+    if (workspacePath && sessions.ready) {
+      void (async () => {
+        const preset = await heroPreset?.prepareSubmission?.();
+        const previous = lastPrepared.current;
+        const id = await prepareHomeSession(workspacePath, preset?.profileId ?? agent.profileId,
+          previous?.cwd !== workspacePath ? previous?.id : undefined);
+        if (!live || revision !== preparationRevision.current) return;
+        lastPrepared.current = { id, cwd: workspacePath };
+        setPreparedId(id);
+        onPreparedSession(id);
+        setWorkspaceError(null);
+      })().catch(error => { if (live) setWorkspaceError(String(error.message ?? error)); })
+        .finally(() => { if (live) setPreparing(false); });
+    }
+    return () => { live = false; };
+  }, [workspacePath, sessions.ready, agent.profileId, heroPreset, onPreparedSession, handedOff]);
+  useEffect(() => () => { onPreparedSession?.(""); }, [onPreparedSession]);
+
   const workspaceAnchor = useRef<HTMLButtonElement>(null);
   const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false);
   useEffect(() => { if (heroPreset) void heroPreset.load(); }, [heroPreset]);
@@ -294,39 +326,21 @@ function Home({
     );
     if (att.attachmentUploading) return;
     if (!trimmed && readyAttachments.length === 0) return;
-    if (busy || !sessions.ready) return;
+    if (busy || handedOff || !sessions.ready || (onPreparedSession && (preparing || !workspacePath))) return;
     setBusy(true);
     try {
-      // HomeView only carries the *intent* to start a chat — the
-      // receiving surface (``ChatSurface`` in panelMode, or
-      // ``tabs/chat.html``'s ``FullScreenChatView`` after navigation)
-      // is what actually creates the session via ``ensureActive``
-      // inside its autosend chain.
-      //
-      // Previously HomeView called ``sessions.createNew()`` itself
-      // before writing the pending prompt. That worked in panel mode
-      // (same Store → the new session id propagates immediately) but
-      // produced an orphan unnamed conversation in the cross-window
-      // case: newtab's local Store minted session A; navigating to
-      // ``tabs/chat.html`` mounts a fresh per-window Store whose
-      // ``activeId`` starts empty (per-window selection — see
-      // ``SessionsStore``); chat.html's autosend then calls
-      // ``ensureActive`` which mints session B. Session A is left
-      // dangling in the rail as an unnamed empty row.
-      //
-      // Letting only the receiving surface create the session avoids
-      // that fork entirely. The home surface has no active id, so the
-      // autosend path creates exactly one session when it submits the
-      // first message.
-      //
-      // Uses `queueChatPrompt` (the bare write — no `createNew`)
-      // rather than the `useChatSessionRequester` hook with `mode:
-      // "new"` precisely because of the orphan-session story above.
+      // Address the already-created Host session explicitly, including across windows.
+      const revision = preparationRevision.current;
       const presetSubmission = await heroPreset?.prepareSubmission?.();
+      const sessionId = onPreparedSession && workspacePath
+        ? await prepareHomeSession(workspacePath, presetSubmission?.profileId ?? agent.profileId)
+        : undefined;
+      if (revision !== preparationRevision.current) throw new Error("Workspace changed before sending; please retry.");
       await queueChatPrompt({
+        sessionId,
         text: trimmed || undefined,
         agent: presetSubmission ? { profileId: presetSubmission.profileId } : heroPreset?.store.getSnapshot().current ? { profileId: heroPreset.store.getSnapshot().current } : agent,
-        modelSelection: draftModelSelection,
+
         // The default root is resolved again by the receiving chat surface.
         // Only carry an explicit override through the pending-prompt handoff.
         workspacePath:
@@ -358,8 +372,9 @@ function Home({
       // Hand-off done — drop them from the composer state without
       // deleting the files (the chat surface now owns them). Mint a
       // new staging session for the next round.
+      setHandedOff(Boolean(sessionId));
       att.setAttachments([]);
-      setDraftModelSelection(undefined);
+      if (sessionId) consumeHomeSession(sessionId);
       if (presetSubmission) presetSubmission.commit();
       else heroPreset?.reset();
       homeUploadSessionRef.current = shortId("home");
@@ -374,9 +389,10 @@ function Home({
   const canSend =
     (input.trim().length > 0 || att.hasReadyAttachment()) &&
     !busy &&
+    !handedOff &&
     !att.attachmentUploading &&
     !att.attachmentBusy &&
-    sessions.ready;
+    sessions.ready && (!onPreparedSession || (!preparing && !!workspacePath));
 
   return (
     <InteractionRegion
@@ -485,11 +501,10 @@ function Home({
             dropOverlay={t("newtab.dropOverlay")}
             sendTitle={t("newtab.send.tooltip")}
             modelPicker={
-              modelPicker
+              modelPicker && preparedId
                 ? {
                     render: modelPicker,
-                    draftSelection: draftModelSelection,
-                    onDraftSelectionChange: setDraftModelSelection,
+                    sessionId: preparedId || undefined,
                   }
                 : undefined
             }

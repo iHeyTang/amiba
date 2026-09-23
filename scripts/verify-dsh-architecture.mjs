@@ -384,7 +384,6 @@ for (const slot of [
   "amiba.workspace.view",
   "conversation.session.header.utilities",
   "conversation.session.header.actions",
-  "amiba.composer.modelPicker",
   "conversation.input.model",
   "conversation.input.plan",
   "conversation.input.overlay",

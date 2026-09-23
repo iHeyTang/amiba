@@ -148,3 +148,42 @@ it("reports a rejected preset preparation without queuing or consuming the selec
   expect(reset).not.toHaveBeenCalled();
   expect(commit).not.toHaveBeenCalled();
 });
+
+it("prepares one hidden real session in StrictMode and addresses it in the first prompt", async () => {
+  let row: any;
+  const create = vi.fn(async ({ cwd, agentPreset }) => {
+    row = { sessionId: 'prepared-home', cwd, agentPreset, blank: true, running: false };
+    return { sessionId: row.sessionId };
+  });
+  setPlatform({ storage: { get: async () => ({}), set: async () => {}, remove: async () => {}, watch: () => () => {} },
+    workspaces: { getDefaultRoot: mocks.root, bind: async () => {} },
+    agentSessions: { create, list: async () => row ? [row] : [] },
+  } as unknown as PlatformAdapter);
+  const prepared = vi.fn();
+  render(<StrictMode><HomeView panelMode onOpenChat={() => {}} onOpenSettings={() => {}} onPreparedSession={prepared} /></StrictMode>);
+  await waitFor(() => expect(prepared).toHaveBeenLastCalledWith('prepared-home'));
+  expect(create).toHaveBeenCalledOnce();
+  mocks.queue.mockRejectedValueOnce(new Error('storage unavailable'));
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('storage unavailable');
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+  expect(mocks.queue).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: 'prepared-home', text: 'hello' }));
+  expect(create).toHaveBeenCalledOnce();
+});
+
+it("allows Send to retry a failed preparation without losing the pending prompt", async () => {
+  let row: any;
+  const create = vi.fn().mockRejectedValueOnce(new Error('temporarily offline')).mockImplementation(async ({ cwd, agentPreset }) => {
+    row = { sessionId: 'recovered', cwd, agentPreset, blank: true, running: false };
+    return { sessionId: row.sessionId };
+  });
+  setPlatform({ storage: { get: async () => ({}), set: async () => {}, remove: async () => {}, watch: () => () => {} },
+    workspaces: { getDefaultRoot: mocks.root, bind: async () => {} },
+    agentSessions: { create, list: async () => row ? [row] : [] },
+  } as unknown as PlatformAdapter);
+  render(<HomeView panelMode onOpenChat={() => {}} onOpenSettings={() => {}} onPreparedSession={vi.fn()} />);
+  expect(await screen.findByRole('alert')).toHaveTextContent('temporarily offline');
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+  expect(mocks.queue).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: 'recovered', text: 'hello' }));
+  expect(create).toHaveBeenCalledTimes(2);
+});

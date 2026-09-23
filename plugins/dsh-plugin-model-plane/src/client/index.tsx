@@ -21,7 +21,7 @@ import {
 } from "./ModelProviderConfigTab.js";
 
 export const name = "amiba-model-plane-client";
-// The session picker reads modelSelection from ctx.sessions; draft pickers only need the catalog.
+// Both home and conversation pickers read the real session model selection.
 export const inject = ["slots", "sessions", "remote", "connection", "remote.session", "remote.settings", "remote.llm", "remote.credentials"];
 
 const SECTION_ID = "models";
@@ -29,11 +29,6 @@ const SECTION_ID = "models";
 
 type ModelPlaneSectionProps = PropsRuntime<"settings.section"> & PropsRenderSlots<"amiba.models.extension" | "settings.models.footer" | "settings.models.provider-card"> & {
   adapter: ProviderSettingsController;
-};
-
-/** The session-less hero seat: draft plumbing rides the owner share. */
-type DraftPickerSlotProps = PropsRuntime<"amiba.composer.modelPicker"> & {
-  catalog: ComposerPickerCatalog;
 };
 
 /** The official seat: sessionId from the standard kit, locked from the owner. */
@@ -66,29 +61,10 @@ function ModelPlaneSettings({ adapter, renderSlot }: ModelPlaneSectionProps): Re
 }
 
 /**
- * `amiba.composer.modelPicker` contribution: the session-less hero model
- * chip (home/draft composer). The catalog comes directly from the official llm.models API; the surface-held draft selection and picker chrome ride the owner
- * share. No engine — there is no session to talk to yet.
- */
-function DraftModelPickerContribution(props: DraftPickerSlotProps): ReactNode {
-  return (
-    <DshComposerModelPicker
-      catalog={props.catalog}
-      dialogSize={props.dialogSize}
-      disabled={props.disabled}
-      draftSelection={props.draftSelection}
-      onDraftSelectionChange={props.onDraftSelectionChange}
-      overlayVariant={props.overlayVariant}
-      refreshKey={props.refreshKey}
-    />
-  );
-}
-
-/**
  * `conversation.input.model` contribution: the official session model seat.
  * `sessionId` arrives from the framework session kit, `locked` from the
  * owner share, and engine data over the official wire
- * (`session.models` / `session.selectModel`) — the same calls the official
+ * (`session.modelCatalog` / `session.selectModel`) — the same calls the official
  * ui-model-selection plugin makes. Dialog chrome is self-managed (defaults):
  * the constrained-host accommodations (dialogSize/overlayVariant/refreshKey)
  * were Quick-Ask concerns, and Quick-Ask has no DSH runtime — no dispatch
@@ -111,8 +87,7 @@ function SessionModelPickerContribution(
 }
 
 /** Publish the 模型与服务 ("Models & services")
- *  Settings section, and the two composer picker contributions (official
- *  session seat + vendor hero seat). */
+ *  Settings section and the official model picker for home and chat. */
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   const api = ctx.remote;
   // Official wire faces, captured once from the connection
@@ -173,19 +148,6 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
     ["slots", "connection"],
     (injectedCtx) => {
       const catalog: ComposerPickerCatalog = controller;
-      const disposeDraftSeat = injectedCtx.slots.inject(
-        "amiba.composer.modelPicker",
-        () =>
-          injectedCtx.slots.register(
-            {
-              name: "amiba.composer.modelPicker",
-              id: "model-plane",
-              order: 100,
-              inject: () => ({ catalog }),
-            },
-            DraftModelPickerContribution,
-          ),
-      );
       const disposeSessionSeat = injectedCtx.slots.inject(
         "conversation.input.model",
         () =>
@@ -199,7 +161,6 @@ export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
       );
       return () => {
         disposeSessionSeat();
-        disposeDraftSeat();
       };
     },
   );

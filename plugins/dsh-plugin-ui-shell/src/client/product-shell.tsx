@@ -160,12 +160,9 @@ const EMPTY_MESSAGE_SOURCES: readonly MessageSourceRow[] = [];
  * `conversation.session.header.actions`, the conversation-edge action row —
  * and the two composer control seats, `conversation.input.model` and
  * `conversation.input.plan`, and the composer's floating overlay anchor,
- * `conversation.input.overlay`). Two names from the public vocabulary are
- * absent on purpose:
+ * `conversation.input.overlay`). One name is owned by another plugin:
  *   - `amiba.agentPreset.section` is declared (and dispatched) by
- *     dsh-plugin-agent-preset as a child of its own settings section;
- *   - `amiba.composer.modelPicker` is dispatched through the composer's
- *     `modelPicker` render prop rather than by the shell markup directly.
+ *     dsh-plugin-agent-preset as a child of its own settings section.
  *
  * `tool.call.toolview` is the one KEYED member: it rides the chat surface's
  * `toolView` render prop, dispatched once per tool row with the row's wire
@@ -350,6 +347,7 @@ async function drainPendingPrompt(): Promise<PendingPromptResult | null> {
       workspacePath,
       agent,
       modelSelection,
+      sessionId: typeof value.sessionId === "string" && value.sessionId ? value.sessionId : undefined,
     };
   } catch {
     return null;
@@ -502,6 +500,7 @@ function ProductShellInner({
   const leaveMainPanel = useCallback(() => mainPanels.leavePanel(), [mainPanels]);
   const hasLineage = useSyncExternalStore(lineageAvailable.subscribe, lineageAvailable.getSnapshot, lineageAvailable.getSnapshot);
   const hasToolImages = useSyncExternalStore(toolImagesAvailable.subscribe, toolImagesAvailable.getSnapshot, toolImagesAvailable.getSnapshot);
+  const [homeSessionId, setHomeSessionId] = useState("");
   const platform = getPlatform();
   const desktop = platform.kind === "desktop";
   const topBarHeightPx = platform.windowChrome?.topBarHeightPx ?? 40;
@@ -701,9 +700,7 @@ function ProductShellInner({
   // official wire), the vendor session-less hero seat while drafting.
   const renderModelPickerSeat = useCallback(
     (request: ComposerModelPickerRequest) =>
-      request.seat === "session"
-        ? renderSlot("conversation.input.model", request.owner)
-        : renderSlot("amiba.composer.modelPicker", request.owner),
+      renderSlot("conversation.input.model", request.owner),
     [renderSlot],
   );
 
@@ -859,8 +856,8 @@ function ProductShellInner({
   // or the already-committed render resolves the official session-scoped
   // seats under the previous session and that stale frame is painted.
   useLayoutEffect(() => {
-    sessionsBridge?.setActive(sessions.activeId);
-  }, [sessionsBridge, sessions.activeId]);
+    sessionsBridge?.setActive(sessions.activeId || homeSessionId);
+  }, [sessionsBridge, sessions.activeId, homeSessionId]);
 
   if (
     platform.kind === "desktop" &&
@@ -945,6 +942,7 @@ function ProductShellInner({
                 onConversationViewSelect: trajectory.select,
                 emptyState: (
                   <HomeView
+                    onPreparedSession={setHomeSessionId}
                     triggerRuntime={triggerRuntime}
                     onOpenChat={() => {}}
                     onOpenSettings={() => settings.openAt()}

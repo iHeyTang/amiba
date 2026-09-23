@@ -1,3 +1,4 @@
+import { usePendingPromptHandoff } from "./usePendingPromptHandoff";
 import { TranscriptScrollPositionContext, readTranscriptScrollPosition } from "./transcript-scroll-position";
 import { useConversationAutoScroll } from "./use-conversation-auto-scroll";
 import { ensureSessionWorkspace } from "@amiba/app-runtime/platform";
@@ -303,10 +304,8 @@ export interface ChatSurfaceProps {
     /**
      * renderSlot-backed model-picker renderer, forwarded to the internal
      * ``<Composer modelPicker>``. Hosts inside a DSH plugin runtime back it
-     * with the seat-split official dispatch (`conversation.input.model`
-     * for session requests, the vendor `amiba.composer.modelPicker` hero
-     * seat for draft requests); hosts without one (Quick-Ask) omit it and
-     * the composer renders nothing where the chip would sit.
+     * with `conversation.input.model`. Hosts without a DSH runtime
+     * (Quick-Ask) omit it and render no model picker.
      */
     modelPicker?: ComposerModelPickerRenderer;
     transcript?: ReactNode;
@@ -573,6 +572,7 @@ export default function ChatSurface({
   // the user already pressed Enter on Home, so an extra Send click here
   // would be friction.
   const [pendingAutosend, setPendingAutosend] = useState(false);
+  const pendingAutosendSession = useRef<string | undefined>(undefined);
   // Origin hint for a hand-off prompt (e.g. "Safari" from Quick-Ask
   // Spotlight). Rendered as a chip above the composer; cleared once the
   // user starts typing or sends, so it doesn't follow them around past
@@ -925,25 +925,13 @@ export default function ChatSurface({
   // whichever fields are populated, and flag the turn for auto-send.
   // The host clears the storage key atomically so renderer remounts do not
   // resubmit the same prompt.
-  useEffect(() => {
-    const drain = capabilities.pendingPrompt?.drain;
-    if (!drain) return;
-    // Re-runs whenever the active session id flips. Critical for the
-    // home-composer hand-off and programmatic fresh-session requests can
-    // change the active id while a pending prompt is being written. Re-run
-    // on that transition so whichever operation finishes last still gets a
-    // chance to drain the payload.
-    //
-    // No `cancelled` cleanup flag: `drain()` is destructive (read +
-    // remove), so a value returned from an in-flight drain that races
-    // with a deps change (typical of the home hand-off, where activeId
-    // flips while the storage write for pendingPrompt is still in
-    // flight) is *already gone from storage* — bailing here on
-    // cancellation would silently drop the user's prompt. The payload
-    // is session-agnostic; whichever effect run wins should still seed
-    // the composer.
-    void drain().then(async (payload: PendingPromptResult | null) => {
-      if (payload == null) return;
+  usePendingPromptHandoff({
+    activeId: sessions.activeId,
+    drain: capabilities.pendingPrompt?.drain,
+    tick: pendingPromptTick,
+    open: sessions.openTab,
+    onError: error => setAttachmentError(error instanceof Error ? error.message : String(error)),
+    receive: async (payload: PendingPromptResult) => {
       const text = payload.text?.trim() ?? "";
       const incoming = payload.attachments ?? [];
       for (const item of incoming) {
@@ -960,6 +948,9 @@ export default function ChatSurface({
         } finally {
           delete item.dataBase64;
         }
+      }
+      if (payload.sessionId && sessions.getSnapshot().activeId !== payload.sessionId) {
+        throw new Error("The active conversation changed before receiving the prompt. Reopen the prepared conversation to retry.");
       }
       const promotedAttachments: Attachment[] = incoming.filter(a => a.attachmentId).map((a) => ({
         uiId: a.uiId,
@@ -996,9 +987,9 @@ export default function ChatSurface({
       // Auto-send only when there's actual text to anchor the turn.
       // Attachment-only hand-offs (a snip with no OCR) need user input
       // — auto-sending an empty user message is a footgun.
-      if (text) setPendingAutosend(true);
-    });
-  }, [sessions.activeId, capabilities.pendingPrompt, pendingPromptTick]);
+      if (text) { pendingAutosendSession.current = payload.sessionId; setPendingAutosend(true); }
+    },
+  });
 
   // Subscribe to pending-prompt push events so the drain re-fires when
   // a new payload lands mid-session — covers the case where the
@@ -1022,12 +1013,16 @@ export default function ChatSurface({
   // landed before send() sees a stale empty string.
   useEffect(() => {
     if (!pendingAutosend) return;
+    if (pendingAutosendSession.current && pendingAutosendSession.current !== sessions.activeId) {
+      setPendingAutosend(false);
+      return;
+    }
     if (!sessions.ready || busy) return;
     if (!input.trim()) return;
     setPendingAutosend(false);
     const fn = sendRef.current;
     if (fn) void fn();
-  }, [pendingAutosend, sessions.ready, busy, input]);
+  }, [pendingAutosend, sessions.activeId, sessions.ready, busy, input]);
 
   // -------------------------------------------------------------------------
   // Chat engine subscription/snapshot/event handling.
