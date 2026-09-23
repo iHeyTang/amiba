@@ -25,6 +25,17 @@ test("cannot distribute lockfiles captured as local workspace links", () => {
   }
 });
 
+test("rejects conflicting direct dependency overrides even when recorded manifests match", () => {
+  for (const override of ["2.0.0", { ".": "2.0.0" }, "$missing"]) {
+    const recorded = { ...manifest, overrides: { example: override } };
+    assert.throws(() => validateDependencyLock(recorded, recorded, lock), /override for example conflicts/);
+  }
+  for (const override of ["1.0.0", "$example", { ".": "1.0.0" }]) {
+    const recorded = { ...manifest, overrides: { example: override } };
+    validateDependencyLock(recorded, recorded, lock);
+  }
+});
+
 test("committed distribution lock retains native dependencies for all platforms", () => {
   const recorded = JSON.parse(readFileSync(new URL("../../runtime-deps/package.json", import.meta.url), "utf8"));
   const committed = JSON.parse(readFileSync(new URL("../../runtime-deps/package-lock.json", import.meta.url), "utf8"));

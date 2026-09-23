@@ -9,7 +9,7 @@
     "shiki": "4.4.3",
     "@shikijs/langs": "4.4.3",
     "pdfjs-dist": "6.1.200",
-    "@deepseek-ai/dsh-home-paths": "0.1.5-rc.1"
+    "@deepseek-ai/dsh-home-paths": "0.1.5-rc.2"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-skill": "0.1.5-rc.2",
