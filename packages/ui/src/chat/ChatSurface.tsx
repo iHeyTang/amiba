@@ -1142,6 +1142,7 @@ export default function ChatSurface({
       const merged: Partial<UiMessage> = {
         content: state.assistantText,
         assistantMessageId: state.assistantMessageId,
+        ...(state.assistantSentAt !== undefined ? { sentAt: state.assistantSentAt } : {}),
         runtimeTurn: state.runtimeTurn,
         streaming: state.streaming,
         // Carry the chip URL the engine captured at end-of-turn through to
@@ -1493,7 +1494,7 @@ export default function ChatSurface({
       case "assistantMessage": {
         const assistantUiId = stream.getCurrentAssistantUiId();
         if (assistantUiId) sessions.setActiveMessages(prev => (prev as UiMessage[]).map(message =>
-          message.uiId === assistantUiId ? { ...message, assistantMessageId: event.messageId } : message));
+          message.uiId === assistantUiId ? { ...message, assistantMessageId: event.messageId, ...(event.sentAt !== undefined ? { sentAt: event.sentAt } : {}) } : message));
         break;
       }
       case "begin":

@@ -100,6 +100,7 @@ interface AssistantTurn {
   turn: number;
   runtimeTurn?: number;
   firstSeq: number;
+  sentAt: number;
   text: string;
   draftText: string;
   draftTimeline: AssistantTimelineItem[];
@@ -120,6 +121,7 @@ function beginTurn(event: AgentSessionEvent): AssistantTurn {
       typeof event.data.turn === "number" ? event.data.turn : event.seq,
     ...(Number.isSafeInteger(event.data.turn) && (event.data.turn as number) >= 0 ? { runtimeTurn: event.data.turn as number } : {}),
     firstSeq: event.seq,
+    sentAt: event.time,
     text: "",
     draftText: "",
     draftTimeline: [],
@@ -162,6 +164,7 @@ function finishTurn(
     content,
     uiId: `dsh:turn:${turn.firstSeq}`,
     runtimeSeq: turn.firstSeq,
+    sentAt: turn.sentAt,
     ...(turn.runtimeTurn === undefined ? {} : { runtimeTurn: turn.runtimeTurn }),
     ...(turn.closing.getMessageId() ? { assistantMessageId: turn.closing.getMessageId()! } : {}),
     ...(turn.reasoning ? { reasoning: turn.reasoning } : {}),
@@ -378,6 +381,7 @@ export function projectRuntimeSessionHistory(
       continue;
     }
     if (event.type === "assistant/message") {
+      turn.sentAt = event.time;
       const message = messageFromEvent(event);
       const text = contentText(message?.content);
       if (text) {
@@ -408,6 +412,7 @@ export function projectRuntimeSessionHistory(
       continue;
     }
     if (event.type === "turn/end") {
+      turn.sentAt = event.time;
       interruptOpenCompactions(turn.timeline!);
       finishTurn(turn, output);
       turn = null;

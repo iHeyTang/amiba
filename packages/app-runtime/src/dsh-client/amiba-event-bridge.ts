@@ -165,7 +165,7 @@ export class DshAmibaEventBridge {
     closing.apply(source)
     const frames = this.projectSessionEvent(sessionId, source, view)
     const messageId = source.type === "turn/end" ? closing.getMessageId() : null
-    return messageId === null ? frames : [{ sessionId, event: { kind: "assistantMessage", messageId } }, ...frames]
+    return messageId === null ? frames : [{ sessionId, event: { kind: "assistantMessage", messageId, sentAt: source.time } }, ...frames]
   }
 
   private projectSessionEvent(

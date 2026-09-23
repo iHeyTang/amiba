@@ -414,6 +414,7 @@ export interface ChatRuntimeState {
   assistantText: string;
   /** Durable identity of the completed turn’s closing assistant, when available. */
   assistantMessageId?: string;
+  assistantSentAt?: number;
   /** Exact DSH engine turn number, never a display ordinal. */
   runtimeTurn?: number;
   reasoning: string;
@@ -498,7 +499,7 @@ export type EngineToClientMessage =
 
 export type StreamEvent =
   | { kind: "begin"; assistantUiId: string }
-  | { kind: "assistantMessage"; messageId: string }
+  | { kind: "assistantMessage"; messageId: string; sentAt?: number }
   | { kind: "chunk"; text: string; runtimeStep?: number }
   | { kind: "assistantTextSource"; phase: "reset"; runtimeStep: number }
   | { kind: "assistantTextSource"; phase: "final"; runtimeStep: number; runtimeSeq: number; text: string }
