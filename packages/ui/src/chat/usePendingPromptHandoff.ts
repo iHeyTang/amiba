@@ -1,3 +1,4 @@
+import { waitForHomeDraftHandoff } from "../home/home-draft-handoff";
 import { useEffect, useRef, useState } from "react";
 import type { PendingPromptResult } from "./internal/capabilities";
 
@@ -31,7 +32,7 @@ export function usePendingPromptHandoff({ activeId, drain, tick, open, receive, 
     if (payload.sessionId && payload.sessionId !== activeId) {
       if (opening.current === payload) return;
       opening.current = payload;
-      void latest.current.open(payload.sessionId).catch(error => {
+      void waitForHomeDraftHandoff(payload.sessionId).then(() => latest.current.open(payload.sessionId!)).catch(error => {
         opening.current = null;
         latest.current.onError(error);
         // Keep the payload for a later navigation/retry, never send it elsewhere.

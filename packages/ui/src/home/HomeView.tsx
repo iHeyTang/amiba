@@ -1,5 +1,9 @@
+import { bindHomeComposerDraft, finishHomeComposerDraft } from "../chat/composer-draft-store";
+import { moveComposerAttachmentDraft } from "../chat/composer-attachment-store";
+import { beginHomeDraftHandoff } from "./home-draft-handoff";
 import { prepareHomeSession, consumeHomeSession } from "./prepared-session";
 import { ReplacementBoundary } from "../chat/ReplacementBoundary";
+import { useSessionComposerDraft } from "../chat/use-session-composer-draft";
 import { useNewChatWorkspace } from "../chat/new-chat-workspace";
 import { useDirectoryChooser } from "../directory-chooser";
 import { InteractionRegion } from "../primitives/interaction-region";
@@ -136,8 +140,10 @@ function Home({
   // The session id scopes the host attachment staging directory;
   // we use a stable HomeView-scoped one so re-uploads land in the same
   // bucket and clean up cleanly on chat hand-off.
+  const [input, setInput, , draftSource] = useSessionComposerDraft(null);
   const homeUploadSessionRef = useRef<string>(shortId("home"));
   const att = useComposerAttachments({
+    draftScope: draftSource,
     getSessionId: () => homeUploadSessionRef.current,
   });
 
@@ -155,7 +161,6 @@ function Home({
     [t],
   );
 
-  const [input, setInput] = useState("");
   const [agent, setAgent] = useState<AgentExecutionContext>({
     profileId: "default",
   });
@@ -175,7 +180,7 @@ function Home({
   const chooseDirectory = useDirectoryChooser("home");
   const canChooseWorkspace = Boolean(chooseDirectory || workspacePicker);
 
-  // Sidebar shortcuts select a draft directory without creating an empty session.
+  // Sidebar shortcuts select the directory for the prepared Home session.
   useEffect(() => {
     if (!newChatWorkspace) return;
     setWorkspacePath(newChatWorkspace.path ?? defaultWorkspaceRoot);
@@ -275,6 +280,7 @@ function Home({
         const id = await prepareHomeSession(workspacePath, preset?.profileId ?? agent.profileId,
           previous?.cwd !== workspacePath ? previous?.id : undefined);
         if (!live || revision !== preparationRevision.current) return;
+        bindHomeComposerDraft(getPlatform().storage, id);
         lastPrepared.current = { id, cwd: workspacePath };
         setPreparedId(id);
         onPreparedSession(id);
@@ -327,7 +333,9 @@ function Home({
     if (att.attachmentUploading) return;
     if (!trimmed && readyAttachments.length === 0) return;
     if (busy || handedOff || !sessions.ready || (onPreparedSession && (preparing || !workspacePath))) return;
+    const submittedDocument = draftSource.getDocument();
     setBusy(true);
+    let releaseHandoff: (() => void) | undefined;
     try {
       // Address the already-created Host session explicitly, including across windows.
       const revision = preparationRevision.current;
@@ -336,6 +344,10 @@ function Home({
         ? await prepareHomeSession(workspacePath, presetSubmission?.profileId ?? agent.profileId)
         : undefined;
       if (revision !== preparationRevision.current) throw new Error("Workspace changed before sending; please retry.");
+      if (sessionId) {
+        bindHomeComposerDraft(getPlatform().storage, sessionId);
+        releaseHandoff = beginHomeDraftHandoff(sessionId);
+      }
       await queueChatPrompt({
         sessionId,
         text: trimmed || undefined,
@@ -369,11 +381,17 @@ function Home({
                 }))
             : undefined,
       });
+      const nextDraft = sessionId
+        ? finishHomeComposerDraft(getPlatform().storage, sessionId, draftSource, submittedDocument)
+        : undefined;
+      if (!sessionId) draftSource.commitSend(submittedDocument);
       // Hand-off done — drop them from the composer state without
       // deleting the files (the chat surface now owns them). Mint a
       // new staging session for the next round.
       setHandedOff(Boolean(sessionId));
-      att.setAttachments([]);
+      const submittedIds = new Set(readyAttachments.map(attachment => attachment.uiId));
+      att.setAttachments(current => current.filter(attachment => !submittedIds.has(attachment.uiId)));
+      if (nextDraft) moveComposerAttachmentDraft(draftSource, nextDraft);
       if (sessionId) consumeHomeSession(sessionId);
       if (presetSubmission) presetSubmission.commit();
       else heroPreset?.reset();
@@ -382,6 +400,7 @@ function Home({
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : String(error));
     } finally {
+      releaseHandoff?.();
       setBusy(false);
     }
   }
@@ -488,6 +507,7 @@ function Home({
             triggerRuntime={triggerRuntime}
             ref={inputRef}
             value={input}
+            draftSource={draftSource}
             onChange={setInput}
             onSubmit={(text) => void submitToChat(text)}
             busy={busy}

@@ -1,3 +1,4 @@
+import { waitForHomeDraftHandoff } from "../home/home-draft-handoff";
 import { usePendingPromptHandoff } from "./usePendingPromptHandoff";
 import { TranscriptScrollPositionContext, readTranscriptScrollPosition } from "./transcript-scroll-position";
 import { useConversationAutoScroll } from "./use-conversation-auto-scroll";
@@ -614,6 +615,8 @@ export default function ChatSurface({
   const draftUploadSessionRef = useRef(shortId("draft"));
   const queuedAttachmentsRef = useRef<Attachment[]>([]);
   const att = useComposerAttachments({
+    draftScope: composerDraftSource,
+    draftKey: sessions.activeId,
     isAttachmentRetained: id => queuedAttachmentsRef.current.some(a => a.attachmentId === id),
     registerDraftImage: triggerRuntime?.registerDraftImage,
     getSessionId: () => sessions.activeId || draftUploadSessionRef.current,
@@ -812,7 +815,7 @@ export default function ChatSurface({
     sessions.activeId,
     sessions.activeMessages,
     composerDockHeight,
-    slots?.transcript === undefined,
+    { enabled: slots?.transcript === undefined, scope: composerDraftSource },
   );
   // The chunk-buffer / RAF-flush machinery used to live inline here; now
   // owned by `useStreamBuffer` (`stream.*`).
@@ -932,6 +935,7 @@ export default function ChatSurface({
     open: sessions.openTab,
     onError: error => setAttachmentError(error instanceof Error ? error.message : String(error)),
     receive: async (payload: PendingPromptResult) => {
+      await waitForHomeDraftHandoff(payload.sessionId);
       const text = payload.text?.trim() ?? "";
       const incoming = payload.attachments ?? [];
       for (const item of incoming) {
@@ -1649,8 +1653,8 @@ export default function ChatSurface({
   // Lifecycle of an assistant bubble is owned by DSH-backed engine snapshots.
   // The UI never infers a durable run state from the volatile `streaming` flag.
 
-  // Session switch: drop panel-local stream accumulators and compose-time
-  // attachments. The previous session's DSH turn keeps running; switching
+  // Session switch: drop panel-local stream accumulators. Draft attachments
+  // remain with their session. The previous DSH turn keeps running; switching
   // back re-subscribes and rebuilds local state from the engine snapshot.
   //
   // Note we do NOT delete the outgoing session's queued attachments here:
@@ -1682,11 +1686,6 @@ export default function ChatSurface({
         // The top-level recovery card belongs to the outgoing session.
         // The incoming snapshot will restore its own error, if any.
         setError(null);
-        // Same fire-and-forget GC as `newChat` — the composer-time
-        // attachments belonged to the session we're leaving.
-        deleteUnretainedAttachments(attachments, pendingQueue.flatMap(q => q.attachments));
-        setAttachments([]);
-        setAttachmentError(null);
         // The "from <App>" source hint belongs to the hand-off prompt
         // for THIS session; dropping it on switch keeps it from
         // bleeding into an unrelated chat.
@@ -2185,8 +2184,7 @@ export default function ChatSurface({
     resetQuestions();
     // Drop any composer-time attachments and unlink their on-disk files —
     // they were tied to the old session and won't be referenced again.
-    deleteUnretainedAttachments(attachments, pendingQueue.flatMap(q => q.attachments));
-    setAttachments([]);
+    att.clearAttachments();
     setAttachmentError(null);
     pendingWorkspacePathRef.current = null;
     setWorkspaceError(null);
@@ -2565,6 +2563,7 @@ export default function ChatSurface({
                       >
                         <WorkspaceUrlOpenerContext.Provider value={workspaceUrlOpener}>
                           <MessageTurns
+                            viewStateScope={composerDraftSource}
                             messageImages={slots?.messageImages}
                             assistantActions={slots?.assistantActions}
                             messageText={slots?.messageText}

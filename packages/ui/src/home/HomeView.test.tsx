@@ -31,10 +31,11 @@ vi.mock("../chat", async () => {
     WorkspaceControl,
     queueChatPrompt: mocks.queue,
     Composer: forwardRef(
-      ({ contextRail, floatingNotice, onSubmit }: any, _ref) => (
+      ({ contextRail, floatingNotice, onSubmit, value, onChange }: any, _ref) => (
         <div>
           {contextRail}
           {floatingNotice}
+          <textarea aria-label="Draft" value={value} onChange={event => onChange(event.target.value)} />
           <button onClick={() => onSubmit("hello")}>Send</button>
         </div>
       ),
@@ -186,4 +187,38 @@ it("allows Send to retry a failed preparation without losing the pending prompt"
   await userEvent.click(screen.getByRole('button', { name: 'Send' }));
   expect(mocks.queue).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: 'recovered', text: 'hello' }));
   expect(create).toHaveBeenCalledTimes(2);
+});
+
+it("restores the home input after a conversation unmounts the empty-state view", async () => {
+  const home = <HomeView panelMode onOpenChat={() => {}} onOpenSettings={() => {}} />;
+  const view = render(home);
+  await userEvent.type(screen.getByRole("textbox", { name: "Draft" }), "Unsent home draft");
+  view.rerender(<div>Existing conversation</div>);
+  expect(screen.queryByRole("textbox", { name: "Draft" })).not.toBeInTheDocument();
+  view.rerender(home);
+  expect(screen.getByRole("textbox", { name: "Draft" })).toHaveValue("Unsent home draft");
+});
+
+it("consumes the home draft after a successful prompt handoff", async () => {
+  mocks.queue.mockResolvedValue(undefined);
+  const home = <HomeView panelMode onOpenChat={() => {}} onOpenSettings={() => {}} />;
+  const view = render(home);
+  await userEvent.type(screen.getByRole("textbox", { name: "Draft" }), "Unsent home draft");
+  await userEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(screen.getByRole("textbox", { name: "Draft" })).toHaveValue(""));
+  view.rerender(<div>Existing conversation</div>);
+  view.rerender(home);
+  expect(screen.getByRole("textbox", { name: "Draft" })).toHaveValue("");
+});
+
+it("does not clear newer home edits when a previous handoff finishes", async () => {
+  let finish!: () => void;
+  mocks.queue.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+  render(<HomeView panelMode onOpenChat={() => {}} onOpenSettings={() => {}} />);
+  const input = screen.getByRole("textbox", { name: "Draft" });
+  await userEvent.type(input, "Original");
+  await userEvent.click(screen.getByRole("button", { name: "Send" }));
+  await userEvent.type(input, " newer edit");
+  finish();
+  await waitFor(() => expect(input).toHaveValue("Original newer edit"));
 });
