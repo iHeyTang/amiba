@@ -5,27 +5,32 @@
 | 统计口径 | 升级前 a3560301 | 本分支 |
 |---|---:|---:|
 | rc.2 官方普通插槽 | 61 | 61 |
-| 有实际派发，包含部分／条件支持 | 43（70.5%） | 53（86.9%） |
-| 未接入／仅声明 | 17 | 7 |
+| 有实际派发，包含部分／条件支持 | 43（70.5%） | 55（90.2%） |
+| 未接入／仅声明 | 17 | 5 |
 | root 宿主占用，单独统计 | 1 | 1 |
 
 这是入口覆盖率，不是完美兼容率。原有部分／条件支持不会因升级自动变成完全兼容。Amiba 私有槽、历史废弃名称、alpha 新增槽和工厂入口不计入。
 
 ## 新入口的运行规则
 
-- 默认界面作为 priority=-1 的占用组件；插件用更小的优先级（如 -2）接管，沿用现有图片槽的规则。
+- single 槽的默认界面作为 priority=-1 的占用组件；插件用更小的优先级（如 -2）接管，沿用现有图片槽的规则。
 - 插件返回 null 表示有意不显示。卸载或渲染异常退让后恢复默认界面。
 - 严格 session 槽在首页不派发；main.conversation 和附件使用 session-maybe。
 - 附件入口传递实际浏览器草稿（含文件）、上传状态和添加／删除／重试动作，覆盖首页与会话输入框。
 - 整块替换会卸载该块原组件；不是透明装饰器。侧栏保留 Amiba 的完全收起模式，没有另行实现官方紧凑栏。
 
-## 未接入的 7 项
+## 输入器接管的兼容边界
+
+- `conversation.composer` 使用官方 `useSessionPendingInteraction` 的会话级选举结果和真实 Session 快照。通过 `overlay: true` 保留原输入器挂载；交互结束、插件卸载后恢复草稿。仅在有效会话派发，拒绝导航期间不匹配的快照。
+- `conversation.composer.bar` 覆盖首页与会话输入器，传递实际 `variant`、`disabled`、`placeholder`。Amiba 没有官方首页“必须先选工作区”的禁用模式，因此不虚构 `blocked` 或 `workspacePickerOpen`；本地工作区控件留在原输入器中。
+- bar 插件替换的是整块界面，会卸载原编辑器 DOM。Composer 层的输入动作／附件服务和上层草稿保留，第三方插件仍需实现自己的编辑界面；这不等于原官方 ComposerBar 的私有注入操作可以无改动复用。
+- 实际 rc.2 renderer 的 chain 测试验证临时接管期间草稿 DOM 不变、选举撤销／卸载后恢复；数据源测试覆盖交互更新、会话切换和订阅释放。
+
+## 未接入的 5 项
 
 | 插槽 | 仍需补齐的工作 |
 |---|---|
 | conversation.chat.node | 官方 Chat 节点与 Amiba 消息投影逐类对齐，不能把消息行冒充节点 |
-| conversation.composer | pendingInteraction、chain 选举与草稿生命周期 |
-| conversation.composer.bar | 统一输入状态、文件服务及工作区／禁用语义 |
 | conversation.hero.agentPreset | 首页预设暂存与官方服务同步 |
 | conversation.hero.workspace | 本地目录与官方 WorkspaceId 选择映射 |
 | rightbar | 官方宽度／全屏／打开条件与工作台协调 |
@@ -35,7 +40,7 @@
 
 ## 验证边界与追溯
 
-- 10 个新增入口使用实际 rc.2 React 渲染器测试注册接管、owner 传递、返回 null、异常退让和卸载回退。
+- 11 个新增 single 入口使用实际 rc.2 React 渲染器测试注册接管、owner 传递、返回 null、异常退让和卸载回退。
 - UI 测试覆盖附件操作、禁用状态和原侧栏／输入布局。app-runtime 全量测试通过。
 - UI-shell 全量套件与未修改的 rc.1 checkout 对照，失败用例集合一致；不将全量套件报告为通过。
 - 三平台安装包、真实第三方插件端到端验收尚未完成；构建、启动及 CI 结果见本次 PR。
@@ -53,8 +58,8 @@
 | `conversation.chat.commandview` | 按命令名渲染结果 | 已有入口，静态对齐 | 已有入口，静态对齐 |
 | `conversation.chat.node` | 按聊天节点类型渲染 | 未接入 | 未接入 |
 | `conversation.chat.turnTail` | 回合尾部附加内容 | 部分兼容 | 部分兼容 |
-| `conversation.composer` | 完整输入区域替换 | 未接入 | 未接入 |
-| `conversation.composer.bar` | 输入器主体 | 未接入 | 未接入 |
+| `conversation.composer` | 完整输入区域替换 | 未接入 | 新增实际入口；官方交互选举、草稿保留与会话隔离测试通过 |
+| `conversation.composer.bar` | 输入器主体 | 未接入 | 新增实际入口；首页／会话输入器 owner 与回退测试通过，整块替换仍有兼容边界 |
 | `conversation.composer.dock` | 输入器下方附加区 | 部分兼容 | 部分兼容 |
 | `conversation.hero.agentPreset` | 首页智能体预设选择 | 未接入 | 未接入 |
 | `conversation.hero.brand.mark` | 首页品牌标识 | 未接入 | 新增实际入口；基础渲染测试通过 |

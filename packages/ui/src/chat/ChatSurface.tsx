@@ -308,7 +308,9 @@ export interface ChatSurfaceProps {
      * the composer renders nothing where the chip would sit.
      */
     modelPicker?: ComposerModelPickerRenderer;
+    renderComposer?: (fallback: ReactNode) => ReactNode;
     renderAttachments?: import("./Composer").ComposerAttachmentsRenderer;
+    renderBar?: import("./Composer").ComposerBarRenderer;
     /**
      * renderSlot-backed dispatch of the official `conversation.input.plan`
      * seat, forwarded verbatim to ``<Composer planSeat>``. Hosts inside a
@@ -2276,7 +2278,7 @@ export default function ChatSurface({
   // into the persistent dock path so React keeps this exact subtree mounted
   // while the first session is created or New chat returns to empty.
   const canSubmitDraft = (text: string) => !readOnly && text.trim().length > 0 && !attachmentUploading && !attachmentBusy;
-  const composerNode = (
+  const nativeComposerNode = (
     <Composer
       ref={composerRef}
       disabled={readOnly}
@@ -2353,6 +2355,7 @@ export default function ChatSurface({
       planSeat={slots?.planSeat}
       inputOverlay={slots?.inputOverlay}
       renderAttachments={slots?.renderAttachments}
+      renderBar={slots?.renderBar}
       inputDock={slots?.inputDock}
       composerDock={slots?.composerDock}
       inputLeft={slots?.inputLeft}
@@ -2403,6 +2406,7 @@ export default function ChatSurface({
       chipRow={undefined}
     />
   );
+  const composerNode = slots?.renderComposer ? slots.renderComposer(nativeComposerNode) : nativeComposerNode;
 
   return (
     <InteractionRegion activity={surfaceActivity.activity}

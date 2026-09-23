@@ -786,6 +786,8 @@ export interface ConversationInputZoneOwner {
 
 export type ConversationInputActions = PropsRuntime<"conversation.input.left">["inputActions"];
 
+export type ComposerBarOwner = OwnerOf<"conversation.composer.bar">;
+
 export type ComposerAttachmentsOwner = OwnerOf<"conversation.input.attachments">;
 
 export type CommandRowOwner = OwnerOf<"conversation.chat.commandview">;

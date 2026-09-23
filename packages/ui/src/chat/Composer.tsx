@@ -108,6 +108,8 @@ export type ComposerModelPickerRenderer = (
  * no reserved space. Surfaces without a DSH plugin runtime (Quick-Ask) pass
  * no renderer and the same nothing renders.
  */
+export type ComposerBarRenderer = (owner: import("@amiba/extension-sdk").ComposerBarOwner, fallback: ReactNode) => ReactNode;
+
 export type ComposerAttachmentsRenderer = (owner: ComposerAttachmentsOwner, fallback: ReactNode) => ReactNode;
 
 export type ComposerPlanSeatRenderer = (
@@ -249,6 +251,7 @@ export interface ComposerProps {
   attachments?: UseComposerAttachmentsResult;
   /** Official draft-attachment replacement; the renderer owns fallback selection. */
   renderAttachments?: ComposerAttachmentsRenderer;
+  renderBar?: ComposerBarRenderer;
   /**
    * Show a compact DSH inference-model selector beside the send controls.
    * The picker NODE comes from `render` — the host's renderSlot-backed
@@ -462,6 +465,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       onPaste,
       attachments,
       renderAttachments,
+      renderBar,
       modelPicker,
       approvalModePicker,
       planSeat,
@@ -1012,7 +1016,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       }];
     }, [attachments?.openFilePicker, attachments?.attachmentBusy, attachments?.attachmentUploading, disabled, t]);
 
-    return (
+    const nativeBar = (
       <ComposerAddMenuContext.Provider value={addMenuItems}>
       <div
         {...wrapperProps}
@@ -1254,6 +1258,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       </div>
       </ComposerAddMenuContext.Provider>
     );
+    // Keep input/attachment services above the replacement boundary.
+    return renderBar ? renderBar({ variant: frameVariant === "hero" ? "hero" : "composer", disabled, placeholder: resolvedPlaceholder }, nativeBar) : nativeBar;
   },
 );
 

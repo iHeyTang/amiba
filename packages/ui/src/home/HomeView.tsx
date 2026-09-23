@@ -52,6 +52,7 @@ export const HOME_PENDING_DRAFT_KEY = "home.pendingDraft";
 
 export interface HomeViewProps {
   renderAttachments?: import("../chat/Composer").ComposerAttachmentsRenderer;
+  renderBar?: import("../chat/Composer").ComposerBarRenderer;
   brandMark?: (owner: { size: number; className?: string }, fallback: import("react").ReactNode) => import("react").ReactNode;
   triggerRuntime?: ComposerTriggerRuntime;
   /** Where to send the user when they hit "Open in tab" / submit chat. */
@@ -107,6 +108,7 @@ export default function HomeView(props: HomeViewProps) {
 
 function Home({
   renderAttachments,
+  renderBar,
   brandMark,
   onOpenChat,
   onOpenSettings,
@@ -451,6 +453,7 @@ function Home({
             placeholder={{ typewriter: placeholderExamples }}
             attachments={att}
             renderAttachments={renderAttachments}
+            renderBar={renderBar}
             dropOverlay={t("newtab.dropOverlay")}
             sendTitle={t("newtab.send.tooltip")}
             modelPicker={

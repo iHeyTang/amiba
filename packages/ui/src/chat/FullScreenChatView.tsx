@@ -233,7 +233,9 @@ export interface FullScreenChatViewProps {
      * ChatSurface to the internal Composer.
      */
     modelPicker?: ComposerModelPickerRenderer;
+    renderComposer?: (fallback: ReactNode) => ReactNode;
     renderAttachments?: import("./Composer").ComposerAttachmentsRenderer;
+    renderBar?: import("./Composer").ComposerBarRenderer;
     /**
      * renderSlot-backed dispatch of the official `conversation.input.plan`
      * seat, forwarded through ChatSurface to the internal Composer.

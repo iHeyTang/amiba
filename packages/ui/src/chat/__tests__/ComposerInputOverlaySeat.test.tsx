@@ -10,7 +10,7 @@ vi.mock("@amiba/i18n", () => ({
 // under test is a sibling of it inside the composer card, so a stub keeps the
 // rest of the composer mountable.
 vi.mock("../composer/RichComposerEditor", () => ({
-  RichComposerEditor: forwardRef(() => <div data-testid="rich-editor" />),
+  RichComposerEditor: forwardRef((_props: { value: string }, _ref) => <div data-testid="rich-editor" data-draft={_props.value} />),
 }));
 
 import { Composer } from "../Composer";
@@ -179,5 +179,29 @@ describe("official attachment presentation", () => {
     expect(addFiles).toHaveBeenCalledTimes(1);
     expect(removeAttachment).toHaveBeenCalledTimes(1);
     expect(retryFileUpload).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("official composer bar replacement", () => {
+  it("passes actual variant, disabled state and placeholder, and restores the current draft", () => {
+    const renderBar = vi.fn((_owner, _fallback) => <div data-testid="replacement">replacement</div>);
+    const base = { value: "retained draft", onChange: vi.fn(), onSubmit: vi.fn(), placeholder: "Write here" };
+    const view = render(<Composer {...base} frameVariant="hero" disabled renderBar={renderBar} />);
+    expect(renderBar.mock.calls.at(-1)?.[0]).toEqual({ variant: "hero", disabled: true, placeholder: "Write here" });
+    expect(view.queryByTestId("rich-editor")).toBeNull();
+    view.rerender(<Composer {...base} renderBar={(owner, fallback) => {
+      expect(owner.variant).toBe("composer");
+      expect(owner.disabled).toBe(false);
+      return fallback;
+    }} />);
+    expect(view.getByTestId("rich-editor").getAttribute("data-draft")).toBe("retained draft");
+    expect(base.onChange).not.toHaveBeenCalled();
+    expect(base.onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("honors deliberate null instead of resurrecting the native bar", () => {
+    const view = render(<Composer value="draft" onChange={vi.fn()} onSubmit={vi.fn()} renderBar={() => null} />);
+    expect(view.container.textContent).toBe("");
+    expect(view.queryByTestId("rich-editor")).toBeNull();
   });
 });

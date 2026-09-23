@@ -1,3 +1,4 @@
+import { ComposerRegion } from "./composer-region.js";
 import { OfficialReplacement } from "./official-replacements.js";
 import { TrajectoryNavigationContext } from "./trajectory-header-action.js";
 import { MainPanelList, type MainPanelRow } from "./main-panel-list.js";
@@ -170,6 +171,8 @@ const EMPTY_MESSAGE_SOURCES: readonly MessageSourceRow[] = [];
  * tool name as `entryKey`.
  */
 export type AmibaShellSlot =
+  | "conversation.composer"
+  | "conversation.composer.bar"
   | "main.conversation"
   | "conversation.session"
   | "conversation.session.header"
@@ -401,6 +404,7 @@ function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string)
 }
 
 interface ProductShellProps {
+  usePendingInteraction: import("@deepseek-ai/dsh-client-ui-session/client").UseSessionPendingInteraction;
   mainPanels: MainPanelNavigation;
   mainPanelList: ContributionsSource<MainPanelRow>;
   renderSlotChain: PropsRenderSlots<AmibaShellSlot>["renderSlotChain"];
@@ -462,6 +466,7 @@ export function AmibaProductShell(props: ProductShellProps): ReactElement {
 }
 
 function ProductShellInner({
+  usePendingInteraction,
   mainPanels,
   mainPanelList,
   renderSlotChain,
@@ -948,6 +953,7 @@ function ProductShellInner({
                     onOpenSettings={() => settings.openAt()}
                     panelMode
                     modelPicker={renderModelPickerSeat}
+                    renderBar={(owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.composer.bar", owner, { fallback })}</OfficialReplacement>}
                     renderAttachments={(owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.input.attachments", owner, { fallback })}</OfficialReplacement>}
                     brandMark={(owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.hero.brand.mark", owner, { fallback })}</OfficialReplacement>}
                   />
@@ -955,6 +961,8 @@ function ProductShellInner({
                 settingsTrigger: renderSettingsTrigger,
                 sidebarFooterActions: owner => renderSlot("sidebar.footer.action", owner),
                 modelPicker: renderModelPickerSeat,
+                renderComposer: fallback => sessions.activeId ? <ComposerRegion sessionId={sessions.activeId} source={conversationSource(sessions.activeId)} usePendingInteraction={usePendingInteraction} fallback={fallback} render={(owner, native) => renderSlotChain("conversation.composer", owner, { fallback: native, overlay: true })} /> : fallback,
+                renderBar: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.composer.bar", owner, { fallback })}</OfficialReplacement>,
                 renderAttachments: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.input.attachments", owner, { fallback })}</OfficialReplacement>,
                 planSeat: renderPlanSeat,
                 notice: (owner, fallback) =>

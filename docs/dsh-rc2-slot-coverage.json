@@ -2,7 +2,7 @@
   "target": "0.1.5-rc.2",
   "beforeCommit": "a3560301",
   "before": 43,
-  "after": 53,
+  "after": 55,
   "total": 61,
   "added": [
     "main.conversation",
@@ -14,7 +14,9 @@
     "sidebar.workspaces",
     "sidebar.settings",
     "conversation.hero.brand.mark",
-    "conversation.input.attachments"
+    "conversation.input.attachments",
+    "conversation.composer",
+    "conversation.composer.bar"
   ],
   "rows": [
     {
@@ -57,14 +59,14 @@
       "kind": "chain",
       "scope": "session",
       "before": "未接入",
-      "after": "未接入"
+      "after": "新增实际入口；官方交互选举、草稿保留与会话隔离测试通过"
     },
     {
       "slot": "conversation.composer.bar",
       "kind": "single",
       "scope": "session-maybe",
       "before": "未接入",
-      "after": "未接入"
+      "after": "新增实际入口；首页／会话输入器 owner 与回退测试通过，整块替换仍有兼容边界"
     },
     {
       "slot": "conversation.composer.dock",

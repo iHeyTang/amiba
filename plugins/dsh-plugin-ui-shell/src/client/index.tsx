@@ -354,6 +354,7 @@ function AmibaRoot({
   prepareConversation,
   renderSlotChain,
   useSessions,
+  useSessionPendingInteraction,
   openLineageSession,
   useWorkspaces,
 }: AmibaRootProps): ReactNode {
@@ -369,6 +370,7 @@ function AmibaRoot({
 
   return (
     <ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench} shells={workbenchShells}><MarkdownProvider extensions={markdown} report={reportMarkdown}><SummaryContributionsProvider contributions={summary}><AmibaProductShell
+      usePendingInteraction={useSessionPendingInteraction}
       mainPanelList={mainPanelList}
       mainPanels={mainPanels}
       dshClient={dshClient}
@@ -895,6 +897,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           ...OFFICIAL_REPLACEMENTS,
           "conversation.input.overlay": { kind: "list", scope: "session" },
           "conversation.input.dock": { kind: "list", scope: "session" },
+          "conversation.composer": { kind: "chain", scope: "session" },
           "conversation.composer.dock": { kind: "list", scope: "session" },
           "conversation.chat.commandview": { kind: "keyed", scope: "session" },
           "conversation.input.left": { kind: "list", scope: "session" },
