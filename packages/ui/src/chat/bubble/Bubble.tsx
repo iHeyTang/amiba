@@ -1892,9 +1892,11 @@ function AssistantReplyChrome({ messages, children, actions, timeFormat, timeLoc
       if (!w || !h) return;
       const th = tab?.offsetHeight ?? 0;
       const tw = Math.min(tab?.offsetWidth ?? 0, w - 20);
-      // One clipped backdrop samples the wallpaper for both body and tab.
+      // Keep the tint continuous, but bound blur surfaces to the body and tab.
       const path = `M12 0 H${w-12} Q${w} 0 ${w} 12 V${h-12} Q${w} ${h} ${w-12} ${h} H${tw+8} Q${tw} ${h} ${tw} ${h+8} V${h+th-12} Q${tw} ${h+th} ${tw-12} ${h+th} H12 Q0 ${h+th} 0 ${h+th-12} V12 Q0 0 12 0 Z`;
       const closedPath = `M12 0 H${w-12} Q${w} 0 ${w} 12 V${h-12} Q${w} ${h} ${w-12} ${h} H${tw+8} Q${tw} ${h} ${tw} ${h} V${h} Q${tw} ${h} ${tw} ${h} H12 Q0 ${h} 0 ${h-12} V12 Q0 0 12 0 Z`;
+      chrome.style.setProperty("--assistant-tab-height", `${th}px`);
+      chrome.style.setProperty("--assistant-tab-width", `${tw + 8}px`);
       chrome.style.setProperty("--assistant-glass-closed", th ? `path('${closedPath}')` : "inset(0 round 12px)");
       chrome.style.setProperty("--assistant-glass-outline", th ? `path('${path}')` : "inset(0 round 12px)");
       chrome.setAttribute("data-unified-glass", "");
@@ -1910,7 +1912,7 @@ function AssistantReplyChrome({ messages, children, actions, timeFormat, timeLoc
   const text = messages.map(message => stripManagedResourceContext(bubbleTextContent(message.content))).filter(value => value.trim()).join("\n\n");
   const time = formatMessageTime(last?.sentAt, timeFormat, timeLocale);
   return <div ref={chromeRef} data-assistant-message-chrome className="group min-w-0">
-    <div data-assistant-glass-clip aria-hidden="true"><div data-assistant-glass-material /></div>
+    <div data-assistant-glass-clip aria-hidden="true"><div data-assistant-body-blur /><div data-assistant-tab-blur /><div data-assistant-glass-material /></div>
     <div data-assistant-reply-body>{children}</div>
     {complete && <TooltipProvider delayDuration={180} skipDelayDuration={80}>
       <div data-background-surface="message-actions" data-action-align="left"

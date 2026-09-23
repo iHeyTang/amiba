@@ -401,6 +401,18 @@
   position: absolute;
   inset: 0;
   background: hsl(var(--background) / var(--amiba-agent-opacity));
+}
+[data-assistant-body-blur], [data-assistant-tab-blur] {
+  position: absolute;
   backdrop-filter: blur(var(--amiba-agent-blur));
   -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
+}
+[data-assistant-body-blur] {
+  inset: 0 0 var(--assistant-tab-height, 0px);
+}
+[data-assistant-tab-blur] {
+  left: 0;
+  bottom: 0;
+  width: var(--assistant-tab-width, 0px);
+  height: var(--assistant-tab-height, 0px);
 }
