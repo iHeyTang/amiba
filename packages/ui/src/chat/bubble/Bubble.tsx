@@ -477,7 +477,7 @@ function BubbleUnmemoized({
     if (isEmptyStreaming) {
       if (awaitingUserInput) return null;
       return (
-        <div className="px-1 py-1 text-sm" aria-live="polite">
+        <div data-background-surface="assistant-message" className="px-4 py-3 text-sm" aria-live="polite">
           <div className="inline-flex max-w-full items-center text-muted-foreground">
             <span className="agent-thinking-text truncate">
               {t("sidepanel.trace.working")}
@@ -493,7 +493,7 @@ function BubbleUnmemoized({
     const showRunning = !!m.streaming && hasBody && !awaitingUserInput;
 
     return (
-      <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
+      <div data-background-surface="assistant-message" data-selection="text" className="min-w-0 px-4 py-3 text-sm">
         {(hasReasoningFold || traceVisible) && (
           /* One aggregated process row: thought + tools + approvals fold
              behind a single natural summary, on every render path. */
@@ -1721,7 +1721,7 @@ function InterleavedAssistantFlow({
       : processDetails;
 
   return (
-    <div data-selection="text" className="min-w-0 px-1 py-1 text-sm">
+    <div data-background-surface="assistant-message" data-selection="text" className="min-w-0 px-4 py-3 text-sm">
       <div ref={flowRef} className="flex min-w-0 flex-col gap-2">
         {resultStreaming || hasLifecycleRecords ? (
           <>
