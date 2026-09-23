@@ -2110,3 +2110,17 @@ it("reports the rendered turn window so the conversation rail stays aligned with
     "u29",
   ]);
 });
+
+it("renders model changes as a readable glass notice and preserves unknown notices", () => {
+  const message: UiMessage = { uiId: "model-switch", role: "user", content: "[model changed: details]", origin: { kind: "plugin", plugin: "model-selection" }, notice: { summary: "old-provider/old-model → new-provider/new-model" } };
+  const { rerender } = render(<Bubble m={message} />);
+  expect(screen.getByTestId("model-change-notice")).toHaveAttribute("data-background-surface", "assistant-message");
+  expect(screen.getByText("old-model")).toBeInTheDocument();
+  expect(screen.getByText("new-provider")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /Model switched/ }));
+  expect(screen.getByText(/Earlier replies were generated/)).toBeInTheDocument();
+  rerender(<Bubble m={{ ...message, notice: { summary: "unrecognized model update" } }} />);
+  expect(screen.queryByTestId("model-change-notice")).toBeNull();
+  fireEvent.click(screen.getByRole("button"));
+  expect(screen.getByText("[model changed: details]")).toBeInTheDocument();
+});
