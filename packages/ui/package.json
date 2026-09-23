@@ -53,6 +53,7 @@
     "@radix-ui/react-scroll-area": "^1.2.1",
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-separator": "^1.1.0",
+    "@radix-ui/react-slider": "^1.4.7",
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-switch": "^1.1.1",
     "@radix-ui/react-tabs": "^1.1.1",
@@ -77,6 +78,8 @@
     "@deepseek-ai/dsh-schedule": "0.1.5-rc.2"
   },
   "devDependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "@deepseek-ai/dsh-client-ui-renderer": "0.1.5-rc.2",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.0.1",

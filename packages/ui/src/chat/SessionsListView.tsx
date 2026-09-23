@@ -386,7 +386,7 @@ export function SessionRowsList({
 
   return (
     <>
-      <nav className="flex flex-col gap-0.5">
+      <nav data-session-rows className="flex flex-col">
         {visible.map((s) => (
           <SessionRow
             key={s.id}
@@ -574,9 +574,11 @@ function SessionRow({
   if (editing) {
     return (
       <div
+        data-session-row
+        data-active={active ? "true" : undefined}
         className={cn(
-          "mx-0.5 flex h-8 items-center rounded-md pr-2",
-          nested ? "pl-8" : "pl-2",
+          "flex h-8 items-center rounded-md pr-2",
+          nested ? "pl-10" : "pl-4",
           active && "bg-secondary",
         )}
       >
@@ -594,11 +596,13 @@ function SessionRow({
 
   return (
     <div
+      data-session-row
+      data-active={active ? "true" : undefined}
       className={cn(
-        "group relative mx-0.5 flex h-8 items-center rounded-md",
+        "group relative flex h-8 items-center rounded-md",
         active
           ? "bg-secondary text-secondary-foreground"
-          : "text-foreground/80 hover:bg-accent/70 hover:text-foreground",
+          : "text-foreground/80 hover:bg-accent/70 focus-within:bg-accent/70 hover:text-foreground",
       )}
     >
       {nested && (selecting || statusLabel) ? (
@@ -606,7 +610,7 @@ function SessionRow({
           aria-hidden={selecting || undefined}
           aria-label={selecting ? undefined : (statusLabel ?? undefined)}
           title={selecting ? undefined : (statusLabel ?? undefined)}
-          className="pointer-events-none absolute left-2 top-1/2 inline-flex h-4 w-4 -translate-y-1/2 items-center justify-center"
+          className="pointer-events-none absolute left-4 top-1/2 inline-flex h-4 w-4 -translate-y-1/2 items-center justify-center"
         >
           {selecting ? <SelectionIndicator selected={selected} /> : statusGlyph}
         </span>
@@ -616,8 +620,8 @@ function SessionRow({
         aria-pressed={selecting ? selected : undefined}
         onClick={selecting ? onToggleSelected : onOpen}
         className={cn(
-          "flex h-full min-w-0 flex-1 items-center gap-2 pr-2 text-left focus-visible:outline-none",
-          nested ? "pl-8" : "pl-2",
+          "flex h-full min-w-0 flex-1 items-center gap-2 pr-9 text-left focus-visible:outline-none",
+          nested ? "pl-10" : "pl-4",
         )}
       >
         {!nested && selecting ? (
@@ -644,11 +648,8 @@ function SessionRow({
       {allowActions && !selecting ? (
         <span
           className={cn(
-            "pointer-events-none absolute inset-y-0 right-1 flex items-center gap-0.5 bg-gradient-to-l from-45% via-70% to-transparent pl-8 opacity-0",
+            "pointer-events-none absolute inset-y-0 right-2 flex items-center gap-0.5 opacity-0",
             "group-hover:opacity-100 group-focus-within:opacity-100",
-            active
-              ? "from-secondary via-secondary/95"
-              : "from-accent via-accent/95",
           )}
         >
           <CascadeMenu

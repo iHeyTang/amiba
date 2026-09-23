@@ -180,3 +180,15 @@ it("verifies complete pending step text against the actual synthetic final befor
   timeline[0].sourceRanges=[];
   expect(matchingInterruptedStep(owner,timeline)).toBeUndefined();
 });
+
+it("hides empty slot wrappers and reveals asynchronously rendered output", async () => {
+  const f = fixture();
+  const source = { getSnapshot: () => f.snapshot, subscribe: () => () => {} };
+  const { container, rerender } = render(<TurnTail source={source} runtimeTurn={7} openFile={vi.fn()} render={() => <div><div /></div>} />);
+  const surface = container.firstElementChild as HTMLElement;
+  expect(surface.hidden).toBe(true);
+  rerender(<TurnTail source={source} runtimeTurn={7} openFile={vi.fn()} render={() => <div><p>report.pdf</p></div>} />);
+  expect(surface.hidden).toBe(false);
+  await act(async () => { surface.querySelector('p')!.textContent = ''; });
+  expect(surface.hidden).toBe(true);
+});

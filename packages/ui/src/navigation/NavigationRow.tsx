@@ -36,6 +36,8 @@ export function NavigationRow({
 }: NavigationRowProps) {
   return (
     <button
+      data-navigation-row
+      data-active={active ? "true" : undefined}
       type="button"
       aria-current={active ? "page" : undefined}
       className={cn(

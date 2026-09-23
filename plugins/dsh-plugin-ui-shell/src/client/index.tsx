@@ -1,3 +1,7 @@
+import { BACKGROUND_REMOTE } from "../background/remote.js";
+import { createBackgroundController, type BackgroundController } from "./background/controller.js";
+import { BackgroundFrame } from "./background/BackgroundFrame.js";
+import { BackgroundSettings } from "./background/BackgroundSettings.js";
 import { createRegisteredHeroPresetReader } from "./hero-preset-entry.js";
 import { OFFICIAL_REPLACEMENTS, NativeOfficialPresentation, NATIVE_REPLACEMENT_PRIORITY } from "./official-replacements.js";
 import { TrajectoryHeaderAction } from "./trajectory-header-action.js";
@@ -139,17 +143,15 @@ export const inject = ["slots", "sessions", "remote", "uiSession", "fileUpload"]
 
 const PACKAGE_ID = "@amiba/dsh-plugin-ui-shell";
 const STYLE_ID = `${PACKAGE_ID}/product-shell.css`;
-if (
-  typeof document !== "undefined" &&
-  document.querySelector(
+if (typeof document !== "undefined") {
+  // Reuse the node, but refresh its CSS when DSH reloads the client module.
+  const tag = document.querySelector<HTMLStyleElement>(
     `style[data-plugin-css=${JSON.stringify(STYLE_ID)}]`,
-  ) === null
-) {
-  const tag = document.createElement("style");
+  ) ?? document.createElement("style");
   tag.dataset.plugin = PACKAGE_ID;
   tag.dataset.pluginCss = STYLE_ID;
   tag.textContent = shellCss;
-  document.head.append(tag);
+  if (!tag.isConnected) document.head.append(tag);
 }
 
 export type {
@@ -290,6 +292,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     messageSources: ContributionsSource<MessageSourceRow>;
     markdownSource: ContributionsSource<MarkdownExtension>;
     surfaces: SurfaceSelections;
+    background: BackgroundController;
     mainPanels: MainPanelNavigation;
     mainPanelList: ContributionsSource<MainPanelRow>;
     workbenchSource: ContributionsSource<WorkbenchViewExtension>;
@@ -347,6 +350,7 @@ function AmibaRoot({
   conversationSource,
   fileMentions,
   surfaces,
+  background,
   mainPanels,
   mainPanelList,
   reportMarkdown,
@@ -368,7 +372,7 @@ function AmibaRoot({
   }, []);
 
   return (
-    <RootSlotDispatch.Provider value={{ renderSlot: renderSlot as never, renderSlotChain: renderSlotChain as never }}><ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench} shells={workbenchShells}><MarkdownProvider extensions={markdown} report={reportMarkdown}><SummaryContributionsProvider contributions={summary}><AmibaProductShell
+    <BackgroundFrame controller={background}><RootSlotDispatch.Provider value={{ renderSlot: renderSlot as never, renderSlotChain: renderSlotChain as never }}><ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench} shells={workbenchShells}><MarkdownProvider extensions={markdown} report={reportMarkdown}><SummaryContributionsProvider contributions={summary}><AmibaProductShell
       usePendingInteraction={useSessionPendingInteraction}
       mainPanelList={mainPanelList}
       mainPanels={mainPanels}
@@ -399,7 +403,7 @@ function AmibaRoot({
       messageSources={messageSources}
       useOfficialSessions={useSessions}
       useOfficialWorkspaces={useWorkspaces}
-    /></SummaryContributionsProvider></MarkdownProvider></WorkbenchExtensionsProvider></ConversationSubmitProvider></RootSlotDispatch.Provider>
+    /></SummaryContributionsProvider></MarkdownProvider></WorkbenchExtensionsProvider></ConversationSubmitProvider></RootSlotDispatch.Provider></BackgroundFrame>
   );
 }
 
@@ -481,9 +485,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // Typert owns descriptors by package, so all shell namespaces mount together.
   const disposeShellRemote = await ctx.remote.$mount({
     package: MARKDOWN_REMOTE.package,
-    descriptors: [...MARKDOWN_REMOTE.descriptors, ...CONVERSATION_ENTRY_REMOTE.descriptors],
+    descriptors: [...MARKDOWN_REMOTE.descriptors, ...CONVERSATION_ENTRY_REMOTE.descriptors, ...BACKGROUND_REMOTE.descriptors],
   });
   ctx.effect(() => disposeShellRemote);
+  const background = createBackgroundController(ctx);
+  ctx.effect(() => () => background.dispose());
   const reportMarkdown = await createMarkdownReporter(ctx);
   const prepareConversation = await createConversationPreparer(ctx);
   const baseUrl =
@@ -1044,6 +1050,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
             };
           })(),
           surfaces,
+          background,
           reportMarkdown,
           prepareConversation,
           settingsSections: sectionsSource,
@@ -1072,6 +1079,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // elects Amiba's component per cell while the official SERVICES stay
     // live. Registered after the root because the root's children table is
     // what declares the seat.
+    const disposeBackgroundSettings = ctx.slots.register({ name: "settings.general.item", id: "background", order: 40, inject: () => ({ background }) }, BackgroundSettings);
     const disposeSurfaceSettings = ctx.slots.register({ name: "settings.general.item", id: "surface-providers", order: 30, inject: () => ({ surfaces }) }, SurfaceSettings);
     const disposeSlashMenu = ctx.slots.register(
       {
@@ -1195,6 +1203,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       disposeMessageImagesDefault();
       disposeCommandPopup();
       disposeSurfaceSettings();
+      disposeBackgroundSettings();
       disposeSlashMenu();
       void localeFiber.dispose();
       void messagesFiber.dispose();

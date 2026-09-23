@@ -96,6 +96,7 @@ const SIDEBAR_WIDTH_KEY = "settings.chat.sidebarWidth";
 const SIDEBAR_COLLAPSED_KEY = "settings.chat.sidebarCollapsed";
 const SIDEBAR_TRANSITION_FALLBACK_MS = 240;
 const HEADER_ACTION_GAP_PX = 2;
+const HEADER_GROUP_GAP_PX = 8;
 const HEADER_RIGHT_PADDING_PX = 12;
 
 /**
@@ -468,6 +469,11 @@ function FullScreenChatViewInner({
   const [failedSessionIds, setFailedSessionIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const sidebarElementRef = useRef<HTMLElement>(null);
+  const workspaceContentRef = useRef<HTMLElement>(null);
+  const sidebarContentRef = useRef<HTMLDivElement>(null);
+  const sidebarResizeCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => sidebarResizeCleanupRef.current?.(), []);
   const sidebarWidthRef = useRef(sidebarWidth);
   sidebarWidthRef.current = sidebarWidth;
   const sidebarCollapsedRef = useRef(sidebarCollapsed);
@@ -769,24 +775,62 @@ function FullScreenChatViewInner({
   const onSidebarResizeStart = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault();
+      sidebarResizeCleanupRef.current?.();
       const handle = e.currentTarget;
+      const sidebar = sidebarElementRef.current;
+      const content = sidebarContentRef.current;
+      if (!sidebar || !content) return;
       handle.setPointerCapture(e.pointerId);
       const startX = e.clientX;
       const startWidth = sidebarWidthRef.current;
       let width = startWidth;
-      const onMove = (ev: PointerEvent) => {
-        width = snapAppSidebarWidth(startWidth + (ev.clientX - startX));
-        setSidebarWidth(width);
+      let frame: number | null = null;
+      // Live resizing must not chase the pointer with the collapse animation,
+      // or render the entire conversation once per pointer event.
+      sidebar.style.transition = "none";
+      sidebar.dataset.resizing = "true";
+      // Keep expensive chat/workbench contents from rewrapping on each frame.
+      // Flex placement still follows the live sidebar edge; reflow on release.
+      const workspace = workspaceContentRef.current;
+      if (workspace) workspace.style.flex = `0 0 ${workspace.getBoundingClientRect().width}px`;
+      const paintWidth = () => {
+        frame = null;
+        sidebar.style.width = `${width}px`;
+        content.style.width = `${width}px`;
       };
-      const onUp = () => {
+      const onMove = (ev: PointerEvent) => {
+        width = clampAppSidebarWidth(startWidth + (ev.clientX - startX));
+        if (frame === null) frame = requestAnimationFrame(paintWidth);
+      };
+      const cleanup = () => {
+        if (frame !== null) cancelAnimationFrame(frame);
+        frame = null;
         handle.removeEventListener("pointermove", onMove);
         handle.removeEventListener("pointerup", onUp);
         handle.removeEventListener("pointercancel", onUp);
+        handle.removeEventListener("lostpointercapture", onUp);
+        sidebar.style.removeProperty("transition");
+        delete sidebar.dataset.resizing;
+        workspace?.style.removeProperty("flex");
+        sidebarResizeCleanupRef.current = null;
+      };
+      const onUp = () => {
+        // Snap only on release, never create a dead zone under the pointer.
+        width = snapAppSidebarWidth(width);
+        // Flush the last pointer position even if release precedes the frame.
+        if (frame !== null) cancelAnimationFrame(frame);
+        paintWidth();
+        cleanup();
+        sidebarWidthRef.current = width;
+        setSidebarWidth(width);
+        if (handle.hasPointerCapture?.(e.pointerId)) handle.releasePointerCapture(e.pointerId);
         void getPlatform().storage.set({ [SIDEBAR_WIDTH_KEY]: width });
       };
+      sidebarResizeCleanupRef.current = cleanup;
       handle.addEventListener("pointermove", onMove);
       handle.addEventListener("pointerup", onUp);
       handle.addEventListener("pointercancel", onUp);
+      handle.addEventListener("lostpointercapture", onUp);
     },
     [],
   );
@@ -908,7 +952,7 @@ function FullScreenChatViewInner({
       const chatRight = chatColumnRef.current?.getBoundingClientRect().right;
       const inset = chatRight === undefined ? HEADER_RIGHT_PADDING_PX : Math.max(
         HEADER_RIGHT_PADDING_PX,
-        chatRight - node.getBoundingClientRect().left + HEADER_ACTION_GAP_PX,
+        chatRight - node.getBoundingClientRect().left + HEADER_GROUP_GAP_PX,
       );
       // ResizeObserver runs before paint. Write geometry directly so React's
       // deferred render cannot leave the actions a frame behind the CSS width
@@ -938,7 +982,8 @@ function FullScreenChatViewInner({
   // separate bottom row so it can span the active workspace like an IDE pane.
   return (
     <div
-      className="flex h-screen min-h-0 w-full bg-background text-foreground"
+      data-background-surface="layout"
+      className="flex h-screen min-h-0 w-full overflow-hidden bg-background text-foreground"
       style={
         viewportTopInsetPx
           ? { height: `calc(100dvh - ${viewportTopInsetPx}px)` }
@@ -946,6 +991,7 @@ function FullScreenChatViewInner({
       }
     >
       <aside
+        ref={sidebarElementRef}
         data-testid="main-sidebar"
         aria-hidden={sidebarCollapsed}
         {...(sidebarCollapsed ? { inert: "" } : {})}
@@ -954,8 +1000,11 @@ function FullScreenChatViewInner({
         style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
       >
         <div
+          ref={sidebarContentRef}
           data-testid="main-sidebar-content"
-          className="flex h-full min-h-0 shrink-0 flex-col bg-muted/30"
+          data-sidebar-glass
+          data-background-surface="navigation"
+          className="relative flex h-full min-h-0 shrink-0 flex-col overflow-hidden bg-muted/30"
           style={{ width: sidebarWidth }}
         >
           <ReplacementBoundary render={slots?.sidebar ? fallback => slots.sidebar!({ collapsed: sidebarCollapsed, width: sidebarCollapsed ? 0 : sidebarWidth }, fallback) : undefined}>
@@ -1041,9 +1090,9 @@ function FullScreenChatViewInner({
             : "cursor-col-resize opacity-100",
         )}
       >
-        <div className="absolute inset-y-0 right-0 w-px bg-border/35 transition-colors group-hover:bg-foreground/[0.07] group-active:bg-foreground/[0.10]" />
       </div>
       <section
+        ref={workspaceContentRef}
         className="relative flex min-h-0 min-w-0 flex-1 flex-col"
         style={
           {
@@ -1052,6 +1101,7 @@ function FullScreenChatViewInner({
         }
       >
         <div
+          data-conversation-canvas={sidebarView === "chats" && !slots?.mainPanel ? (sessions.activeId || displayedLoad ? "reading" : "canvas") : undefined}
           data-workspace-main-row
           className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
         >
@@ -1063,6 +1113,7 @@ function FullScreenChatViewInner({
               <ReplacementBoundary render={slots?.mainConversation}>
               <ReplacementBoundary render={sessions.activeId && !displayedLoad ? slots?.sessionHeader : undefined}>
               <ContentHeader
+                canvas={!sessions.activeId && !displayedLoad}
                 title={displayedLoad ? (sessions.sessions.find(item => item.id === displayedLoad?.sessionId)?.title ?? "") : chatTopBarPlaceholder}
                 icon={<Folder className="h-4 w-4" />}
                 actions={displayedLoad ? undefined : slots?.headerActions}
@@ -1080,7 +1131,6 @@ function FullScreenChatViewInner({
                   topBarClassName,
                   messagesWidth !== "full" && "amiba-chat-header--wide-overlay",
                 )}
-                seamless
               />
               </ReplacementBoundary>
               {displayedLoad ? (
@@ -1319,7 +1369,7 @@ interface ContentHeaderProps {
   leftInset?: number;
   heightPx?: number;
   className?: string;
-  seamless?: boolean;
+  canvas?: boolean;
 }
 
 function ContentHeader({
@@ -1335,15 +1385,17 @@ function ContentHeader({
   leftInset = 0,
   heightPx = 40,
   className,
-  seamless = false,
+  canvas = false,
 }: ContentHeaderProps) {
   const [titleEditing, setTitleEditing] = useState(false);
 
   return (
     <PaneHeaderBar
+      data-conversation-header
+      data-background-surface={canvas ? "canvas-header" : "header"}
       heightPx={heightPx}
       leftInset={sidebarCollapsed ? leftInset : 0}
-      bordered={!seamless}
+      bordered={false}
       style={{
         paddingRight: `var(--amiba-header-actions-right, ${HEADER_RIGHT_PADDING_PX}px)`,
         "--amiba-header-height": `${heightPx}px`,
@@ -1364,7 +1416,8 @@ function ContentHeader({
       leading={
         <div
           data-content-header-leading
-          className="flex w-full min-w-0 items-center gap-2.5"
+          data-header-glass={title || sidebarCollapsed || lineage ? "" : undefined}
+          className="flex w-fit max-w-full min-w-0 items-center gap-2.5"
           style={{ height: heightPx }}
         >
           <HeaderIconBox

@@ -60,3 +60,25 @@ it("restores draft provenance without changing the historical body or timeline",
   expect(finalized.content).toBe("final");
   expect(finalized.assistantDraftSource).toBeUndefined();
 });
+
+it("preserves the durable completion time in live events and restored history", () => {
+  const source = [event("turn/start", 10, 7), event("assistant/message", 20, 7, { message: { id: "answer", content: [{ type: "text", text: "done" }] } }), event("turn/end", 30, 7)];
+  source[2].time = 1750000000123;
+  const bridge = new DshAmibaEventBridge();
+  const live = source.flatMap(event => bridge.accept({ rpcId: "rpc", payload: { type: "session/event", sessionId: "s", event } } as any));
+  expect(live.find(row => row.event.kind === "assistantMessage")?.event).toMatchObject({ sentAt: 1750000000123 });
+  expect(projectRuntimeSessionHistory(source.map(event => ({ event }))).find(row => row.role === "assistant")?.sentAt).toBe(1750000000123);
+  expect(projectRuntimeSessionHistory(source.slice(0, 2).map(event => ({ event }))).find(row => row.role === "assistant")?.sentAt).toBe(20);
+});
+
+it("carries deduplicated token usage identically through live completion and history", () => {
+  const usage = { inputTokens: 12, outputTokens: 5, cacheReadTokens: 30, cacheWriteTokens: 2 };
+  const source = [event("turn/start", 1, 4),
+    event("assistant/chunk", 2, 4, { chunk: { type: "usage", usage: { ...usage, outputTokens: 1 } } }),
+    event("assistant/message", 3, 4, { usage, message: { id: "final", content: [{ type: "text", text: "done" }] } }),
+    event("turn/end", 4, 4)];
+  const bridge = new DshAmibaEventBridge();
+  const live = source.flatMap(event => bridge.accept({ rpcId: "rpc", payload: { type: "session/event", sessionId: "s", event } } as any));
+  expect(live.find(row => row.event.kind === "assistantMessage")?.event).toMatchObject({ tokenUsage: usage });
+  expect(projectRuntimeSessionHistory(source.map(event => ({ event }))).find(row => row.role === "assistant")?.tokenUsage).toEqual(usage);
+});

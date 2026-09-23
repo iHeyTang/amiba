@@ -119,9 +119,9 @@ const completed = (draft: QuestionDraft): boolean =>
 const quietButton =
   "inline-flex h-7 select-none items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-[background-color,color,border-color,opacity] focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
 const quietNeutral =
-  "text-muted-foreground hover:bg-muted/50 hover:text-foreground";
+  "text-muted-foreground hover:bg-chat-surface-hover hover:text-foreground";
 const quietOutline =
-  "border border-border/60 bg-background text-foreground/70 hover:bg-muted/40 hover:text-foreground";
+  "border border-border/60 bg-chat-surface text-foreground/70 hover:bg-chat-surface-hover hover:text-foreground";
 const quietPrimary =
   // min-w keeps 下一个/提交 (and Next/Submit) the same footprint so the
   // footer doesn't shift when the last step swaps the label.
@@ -167,7 +167,7 @@ function PlanReviewCard({
           {t("sidepanel.clarify.plan.header")}
         </p>
       </div>
-      <div className="mx-4 mt-2 max-h-[min(42vh,360px)] overflow-y-auto rounded-lg border border-border/45 bg-muted/25 px-3 py-2.5">
+      <div className="mx-4 mt-2 max-h-[min(42vh,360px)] overflow-y-auto rounded-lg border border-border/45 bg-chat-surface px-3 py-2.5">
         <Streamdown mode="static" className="chat-md break-words text-xs">
           {review.plan}
         </Streamdown>
@@ -371,7 +371,7 @@ function QuestionStepper({
                 ? "sidepanel.clarify.expand"
                 : "sidepanel.clarify.collapse",
             )}
-            className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-foreground"
+            className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-chat-surface-hover hover:text-foreground"
             onClick={() => setMinimized((current) => !current)}
             type="button"
           >
@@ -384,7 +384,7 @@ function QuestionStepper({
           {onCancel ? (
             <button
               aria-label={t("sidepanel.clarify.dismiss")}
-              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-chat-surface-hover hover:text-foreground disabled:opacity-50"
               disabled={inFlight}
               onClick={onCancel}
               title={t("sidepanel.clarify.dismissHint")}
@@ -429,7 +429,7 @@ function QuestionStepper({
                           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50",
                           active
                             ? "bg-primary/[0.08] ring-1 ring-primary/35"
-                            : "bg-muted/40 hover:bg-muted/60",
+                            : "bg-chat-surface hover:bg-chat-surface-hover",
                         )}
                         disabled={inFlight}
                         key={`${choice.label}-${choiceIndex}`}
@@ -474,7 +474,7 @@ function QuestionStepper({
                               "flex h-5 min-w-5 shrink-0 items-center justify-center rounded border px-1 text-[11px] tabular-nums transition-colors",
                               active
                                 ? "border-primary/40 bg-primary/10 text-primary"
-                                : "border-border/60 bg-background text-muted-foreground/70",
+                                : "border-border/60 bg-chat-surface text-muted-foreground/70",
                             )}
                           >
                             {choiceIndex + 1}
@@ -491,14 +491,14 @@ function QuestionStepper({
                   in step with every other input in the product. */}
               <div
                 className={cn(
-                  "rounded-lg bg-muted/40 p-1.5",
+                  "rounded-lg bg-chat-surface p-1.5",
                   hasOptions && "mt-1.5",
                 )}
               >
                 <Input
                   aria-label={t("sidepanel.clarify.customAnswer")}
                   autoFocus={!hasOptions}
-                  className="h-8 bg-background px-3 text-xs"
+                  className="h-8 bg-chat-surface px-3 text-xs"
                   disabled={inFlight}
                   onChange={(event) => {
                     const value = event.target.value;
@@ -529,7 +529,7 @@ function QuestionStepper({
               <div className="flex shrink-0 items-center gap-0.5">
                 <button
                   aria-label={t("sidepanel.clarify.prev")}
-                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-chat-surface-hover hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
                   disabled={index === 0 || inFlight}
                   onClick={() => {
                     setIndex(index - 1);
@@ -541,7 +541,7 @@ function QuestionStepper({
                 </button>
                 <button
                   aria-label={t("sidepanel.clarify.next")}
-                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-chat-surface-hover hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
                   disabled={isLast || inFlight}
                   onClick={() => {
                     setIndex(index + 1);

@@ -17,7 +17,7 @@ import type { ReactNode } from "react"
 
 export function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="rounded border border-border bg-muted/40 px-1 font-sans text-[10px] text-foreground/80">
+    <kbd className="rounded border border-border bg-chat-surface px-1 font-sans text-[10px] text-foreground/80">
       {children}
     </kbd>
   )

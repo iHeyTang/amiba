@@ -1380,10 +1380,7 @@ export function WorkspacePaneToggle({
       aria-pressed={pane.open}
       aria-keyshortcuts="Meta+Shift+Backslash Control+Shift+Backslash"
       className={cn(
-        "app-no-drag relative inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors",
-        "hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-        "disabled:pointer-events-none disabled:opacity-30",
-        pane.open && "bg-foreground/5 text-foreground",
+        "app-no-drag amiba-header-action w-7",
         className,
       )}
     >
@@ -3107,7 +3104,7 @@ export function WorkspaceFileWorkspace({
   useEffect(() => { if (treeOpen) setTreeMounted(true); }, [treeOpen]);
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col bg-background">
+    <div data-workbench-file-surface className="flex h-full min-h-0 min-w-0 flex-col bg-background">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/35 px-3">
         <FileTypeIcon name={path} directory={!resource} className="h-3.5 w-3.5 shrink-0" />
         <span
@@ -3892,7 +3889,7 @@ export function WorkspacePane({
           pane.open ? "opacity-100" : "invisible opacity-0",
         )}
       >
-        <div className="absolute inset-y-0 left-1/2 w-px bg-border transition-colors group-hover:bg-primary/60 group-focus-visible:bg-primary/60 group-active:bg-primary/80" />
+        <div className="absolute inset-y-0 left-1/2 w-px bg-transparent transition-colors group-hover:bg-primary/60 group-focus-visible:bg-primary/60 group-active:bg-primary/80" />
       </div>
       {resizing && createPortal(
         <div
@@ -3903,6 +3900,7 @@ export function WorkspacePane({
       )}
       <aside
         ref={previewRef}
+        data-background-surface="workbench"
         aria-label={t("workspacePane.title")}
         aria-hidden={!pane.open}
         className={cn(

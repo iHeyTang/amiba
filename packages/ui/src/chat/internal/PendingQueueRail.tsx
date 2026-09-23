@@ -53,8 +53,8 @@ export function PendingQueueRail({
           <li
             key={item.queueId}
             className={cn(
-              "group flex h-6 w-full items-center rounded-md bg-background/55 pl-1.5 pr-0.5 text-[11px]",
-              "transition-colors hover:bg-background/85",
+              "group flex h-6 w-full items-center rounded-md bg-chat-surface pl-1.5 pr-0.5 text-[11px]",
+              "transition-colors hover:bg-chat-surface-hover",
               isEditing && "text-muted-foreground",
             )}
           >

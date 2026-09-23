@@ -25,3 +25,5 @@ export * from "./tabs";
 export * from "./textarea";
 export * from "./tooltip";
 export * from "./page-content";
+
+export * from "./slider";

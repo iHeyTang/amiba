@@ -1150,6 +1150,8 @@ export default function ChatSurface({
       const merged: Partial<UiMessage> = {
         content: state.assistantText,
         assistantMessageId: state.assistantMessageId,
+        tokenUsage: state.tokenUsage,
+        ...(state.assistantSentAt !== undefined ? { sentAt: state.assistantSentAt } : {}),
         runtimeTurn: state.runtimeTurn,
         streaming: state.streaming,
         // Carry the chip URL the engine captured at end-of-turn through to
@@ -1501,7 +1503,7 @@ export default function ChatSurface({
       case "assistantMessage": {
         const assistantUiId = stream.getCurrentAssistantUiId();
         if (assistantUiId) sessions.setActiveMessages(prev => (prev as UiMessage[]).map(message =>
-          message.uiId === assistantUiId ? { ...message, assistantMessageId: event.messageId } : message));
+          message.uiId === assistantUiId ? { ...message, assistantMessageId: event.messageId, tokenUsage: event.tokenUsage, ...(event.sentAt !== undefined ? { sentAt: event.sentAt } : {}) } : message));
         break;
       }
       case "begin":
@@ -2313,7 +2315,7 @@ export default function ChatSurface({
                 <button
                   type="button"
                   onClick={() => setPendingSourceApp(null)}
-                  className="ml-0.5 shrink-0 rounded-md p-1 text-muted-foreground/65 transition-colors hover:bg-background/70 hover:text-foreground"
+                  className="ml-0.5 shrink-0 rounded-md p-1 text-muted-foreground/65 transition-colors hover:bg-chat-surface-hover hover:text-foreground"
                   aria-label={t("sidepanel.context.dismissSource")}
                 >
                   <X className="h-3 w-3" />
@@ -2369,7 +2371,7 @@ export default function ChatSurface({
               type="button"
               onClick={cancelQueueEdit}
               title={t("sidepanel.composer.cancelEdit")}
-              className="rounded p-0.5 transition-colors hover:bg-muted hover:text-foreground"
+              className="rounded p-0.5 transition-colors hover:bg-chat-surface-hover hover:text-foreground"
               aria-label={t("sidepanel.composer.cancelEdit.aria")}
             >
               <X className="h-2.5 w-2.5" />
@@ -2408,7 +2410,7 @@ export default function ChatSurface({
   const composerNode = slots?.renderComposer ? slots.renderComposer(nativeComposerNode) : nativeComposerNode;
 
   return (
-    <InteractionRegion activity={surfaceActivity.activity}
+    <InteractionRegion activity={surfaceActivity.activity} data-background-surface={hasActive ? "reading" : "canvas"}
       className={cn(
         "relative flex flex-col bg-background text-foreground",
         // The surface is mounted inside a flex column and consumes the remaining
@@ -2473,7 +2475,7 @@ export default function ChatSurface({
                   {pendingSourceApp && (
                     <div className="app-drag-region mb-1 flex shrink-0 items-center gap-1 px-1 text-[11px] text-muted-foreground">
                       <span>{t("quickAsk.selectionFrom")}</span>
-                      <span className="rounded-full border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+                      <span className="rounded-full border border-border/60 bg-chat-surface px-1.5 py-0.5 text-[10px] font-medium text-foreground">
                         {pendingSourceApp}
                       </span>
                     </div>

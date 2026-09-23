@@ -1,0 +1,468 @@
+/* Shared surface roles: wallpaper glass and default-theme hierarchy. */
+[data-amiba-product-shell] {
+  --amiba-pane-color: var(--background);
+  --amiba-agent-color: var(--background);
+  --amiba-user-color: var(--background);
+  --amiba-header-fill: hsl(var(--background) / 0.6);
+  --amiba-glass-opacity: 0.64;
+  --amiba-reading-opacity: 0.72;
+  --amiba-input-opacity: 0.9;
+  --amiba-glass-blur: 18px;
+  --amiba-reading-blur: 8px;
+  --amiba-agent-opacity: 0.68;
+  --amiba-agent-blur: 16px;
+  --amiba-message-opacity: 0.82;
+  --amiba-message-blur: 64px;
+  --amiba-content-opacity: 0.16;
+  --amiba-content-hover-opacity: 0.3;
+  /* Inner cards share the pane blur, like the file-change review card. */
+  --amiba-content-fill: hsl(var(--muted) / var(--amiba-content-opacity));
+  --amiba-content-hover: hsl(var(--muted) / var(--amiba-content-hover-opacity));
+}
+.amiba-background-frame [data-amiba-product-shell],
+[data-amiba-product-shell] [data-background-surface="layout"] {
+  background: transparent;
+}
+[data-amiba-product-shell] [data-background-surface="navigation"] {
+  background: hsl(var(--amiba-pane-color) / var(--amiba-glass-opacity));
+  backdrop-filter: blur(var(--amiba-reading-blur)) saturate(1.08);
+  -webkit-backdrop-filter: blur(var(--amiba-reading-blur)) saturate(1.08);
+}
+[data-amiba-product-shell] [data-background-surface="workbench"] {
+  background: hsl(var(--amiba-pane-color) / var(--amiba-glass-opacity));
+  backdrop-filter: blur(var(--amiba-glass-blur)) saturate(1.08);
+  -webkit-backdrop-filter: blur(var(--amiba-glass-blur)) saturate(1.08);
+}
+/* Conversation and empty-state space reveal the unmodified wallpaper. */
+[data-amiba-product-shell] [data-background-surface="reading"],
+[data-amiba-product-shell] [data-conversation-canvas] {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-amiba-product-shell] [data-background-surface="assistant-message"] {
+  background: hsl(var(--amiba-agent-color) / var(--amiba-agent-opacity));
+  backdrop-filter: blur(var(--amiba-agent-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
+  border: 0;
+  border-radius: 12px;
+}
+/* Recovery copy must stay legible even over a high-contrast wallpaper. */
+[data-amiba-product-shell] [data-background-surface="recovery"] {
+  background: hsl(var(--background) / var(--amiba-reading-opacity));
+  backdrop-filter: blur(var(--amiba-glass-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
+}
+/* Empty space reveals the canvas, rather than applying a full-screen blur. */
+[data-amiba-product-shell] [data-conversation-canvas="canvas"],
+[data-amiba-product-shell] [data-background-surface="canvas"],
+[data-amiba-product-shell] [data-background-surface="canvas-header"] {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-amiba-product-shell] [data-background-surface="header"],
+[data-amiba-product-shell] [data-testid="native-window-titlebar"] {
+  background: hsl(var(--amiba-pane-color) / var(--amiba-glass-opacity));
+  backdrop-filter: blur(var(--amiba-glass-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
+}
+/* Header, reading body, and rounded workbench cutouts share one backdrop.
+ * Do not paint the reading material twice inside the shared canvas. */
+[data-amiba-product-shell] [data-conversation-canvas] [data-background-surface="reading"],
+[data-amiba-product-shell] [data-conversation-canvas] [data-background-surface="canvas"],
+[data-amiba-product-shell] [data-conversation-header] {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+/* Keep split sizing, but paint the workbench above the conversation plane. */
+[data-amiba-product-shell] [data-workspace-container] {
+  z-index: 10;
+}
+[data-amiba-product-shell] [data-workspace-container]:has(> [data-background-surface="workbench"][aria-hidden="false"]) {
+  border-radius: 16px 0 0 16px;
+  box-shadow: -8px 0 24px hsl(var(--foreground) / 0.06);
+}
+[data-amiba-product-shell] [data-background-surface="workbench"] {
+  border-radius: 16px 0 0 16px;
+  box-shadow: inset 1px 0 0 rgb(255 255 255 / 0.25);
+}
+/* The owning pane has already blurred the backdrop. Nested chrome shares it. */
+[data-amiba-product-shell] [data-background-surface="navigation"] [data-background-surface="header"],
+[data-amiba-product-shell] [data-background-surface="workbench"] [data-background-surface="header"],
+[data-amiba-product-shell] [data-workspace-tabbar],
+[data-amiba-product-shell] [data-workbench-file-surface] {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-amiba-product-shell] [data-section-header="rail"] {
+  border-radius: 8px;
+  background: var(--amiba-content-fill);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-amiba-product-shell] [data-section-header="rail"]:hover,
+[data-amiba-product-shell] :is([data-session-row], [data-navigation-row]):is([data-active="true"], :hover, :focus-within) {
+  background: var(--amiba-content-hover);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-amiba-product-shell] [data-section-header="rail"] > button {
+  background: transparent;
+}
+[data-amiba-product-shell] [data-composer-card] {
+  background: hsl(var(--background) / var(--amiba-input-opacity));
+  backdrop-filter: blur(var(--amiba-glass-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
+  border-color: hsl(var(--border) / 0.6);
+}
+[data-amiba-product-shell] [data-background-surface="sticky-message"] {
+  border-radius: 12px;
+  background: hsl(var(--amiba-user-color) / var(--amiba-message-opacity));
+  /* Sticky messages pass over live text, unlike ordinary content cards. */
+  backdrop-filter: blur(var(--amiba-message-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-message-blur));
+}
+[data-amiba-product-shell] [data-home-greeting] {
+  color: hsl(var(--foreground));
+  text-shadow: 0 1px 3px hsl(var(--background)), 0 0 10px hsl(var(--background));
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-amiba-product-shell] {
+    --amiba-glass-opacity: 1;
+    --amiba-reading-opacity: 1;
+    --amiba-input-opacity: 1;
+    --amiba-agent-opacity: 1;
+    --amiba-message-opacity: 1;
+    --amiba-content-opacity: 1;
+    --amiba-content-hover-opacity: 1;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  [data-amiba-product-shell] {
+    --amiba-glass-opacity: 1;
+    --amiba-reading-opacity: 1;
+    --amiba-input-opacity: 1;
+    --amiba-agent-opacity: 1;
+    --amiba-message-opacity: 1;
+    --amiba-content-opacity: 1;
+    --amiba-content-hover-opacity: 1;
+    --amiba-glass-blur: 0px;
+    --amiba-reading-blur: 0px;
+    --amiba-message-blur: 0px;
+    --amiba-agent-blur: 0px;
+  }
+}
+
+/* Sidebar compact groups: equal-width inset surfaces, rounded outside only.
+ * A transparent row does not join its neighbours. Hover/focus follows the
+ * same rule as the persistent active state, including a section's first row. */
+[data-session-row], [data-navigation-row] { border-radius: 8px; }
+[data-session-row]:is([data-active="true"], :hover, :focus-within):has(+ [data-session-row]:is([data-active="true"], :hover, :focus-within)) {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+[data-session-row]:is([data-active="true"], :hover, :focus-within) + [data-session-row]:is([data-active="true"], :hover, :focus-within) {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+/* Direct group rows and the two transparent wrappers in SessionsListView. */
+[data-sidebar-section="rail"]:has(> [data-section-content] > [data-session-rows] > [data-session-row]:first-child:is([data-active="true"], :hover, :focus-within)),
+[data-sidebar-section="rail"]:has(> [data-section-content] > div:first-child > div:first-child > [data-session-rows] > [data-session-row]:first-child:is([data-active="true"], :hover, :focus-within)) {
+  > [data-section-header="rail"] {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  > [data-section-content] > [data-session-rows] > [data-session-row]:first-child,
+  > [data-section-content] > div:first-child > div:first-child > [data-session-rows] > [data-session-row]:first-child {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+}
+
+/* A narrow glass edge, with a slow moving reflection rather than a divider. */
+[data-sidebar-glass]::before,
+[data-sidebar-glass]::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+[data-sidebar-glass]::before {
+  inset-block: 0;
+  width: 4px;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.16));
+}
+[data-sidebar-glass]::after {
+  top: 0;
+  width: 3px;
+  height: 28%;
+  border-radius: 50%;
+  background: linear-gradient(180deg, transparent, rgb(255 255 255 / 0.28), transparent);
+  animation: amiba-sidebar-reflection 18s ease-in-out infinite alternate;
+}
+@keyframes amiba-sidebar-reflection {
+  from { transform: translateY(-110%); }
+  to { transform: translateY(370%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-sidebar-glass]::after {
+    animation: none;
+    transform: translateY(120%);
+  }
+}
+
+/* Keep decorative reflection out of the resize paint path. */
+[data-resizing="true"] [data-sidebar-glass]::after {
+  animation-play-state: paused;
+}
+
+/* Local readable backing for toolbar controls, never a full-width header wash. */
+[data-amiba-product-shell] :is([data-content-header-leading][data-header-glass], [data-content-header-actions], [data-workspace-edge-toggle]) {
+  isolation: isolate;
+  padding-inline: 6px;
+  box-sizing: border-box;
+}
+:where([data-amiba-product-shell] [data-content-header-leading][data-header-glass], [data-amiba-product-shell] [data-content-header-actions]) {
+  position: relative;
+}
+[data-amiba-product-shell] :is([data-content-header-leading][data-header-glass], [data-content-header-actions], [data-workspace-edge-toggle]):not(:empty)::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  inset-inline: 0;
+  top: 50%;
+  height: 30px;
+  transform: translateY(-50%);
+  border-radius: 8px;
+  background: var(--amiba-header-fill);
+  backdrop-filter: blur(var(--amiba-glass-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
+  box-shadow: inset 0 0 0 1px hsl(var(--border) / 0.4);
+}
+[data-amiba-product-shell] :is([data-content-header-leading][data-header-glass], [data-content-header-actions], [data-workspace-edge-toggle]) :is(button, [role="button"]) {
+  color: hsl(var(--foreground) / 0.9);
+}
+
+[data-amiba-product-shell] [data-content-header-leading][data-header-glass] :is(button, span) {
+  color: hsl(var(--foreground) / 0.9);
+}
+
+/* Shared interaction material for all conversation header actions. */
+.amiba-header-action {
+  position: relative;
+  display: inline-flex;
+  height: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: transparent;
+  color: hsl(var(--foreground) / 0.9);
+  transition: background-color 120ms ease;
+}
+.amiba-header-action:is(:hover, :focus-visible, [aria-pressed="true"], [aria-expanded="true"]) {
+  background: var(--amiba-content-hover, hsl(var(--muted) / 0.3));
+}
+.amiba-header-action:focus-visible {
+  outline: 2px solid hsl(var(--ring) / 0.4);
+  outline-offset: -2px;
+}
+.amiba-header-action:disabled {
+  pointer-events: none;
+  opacity: 0.3;
+}
+
+/* The revealed action tab continues the user bubble's material and right edge. */
+[data-amiba-product-shell] [data-background-surface="message-actions"] {
+  position: relative;
+  background: hsl(var(--amiba-user-color) / var(--amiba-message-opacity));
+  backdrop-filter: blur(var(--amiba-message-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-message-blur));
+  border-radius: 0 0 12px 12px;
+  /* Reserve layout space; animate only the visual tab. */
+  transform: translateY(-6px);
+  transform-origin: top right;
+  transition: opacity 160ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+[data-amiba-product-shell] [data-user-message-chrome]:has([data-background-surface="message-actions"]):is(:hover, :focus-within) [data-background-surface="sticky-message"] {
+  border-bottom-right-radius: 0;
+}
+
+/* A concave fillet joins the tab's left shoulder to the bubble above. */
+[data-amiba-product-shell] [data-background-surface="message-actions"]::before {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  top: 0;
+  left: -8px;
+  width: 8px;
+  height: 8px;
+  background: inherit;
+  backdrop-filter: blur(var(--amiba-message-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-message-blur));
+  mask-image: radial-gradient(circle at 0 100%, transparent 7.5px, black 8px);
+  -webkit-mask-image: radial-gradient(circle at 0 100%, transparent 7.5px, black 8px);
+}
+
+[data-amiba-product-shell] [data-user-message-chrome]:is(:hover, :focus-within) [data-background-surface="message-actions"] {
+  transform: translateY(0);
+}
+[data-amiba-product-shell] [data-user-message-chrome] [data-background-surface="sticky-message"] {
+  position: relative;
+  z-index: 1;
+  transition: border-bottom-right-radius 160ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-amiba-product-shell] [data-background-surface="message-actions"],
+  [data-amiba-product-shell] [data-user-message-chrome] [data-background-surface="sticky-message"] {
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Consecutive assistant records share one material; retain their text padding. */
+[data-amiba-product-shell] [data-assistant-reply-group] [data-background-surface="assistant-message"] {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 0;
+}
+[data-assistant-reply-group] > [data-execution-summary] {
+  padding: 12px 16px;
+}
+
+[data-amiba-product-shell] [data-background-surface="model-notice"] {
+  background: hsl(var(--background) / 0.48);
+  backdrop-filter: blur(var(--amiba-agent-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
+  border-radius: 8px;
+}
+
+/* Assistant tabs mirror the user's tab, attached at the left edge. */
+[data-amiba-product-shell] [data-assistant-message-chrome] [data-background-surface="message-actions"] {
+  background: hsl(var(--amiba-agent-color) / var(--amiba-agent-opacity));
+  backdrop-filter: blur(var(--amiba-agent-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
+}
+[data-amiba-product-shell] [data-background-surface="message-actions"][data-action-align="left"]::before {
+  left: auto;
+  right: -8px;
+  backdrop-filter: blur(var(--amiba-agent-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
+  mask-image: radial-gradient(circle at 100% 100%, transparent 7.5px, black 8px);
+  -webkit-mask-image: radial-gradient(circle at 100% 100%, transparent 7.5px, black 8px);
+}
+[data-amiba-product-shell] [data-assistant-message-chrome]:is(:hover, :focus-within) [data-background-surface="message-actions"] {
+  transform: translateY(0);
+}
+[data-amiba-product-shell] [data-assistant-message-chrome] [data-assistant-reply-body] {
+  position: relative;
+  z-index: 1;
+}
+[data-amiba-product-shell] [data-assistant-message-chrome]:has([data-background-surface="message-actions"]):is(:hover, :focus-within) [data-background-surface="assistant-message"] {
+  border-bottom-left-radius: 0;
+}
+
+/* Body and attached tab must sample one backdrop to avoid a tint seam. */
+[data-amiba-product-shell] :is([data-assistant-message-chrome], [data-user-message-chrome])[data-unified-glass] {
+  position: relative;
+}
+[data-amiba-product-shell] :is([data-assistant-message-chrome], [data-user-message-chrome])[data-unified-glass] > [data-assistant-glass-clip] {
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--message-glass-height);
+  pointer-events: none;
+  overflow: hidden;
+  clip-path: var(--assistant-glass-closed);
+  transition: clip-path 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+[data-amiba-product-shell] :is([data-assistant-message-chrome], [data-user-message-chrome])[data-unified-glass]:is(:hover, :focus-within) > [data-assistant-glass-clip] {
+  clip-path: var(--assistant-glass-outline);
+}
+[data-amiba-product-shell] :is([data-assistant-message-chrome], [data-user-message-chrome])[data-unified-glass] :is([data-background-surface="assistant-message"], [data-background-surface="sticky-message"], [data-background-surface="message-actions"]) {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-amiba-product-shell] :is([data-assistant-message-chrome], [data-user-message-chrome])[data-unified-glass] [data-background-surface="message-actions"]::before {
+  content: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-amiba-product-shell] :is([data-assistant-message-chrome], [data-user-message-chrome])[data-unified-glass] > [data-assistant-glass-clip] {
+    transition: none;
+  }
+}
+
+[data-assistant-glass-clip] { display: none; }
+[data-unified-glass] > [data-assistant-glass-clip] { display: block; }
+[data-amiba-product-shell] [data-assistant-glass-material] {
+  position: absolute;
+  inset: 0;
+  background: hsl(var(--message-glass-color, var(--amiba-agent-color)) / var(--message-glass-opacity, var(--amiba-agent-opacity)));
+  backdrop-filter: blur(var(--message-glass-blur, var(--amiba-agent-blur)));
+  -webkit-backdrop-filter: blur(var(--message-glass-blur, var(--amiba-agent-blur)));
+  mask-image: var(--assistant-glass-mask-closed);
+  -webkit-mask-image: var(--assistant-glass-mask-closed);
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+}
+
+[data-amiba-product-shell] :is([data-assistant-message-chrome], [data-user-message-chrome]):is(:hover, :focus-within) [data-assistant-glass-material] {
+  mask-image: var(--assistant-glass-mask);
+  -webkit-mask-image: var(--assistant-glass-mask);
+}
+
+/* Mirror only the silhouette, keeping the backdrop in its original orientation. */
+[data-amiba-product-shell] [data-user-message-chrome] {
+  --message-glass-color: var(--amiba-user-color);
+  --message-glass-opacity: var(--amiba-message-opacity);
+  --message-glass-blur: var(--amiba-message-blur);
+}
+[data-amiba-product-shell] [data-user-message-chrome] > [data-assistant-glass-clip],
+[data-amiba-product-shell] [data-user-message-chrome] [data-assistant-glass-material] {
+  transform: scaleX(-1);
+}
+[data-amiba-product-shell] [data-action-align="left"] { padding-left: 12px; padding-right: 16px; }
+[data-amiba-product-shell] [data-action-align="right"] { padding-left: 16px; }
+
+/* A flat canvas needs tonal separation; translucent white alone disappears.
+ * One mode boundary also covers missing/failed/disabled wallpaper media. */
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] {
+  --amiba-pane-color: var(--muted);
+  --amiba-agent-color: var(--muted);
+  --amiba-user-color: var(--secondary);
+  --amiba-glass-opacity: 1;
+  --amiba-agent-opacity: 0;
+  --amiba-message-opacity: 1;
+  --amiba-input-opacity: 1;
+  --amiba-content-opacity: 0.85;
+  --amiba-content-fill: hsl(var(--foreground) / 0.035);
+  --amiba-content-hover: hsl(var(--foreground) / 0.08);
+  --amiba-header-fill: hsl(var(--muted));
+  --amiba-glass-blur: 0px;
+  --amiba-reading-blur: 0px;
+  --amiba-agent-blur: 0px;
+  --amiba-message-blur: 0px;
+}
+.amiba-background-frame:not([data-background-active="true"]) [data-sidebar-glass]::before,
+.amiba-background-frame:not([data-background-active="true"]) [data-sidebar-glass]::after {
+  display: none;
+}
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-composer-card] {
+  border-color: hsl(var(--border));
+  box-shadow: 0 2px 12px hsl(var(--foreground) / 0.06);
+}
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-background-surface="workbench"] {
+  box-shadow: inset 1px 0 0 hsl(var(--border));
+}
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-background-surface="model-notice"] {
+  background: hsl(var(--muted));
+}

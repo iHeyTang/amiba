@@ -58,7 +58,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           "max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap break-words",
           isUser
             ? "bg-primary text-primary-foreground"
-            : "bg-muted text-foreground border border-border"
+            : "bg-chat-surface text-foreground border border-border"
         )}>
         {message.content || (isUser ? "" : <span className="text-muted-foreground italic">…</span>)}
       </div>

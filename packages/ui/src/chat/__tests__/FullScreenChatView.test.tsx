@@ -1026,7 +1026,7 @@ describe("FullScreenChatView new-chat home", () => {
     expect(sidebar).toHaveStyle({ width: `${APP_SIDEBAR_DEFAULT_WIDTH}px` });
   });
 
-  it("snaps sidebar resizing to the shared default width", () => {
+  it("snaps sidebar resizing to the shared default width", async () => {
     mocks.useSessions.mockReturnValue(makeSessions());
 
     render(
@@ -1044,11 +1044,17 @@ describe("FullScreenChatView new-chat home", () => {
 
     fireEvent(handle, pointerEvent("pointerdown", 240));
     fireEvent(handle, pointerEvent("pointermove", 260));
-    expect(sidebar).toHaveStyle({ width: "260px" });
+    expect(sidebar.style.transition).toBe("none");
+    await waitFor(() => expect(sidebar).toHaveStyle({ width: "260px" }));
 
     fireEvent(handle, pointerEvent("pointermove", 248));
-    expect(sidebar).toHaveStyle({ width: "240px" });
+    await waitFor(() => expect(sidebar).toHaveStyle({ width: "248px" }));
+    expect(sidebar).toHaveAttribute("data-resizing", "true");
     fireEvent(handle, pointerEvent("pointerup", 248));
+    expect(sidebar).not.toHaveAttribute("data-resizing");
+    expect(sidebar).toHaveStyle({ width: "240px" });
+    expect(screen.getByTestId("main-sidebar-content")).toHaveStyle({ width: "240px" });
+    expect(sidebar.style.transition).toBe("");
 
     expect(mocks.storageSet).toHaveBeenCalledWith({
       "settings.chat.sidebarWidth": APP_SIDEBAR_DEFAULT_WIDTH,
@@ -1218,7 +1224,7 @@ describe("FullScreenChatView session-header action seat", () => {
     expect(utilities).not.toContainElement(action);
   });
 
-  it("keeps equal gaps beside the toggle and follows the chat boundary as the pane resizes", () => {
+  it("keeps glass groups separated and follows the chat boundary as the pane resizes", () => {
     let chatRight = 1200;
     let controlsLeft = 1160;
     const resizeCallbacks: Array<() => void> = [];
@@ -1242,7 +1248,7 @@ describe("FullScreenChatView session-header action seat", () => {
       const inset = () => parseFloat(column.style.getPropertyValue("--amiba-header-actions-right"));
       expect(header.style.paddingRight).toBe("var(--amiba-header-actions-right, 12px)");
       expect(actions.style.gap).toBe(controls.style.gap);
-      expect(chatRight - inset()).toBe(controlsLeft - 2);
+      expect(chatRight - inset()).toBe(controlsLeft - 8);
       // Opening/resizing the pane moves only the chat boundary, not window controls.
       chatRight = 760;
       act(() => resizeCallbacks.forEach(callback => callback()));
@@ -1256,14 +1262,14 @@ describe("FullScreenChatView session-header action seat", () => {
         resizeCallbacks.forEach(callback => callback());
         const actionRight = chatRight - inset();
         expect(actionRight).toBeGreaterThanOrEqual(previousRight);
-        expect(actionRight).toBeLessThanOrEqual(controlsLeft - 2);
+        expect(actionRight).toBeLessThanOrEqual(controlsLeft - 8);
         previousRight = actionRight;
       }
-      // Closing the pane and adding another utility preserves the same 2px gap.
+      // Closing the pane and adding another utility preserves the same 8px group gap.
       chatRight = 1200;
       controlsLeft = 1130;
       act(() => resizeCallbacks.forEach(callback => callback()));
-      expect(chatRight - inset()).toBe(controlsLeft - 2);
+      expect(chatRight - inset()).toBe(controlsLeft - 8);
     } finally {
       bounds.mockRestore();
       vi.unstubAllGlobals();

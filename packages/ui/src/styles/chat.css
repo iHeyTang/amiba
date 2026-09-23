@@ -1,3 +1,4 @@
+@import "./surfaces.css";
 
 /*
  * Shared desktop chat surface styles — used by the main conversation,
@@ -23,50 +24,6 @@
 .amiba-chat-column {
   container-name: amiba-chat-column;
   container-type: inline-size;
-}
-
-/*
- * The conversation continues behind the floating composer so its side
- * gutters remain visually open. Fade the final few lines into the canvas
- * before they reach the composer instead of ending them against a hard card
- * edge. The mask belongs to the dock rather than the composer itself so
- * approval banners and attachment errors share the same quiet landing zone.
- */
-.amiba-composer-dock::before {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  inset-block: -5rem -0.75rem;
-  /* The composer caps at 48rem. Spend at most the chat column's remaining
-   * side gutter on the fade, so opening the workbench can never leave the
-   * fixed 4rem expansion painting across the pane boundary. */
-  inset-inline: clamp(-4rem, calc((48rem - 100cqw) / 2), 0rem);
-  pointer-events: none;
-  background: hsl(var(--background) / 0.96);
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    rgb(0 0 0 / 0.04) 10%,
-    rgb(0 0 0 / 0.16) 24%,
-    rgb(0 0 0 / 0.42) 40%,
-    rgb(0 0 0 / 0.72) 56%,
-    rgb(0 0 0 / 0.94) 72%,
-    black 84%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    rgb(0 0 0 / 0.04) 10%,
-    rgb(0 0 0 / 0.16) 24%,
-    rgb(0 0 0 / 0.42) 40%,
-    rgb(0 0 0 / 0.72) 56%,
-    rgb(0 0 0 / 0.94) 72%,
-    black 84%
-  );
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
 }
 
 .amiba-composer-dock > * {
@@ -278,7 +235,7 @@
   margin: 0.75rem 0;
   padding: 0.15rem 0 0.15rem 0.85rem;
   border-left: 3px solid hsl(var(--border));
-  color: hsl(var(--muted-foreground));
+  color: hsl(var(--foreground) / 0.82);
   font-style: normal;
 }
 
@@ -295,7 +252,7 @@
   font-size: 0.86em;
   padding: 0.1em 0.42em;
   border-radius: 5px;
-  background: hsl(var(--muted));
+  background: var(--amiba-content-fill, hsl(var(--muted) / 0.16));
   color: hsl(var(--foreground));
   border: 1px solid hsl(var(--border) / 0.7);
 }
@@ -341,8 +298,14 @@
   gap: 0;
   border: 1px solid hsl(var(--border));
   border-radius: 8px;
-  background: hsl(var(--background));
+  background: var(--amiba-content-fill, hsl(var(--muted) / 0.16));
   overflow: visible;
+}
+/* Streamdown paints both its body and Shiki's pre. The frame owns the
+ * material; only syntax foregrounds belong to the highlighter. Important
+ * also handles themes that emit an inline background on pre. */
+.chat-md.chat-md [data-streamdown="code-block-body"] > pre {
+  background: transparent !important;
 }
 /* Give the code toolbar a readable identity, including unlabeled fences.
  * The language span is supplied by Streamdown; :lang follows the app locale. */
@@ -353,7 +316,7 @@
   height: 34px;
   min-height: 34px;
   padding: 0 76px 0 16px;
-  background: hsl(var(--muted) / 0.35);
+  background: var(--amiba-content-fill, hsl(var(--muted) / 0.16));
   border-bottom: 1px solid hsl(var(--border) / 0.6);
   border-radius: 7px 7px 0 0;
   line-height: 16px;
@@ -440,19 +403,20 @@
 .chat-md.chat-md
   [data-streamdown="code-block-actions"]
   > button:is(:hover, :focus-visible):not(:disabled) {
-  background: hsl(var(--muted));
+  background: var(--amiba-content-fill, hsl(var(--muted) / 0.16));
 }
 
 .chat-md.chat-md
   [data-streamdown="code-block-actions"]
   > button[aria-pressed="true"] {
-  background: hsl(var(--muted));
+  background: var(--amiba-content-fill, hsl(var(--muted) / 0.16));
   color: hsl(var(--foreground));
   opacity: 1;
 }
 
 /* Only the outer frame draws an outline. Inner content clips the corners. */
 .chat-md.chat-md [data-streamdown="code-block-body"] {
+  background: transparent;
   border: 0;
   border-radius: 0 0 7px 7px;
   padding: 12px 16px;
@@ -567,7 +531,7 @@
 }
 .chat-md.chat-md [data-streamdown="table-header-cell"] {
   padding: 0.5rem 0.7rem;
-  background: hsl(var(--muted) / 0.6);
+  background: var(--amiba-content-fill, hsl(var(--muted) / 0.16));
   font-weight: 600;
   font-size: 0.85rem;
   border-bottom: 1px solid hsl(var(--border));
@@ -709,26 +673,26 @@
 }
 
 .chat-md--glass.chat-md--glass [data-streamdown="inline-code"] {
-  background: hsl(var(--muted) / 0.5);
+  background: var(--amiba-content-fill, hsl(var(--muted) / 0.16));
   border-color: hsl(var(--border) / 0.5);
 }
 
 .chat-md--glass.chat-md--glass [data-streamdown="code-block"] {
   /* Match the dashboard-card glass aesthetic so embedded code blocks
    * sit on the same visual plane as the card itself. */
-  background: hsl(var(--muted) / 0.5);
+  background: var(--amiba-content-fill, hsl(var(--muted) / 0.16));
   border: 1px solid hsl(var(--border) / 0.4);
-  backdrop-filter: blur(8px);
+  backdrop-filter: none;
 }
 
 .chat-md--glass.chat-md--glass [data-streamdown="blockquote"] {
   border-left-color: hsl(var(--foreground) / 0.25);
-  background: hsl(var(--muted) / 0.35);
+  background: var(--amiba-content-fill, hsl(var(--muted) / 0.16));
   border-radius: 0 6px 6px 0;
 }
 
 .chat-md--glass.chat-md--glass [data-streamdown="table-header-cell"] {
-  background: hsl(var(--muted) / 0.5);
+  background: var(--amiba-content-fill, hsl(var(--muted) / 0.16));
   border-bottom-color: hsl(var(--border) / 0.5);
 }
 
@@ -776,4 +740,10 @@
   [data-composer-card] [data-composer-effort-trigger] > span { display: none; }
   [data-composer-card] [data-composer-toolbar-start] > button,
   [data-composer-card] [data-composer-model-trigger], [data-composer-card] [data-composer-effort-trigger] { padding-inline: 6px; }
+}
+
+/* Clip scrolled bubbles at the message column's padded edges, so their
+ * rounded corners do not become square when they pass the viewport top. */
+[data-conversation-scroll-region] > [data-radix-scroll-area-viewport] {
+  clip-path: inset(0 12px round 12px);
 }

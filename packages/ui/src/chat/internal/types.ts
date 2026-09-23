@@ -26,6 +26,7 @@ import type {
 export interface UiMessage extends ChatMessage {
   uiId: string
   /** Wall-clock time when this message entered the session. */
+  tokenUsage?: import("@amiba/app-runtime/protocol").MessageTokenUsage
   sentAt?: number
   /** DSH append-only event sequence used for fork-at-message operations. */
   runtimeSeq?: number

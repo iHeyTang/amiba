@@ -1,3 +1,4 @@
+import { TurnTokenUsage } from "../dsh-client/turn-token-usage";
 import { retryProgress, upsertRetryTimeline } from "../dsh-client/retry";
 import { appendAssistantText, applyAssistantTextSource } from "../dsh-client/assistant-text-source";
 import { ClosingAssistant } from "../dsh-client/closing-assistant";
@@ -27,6 +28,7 @@ import type { AttachmentBadge } from "./attachments/types";
 type RuntimeSessionMessage = SessionMessage & {
   /** Wall-clock time of the durable event that produced this message. */
   sentAt?: number;
+  tokenUsage?: import("../protocol").MessageTokenUsage;
   reasoning?: string;
   /** Rebuilt from the message's `<file-attachment>` envelope on reload. */
   attachmentBadges?: AttachmentBadge[];
@@ -100,6 +102,7 @@ interface AssistantTurn {
   turn: number;
   runtimeTurn?: number;
   firstSeq: number;
+  sentAt: number;
   text: string;
   draftText: string;
   draftTimeline: AssistantTimelineItem[];
@@ -111,6 +114,7 @@ interface AssistantTurn {
   tools: Map<string, ToolProgress>;
   dispatches: CodeDispatchTree;
   closing: ClosingAssistant;
+  usage: TurnTokenUsage;
   timeline: RuntimeSessionMessage["assistantTimeline"];
 }
 
@@ -120,6 +124,7 @@ function beginTurn(event: AgentSessionEvent): AssistantTurn {
       typeof event.data.turn === "number" ? event.data.turn : event.seq,
     ...(Number.isSafeInteger(event.data.turn) && (event.data.turn as number) >= 0 ? { runtimeTurn: event.data.turn as number } : {}),
     firstSeq: event.seq,
+    sentAt: event.time,
     text: "",
     draftText: "",
     draftTimeline: [],
@@ -131,6 +136,7 @@ function beginTurn(event: AgentSessionEvent): AssistantTurn {
     tools: new Map(),
     dispatches: new CodeDispatchTree(),
     closing: new ClosingAssistant(),
+    usage: new TurnTokenUsage(),
     timeline: [],
   };
 }
@@ -162,6 +168,8 @@ function finishTurn(
     content,
     uiId: `dsh:turn:${turn.firstSeq}`,
     runtimeSeq: turn.firstSeq,
+    sentAt: turn.sentAt,
+    ...(turn.usage.snapshot() ? { tokenUsage: turn.usage.snapshot() } : {}),
     ...(turn.runtimeTurn === undefined ? {} : { runtimeTurn: turn.runtimeTurn }),
     ...(turn.closing.getMessageId() ? { assistantMessageId: turn.closing.getMessageId()! } : {}),
     ...(turn.reasoning ? { reasoning: turn.reasoning } : {}),
@@ -256,6 +264,7 @@ export function projectRuntimeSessionHistory(
     if (retry) {
       if (!turn) turn = beginTurn(event);
       turn.closing.apply(event);
+      turn.usage.apply(event);
       upsertRetryTimeline(turn.timeline!, retry);
       if (event.type === "llm/retry" && Number.isSafeInteger(event.data.step)) {
         applyAssistantTextSource(turn.draftTimeline, {kind:"assistantTextSource",phase:"reset",runtimeStep:event.data.step as number});
@@ -266,6 +275,7 @@ export function projectRuntimeSessionHistory(
     if (compact) {
       if (!turn) turn = beginTurn(event);
       turn.closing.apply(event);
+      turn.usage.apply(event);
       upsertCompactionTimeline(turn.timeline!, compact);
       continue;
     }
@@ -316,6 +326,7 @@ export function projectRuntimeSessionHistory(
       finishTurn(turn, output);
       turn = beginTurn(event);
       turn.closing.apply(event);
+      turn.usage.apply(event);
       continue;
     }
     if (event.type === "amiba/notice") {
@@ -356,6 +367,7 @@ export function projectRuntimeSessionHistory(
     }
     if (!turn) turn = beginTurn(event);
     turn.closing.apply(event);
+    turn.usage.apply(event);
     const runtimeStep = Number.isSafeInteger(event.data.step) && (event.data.step as number) >= 0 ? event.data.step as number : undefined;
     if (event.type === "llm/retry" && runtimeStep !== undefined) {
       applyAssistantTextSource(turn.draftTimeline, {kind:"assistantTextSource",phase:"reset",runtimeStep});
@@ -378,6 +390,7 @@ export function projectRuntimeSessionHistory(
       continue;
     }
     if (event.type === "assistant/message") {
+      turn.sentAt = event.time;
       const message = messageFromEvent(event);
       const text = contentText(message?.content);
       if (text) {
@@ -408,6 +421,7 @@ export function projectRuntimeSessionHistory(
       continue;
     }
     if (event.type === "turn/end") {
+      turn.sentAt = event.time;
       interruptOpenCompactions(turn.timeline!);
       finishTurn(turn, output);
       turn = null;

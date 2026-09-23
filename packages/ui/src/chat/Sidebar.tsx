@@ -389,7 +389,7 @@ export function Sidebar({
       <div className="px-2">
         {sidebarFooterActions?.({ wide })}
       </div>
-      <div className="mt-1 border-t border-border/30 p-2">
+      <div className="mt-1 p-2">
         <ReplacementBoundary render={settingsRegion ? fallback => settingsRegion({ wide }, fallback) : undefined}>
         <ProfileMenu
           wide={wide}

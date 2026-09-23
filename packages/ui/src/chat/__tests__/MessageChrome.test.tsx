@@ -88,6 +88,7 @@ describe("chat message chrome", () => {
               uiId: "assistant-1",
               role: "assistant",
               content: "Done",
+              runtimeTurn: 7,
               toolProgress: [
                 {
                   tool: "edit",
@@ -112,9 +113,15 @@ describe("chat message chrome", () => {
           ] as UiMessage[]
         }
         onReviewWorkspaceChanges={onReview}
+        openTurnFile={() => {}}
+        turnTail={() => <div>Produced report.pdf</div>}
       />,
     );
 
+    const group = screen.getByText("Done").closest("[data-assistant-reply-group]");
+    expect(group).toContainElement(screen.getByText("Produced report.pdf"));
+    expect(group).toContainElement(screen.getByRole("button", { name: "workspacePane.review" }));
+    expect(group?.closest("[data-assistant-message-chrome]")?.querySelectorAll('[data-action-align="left"]')).toHaveLength(1);
     expect(screen.getByText("src/App.tsx")).toBeInTheDocument();
     expect(screen.getByText("src/theme.css")).toBeInTheDocument();
     expect(screen.getByText("+2")).toBeInTheDocument();
@@ -274,7 +281,10 @@ describe("chat message chrome", () => {
       "group-focus-within:opacity-100",
       "group-focus-within:pointer-events-auto",
     );
-    expect(actions.className).not.toMatch(/\bbg-|\bborder/);
+    expect(actions).toHaveClass("w-fit", "ml-auto");
+    expect(actions.className).not.toMatch(/\bbg-|\bbackdrop-|\bborder/);
+    expect(actions.closest(".sticky")?.className).not.toMatch(/\bbg-|\bbackdrop-/);
+    expect(actions.closest(".sticky")?.querySelector('[data-background-surface="sticky-message"]')).toHaveClass("rounded-xl", "overflow-hidden");
 
     const time = actions.querySelector("time");
     expect(time).toHaveAttribute(
@@ -456,7 +466,7 @@ describe("chat message chrome", () => {
     expect(
       screen.queryByText("sidepanel.message.task"),
     ).not.toBeInTheDocument();
-    expect(container.firstElementChild).toHaveClass("bg-secondary");
+    expect(container.firstElementChild).not.toHaveClass("bg-chat-surface");
     expect(container.firstElementChild).toHaveAttribute(
       "data-selection",
       "text",
@@ -2106,4 +2116,100 @@ it("reports the rendered turn window so the conversation rail stays aligned with
     "u28",
     "u29",
   ]);
+});
+
+it("renders model changes as a readable glass notice and preserves unknown notices", () => {
+  const message: UiMessage = { uiId: "model-switch", role: "user", content: "[model changed: details]", origin: { kind: "plugin", plugin: "model-selection" }, notice: { summary: "old-provider/old-model → new-provider/new-model" } };
+  const { rerender } = render(<Bubble m={message} />);
+  expect(screen.getByTestId("model-change-notice")).toHaveAttribute("data-background-surface", "model-notice");
+  expect(screen.getByText("old-model")).toBeInTheDocument();
+  expect(screen.getByText("new-model")).toHaveAttribute("title", "new-provider/new-model");
+  fireEvent.click(screen.getByRole("button", { name: /Model switched/ }));
+  expect(screen.getByText(/Earlier replies were generated/)).toBeInTheDocument();
+  rerender(<Bubble m={{ ...message, notice: { summary: "unrecognized model update" } }} />);
+  expect(screen.queryByTestId("model-change-notice")).toBeNull();
+  fireEvent.click(screen.getByRole("button"));
+  expect(screen.getByText("[model changed: details]")).toBeInTheDocument();
+});
+
+it("groups continuous assistant records while notices and user turns remain boundaries", () => {
+  const messages: UiMessage[] = [
+    { uiId: "u", role: "user", content: "Start" },
+    { uiId: "a1", role: "assistant", content: "Waiting for approval" },
+    { uiId: "a2", role: "assistant", content: "Activated" },
+    { uiId: "notice", role: "user", content: "Changed", notice: { summary: "Model update" } },
+    { uiId: "a3", role: "assistant", content: "After notice" },
+    { uiId: "u2", role: "user", content: "Next" },
+    { uiId: "a4", role: "assistant", content: "New reply" },
+  ];
+  const { container } = render(<MessageTurns messages={messages} />);
+  const group = container.querySelector('[data-assistant-reply-group]')!;
+  expect(container.querySelectorAll('[data-assistant-reply-group]')).toHaveLength(3);
+  expect(group).toHaveTextContent('Waiting for approval');
+  expect(group).toHaveTextContent('Activated');
+  expect(group).not.toHaveTextContent('Model update');
+  expect(group).not.toHaveTextContent('After notice');
+  expect(group).not.toHaveTextContent('New reply');
+});
+
+it("adds one left assistant tab per reply, copying all fragments and hosting actions", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  const clipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  try {
+    const messages: UiMessage[] = [
+      { uiId: "a1", role: "assistant", content: "First paragraph", assistantMessageId: "first" },
+      { uiId: "a2", role: "assistant", content: "Second paragraph", assistantMessageId: "last", sentAt: 1750000000000 },
+    ];
+    const { container, rerender } = render(<MessageTurns messages={messages} assistantActions={id => <button>Extra {id}</button>} />);
+    const tabs = container.querySelectorAll('[data-action-align="left"]');
+    expect(tabs).toHaveLength(1);
+    expect(tabs[0]!.querySelector("time")).not.toBeNull();
+    expect(tabs[0]).toContainElement(screen.getByRole("button", { name: "Extra last" }));
+    expect(screen.queryByRole("button", { name: "Extra first" })).toBeNull();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "common.copy" })));
+    expect(writeText).toHaveBeenCalledWith("First paragraph\n\nSecond paragraph");
+    rerender(<MessageTurns messages={[messages[0]!, { ...messages[1]!, streaming: true }]} />);
+    expect(container.querySelector('[data-action-align="left"]')).toBeNull();
+  } finally {
+    if (clipboard) Object.defineProperty(navigator, "clipboard", clipboard);
+    else Reflect.deleteProperty(navigator, "clipboard");
+  }
+});
+
+it("copies only rendered result prose and resets the assistant copy feedback", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  const clipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  vi.useFakeTimers();
+  try {
+    render(<MessageTurns messages={[{
+      uiId: "result", role: "assistant", content: "Earlier progress.Final answer.",
+      assistantTimeline: [
+        { kind: "text", id: "before", text: "Earlier progress." },
+        { kind: "tool", id: "tool", toolCallId: "write" },
+        { kind: "text", id: "after", text: "Final answer." },
+      ],
+      toolProgress: [{ toolCallId: "write", toolName: "write_file", status: "success" }],
+    }]} />);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "common.copy" })));
+    expect(writeText).toHaveBeenCalledWith("Final answer.");
+    expect(screen.getByRole("button", { name: "common.copied" })).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(2000));
+    expect(screen.getByRole("button", { name: "common.copy" })).toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+    if (clipboard) Object.defineProperty(navigator, "clipboard", clipboard);
+    else Reflect.deleteProperty(navigator, "clipboard");
+  }
+});
+
+it("shows only output tokens once regardless of missing cache counters", () => {
+  const message: UiMessage = { uiId: "usage", runtimeTurn: 7, role: "assistant", content: "Answer", tokenUsage: { inputTokens: 12, outputTokens: 5, cacheReadTokens: 30, cacheWriteTokens: 2 } };
+  const { rerender } = render(<MessageTurns messages={[message, { ...message, uiId: "duplicate", content: "Continuation" }]} />);
+  expect(screen.getByRole("button", { name: "sidepanel.tokens.details" })).toHaveTextContent("sidepanel.tokens.outputTokens 5 tokens");
+  rerender(<MessageTurns messages={[{ ...message, tokenUsage: { inputTokens: 12, outputTokens: 5 } }]} />);
+  expect(screen.getByRole("button", { name: "sidepanel.tokens.details" })).toHaveTextContent("sidepanel.tokens.outputTokens 5 tokens");
+  rerender(<MessageTurns messages={[{ ...message, tokenUsage: undefined }]} />);
+  expect(screen.queryByRole("button", { name: "sidepanel.tokens.details" })).toBeNull();
 });
