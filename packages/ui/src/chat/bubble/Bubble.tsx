@@ -1971,12 +1971,13 @@ function UserStickyBubbleUnmemoized({
           {!m.streaming ? (
             <div
               data-testid="user-message-actions"
+              data-background-surface="message-actions"
               className="pointer-events-none ml-auto flex h-7 w-fit items-center justify-end gap-0.5 px-1.5 pt-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
             >
               {messageTime ? (
                 <time
                   dateTime={messageTime.dateTime}
-                  className="mr-1 shrink-0 whitespace-nowrap text-[10px] tabular-nums leading-none text-muted-foreground/55"
+                  className="mr-1 shrink-0 whitespace-nowrap text-[10px] tabular-nums leading-none text-muted-foreground"
                 >
                   {messageTime.label}
                 </time>

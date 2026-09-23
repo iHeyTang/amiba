@@ -273,3 +273,10 @@
   pointer-events: none;
   opacity: 0.3;
 }
+
+[data-amiba-product-shell] [data-background-surface="message-actions"] {
+  background: hsl(var(--background) / 0.72);
+  backdrop-filter: blur(var(--amiba-glass-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
+  border-radius: 8px;
+}

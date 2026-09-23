@@ -1,7 +1,7 @@
 import type { AssistantTimelineItem } from "@amiba/app-runtime/protocol";
 import { WorkspaceTextMentionsContext } from "@amiba/ui";
 import type { ChatFileMentions } from "@deepseek-ai/dsh-client-ui-chat/client";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { ConversationSnapshot } from "./conversation-snapshot.js";
 import type { ObservableSnapshot } from "@deepseek-ai/dsh-client-store";
 import type { TurnTailOwnerProps } from "@deepseek-ai/dsh-client-ui-chat/client";
@@ -30,6 +30,19 @@ export function TurnTail({
   openFile: (path: string) => void;
   render: (owner: TurnTailOwnerProps) => ReactNode;
 }) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [hasContent, setHasContent] = useState(false);
+  useLayoutEffect(() => {
+    const node = contentRef.current;
+    if (!node) return;
+    // Slot chains can leave empty wrapper elements even when all contributors decline.
+    const measure = () => setHasContent(Boolean(node.textContent?.trim() ||
+      node.querySelector("img,svg,video,canvas,iframe,button,input,[role='alert']")));
+    measure();
+    const observer = new MutationObserver(measure);
+    observer.observe(node, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  });
   const snapshot = useConversationSnapshot(source);
   const [fileError, setFileError] = useState<string | null>(null);
   const fileRequest = useRef(0);
@@ -48,7 +61,7 @@ export function TurnTail({
   }, [openFile]);
   const owner = turnTailOwner(snapshot, runtimeTurn, requestOpenFile);
   return owner ? (
-    <div data-background-surface="assistant-message" className="min-w-0 space-y-2 px-4 py-3 text-sm empty:hidden">
+    <div ref={contentRef} hidden={!hasContent} data-background-surface="assistant-message" className="min-w-0 space-y-2 px-4 py-3 text-sm">
       {render(owner)}
       {fileError ? <p role="alert" className="text-xs text-destructive">{fileError}</p> : null}
     </div>
