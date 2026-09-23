@@ -220,6 +220,8 @@
 /* Local readable backing for toolbar controls, never a full-width header wash. */
 [data-amiba-product-shell] :is([data-content-header-leading][data-header-glass], [data-content-header-actions], [data-workspace-edge-toggle]) {
   isolation: isolate;
+  padding-inline: 6px;
+  box-sizing: border-box;
 }
 :where([data-amiba-product-shell] [data-content-header-leading][data-header-glass], [data-amiba-product-shell] [data-content-header-actions]) {
   position: relative;
@@ -229,12 +231,12 @@
   position: absolute;
   z-index: -1;
   pointer-events: none;
-  inset-inline: -3px;
+  inset-inline: 0;
   top: 50%;
   height: 30px;
   transform: translateY(-50%);
   border-radius: 8px;
-  background: hsl(var(--background) / var(--amiba-message-opacity));
+  background: hsl(var(--background) / 0.6);
   backdrop-filter: blur(var(--amiba-glass-blur));
   -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
   box-shadow: inset 0 0 0 1px hsl(var(--border) / 0.4);

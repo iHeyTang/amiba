@@ -93,6 +93,7 @@ const SIDEBAR_WIDTH_KEY = "settings.chat.sidebarWidth";
 const SIDEBAR_COLLAPSED_KEY = "settings.chat.sidebarCollapsed";
 const SIDEBAR_TRANSITION_FALLBACK_MS = 240;
 const HEADER_ACTION_GAP_PX = 2;
+const HEADER_GROUP_GAP_PX = 8;
 const HEADER_RIGHT_PADDING_PX = 12;
 
 /**
@@ -940,7 +941,7 @@ function FullScreenChatViewInner({
       const chatRight = chatColumnRef.current?.getBoundingClientRect().right;
       const inset = chatRight === undefined ? HEADER_RIGHT_PADDING_PX : Math.max(
         HEADER_RIGHT_PADDING_PX,
-        chatRight - node.getBoundingClientRect().left + HEADER_ACTION_GAP_PX,
+        chatRight - node.getBoundingClientRect().left + HEADER_GROUP_GAP_PX,
       );
       // ResizeObserver runs before paint. Write geometry directly so React's
       // deferred render cannot leave the actions a frame behind the CSS width

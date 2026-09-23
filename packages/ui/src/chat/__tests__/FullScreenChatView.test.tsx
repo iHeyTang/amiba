@@ -1194,7 +1194,7 @@ describe("FullScreenChatView session-header action seat", () => {
     expect(utilities).not.toContainElement(action);
   });
 
-  it("keeps equal gaps beside the toggle and follows the chat boundary as the pane resizes", () => {
+  it("keeps glass groups separated and follows the chat boundary as the pane resizes", () => {
     let chatRight = 1200;
     let controlsLeft = 1160;
     const resizeCallbacks: Array<() => void> = [];
@@ -1218,7 +1218,7 @@ describe("FullScreenChatView session-header action seat", () => {
       const inset = () => parseFloat(column.style.getPropertyValue("--amiba-header-actions-right"));
       expect(header.style.paddingRight).toBe("var(--amiba-header-actions-right, 12px)");
       expect(actions.style.gap).toBe(controls.style.gap);
-      expect(chatRight - inset()).toBe(controlsLeft - 2);
+      expect(chatRight - inset()).toBe(controlsLeft - 8);
       // Opening/resizing the pane moves only the chat boundary, not window controls.
       chatRight = 760;
       act(() => resizeCallbacks.forEach(callback => callback()));
@@ -1232,14 +1232,14 @@ describe("FullScreenChatView session-header action seat", () => {
         resizeCallbacks.forEach(callback => callback());
         const actionRight = chatRight - inset();
         expect(actionRight).toBeGreaterThanOrEqual(previousRight);
-        expect(actionRight).toBeLessThanOrEqual(controlsLeft - 2);
+        expect(actionRight).toBeLessThanOrEqual(controlsLeft - 8);
         previousRight = actionRight;
       }
-      // Closing the pane and adding another utility preserves the same 2px gap.
+      // Closing the pane and adding another utility preserves the same 8px group gap.
       chatRight = 1200;
       controlsLeft = 1130;
       act(() => resizeCallbacks.forEach(callback => callback()));
-      expect(chatRight - inset()).toBe(controlsLeft - 2);
+      expect(chatRight - inset()).toBe(controlsLeft - 8);
     } finally {
       bounds.mockRestore();
       vi.unstubAllGlobals();
