@@ -1871,6 +1871,42 @@ function InterleavedAssistantFlow({
  */
 export const Bubble = memo(BubbleUnmemoized);
 
+function useMessageGlass(complete: boolean, align: "left" | "right") {
+  const chromeRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const chrome = chromeRef.current;
+    const body = chrome?.querySelector<HTMLElement>("[data-message-glass-body]");
+    const tab = chrome?.querySelector<HTMLElement>('[data-background-surface="message-actions"]');
+    if (!chrome || !body) return;
+    const measure = () => {
+      const w = chrome.clientWidth, h = body.offsetHeight;
+      if (!w || !h) return;
+      const th = tab?.offsetHeight ?? 0;
+      const tw = Math.min(tab?.offsetWidth ?? 0, w - 20);
+      // Alpha-mask the final filtered pixels, not just the layer geometry.
+      const path = `M12 0 H${w-12} Q${w} 0 ${w} 12 V${h-12} Q${w} ${h} ${w-12} ${h} H${tw+8} Q${tw} ${h} ${tw} ${h+8} V${h+th-12} Q${tw} ${h+th} ${tw-12} ${h+th} H12 Q0 ${h+th} 0 ${h+th-12} V12 Q0 0 12 0 Z`;
+      const closedPath = `M12 0 H${w-12} Q${w} 0 ${w} 12 V${h-12} Q${w} ${h} ${w-12} ${h} H${tw+8} Q${tw} ${h} ${tw} ${h} V${h} Q${tw} ${h} ${tw} ${h} H12 Q0 ${h} 0 ${h-12} V12 Q0 0 12 0 Z`;
+      const mirror = align === "right" ? `translate(${w} 0) scale(-1 1)` : "";
+      const mask = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h+th}" viewBox="0 0 ${w} ${h+th}">${th ? `<path d="${path}" transform="${mirror}" fill="white"/>` : `<rect width="${w}" height="${h}" rx="12" fill="white"/>`}</svg>`;
+      chrome.style.setProperty("--assistant-glass-mask", `url("data:image/svg+xml,${encodeURIComponent(mask)}")`);
+      const closedMask = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h+th}" viewBox="0 0 ${w} ${h+th}"><rect width="${w}" height="${h}" rx="12" fill="white"/></svg>`;
+      chrome.style.setProperty("--assistant-glass-mask-closed", `url("data:image/svg+xml,${encodeURIComponent(closedMask)}")`);
+      chrome.style.setProperty("--assistant-glass-closed", th ? `path('${closedPath}')` : "inset(0 round 12px)");
+      chrome.style.setProperty("--assistant-glass-outline", th ? `path('${path}')` : "inset(0 round 12px)");
+      chrome.style.setProperty("--message-glass-height", `${h+th}px`);
+      chrome.setAttribute("data-unified-glass", "");
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(chrome);
+    observer.observe(body);
+    if (tab) observer.observe(tab);
+    return () => observer.disconnect();
+  }, [complete, align]);
+  return chromeRef;
+
+}
+
 function AssistantReplyChrome({ messages, copyText, children, actions, timeFormat, timeLocale }: {
   messages: UiMessage[];
   copyText: string;
@@ -1887,41 +1923,13 @@ function AssistantReplyChrome({ messages, copyText, children, actions, timeForma
     return () => window.clearTimeout(timer);
   }, [copied]);
   const complete = messages.every(message => !message.streaming);
-  const chromeRef = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const chrome = chromeRef.current;
-    const body = chrome?.querySelector<HTMLElement>("[data-assistant-reply-body]");
-    const tab = chrome?.querySelector<HTMLElement>('[data-action-align="left"]');
-    if (!chrome || !body) return;
-    const measure = () => {
-      const w = chrome.clientWidth, h = body.offsetHeight;
-      if (!w || !h) return;
-      const th = tab?.offsetHeight ?? 0;
-      const tw = Math.min(tab?.offsetWidth ?? 0, w - 20);
-      // Alpha-mask the final filtered pixels, not just the layer geometry.
-      const path = `M12 0 H${w-12} Q${w} 0 ${w} 12 V${h-12} Q${w} ${h} ${w-12} ${h} H${tw+8} Q${tw} ${h} ${tw} ${h+8} V${h+th-12} Q${tw} ${h+th} ${tw-12} ${h+th} H12 Q0 ${h+th} 0 ${h+th-12} V12 Q0 0 12 0 Z`;
-      const closedPath = `M12 0 H${w-12} Q${w} 0 ${w} 12 V${h-12} Q${w} ${h} ${w-12} ${h} H${tw+8} Q${tw} ${h} ${tw} ${h} V${h} Q${tw} ${h} ${tw} ${h} H12 Q0 ${h} 0 ${h-12} V12 Q0 0 12 0 Z`;
-      const mask = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h+th}" viewBox="0 0 ${w} ${h+th}">${th ? `<path d="${path}" fill="white"/>` : `<rect width="${w}" height="${h}" rx="12" fill="white"/>`}</svg>`;
-      chrome.style.setProperty("--assistant-glass-mask", `url("data:image/svg+xml,${encodeURIComponent(mask)}")`);
-      const closedMask = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h+th}" viewBox="0 0 ${w} ${h+th}"><rect width="${w}" height="${h}" rx="12" fill="white"/></svg>`;
-      chrome.style.setProperty("--assistant-glass-mask-closed", `url("data:image/svg+xml,${encodeURIComponent(closedMask)}")`);
-      chrome.style.setProperty("--assistant-glass-closed", th ? `path('${closedPath}')` : "inset(0 round 12px)");
-      chrome.style.setProperty("--assistant-glass-outline", th ? `path('${path}')` : "inset(0 round 12px)");
-      chrome.setAttribute("data-unified-glass", "");
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(chrome);
-    observer.observe(body);
-    if (tab) observer.observe(tab);
-    return () => observer.disconnect();
-  }, [complete]);
+  const chromeRef = useMessageGlass(complete, "left");
   const last = messages.at(-1);
   const text = copyText;
   const time = formatMessageTime(last?.sentAt, timeFormat, timeLocale);
   return <div ref={chromeRef} data-assistant-message-chrome className="group min-w-0">
     <div data-assistant-glass-clip aria-hidden="true"><div data-assistant-glass-material /></div>
-    <div data-assistant-reply-body>{children}</div>
+    <div data-assistant-reply-body data-message-glass-body>{children}</div>
     {complete && <TooltipProvider delayDuration={180} skipDelayDuration={80}>
       <div data-background-surface="message-actions" data-action-align="left"
         className="pointer-events-none flex h-7 w-fit max-w-full items-center gap-1 px-2 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
@@ -1962,6 +1970,7 @@ function UserStickyBubbleUnmemoized({
   timeLocale?: string;
 }) {
   const { t } = useT();
+  const chromeRef = useMessageGlass(!m.streaming, "right");
   const innerRef = useRef<HTMLDivElement>(null);
   const [overflowed, setOverflowed] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -2003,8 +2012,9 @@ function UserStickyBubbleUnmemoized({
   return (
     <div className="sticky top-0 z-20">
       <TooltipProvider delayDuration={180} skipDelayDuration={80}>
-        <div data-user-message-chrome className="group pb-1">
-          <div className="relative">
+        <div ref={chromeRef} data-user-message-chrome className="group pb-1">
+          <div data-assistant-glass-clip aria-hidden="true"><div data-assistant-glass-material /></div>
+          <div data-message-glass-body className="relative">
             <div
               data-background-surface="sticky-message"
               className={cn(
@@ -2062,6 +2072,7 @@ function UserStickyBubbleUnmemoized({
           {!m.streaming ? (
             <div
               data-testid="user-message-actions"
+              data-action-align="right"
               data-background-surface="message-actions"
               className="pointer-events-none ml-auto flex h-7 w-fit items-center justify-end gap-1 px-2 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
             >
