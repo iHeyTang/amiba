@@ -9,6 +9,8 @@ import {
   assertDshPackageName,
   isRegistryDependencySpec,
   listDshProfilePlugins,
+  packageProvider,
+  inventoryPackageName,
   registryPackageName,
 } from "../dsh-profile-plugins.ts";
 
@@ -99,6 +101,7 @@ test("lists profile dependencies and marks only active DSH bundles", async () =>
         requestedSpec: "1.0.0",
         version: "1.0.0",
         bundle: true,
+        provider: "unknown",
       },
     ]);
   } finally {
@@ -225,4 +228,75 @@ test("rolls back a plugin package with a missing native entry", async () => {
     await assert.rejects(manager.installRegistry(packageName), /ENOENT/);
     assert.equal(await readFile(paths.profileManifest, "utf8"), original);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test("inventory follows the active profile and uses runtime inventory for package origin", async () => {
+  const { root, paths } = await fixture();
+  try {
+    await writeInstalledBundle(paths);
+    const runtimeManifest = path.resolve(paths.runtimeAppBinDir, "../..", "package.json");
+    await mkdir(path.dirname(runtimeManifest), { recursive: true });
+    const browser = "@amiba/dsh-plugin-browser-provider-electron";
+    const external = "@amiba/dsh-plugin-user-example";
+    await writeFile(runtimeManifest, JSON.stringify({ dependencies: {} }));
+    const bundledBrowser = path.resolve(paths.runtimeAppBinDir, "..", browser, "package.json");
+    await mkdir(path.dirname(bundledBrowser), { recursive: true });
+    await writeFile(bundledBrowser, JSON.stringify({ name: browser }));
+    let activeProfileManifest = paths.profileManifest;
+    const manager = new DshProfilePluginManager({ paths, runtime: {
+      get activeProfileManifest() { return activeProfileManifest; },
+      async ensureManagedProfile() {}, async ensureStarted() {}, async stop() {},
+    } });
+    assert.equal((await manager.list()).packages[0].source, "external");
+    const active = path.join(root, "dev", "package.json");
+    await mkdir(path.dirname(active), { recursive: true });
+    await writeFile(active, JSON.stringify({ dependencies: { [browser]: "link:/runtime/browser", [external]: "link:/projects/example" }, amibaDevelopmentPackages: [external] }));
+    activeProfileManifest = active;
+    const result = (await manager.list()).packages;
+    assert.equal(result.find(p => p.packageName === browser).source, "internal");
+    assert.equal(result.find(p => p.packageName === browser).mutable, false);
+    assert.equal(result.find(p => p.packageName === external).source, "external");
+    assert.equal(result.find(p => p.packageName === external).development, true);
+    assert.equal(result.find(p => p.packageName === external).mutable, false);
+    activeProfileManifest = paths.profileManifest;
+    assert.equal((await manager.list()).packages[0].mutable, true);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test("provider metadata is independent of package scope and installation source", () => {
+  assert.equal(packageProvider({ name: "@deepseek-ai/fake" }).provider, "unknown");
+  assert.equal(packageProvider({ repository: { url: "git+https://github.com/deepseek-ai/deepseek-harness.git" } }).provider, "dsh");
+  assert.equal(packageProvider({ repository: "https://github.com/iHeyTang/amiba" }).provider, "amiba");
+  assert.deepEqual(packageProvider({ author: { name: "Alice", email: "private@example.com" } }), { provider: "third-party", author: "Alice" });
+  assert.deepEqual(packageProvider({ author: "Bob <private@example.com>" }), { provider: "third-party", author: "Bob" });
+  assert.equal(packageProvider({ author: "Amiba" }).provider, "amiba");
+  assert.equal(packageProvider(null).provider, "unknown");
+});
+
+test("reads metadata for transitive Loader packages without making them externally manageable", async () => {
+  const { root, paths } = await fixture();
+  try {
+    const name = "@vendor/bundled-plugin";
+    const file = path.resolve(paths.runtimeAppBinDir, "..", name, "package.json");
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify({ name, author: "Alice", version: "2" }));
+    const manager = new DshProfilePluginManager({ paths, runtime: { async ensureManagedProfile() {}, async ensureStarted() {}, async stop() {} } });
+    const { packages } = await manager.list([`${name}/startup`, `${name}/other`, "../../secret"]);
+    assert.equal(packages.length, 1);
+    assert.deepEqual(packages[0].modules, [`${name}/startup`, `${name}/other`]);
+    assert.equal(packages[0].source, "internal");
+    assert.equal(packages[0].provider, "third-party");
+    assert.equal(packages[0].author, "Alice");
+    assert.equal(packages[0].mutable, false);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("resolves submodules and the framework include to their owning package", () => {
+  assert.equal(inventoryPackageName("@deepseek-ai/dsh-web-app/startup"), "@deepseek-ai/dsh-web-app");
+  assert.equal(inventoryPackageName("example/sub/module"), "example");
+  assert.equal(inventoryPackageName("cordis:include"), "@deepseek-ai/dsh-app-boot");
+  assert.equal(inventoryPackageName("@scope/pkg/../../secret"), undefined);
+  assert.equal(inventoryPackageName("/absolute/file"), undefined);
 });

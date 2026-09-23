@@ -2,7 +2,7 @@
   "name": "@amiba/dsh-plugin-pin",
   "version": "0.1.0",
   "private": true,
-  "description": "Amiba pin: sidebar session pinning owned by a plugin \u2014 a row-menu toggle and a \u7f6e\u9876 group",
+  "description": "Amiba pin: sidebar session pinning owned by a plugin — a row-menu toggle and a 置顶 group",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -70,5 +70,11 @@
     "typescript": "5.6.3",
     "vite": "^5.4.11",
     "vitest": "^2.1.4"
+  },
+  "author": "Amiba",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iHeyTang/amiba.git",
+    "directory": "plugins/dsh-plugin-pin"
   }
 }

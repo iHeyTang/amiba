@@ -32,7 +32,24 @@ pnpm install
 amiba plugin dev
 ```
 
-模板的 `pnpm dev` 也会执行这个命令。插件项目需要安装包含此功能的 `@amiba/cli`。
+初始化模板已提供两个连接命令：
+
+```sh
+npm run connect:dev      # 只连接源码启动的 dev 测试版
+npm run connect:release  # 只连接已安装的发行版
+```
+
+模板的 `npm run dev` 是 `connect:dev` 的别名。它们分别调用
+`amiba plugin dev --target dev` / `--target release`，不会因为目标没启动而
+改连另一个版本。直接运行不带 `--target` 的 `amiba plugin dev` 仍保留自动发现行为；
+发现多个实例时要求指定 `--dsh-home`。
+
+自定义目录可分别设置 `AMIBA_PLUGIN_DEV_HOME` / `AMIBA_PLUGIN_RELEASE_HOME`。
+指定 `--target` 后忽略未区分版本的 `AMIBA_DSH_HOME`、`DSH_HOME`、`AMIBA_USER_DATA_DIR`，
+避免继承环境变量误连；显式 `--dsh-home` 优先级最高。
+两个命令都是临时开发连接，不会永久安装或发布插件。
+
+插件项目需要安装包含此功能的 `@amiba/cli`。
 不需要 Amiba 源码，也不需要重新打包 Amiba。
 
 命令先成功构建插件，再连接运行中的桌面端。首次接入会自动重启 DSH 并刷新主窗口，
@@ -90,3 +107,12 @@ node apps/desktop/scripts/smoke-desktop-dev-start.mjs
 # 实际安装 CLI tarball 到仓库外，再连接桌面验证；需要 npm 网络访问。
 node apps/cli/scripts/smoke-package.mjs
 ```
+
+### 插件提供方
+
+插件列表的「内部 / 外部」表示安装来源，「提供方」表示包声明的归属，两者独立。
+提供方复用插件 `package.json` 的标准 `author`（字符串或 `{ name }`）和
+`repository` 字段，无需额外描述文件。DSH 官方仓库和 Amiba 仓库对应各自提供方；
+Amiba 插件也可声明 `author: "Amiba"`。其他作者显示「第三方 · 作者名」，缺失时
+显示「未知作者」，不从 npm scope 猜测官方身份。标签是包的归属声明，不是签名认证。
+初始化模板会把填写的作者写入 `author`；仓库地址在创建仓库后补充。

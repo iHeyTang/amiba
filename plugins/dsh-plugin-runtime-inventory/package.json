@@ -85,5 +85,11 @@
     "@deepseek-ai/dsh-client-connection": "0.1.5-rc.2",
     "@deepseek-ai/dsh-api-settings-controller": "catalog:",
     "@deepseek-ai/dsh-client-ui-settings": "0.1.5-rc.2"
+  },
+  "author": "Amiba",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iHeyTang/amiba.git",
+    "directory": "plugins/dsh-plugin-runtime-inventory"
   }
 }

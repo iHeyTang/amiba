@@ -106,5 +106,11 @@
         }
       }
     }
+  },
+  "author": "Amiba",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iHeyTang/amiba.git",
+    "directory": "plugins/dsh-plugin-memory-memos"
   }
 }

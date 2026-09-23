@@ -117,7 +117,7 @@ const api = {
   },
 
   dshPlugins: {
-    list: () => ipcRenderer.invoke("dsh-plugins:list"),
+    list: (moduleNames?: readonly string[]) => ipcRenderer.invoke("dsh-plugins:list", moduleNames),
     installRegistry: (spec: string) =>
       ipcRenderer.invoke("dsh-plugins:install-registry", spec),
     installArchive: () => ipcRenderer.invoke("dsh-plugins:install-archive"),

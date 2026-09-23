@@ -51,6 +51,7 @@ export async function createDevelopmentProfile(base: ManagedDshPaths, directorie
         links.set(name, resolveInstalledPackageDirectory(base.entrypoint, name))
       }
     }
+    manifest.amibaDevelopmentPackages = projects.filter(project => !passive.has(project.directory)).map(project => project.name)
     manifest.dependencies ??= {}
     for (const project of projects) {
       links.set(project.name, project.directory)

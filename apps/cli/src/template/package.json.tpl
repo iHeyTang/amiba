@@ -1,6 +1,7 @@
 {
   "name": "@{{AUTHOR}}/{{NAME}}",
   "version": "0.1.0",
+  "author": "{{AUTHOR}}",
   "private": true,
   "description": "An independent Amiba DSH plugin.",
   "type": "module",
@@ -23,7 +24,9 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && vite build",
-    "dev": "amiba plugin dev",
+    "dev": "amiba plugin dev --target dev",
+    "connect:dev": "amiba plugin dev --target dev",
+    "connect:release": "amiba plugin dev --target release",
     "pack": "amiba plugin pack",
     "typecheck": "tsc --noEmit"
   },

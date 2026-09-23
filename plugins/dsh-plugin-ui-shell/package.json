@@ -133,5 +133,11 @@
     "@deepseek-ai/dsh-client-ui-sidebar-documentpreview": "0.1.5-rc.2",
     "@deepseek-ai/dsh-client-ui-sidebar-right": "0.1.5-rc.2",
     "@deepseek-ai/dsh-client-ui-agent-preset": "catalog:"
+  },
+  "author": "Amiba",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iHeyTang/amiba.git",
+    "directory": "plugins/dsh-plugin-ui-shell"
   }
 }

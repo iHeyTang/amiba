@@ -86,5 +86,11 @@
     "lucide-react": "^0.460.0",
     "@deepseek-ai/dsh-mcp-client": "0.1.5-rc.2",
     "@deepseek-ai/dsh-base": "0.1.5-rc.2"
+  },
+  "author": "Amiba",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iHeyTang/amiba.git",
+    "directory": "plugins/dsh-plugin-catalog"
   }
 }

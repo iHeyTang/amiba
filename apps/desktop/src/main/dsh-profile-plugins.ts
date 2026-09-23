@@ -37,6 +37,7 @@ export interface DshPluginCommandResult {
 export interface DshProfilePluginRuntime {
   assertPluginMutationAllowed?(): void;
   ensureManagedProfile(): Promise<void>;
+  readonly activeProfileManifest?: string;
   ensureStarted(): Promise<unknown>;
   stop(): Promise<void>;
 }
@@ -99,6 +100,28 @@ function packageDirectory(profileDir: string, packageName: string): string {
   return path.join(profileDir, "node_modules", ...packageName.split("/"));
 }
 
+/** Resolve Loader entry specifiers to the package that supplies their implementation. */
+export function inventoryPackageName(specifier: string): string | undefined {
+  if (specifier === "cordis:include") return "@deepseek-ai/dsh-app-boot";
+  const parts = specifier.split("/");
+  if (parts.some(part => !part || part === "." || part === "..")) return undefined;
+  const name = parts.slice(0, specifier.startsWith("@") ? 2 : 1).join("/");
+  return PACKAGE_NAME_PATTERN.test(name) ? name : undefined;
+}
+
+/** Provider is package-declared attribution, independent of installation source. */
+export function packageProvider(manifest: Record<string, unknown> | null): Pick<AmibaDshProfilePlugin, "provider" | "author"> {
+  const rawAuthor = manifest?.author;
+  const author = (typeof rawAuthor === "string" ? rawAuthor.split(/[<(]/, 1)[0] : object(rawAuthor)?.name);
+  const name = typeof author === "string" ? author.trim() : "";
+  const repository = typeof manifest?.repository === "string" ? manifest.repository : object(manifest?.repository)?.url;
+  const repo = typeof repository === "string" ? repository.toLowerCase().replace(/^git\+/, "").replace(/\.git$/, "").replace(/\/$/, "") : "";
+  const provider = ["https://github.com/deepseek-ai/deepseek-harness", "github:deepseek-ai/deepseek-harness"].includes(repo) ? "dsh"
+    : ["https://github.com/iheytang/amiba", "github:iheytang/amiba"].includes(repo) || name === "Amiba" ? "amiba"
+    : name ? "third-party" : "unknown";
+  return { provider, ...(name ? { author: name } : {}) };
+}
+
 async function inspectProfilePackage(
   profileDir: string,
   packageName: string,
@@ -120,6 +143,7 @@ async function inspectProfilePackage(
   return {
     packageName,
     requestedSpec,
+    ...packageProvider(installed),
     ...(typeof installed?.version === "string"
       ? { version: installed.version }
       : {}),
@@ -340,9 +364,43 @@ export class DshProfilePluginManager {
     return next;
   }
 
-  async list(): Promise<{ packages: readonly AmibaDshProfilePlugin[] }> {
+  async list(moduleNames: readonly string[] = []): Promise<{ packages: readonly AmibaDshProfilePlugin[]; readOnly?: boolean }> {
     await this.runtime.ensureManagedProfile();
-    return { packages: await listDshProfilePlugins(this.paths) };
+    const profileManifest = this.runtime.activeProfileManifest ?? this.paths.profileManifest;
+    const activePaths = { profileManifest, profileDir: path.dirname(profileManifest) };
+    const manifest = JSON.parse(await readFile(profileManifest, "utf8"));
+    // Runtime dependencies are the distribution's package inventory, not a namespace heuristic.
+    const runtimeManifest = path.resolve(this.paths.runtimeAppBinDir, "../..", "package.json");
+    let internal: Record<string, string> = {};
+    try { internal = JSON.parse(await readFile(runtimeManifest, "utf8")).dependencies ?? {}; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    // Amiba's shipped workspace plugins are copied into node_modules during
+    // runtime assembly, without becoming app/package.json dependencies.
+    for (const name of Object.keys(manifest.dependencies ?? {})) {
+      const bundledManifest = path.resolve(this.paths.runtimeAppBinDir, "..", name, "package.json");
+      if (existsSync(bundledManifest)) internal[name] = "bundled";
+    }
+    const development = new Set<string>(manifest.amibaDevelopmentPackages ?? []);
+    const temporary = profileManifest !== this.paths.profileManifest;
+    const packages = [...await listDshProfilePlugins(activePaths)];
+    // Loader may expose transitive runtime packages which are absent from profile dependencies.
+    for (const name of new Set(moduleNames.map(inventoryPackageName).filter((name): name is string => Boolean(name)))) {
+      if (!PACKAGE_NAME_PATTERN.test(name) || packages.some(item => item.packageName === name)) continue;
+      const runtimeModules = path.resolve(this.paths.runtimeAppBinDir, "..");
+      const bundled = existsSync(packageDirectory(path.dirname(runtimeModules), name) + "/package.json");
+      const profilePackage = path.join(activePaths.profileDir, "node_modules", name, "package.json");
+      const directory = existsSync(profilePackage) ? activePaths.profileDir : path.dirname(runtimeModules);
+      const item = await inspectProfilePackage(directory, name, "", new Set());
+      if (bundled) internal[name] = "bundled";
+      packages.push(item);
+    }
+    return { readOnly: temporary, packages: packages.map(item => ({
+      ...item,
+      modules: moduleNames.filter(name => inventoryPackageName(name) === item.packageName),
+      source: Object.hasOwn(internal, item.packageName) ? "internal" as const : "external" as const,
+      development: development.has(item.packageName),
+      mutable: !temporary && !Object.hasOwn(internal, item.packageName),
+    })) };
   }
 
   installRegistry(spec: string): Promise<AmibaDshPluginMutationResult> {
