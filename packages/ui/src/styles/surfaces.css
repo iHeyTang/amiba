@@ -274,9 +274,13 @@
   opacity: 0.3;
 }
 
+/* The revealed action tab continues the user bubble's material and right edge. */
 [data-amiba-product-shell] [data-background-surface="message-actions"] {
-  background: hsl(var(--background) / 0.72);
-  backdrop-filter: blur(var(--amiba-glass-blur));
-  -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
-  border-radius: 8px;
+  background: hsl(var(--background) / var(--amiba-message-opacity));
+  backdrop-filter: blur(var(--amiba-message-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-message-blur));
+  border-radius: 0 0 12px 12px;
+}
+[data-amiba-product-shell] [data-user-message-chrome]:has([data-background-surface="message-actions"]):is(:hover, :focus-within) [data-background-surface="sticky-message"] {
+  border-bottom-right-radius: 0;
 }
