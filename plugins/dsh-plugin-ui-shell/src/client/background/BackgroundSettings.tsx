@@ -68,11 +68,11 @@ export function BackgroundSettings({
       setBusy(false);
     }
   };
-  const apply = async () => {
+  const apply = async (config = draft) => {
     setBusy(true);
     setError("");
     try {
-      await background.configure(draft, revision);
+      await background.configure(config, revision);
       setDirty(false);
     } catch (error) {
       setError(String(error));
@@ -80,21 +80,29 @@ export function BackgroundSettings({
       setBusy(false);
     }
   };
+  const [preview, setPreview] = useState<{ id: string; url: string } | null>(null);
+  useEffect(() => {
+    setPreview(null);
+    if (!draft.assetId) return;
+    const id = draft.assetId;
+    const abort = new AbortController();
+    let url: string | undefined;
+    void background.loadAsset(id, abort.signal).then(blob => {
+      if (abort.signal.aborted) return;
+      url = URL.createObjectURL(blob);
+      setPreview({ id, url });
+    }).catch(() => {
+      if (!abort.signal.aborted) setError(zh ? "素材预览加载失败，请重新选择。" : "Could not load preview. Choose the asset again.");
+    });
+    return () => { abort.abort(); if (url) URL.revokeObjectURL(url); };
+  }, [background, draft.assetId, zh]);
   return (
     <section
       className="space-y-3 border-t border-border/50 pt-4"
       aria-label={zh ? "主界面背景" : "Application background"}
     >
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <Label>{zh ? "主界面背景" : "Application background"}</Label>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {zh
-          ? "图片或循环视频，搭配分区毛玻璃；代码、终端和弹窗保留清晰底色。"
-          : "Images or looping videos with layered glass; code, terminals and dialogs keep clear surfaces."}
-      </p>
-      <div className="flex items-center justify-between gap-3 text-sm">
-        <span>{zh ? "背景素材" : "Background asset"}</span>
         <Button
           variant="outline"
           size="sm"
@@ -111,15 +119,19 @@ export function BackgroundSettings({
           onChange={(event) => void upload(event)}
         />
       </div>
-      <p className="text-xs text-muted-foreground">
-        {busy
-          ? `${progress}%`
-          : draft.assetId
-            ? `${isVideo(draft.assetId) ? (zh ? "循环视频" : "Looping video") : zh ? "图片" : "Image"} · ${zh ? "已选择" : "Selected"}`
-            : zh
-              ? "尚未选择素材 · 最大 64 MiB"
-              : "No asset selected · up to 64 MiB"}
+      <p className="text-xs text-muted-foreground" role="status">
+        {busy ? (zh ? "正在处理…" : "Working…") + (progress > 0 && progress < 100 ? ` ${progress}%` : "")
+          : !draft.assetId ? (zh ? "支持图片与循环视频，最大 64 MiB" : "Images and looping videos, up to 64 MiB")
+          : dirty ? (zh ? "预览 · 尚未应用" : "Preview · Not applied") : (zh ? "当前背景" : "Current background")}
       </p>
+      {draft.assetId && (
+        <div className="relative h-32 overflow-hidden rounded-lg border border-border/60 bg-muted">
+          {preview?.id === draft.assetId && (isVideo(draft.assetId)
+            ? <video src={preview.url} muted playsInline preload="auto" className="h-full w-full object-cover" style={{ filter: `blur(${draft.blur}px)` }} />
+            : <img src={preview.url} alt={zh ? "背景预览" : "Background preview"} className="h-full w-full object-cover" style={{ filter: `blur(${draft.blur}px)` }} />)}
+          <div className="pointer-events-none absolute inset-0 bg-black" style={{ opacity: draft.dim }} />
+        </div>
+      )}
       {draft.assetId && (
         <>
           {isVideo(draft.assetId) && (
@@ -177,42 +189,21 @@ export function BackgroundSettings({
           </label>
         </>
       )}
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          disabled={
-            busy || !state.ready || !dirty || (draft.enabled && !draft.assetId)
-          }
-          onClick={() => void apply()}
-        >
-          {zh ? "应用背景" : "Apply"}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={busy}
-          onClick={() => {
-            setDraft({ ...DEFAULT_BACKGROUND });
-            setDirty(true);
-          }}
-        >
-          {zh ? "恢复默认" : "Restore defaults"}
-        </Button>
-        {dirty && (
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={busy}
-            onClick={() => {
-              setDirty(false);
-              setError("");
-              void background.refresh();
-            }}
-          >
-            {zh ? "取消修改" : "Discard"}
+      {(dirty || state.snapshot.config.enabled) && <div className="flex flex-wrap items-center gap-2">
+        {dirty && <>
+          <Button size="sm" disabled={busy || !state.ready || (draft.enabled && !draft.assetId)} onClick={() => void apply()}>
+            {zh ? "应用" : "Apply"}
           </Button>
-        )}
-      </div>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => {
+            setDraft(state.snapshot.config);
+            setDirty(false);
+            setError("");
+          }}>{zh ? "取消" : "Cancel"}</Button>
+        </>}
+        {state.snapshot.config.enabled && <Button size="sm" variant="ghost" className="ml-auto text-muted-foreground" disabled={busy || !state.ready} onClick={() => void apply({ ...DEFAULT_BACKGROUND })}>
+          {zh ? "恢复默认" : "Restore defaults"}
+        </Button>}
+      </div>}
       {(error || state.error) && (
         <p role="alert" className="text-xs text-destructive">
           {error || state.error}
