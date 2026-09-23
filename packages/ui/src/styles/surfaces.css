@@ -369,18 +369,15 @@
 [data-amiba-product-shell] [data-assistant-message-chrome][data-unified-glass] {
   position: relative;
 }
-[data-amiba-product-shell] [data-assistant-message-chrome][data-unified-glass]::before {
-  content: "";
+[data-amiba-product-shell] [data-assistant-message-chrome][data-unified-glass] > [data-assistant-glass-clip] {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: hsl(var(--background) / var(--amiba-agent-opacity));
-  backdrop-filter: blur(var(--amiba-agent-blur));
-  -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
+  overflow: hidden;
   clip-path: var(--assistant-glass-closed);
   transition: clip-path 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-[data-amiba-product-shell] [data-assistant-message-chrome][data-unified-glass]:is(:hover, :focus-within)::before {
+[data-amiba-product-shell] [data-assistant-message-chrome][data-unified-glass]:is(:hover, :focus-within) > [data-assistant-glass-clip] {
   clip-path: var(--assistant-glass-outline);
 }
 [data-amiba-product-shell] [data-assistant-message-chrome][data-unified-glass] :is([data-background-surface="assistant-message"], [data-background-surface="message-actions"]) {
@@ -393,7 +390,17 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-amiba-product-shell] [data-assistant-message-chrome][data-unified-glass]::before {
+  [data-amiba-product-shell] [data-assistant-message-chrome][data-unified-glass] > [data-assistant-glass-clip] {
     transition: none;
   }
+}
+
+[data-assistant-glass-clip] { display: none; }
+[data-unified-glass] > [data-assistant-glass-clip] { display: block; }
+[data-amiba-product-shell] [data-assistant-glass-material] {
+  position: absolute;
+  inset: 0;
+  background: hsl(var(--background) / var(--amiba-agent-opacity));
+  backdrop-filter: blur(var(--amiba-agent-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
 }
