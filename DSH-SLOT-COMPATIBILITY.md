@@ -14,10 +14,10 @@
 | 对照版本 | `0.1.5-rc.2`、`0.1.5-rc.3`、`0.1.7-alpha.2`；固定发布快照，不代表实时最新版或同一条升级线 |
 | 入口覆盖 | 目标版本 61 项中，60 个可扩展槽均已接入；`root` 由宿主占用 |
 | 行为兼容 | **尚不能认定全部完全兼容**；专项验证、待验收、条件支持和宿主限制见逐项表 |
-| 退役重点 | `conversation.details.tool` 旧桥仍在，需迁移使用者后删除；另有 3 个私有槽待清点使用者 |
+| 已完成退役 | `conversation.details.tool` 及 3 个私有槽已在分支移除；迁移说明见第 6 节，尚未发布 |
 | 后续新增槽 | 26 项不属于目标版本，暂不接入 |
-| 实现基线 | `4d2edf82` · [PR #97](https://github.com/iHeyTang/amiba/pull/97)；记录时尚未合并／发布 |
-| 最近核验 | 2026-09-23；范围为 91 个官方历史名称及 28 个 Amiba 私有槽 |
+| 实现基线 | 插槽接入 `4d2edf82`；退役清理 `5aca2b07` · [PR #97](https://github.com/iHeyTang/amiba/pull/97)；记录时尚未合并／发布 |
+| 最近核验 | 2026-09-23；范围为 91 个官方历史名称及 28 个 Amiba 私有历史名称（25 个保留、3 个已退役） |
 
 维护原则：rc.2 仍有效的槽继续维护，即使 alpha 分支已经移除；仅在后续版本新增的槽，等目标内核升级后重新评估。
 
@@ -27,11 +27,9 @@
 
 | 优先级 | 项目 | 应执行的动作 | 完成条件 |
 |---|---|---|---|
-| P1 | `conversation.details.tool` 旧桥 | 清点内置与已支持外部使用者，迁移到 `tool.call.toolview` 后删除声明／派发／SDK 旧类型 | 本表改为“已退役”，填移除提交及原功能回归证据；完成前保持“准备退役”状态 |
 | P1 | 输入区域、队列和附件 | 对下方目标版本表中“待专项验收”的真实插件补齐发送失败保留、普通文件、后台输入、Host 队列证据 | 修复确切缺口并逐行升级状态，不以入口数量关闭待办 |
 | P1 | 条件支持项 | 在实际支持的桌面／独立 Web 条件下验证目录、工作台、文档、工具、授权与卸载 | 每行记录已测宿主；不支持的宿主列明回退 |
 | P2 | 新增替换入口 | 补第三方整组件的会话切换、卸载、异常恢复及服务依赖验收 | 明确到插件／宿主／提交的证据，不宣称任意私有 API 通用兼容 |
-| P2 | 三个待清点使用者的私有槽 | 复查 `amiba.tool.execution`、`amiba.tool.activity`、`amiba.conversation.progress` 的实际用户与替代能力 | 再决定保留或进入弃用周期，不能直接标“无用” |
 | 暂缓 | 26 个后续版本新增名 | 保留存在性记录，不向 rc.2 引入实现 | 只有目标内核升级且新目标仍有效时，才转为接入任务 |
 
 <a id="target"></a>
@@ -271,12 +269,12 @@
 
 ## 4. 历史旧槽（4 项）
 
-这 4 个名称在三个对照版本中均不存在。保留记录用于防止重复接入；其中旧工具详情桥仍需处理。
+这 4 个名称在三个对照版本中均不存在。保留记录用于防止重复接入；其中旧工具详情桥已在 `5aca2b07` 移除。
 
 | 插槽／用途 | 0.1.5-rc.2 | 0.1.5-rc.3 | 0.1.7-alpha.2 | Amiba 支持程度 | 维护建议 |
 | --- | --- | --- | --- | --- | --- |
 | `conversation`<br>旧对话整体区域 | 无 | 无 | 无 | 未找到同名派发 | 不恢复兼容 |
-| `conversation.details.tool`<br>旧工具详情页 | 无 | 无 | 无 | 旧兼容桥仍在 | 迁移后退役 → `tool.call.toolview` |
+| `conversation.details.tool`<br>旧工具详情页 | 无 | 无 | 无 | 已退役（未发布） | 使用 `tool.call.toolview`；需适配契约 |
 | `conversation.session.header.leading`<br>旧会话级头部导航 | 无 | 无 | 无 | 未接入 | 不恢复兼容 |
 | `details`<br>旧详情区域 | 无 | 无 | 无 | 未找到同名派发 | 不恢复兼容 |
 
@@ -286,7 +284,7 @@
 | 插槽 | 已核验的版本历史 | 迁移说明／证据 |
 | --- | --- | --- |
 | `conversation` | 不晚于 0.0.1-rc.3；到 0.1.5-alpha.2 的目录已没有此名 | 不恢复兼容；采用目标版本现存入口。conversation 名称不要与 main 的 conversation key 混淆。 [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
-| `conversation.details.tool` | 不晚于 0.0.1-rc.3；0.1.5-alpha.1 起的已核验开发线目录没有此名 | 准备退役；迁移到 tool.call.toolview，清点注册方、派发和 SDK 类型后删除；当前未删除。[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
+| `conversation.details.tool` | 不晚于 0.0.1-rc.3；0.1.5-alpha.1 起的已核验开发线目录没有此名 | `5aca2b07` 已删除旧声明、派发、订阅、SDK owner 和旧详情面板；仓库未发现注册使用者。外部插件需适配 `tool.call.toolview` 的 owner 与工具行位置。[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
 | `conversation.session.header.leading` | 0.1.6-alpha.2；到 0.1.7-alpha.1 已移除，已核验仅存续一个 alpha | 不接入旧名；后续目标升级再评估 conversation.header.leading（session → root，不能直接别名）。 [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.1.6-alpha.2/lib/client.js) |
 | `details` | 不晚于 0.0.1-rc.3；到 0.1.5-alpha.1 的目录已没有此名 | 不恢复兼容；采用目标版本现存入口。 [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
 
@@ -363,19 +361,28 @@
 
 <a id="private"></a>
 
-## 6. Amiba 私有槽（28 项）
+## 6. Amiba 私有槽（25 项保留，3 项已退役）
 
 私有槽不计入官方覆盖率。官方无同名不是退役理由；保留项修改时须验证注册、卸载和宿主行为，与官方能力重叠时先明确迁移方案。
 
-下表仅核实源码引用，专项运行验收待补。3 个退役候选曾未发现内置使用者，仍须清点外部插件后决定，不能直接删除。
+保留项仅核实源码引用，专项运行验收待补。以下 3 项已移除；保留历史行用于追溯，不计入当前可用私有槽。
 
-### 退役候选（3 项）
+### 已退役（3 项，尚未发布）
 
-| 私有插槽 | 源码证据 | 维护建议 |
-| --- | --- | --- |
-| `amiba.conversation.progress` | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 清点使用者后决定 |
-| `amiba.tool.activity` | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 清点使用者后决定 |
-| `amiba.tool.execution` | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 清点使用者后决定 |
+| 私有插槽 | 状态 | 迁移方向 |
+|---|---|---|
+| `amiba.conversation.progress` | `5aca2b07` 已移除声明和派发 | 会话继续使用原生进度提示；无同语义官方槽可直接改名替换 |
+| `amiba.tool.activity` | `5aca2b07` 已移除声明和派发 | 工具附加状态并入 `tool.call.toolview` 的对应工具展示 |
+| `amiba.tool.execution` | `5aca2b07` 已移除声明及工具行包装 | 按工具 wire name 注册 `tool.call.toolview`；旧 `fallback` 包装参数不再提供 |
+
+### 本次退役记录（含 1 个官方旧名）
+
+- **最后保留代码**：`09656bd6`；对应已发布 Amiba 版本尚未核验，不将分支提交冒充发行版本。
+- **移除提交**：`5aca2b07`。4 个旧名称均已从运行时声明、派发和相关 SDK 类型中移除；旧详情面板及其专属测试删除。
+- **使用者核验**：仓库代码未发现这 4 项的注册使用者，后台任务插件测试也确认不注册旧执行／进度槽；未能核验外部已安装插件。仍使用旧名称的外部插件需迁移，不再兼容。
+- **迁移说明**：[SDK 工具展示说明](packages/extension-sdk/README.md)。`conversation.details.tool` 的旧详情页改为工具调用行，需适配 `ToolCallToolviewOwnerProps`，不能仅改名称。
+- **回归证据 V6**：UI Shell 72 项、工具行／消息／会话 UI 110 项、后台任务 7 项，共 189 项通过；SDK 类型与契约检查、UI Shell 生产 TypeScript 检查通过。未进行外部旧插件或安装包端到端验收。
+- **发布状态**：原 PR #97 内，尚未合并／发布。发布时补充首个不再支持旧名称的 Amiba 版本。
 
 ### 继续保留（25 项）
 
@@ -454,6 +461,7 @@
 | V3 | [右栏尺寸](packages/ui/src/chat/__tests__/RightbarRegion.test.tsx)、[会话边界](packages/ui/src/chat/__tests__/FullScreenChatView.test.tsx)、[滚动交接](packages/ui/src/chat/__tests__/transcript-scroll-position.test.ts)、[滚动跟随](packages/ui/src/chat/__tests__/use-conversation-auto-scroll.test.tsx) | 实际几何、会话切换、阅读位置；不同排版不保证逐文字行定位 |
 | V4 | [发布包控制器验证脚本](scripts/verify-rc2-preset-handoff.mjs) | 真实 rc.2 apply／预设控制器 → 私有暂存 → Amiba 读取 → 会话消费 → 默认恢复 → 卸载；远程／会话及 observable transport 为替身 |
 | V5 | `pnpm runtime:prepare`、`pnpm runtime:verify`、`pnpm runtime:smoke` | 4d2edf82 对应代码的最终构建、完整性和运行时集成通过，DSH rc.2 / Node 22.22.0；不是三平台安装包或全部第三方浏览器验收 |
+| V6 | [工具展示](plugins/dsh-plugin-ui-shell/src/client/official-toolviews.test.tsx)、[官方工具行入口](packages/ui/src/chat/__tests__/ToolCallToolviewSeat.test.tsx)、[消息渲染](packages/ui/src/chat/__tests__/MessageChrome.test.tsx)、[会话](packages/ui/src/chat/__tests__/FullScreenChatView.test.tsx)、[后台任务](plugins/dsh-plugin-background-jobs/src/client/activity.test.tsx) | `5aca2b07` 退役后相关 189 项通过；SDK 类型及 UI Shell 生产 TypeScript 通过。运行 Node 22.17.0，有低于仓库要求的 engine 警告；未重跑运行时打包或外部插件端到端 |
 
 实现基线 `4d2edf82` 的相关 UI 58 项、renderer／SlotCore／数据源 31 项，共 89 项通过；生产 TypeScript、V4、V5 通过。已有全量 UI-shell／架构检查基线失败并未标为全绿。入口覆盖、专项测试、完整插件、安装包、发布是不同证据层级。
 
@@ -473,6 +481,7 @@ node scripts/verify-rc2-preset-handoff.mjs
 | 2026-09-23 | 3e125b2b、2185bfd8、1d444b5e、91eb6b23 | rc.2 内核升级及 17 个新增入口，目标可扩展入口 60/60 |
 | 2026-09-23 | ac9018a9、4d2edf82，PR #97 | 修正优先级、预设业务交接、工作区异步边界、聊天滚动和右栏几何，补发布包验证 |
 | 2026-09-23 | 本文件入库，沿用 PR #97 | 统一根目录台账；按结论、待办、功能分组及可展开证据维护，停止维护版本化临时台账 |
+| 2026-09-23 | `5aca2b07` | 退役官方旧名 `conversation.details.tool` 和 3 个私有槽；保留迁移、使用者范围和 V6 回归证据 |
 
 `dsh-rc2-slot-coverage.md` 仅保留迁移入口，原重复 JSON 已移除（历史可从 Git 查找）。早期 `dsh-extension-*`、`dsh-main-sync-*` 和升级审计文档保留其历史／服务设计内容，其中插槽当前状态以本文件为准。会话附件中的日期报告不再作为项目维护依据。本文件不依赖 `/tmp`、个人目录或会话附件才能阅读和复核。
 
