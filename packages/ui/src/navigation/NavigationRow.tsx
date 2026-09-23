@@ -36,14 +36,16 @@ export function NavigationRow({
 }: NavigationRowProps) {
   return (
     <button
+      data-navigation-row
+      data-active={active ? "true" : undefined}
       type="button"
       aria-current={active ? "page" : undefined}
       className={cn(
         "app-no-drag group flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-sm font-normal transition-colors",
-        "focus-visible:bg-chat-surface-hover focus-visible:text-foreground focus-visible:outline-none",
+        "focus-visible:bg-accent/70 focus-visible:text-foreground focus-visible:outline-none",
         active
-          ? "bg-chat-surface-hover text-secondary-foreground"
-          : "text-foreground/80 hover:bg-chat-surface-hover hover:text-foreground",
+          ? "bg-secondary text-secondary-foreground"
+          : "text-foreground/80 hover:bg-accent/70 hover:text-foreground",
         className,
       )}
       {...props}

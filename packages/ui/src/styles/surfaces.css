@@ -56,7 +56,7 @@
   -webkit-backdrop-filter: none;
 }
 [data-amiba-product-shell] [data-section-header="rail"]:hover,
-[data-amiba-product-shell] [data-session-row]:is([data-active="true"], :hover, :focus-within) {
+[data-amiba-product-shell] :is([data-session-row], [data-navigation-row]):is([data-active="true"], :hover, :focus-within) {
   background: var(--amiba-content-hover);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -102,7 +102,7 @@
 /* Sidebar compact groups: equal-width inset surfaces, rounded outside only.
  * A transparent row does not join its neighbours. Hover/focus follows the
  * same rule as the persistent active state, including a section's first row. */
-[data-session-row] { border-radius: 8px; }
+[data-session-row], [data-navigation-row] { border-radius: 8px; }
 [data-session-row]:is([data-active="true"], :hover, :focus-within):has(+ [data-session-row]:is([data-active="true"], :hover, :focus-within)) {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
