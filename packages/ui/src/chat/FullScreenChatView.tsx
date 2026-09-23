@@ -1393,7 +1393,8 @@ function ContentHeader({
       leading={
         <div
           data-content-header-leading
-          className="flex w-full min-w-0 items-center gap-2.5"
+          data-header-glass={title || sidebarCollapsed || lineage ? "" : undefined}
+          className="flex w-fit max-w-full min-w-0 items-center gap-2.5"
           style={{ height: heightPx }}
         >
           <HeaderIconBox

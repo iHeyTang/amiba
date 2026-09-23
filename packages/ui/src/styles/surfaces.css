@@ -216,3 +216,33 @@
 [data-resizing="true"] [data-sidebar-glass]::after {
   animation-play-state: paused;
 }
+
+/* Local readable backing for toolbar controls, never a full-width header wash. */
+[data-amiba-product-shell] :is([data-content-header-leading][data-header-glass], [data-content-header-actions], [data-workspace-edge-toggle]) {
+  isolation: isolate;
+}
+:where([data-amiba-product-shell] [data-content-header-leading][data-header-glass], [data-amiba-product-shell] [data-content-header-actions]) {
+  position: relative;
+}
+[data-amiba-product-shell] :is([data-content-header-leading][data-header-glass], [data-content-header-actions], [data-workspace-edge-toggle]):not(:empty)::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  inset-inline: -3px;
+  top: 50%;
+  height: 30px;
+  transform: translateY(-50%);
+  border-radius: 8px;
+  background: hsl(var(--background) / var(--amiba-message-opacity));
+  backdrop-filter: blur(var(--amiba-glass-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
+  box-shadow: inset 0 0 0 1px hsl(var(--border) / 0.4);
+}
+[data-amiba-product-shell] :is([data-content-header-leading][data-header-glass], [data-content-header-actions], [data-workspace-edge-toggle]) :is(button, [role="button"]) {
+  color: hsl(var(--foreground) / 0.9);
+}
+
+[data-amiba-product-shell] [data-content-header-leading][data-header-glass] :is(button, span) {
+  color: hsl(var(--foreground) / 0.9);
+}
