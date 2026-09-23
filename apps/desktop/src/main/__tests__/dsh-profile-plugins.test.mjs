@@ -9,6 +9,7 @@ import {
   assertDshPackageName,
   isRegistryDependencySpec,
   listDshProfilePlugins,
+  packageProvider,
   registryPackageName,
 } from "../dsh-profile-plugins.ts";
 
@@ -99,6 +100,7 @@ test("lists profile dependencies and marks only active DSH bundles", async () =>
         requestedSpec: "1.0.0",
         version: "1.0.0",
         bundle: true,
+        provider: "unknown",
       },
     ]);
   } finally {
@@ -258,5 +260,33 @@ test("inventory follows the active profile and uses runtime inventory for packag
     assert.equal(result.find(p => p.packageName === external).mutable, false);
     activeProfileManifest = paths.profileManifest;
     assert.equal((await manager.list()).packages[0].mutable, true);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test("provider metadata is independent of package scope and installation source", () => {
+  assert.equal(packageProvider({ name: "@deepseek-ai/fake" }).provider, "unknown");
+  assert.equal(packageProvider({ repository: { url: "git+https://github.com/deepseek-ai/deepseek-harness.git" } }).provider, "dsh");
+  assert.equal(packageProvider({ repository: "https://github.com/iHeyTang/amiba" }).provider, "amiba");
+  assert.deepEqual(packageProvider({ author: { name: "Alice", email: "private@example.com" } }), { provider: "third-party", author: "Alice" });
+  assert.deepEqual(packageProvider({ author: "Bob <private@example.com>" }), { provider: "third-party", author: "Bob" });
+  assert.equal(packageProvider({ author: "Amiba" }).provider, "amiba");
+  assert.equal(packageProvider(null).provider, "unknown");
+});
+
+test("reads metadata for transitive Loader packages without making them externally manageable", async () => {
+  const { root, paths } = await fixture();
+  try {
+    const name = "@vendor/bundled-plugin";
+    const file = path.resolve(paths.runtimeAppBinDir, "..", name, "package.json");
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify({ name, author: "Alice", version: "2" }));
+    const manager = new DshProfilePluginManager({ paths, runtime: { async ensureManagedProfile() {}, async ensureStarted() {}, async stop() {} } });
+    const { packages } = await manager.list([name, name, "../../secret"]);
+    assert.equal(packages.length, 1);
+    assert.equal(packages[0].source, "internal");
+    assert.equal(packages[0].provider, "third-party");
+    assert.equal(packages[0].author, "Alice");
+    assert.equal(packages[0].mutable, false);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

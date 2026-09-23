@@ -100,6 +100,19 @@ function packageDirectory(profileDir: string, packageName: string): string {
   return path.join(profileDir, "node_modules", ...packageName.split("/"));
 }
 
+/** Provider is package-declared attribution, independent of installation source. */
+export function packageProvider(manifest: Record<string, unknown> | null): Pick<AmibaDshProfilePlugin, "provider" | "author"> {
+  const rawAuthor = manifest?.author;
+  const author = (typeof rawAuthor === "string" ? rawAuthor.split(/[<(]/, 1)[0] : object(rawAuthor)?.name);
+  const name = typeof author === "string" ? author.trim() : "";
+  const repository = typeof manifest?.repository === "string" ? manifest.repository : object(manifest?.repository)?.url;
+  const repo = typeof repository === "string" ? repository.toLowerCase().replace(/^git\+/, "").replace(/\.git$/, "").replace(/\/$/, "") : "";
+  const provider = ["https://github.com/deepseek-ai/deepseek-harness", "github:deepseek-ai/deepseek-harness"].includes(repo) ? "dsh"
+    : ["https://github.com/iheytang/amiba", "github:iheytang/amiba"].includes(repo) || name === "Amiba" ? "amiba"
+    : name ? "third-party" : "unknown";
+  return { provider, ...(name ? { author: name } : {}) };
+}
+
 async function inspectProfilePackage(
   profileDir: string,
   packageName: string,
@@ -121,6 +134,7 @@ async function inspectProfilePackage(
   return {
     packageName,
     requestedSpec,
+    ...packageProvider(installed),
     ...(typeof installed?.version === "string"
       ? { version: installed.version }
       : {}),
@@ -341,7 +355,7 @@ export class DshProfilePluginManager {
     return next;
   }
 
-  async list(): Promise<{ packages: readonly AmibaDshProfilePlugin[]; readOnly?: boolean }> {
+  async list(moduleNames: readonly string[] = []): Promise<{ packages: readonly AmibaDshProfilePlugin[]; readOnly?: boolean }> {
     await this.runtime.ensureManagedProfile();
     const profileManifest = this.runtime.activeProfileManifest ?? this.paths.profileManifest;
     const activePaths = { profileManifest, profileDir: path.dirname(profileManifest) };
@@ -359,7 +373,18 @@ export class DshProfilePluginManager {
     }
     const development = new Set<string>(manifest.amibaDevelopmentPackages ?? []);
     const temporary = profileManifest !== this.paths.profileManifest;
-    const packages = await listDshProfilePlugins(activePaths);
+    const packages = [...await listDshProfilePlugins(activePaths)];
+    // Loader may expose transitive runtime packages which are absent from profile dependencies.
+    for (const name of new Set(moduleNames)) {
+      if (!PACKAGE_NAME_PATTERN.test(name) || packages.some(item => item.packageName === name)) continue;
+      const runtimeModules = path.resolve(this.paths.runtimeAppBinDir, "..");
+      const bundled = existsSync(packageDirectory(path.dirname(runtimeModules), name) + "/package.json");
+      const profilePackage = path.join(activePaths.profileDir, "node_modules", name, "package.json");
+      const directory = existsSync(profilePackage) ? activePaths.profileDir : path.dirname(runtimeModules);
+      const item = await inspectProfilePackage(directory, name, "", new Set());
+      if (bundled) internal[name] = "bundled";
+      packages.push(item);
+    }
     return { readOnly: temporary, packages: packages.map(item => ({
       ...item,
       source: Object.hasOwn(internal, item.packageName) ? "internal" as const : "external" as const,

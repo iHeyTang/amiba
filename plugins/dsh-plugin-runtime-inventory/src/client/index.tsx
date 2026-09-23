@@ -175,7 +175,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
         ...(management
           ? {
               management: {
-                list: () => management.list(),
+                list: (moduleNames?: readonly string[]) => management.list(moduleNames),
                 installRegistry: (spec: string) =>
                   management.installRegistry(spec),
                 installArchive: () => management.installArchive(),

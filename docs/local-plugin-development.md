@@ -90,3 +90,12 @@ node apps/desktop/scripts/smoke-desktop-dev-start.mjs
 # 实际安装 CLI tarball 到仓库外，再连接桌面验证；需要 npm 网络访问。
 node apps/cli/scripts/smoke-package.mjs
 ```
+
+### 插件提供方
+
+插件列表的「内部 / 外部」表示安装来源，「提供方」表示包声明的归属，两者独立。
+提供方复用插件 `package.json` 的标准 `author`（字符串或 `{ name }`）和
+`repository` 字段，无需额外描述文件。DSH 官方仓库和 Amiba 仓库对应各自提供方；
+Amiba 插件也可声明 `author: "Amiba"`。其他作者显示「第三方 · 作者名」，缺失时
+显示「未知作者」，不从 npm scope 猜测官方身份。标签是包的归属声明，不是签名认证。
+初始化模板会把填写的作者写入 `author`；仓库地址在创建仓库后补充。

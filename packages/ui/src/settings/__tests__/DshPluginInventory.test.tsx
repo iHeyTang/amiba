@@ -219,3 +219,59 @@ it("merges package entries and distinguishes bundled browser from an external de
   expect(screen.getByText(computer)).toBeInTheDocument();
   expect(screen.getByText("失败")).toBeInTheDocument();
 });
+
+it("filters provider independently from internal/external origin", async () => {
+  document.documentElement.lang = "zh-CN";
+  render(
+    <DshPluginInventoryView
+      adapter={{
+        list: async () => ({ entries: [] }),
+        management: {
+          list: async () => ({
+            packages: [
+              {
+                packageName: "@vendor/builtin",
+                requestedSpec: "1",
+                bundle: true,
+                source: "internal",
+                provider: "third-party",
+                author: "Alice",
+                mutable: false,
+              },
+              {
+                packageName: "@vendor/installed",
+                requestedSpec: "1",
+                bundle: true,
+                source: "external",
+                provider: "third-party",
+                author: "Alice",
+              },
+              {
+                packageName: "@amiba/browser",
+                requestedSpec: "1",
+                bundle: true,
+                source: "internal",
+                provider: "amiba",
+                mutable: false,
+              },
+            ],
+          }),
+          installRegistry: vi.fn(),
+          installArchive: vi.fn(),
+          remove: vi.fn(),
+          update: vi.fn(),
+        },
+      }}
+    />,
+  );
+  await screen.findByText("@amiba/browser");
+  await userEvent.selectOptions(
+    screen.getByRole("combobox", { name: "提供方" }),
+    "third-party",
+  );
+  expect(screen.queryByText("@amiba/browser")).not.toBeInTheDocument();
+  expect(screen.getAllByText("第三方 · Alice")).toHaveLength(2);
+  await userEvent.click(screen.getByRole("button", { name: "内部 2" }));
+  expect(screen.getByText("@vendor/builtin")).toBeInTheDocument();
+  expect(screen.queryByText("@vendor/installed")).not.toBeInTheDocument();
+});

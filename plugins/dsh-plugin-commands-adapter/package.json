@@ -38,5 +38,11 @@
     "typescript": "5.6.3",
     "vitest": "^2.1.4",
     "@deepseek-ai/dsh-api-remotes": "0.1.5-rc.1"
+  },
+  "author": "Amiba",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iHeyTang/amiba.git",
+    "directory": "plugins/dsh-plugin-commands-adapter"
   }
 }

@@ -135,7 +135,10 @@ export function registerIpcHandlers() {
   // The Plugins Client contribution owns the product workflow. Electron only
   // supplies the native file picker and the process boundary required to run
   // DSH's official profile plugin command while its Host is stopped.
-  ipcMain.handle("dsh-plugins:list", () => dshProfilePlugins.list());
+  ipcMain.handle("dsh-plugins:list", (_event, moduleNames?: unknown) => {
+    if (moduleNames !== undefined && (!Array.isArray(moduleNames) || moduleNames.length > 5000 || moduleNames.some(name => typeof name !== "string" || name.length > 256))) throw new Error("Invalid module names");
+    return dshProfilePlugins.list(moduleNames as string[] | undefined);
+  });
   ipcMain.handle("dsh-plugins:install-registry", (_event, spec: string) =>
     dshProfilePlugins.installRegistry(spec),
   );

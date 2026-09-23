@@ -5,6 +5,8 @@ export interface AmibaDshProfilePlugin {
   version?: string;
   bundle: boolean;
   source?: "internal" | "external";
+  provider?: "dsh" | "amiba" | "third-party" | "unknown";
+  author?: string;
   development?: boolean;
   mutable?: boolean;
 }
@@ -23,7 +25,7 @@ export interface AmibaDshPluginMutationResult {
  * renderer is reloaded only after the rebuilt Host and Client graph is ready.
  */
 export interface AmibaDshPluginManagerBridge {
-  list(): Promise<{
+  list(moduleNames?: readonly string[]): Promise<{
     packages: readonly AmibaDshProfilePlugin[];
     readOnly?: boolean;
   }>;

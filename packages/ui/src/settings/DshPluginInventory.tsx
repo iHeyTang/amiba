@@ -52,12 +52,14 @@ export interface DshInstalledPluginPackage {
   version?: string;
   bundle: boolean;
   source?: "internal" | "external";
+  provider?: "dsh" | "amiba" | "third-party" | "unknown";
+  author?: string;
   development?: boolean;
   mutable?: boolean;
 }
 
 export interface DshPluginManagementAdapter {
-  list(): Promise<{
+  list(moduleNames?: readonly string[]): Promise<{
     packages: readonly DshInstalledPluginPackage[];
     readOnly?: boolean;
   }>;
@@ -92,6 +94,14 @@ function copy(language: PluginLanguage) {
         internal: "内部",
         external: "外部",
         development: "开发连接",
+        provider: "提供方",
+        providers: {
+          all: "全部提供方",
+          dsh: "DSH 官方",
+          amiba: "Amiba",
+          "third-party": "第三方",
+          unknown: "未知作者",
+        },
         failed: "异常",
         enabled: "已启用",
         disabled: "已停用",
@@ -133,6 +143,14 @@ function copy(language: PluginLanguage) {
         internal: "Internal",
         external: "External",
         development: "Development",
+        provider: "Provider",
+        providers: {
+          all: "All providers",
+          dsh: "DSH official",
+          amiba: "Amiba",
+          "third-party": "Third party",
+          unknown: "Unknown author",
+        },
         failed: "Issues",
         enabled: "Enabled",
         disabled: "Disabled",
@@ -202,6 +220,7 @@ export function DshPluginInventoryView({
   const [query, setQuery] = useState("");
   const [readOnly, setReadOnly] = useState(false);
   const [registrySpec, setRegistrySpec] = useState("");
+  const [providerFilter, setProviderFilter] = useState("all");
   const [filter, setFilter] = useState<PluginFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -219,11 +238,10 @@ export function DshPluginInventoryView({
     setLoading(true);
     setError(null);
     try {
-      const [snapshot, managed] = await Promise.all([
-        adapter.list(),
-        adapter.management?.list() ??
-          Promise.resolve({ packages: [], readOnly: false }),
-      ]);
+      const snapshot = await adapter.list();
+      const managed = await (adapter.management?.list(
+        snapshot.entries.map((entry) => entry.moduleName),
+      ) ?? Promise.resolve({ packages: [], readOnly: false }));
       setEntries(snapshot.entries);
       setPackages(managed.packages);
       setReadOnly(managed.readOnly ?? false);
@@ -286,6 +304,7 @@ export function DshPluginInventoryView({
     }
     return [...grouped.values()].map((row) => ({
       ...row,
+      provider: row.item?.provider ?? "unknown",
       source: row.item?.source ?? (row.item ? "external" : "internal"),
       entryId: row.entries.map((entry) => entry.entryId).join(", "),
       enabled:
@@ -317,15 +336,19 @@ export function DshPluginInventoryView({
         (filter === "internal" && entry.source === "internal") ||
         (filter === "external" && entry.source === "external") ||
         (filter === "failed" && entry.enabled && entry.fiberPhase === "failed");
-      if (!inFilter) return false;
+      if (
+        !inFilter ||
+        (providerFilter !== "all" && entry.provider !== providerFilter)
+      )
+        return false;
       return (
         !needle ||
-        `${entry.moduleName} ${entry.entryId}`
+        `${entry.moduleName} ${entry.entryId} ${entry.item?.author ?? ""}`
           .toLocaleLowerCase()
           .includes(needle)
       );
     });
-  }, [rows, filter, query]);
+  }, [rows, filter, query, providerFilter]);
 
   const filters: Array<{ id: PluginFilter; label: string }> = [
     { id: "all", label: labels.all },
@@ -460,6 +483,18 @@ export function DshPluginInventoryView({
               value={query}
             />
           </div>
+          <select
+            aria-label={labels.provider}
+            className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+            value={providerFilter}
+            onChange={(event) => setProviderFilter(event.target.value)}
+          >
+            {Object.entries(labels.providers).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
           <div className="flex items-center rounded-md bg-muted/45 p-0.5">
             {filters.map((item) => (
               <button
@@ -517,6 +552,15 @@ export function DshPluginInventoryView({
                     </span>
                     <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                       {labels[entry.source as "internal" | "external"]}
+                    </span>
+                    <span
+                      title={entry.item?.author}
+                      className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                    >
+                      {labels.providers[entry.provider]}
+                      {entry.provider === "third-party" && entry.item?.author
+                        ? ` · ${entry.item.author}`
+                        : ""}
                     </span>
                     {entry.item?.development && (
                       <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
