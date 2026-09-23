@@ -37,6 +37,7 @@ export interface DshPluginCommandResult {
 export interface DshProfilePluginRuntime {
   assertPluginMutationAllowed?(): void;
   ensureManagedProfile(): Promise<void>;
+  readonly activeProfileManifest?: string;
   ensureStarted(): Promise<unknown>;
   stop(): Promise<void>;
 }
@@ -340,9 +341,25 @@ export class DshProfilePluginManager {
     return next;
   }
 
-  async list(): Promise<{ packages: readonly AmibaDshProfilePlugin[] }> {
+  async list(): Promise<{ packages: readonly AmibaDshProfilePlugin[]; readOnly?: boolean }> {
     await this.runtime.ensureManagedProfile();
-    return { packages: await listDshProfilePlugins(this.paths) };
+    const profileManifest = this.runtime.activeProfileManifest ?? this.paths.profileManifest;
+    const activePaths = { profileManifest, profileDir: path.dirname(profileManifest) };
+    const manifest = JSON.parse(await readFile(profileManifest, "utf8"));
+    // Runtime dependencies are the distribution's package inventory, not a namespace heuristic.
+    const runtimeManifest = path.resolve(this.paths.runtimeAppBinDir, "../..", "package.json");
+    let internal: Record<string, string> = {};
+    try { internal = JSON.parse(await readFile(runtimeManifest, "utf8")).dependencies ?? {}; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    const development = new Set<string>(manifest.amibaDevelopmentPackages ?? []);
+    const temporary = profileManifest !== this.paths.profileManifest;
+    const packages = await listDshProfilePlugins(activePaths);
+    return { readOnly: temporary, packages: packages.map(item => ({
+      ...item,
+      source: Object.hasOwn(internal, item.packageName) ? "internal" as const : "external" as const,
+      development: development.has(item.packageName),
+      mutable: !temporary && !Object.hasOwn(internal, item.packageName),
+    })) };
   }
 
   installRegistry(spec: string): Promise<AmibaDshPluginMutationResult> {

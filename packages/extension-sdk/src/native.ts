@@ -1,9 +1,12 @@
-/** One out-of-tree package installed into the managed DSH web profile. */
+/** Package declared in the active DSH profile. */
 export interface AmibaDshProfilePlugin {
   packageName: string;
   requestedSpec: string;
   version?: string;
   bundle: boolean;
+  source?: "internal" | "external";
+  development?: boolean;
+  mutable?: boolean;
 }
 
 export interface AmibaDshPluginMutationResult {
@@ -20,10 +23,12 @@ export interface AmibaDshPluginMutationResult {
  * renderer is reloaded only after the rebuilt Host and Client graph is ready.
  */
 export interface AmibaDshPluginManagerBridge {
-  list(): Promise<{ packages: readonly AmibaDshProfilePlugin[] }>;
+  list(): Promise<{
+    packages: readonly AmibaDshProfilePlugin[];
+    readOnly?: boolean;
+  }>;
   installRegistry(spec: string): Promise<AmibaDshPluginMutationResult>;
   installArchive(): Promise<AmibaDshPluginMutationResult | null>;
   remove(packageName: string): Promise<AmibaDshPluginMutationResult>;
   update(packageName: string): Promise<AmibaDshPluginMutationResult>;
 }
-

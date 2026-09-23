@@ -226,3 +226,34 @@ test("rolls back a plugin package with a missing native entry", async () => {
     assert.equal(await readFile(paths.profileManifest, "utf8"), original);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+
+test("inventory follows the active profile and uses runtime inventory for package origin", async () => {
+  const { root, paths } = await fixture();
+  try {
+    await writeInstalledBundle(paths);
+    const runtimeManifest = path.resolve(paths.runtimeAppBinDir, "../..", "package.json");
+    await mkdir(path.dirname(runtimeManifest), { recursive: true });
+    const browser = "@amiba/dsh-plugin-browser-provider-electron";
+    const external = "@amiba/dsh-plugin-user-example";
+    await writeFile(runtimeManifest, JSON.stringify({ dependencies: { [browser]: "1" } }));
+    let activeProfileManifest = paths.profileManifest;
+    const manager = new DshProfilePluginManager({ paths, runtime: {
+      get activeProfileManifest() { return activeProfileManifest; },
+      async ensureManagedProfile() {}, async ensureStarted() {}, async stop() {},
+    } });
+    assert.equal((await manager.list()).packages[0].source, "external");
+    const active = path.join(root, "dev", "package.json");
+    await mkdir(path.dirname(active), { recursive: true });
+    await writeFile(active, JSON.stringify({ dependencies: { [browser]: "link:/runtime/browser", [external]: "link:/projects/example" }, amibaDevelopmentPackages: [external] }));
+    activeProfileManifest = active;
+    const result = (await manager.list()).packages;
+    assert.equal(result.find(p => p.packageName === browser).source, "internal");
+    assert.equal(result.find(p => p.packageName === browser).mutable, false);
+    assert.equal(result.find(p => p.packageName === external).source, "external");
+    assert.equal(result.find(p => p.packageName === external).development, true);
+    assert.equal(result.find(p => p.packageName === external).mutable, false);
+    activeProfileManifest = paths.profileManifest;
+    assert.equal((await manager.list()).packages[0].mutable, true);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

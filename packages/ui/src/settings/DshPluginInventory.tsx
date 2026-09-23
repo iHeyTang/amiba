@@ -51,29 +51,34 @@ export interface DshInstalledPluginPackage {
   requestedSpec: string;
   version?: string;
   bundle: boolean;
+  source?: "internal" | "external";
+  development?: boolean;
+  mutable?: boolean;
 }
 
 export interface DshPluginManagementAdapter {
-  list(): Promise<{ packages: readonly DshInstalledPluginPackage[] }>;
+  list(): Promise<{
+    packages: readonly DshInstalledPluginPackage[];
+    readOnly?: boolean;
+  }>;
   installRegistry(spec: string): Promise<unknown>;
   installArchive(): Promise<unknown | null>;
   remove(packageName: string): Promise<unknown>;
   update(packageName: string): Promise<unknown>;
 }
 
-type PluginFilter = "all" | "amiba" | "dsh" | "failed";
+type PluginFilter = "all" | "internal" | "external" | "failed";
 
 function copy(language: PluginLanguage) {
   return language === "zh-CN"
     ? {
         title: "插件",
-        description:
-          "安装与运行都遵循 DSH Profile/Loader。下方状态来自当前 Loader，不维护另一套 Extension 注册表。",
+        description: "查看所有插件包的来源、运行状态和可用操作。",
         registryPlaceholder: "npm 包，例如 @scope/dsh-plugin-example@1.0.0",
         installRegistry: "从 npm 安装",
         installArchive: "安装本地 .tgz",
-        installedPackages: "外部 DSH 包",
-        noInstalledPackages: "尚未安装外部 DSH 包",
+        readOnly:
+          "开发连接期间暂不可安装、更新或移除插件；请先在连接终端按 Ctrl+C 断开。",
         updatePackage: "更新",
         reinstallArchive: "本地来源请重新安装新的 .tgz",
         removePackage: "移除",
@@ -84,8 +89,9 @@ function copy(language: PluginLanguage) {
         search: "搜索模块或 Loader entry",
         refresh: "刷新插件清单",
         all: "全部",
-        amiba: "Amiba",
-        dsh: "DSH",
+        internal: "内部",
+        external: "外部",
+        development: "开发连接",
         failed: "异常",
         enabled: "已启用",
         disabled: "已停用",
@@ -107,13 +113,13 @@ function copy(language: PluginLanguage) {
     : {
         title: "Plugins",
         description:
-          "Installation and runtime both follow the DSH Profile/Loader. Live state below comes from Loader, never a second Extension registry.",
+          "View all plugin packages, their source, runtime status and available actions.",
         registryPlaceholder:
           "npm package, e.g. @scope/dsh-plugin-example@1.0.0",
         installRegistry: "Install from npm",
         installArchive: "Install local .tgz",
-        installedPackages: "External DSH packages",
-        noInstalledPackages: "No external DSH packages installed",
+        readOnly:
+          "Install, update and remove are unavailable during development. Disconnect with Ctrl+C in the connection terminal first.",
         updatePackage: "Update",
         reinstallArchive: "Install a new .tgz to update this local source",
         removePackage: "Remove",
@@ -124,8 +130,9 @@ function copy(language: PluginLanguage) {
         search: "Search module or Loader entry",
         refresh: "Refresh plugin inventory",
         all: "All",
-        amiba: "Amiba",
-        dsh: "DSH",
+        internal: "Internal",
+        external: "External",
+        development: "Development",
         failed: "Issues",
         enabled: "Enabled",
         disabled: "Disabled",
@@ -193,6 +200,7 @@ export function DshPluginInventoryView({
     readonly DshInstalledPluginPackage[]
   >([]);
   const [query, setQuery] = useState("");
+  const [readOnly, setReadOnly] = useState(false);
   const [registrySpec, setRegistrySpec] = useState("");
   const [filter, setFilter] = useState<PluginFilter>("all");
   const [loading, setLoading] = useState(true);
@@ -213,10 +221,12 @@ export function DshPluginInventoryView({
     try {
       const [snapshot, managed] = await Promise.all([
         adapter.list(),
-        adapter.management?.list() ?? Promise.resolve({ packages: [] }),
+        adapter.management?.list() ??
+          Promise.resolve({ packages: [], readOnly: false }),
       ]);
       setEntries(snapshot.entries);
       setPackages(managed.packages);
+      setReadOnly(managed.readOnly ?? false);
     } catch (cause) {
       setEntries([]);
       setPackages([]);
@@ -250,28 +260,62 @@ export function DshPluginInventoryView({
     void refresh();
   }, [refresh]);
 
+  const rows = useMemo(() => {
+    const grouped = new Map<
+      string,
+      {
+        moduleName: string;
+        entries: DshPluginInventoryEntry[];
+        item?: DshInstalledPluginPackage;
+      }
+    >();
+    for (const entry of entries) {
+      const row = grouped.get(entry.moduleName) ?? {
+        moduleName: entry.moduleName,
+        entries: [],
+      };
+      row.entries.push(entry);
+      grouped.set(entry.moduleName, row);
+    }
+    for (const item of packages) {
+      const row = grouped.get(item.packageName) ?? {
+        moduleName: item.packageName,
+        entries: [],
+      };
+      grouped.set(item.packageName, { ...row, item });
+    }
+    return [...grouped.values()].map((row) => ({
+      ...row,
+      source: row.item?.source ?? (row.item ? "external" : "internal"),
+      entryId: row.entries.map((entry) => entry.entryId).join(", "),
+      enabled:
+        row.entries.length === 0 || row.entries.some((entry) => entry.enabled),
+      fiberPhase:
+        (["failed", "loading", "pending", "unloading", "active"] as const).find(
+          (phase) =>
+            row.entries.some(
+              (entry) => entry.enabled && entry.fiberPhase === phase,
+            ),
+        ) ?? null,
+    }));
+  }, [entries, packages]);
   const counts = useMemo(
     () => ({
-      all: entries.length,
-      amiba: entries.filter((entry) => entry.moduleName.startsWith("@amiba/"))
-        .length,
-      dsh: entries.filter((entry) =>
-        entry.moduleName.startsWith("@deepseek-ai/"),
-      ).length,
-      failed: entries.filter(
-        (entry) => entry.enabled && entry.fiberPhase === "failed",
-      ).length,
+      all: rows.length,
+      internal: rows.filter((row) => row.source === "internal").length,
+      external: rows.filter((row) => row.source === "external").length,
+      failed: rows.filter((row) => row.fiberPhase === "failed").length,
     }),
-    [entries],
+    [rows],
   );
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
-    return entries.filter((entry) => {
+    return rows.filter((entry) => {
       const inFilter =
         filter === "all" ||
-        (filter === "amiba" && entry.moduleName.startsWith("@amiba/")) ||
-        (filter === "dsh" && entry.moduleName.startsWith("@deepseek-ai/")) ||
+        (filter === "internal" && entry.source === "internal") ||
+        (filter === "external" && entry.source === "external") ||
         (filter === "failed" && entry.enabled && entry.fiberPhase === "failed");
       if (!inFilter) return false;
       return (
@@ -281,12 +325,12 @@ export function DshPluginInventoryView({
           .includes(needle)
       );
     });
-  }, [entries, filter, query]);
+  }, [rows, filter, query]);
 
   const filters: Array<{ id: PluginFilter; label: string }> = [
     { id: "all", label: labels.all },
-    { id: "amiba", label: labels.amiba },
-    { id: "dsh", label: labels.dsh },
+    { id: "internal", label: labels.internal },
+    { id: "external", label: labels.external },
     { id: "failed", label: labels.failed },
   ];
 
@@ -328,13 +372,14 @@ export function DshPluginInventoryView({
               <Input
                 aria-label={labels.registryPlaceholder}
                 className="h-8 min-w-64 flex-1 text-xs"
-                disabled={operation !== null}
+                disabled={operation !== null || readOnly}
                 onChange={(event) => setRegistrySpec(event.target.value)}
                 onKeyDown={(event) => {
                   if (
                     event.key === "Enter" &&
                     registrySpec.trim() &&
-                    operation === null
+                    operation === null &&
+                    !readOnly
                   ) {
                     void mutate("registry", () =>
                       adapter.management!.installRegistry(registrySpec.trim()),
@@ -346,7 +391,9 @@ export function DshPluginInventoryView({
               />
               <Button
                 className="h-8 gap-1.5 text-xs"
-                disabled={!registrySpec.trim() || operation !== null}
+                disabled={
+                  !registrySpec.trim() || operation !== null || readOnly
+                }
                 onClick={() =>
                   void mutate("registry", () =>
                     adapter.management!.installRegistry(registrySpec.trim()),
@@ -363,7 +410,7 @@ export function DshPluginInventoryView({
               </Button>
               <Button
                 className="h-8 gap-1.5 text-xs"
-                disabled={operation !== null}
+                disabled={operation !== null || readOnly}
                 onClick={() =>
                   void mutate("archive", () =>
                     adapter.management!.installArchive(),
@@ -381,109 +428,9 @@ export function DshPluginInventoryView({
               </Button>
             </div>
 
-            <div>
-              <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">
-                {labels.installedPackages}
-              </p>
-              {packages.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  {labels.noInstalledPackages}
-                </p>
-              ) : (
-                <div className="overflow-hidden rounded-md border border-border/50 bg-background">
-                  {packages.map((item, index) => (
-                    <div
-                      className={cn(
-                        "flex min-h-12 items-center gap-3 px-3 py-2",
-                        index > 0 && "border-t border-border/45",
-                      )}
-                      key={item.packageName}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-medium">
-                          {item.packageName}
-                        </p>
-                        <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground/70">
-                          {item.version ?? item.requestedSpec}
-                          {!item.bundle ? ` · ${labels.invalidBundle}` : ""}
-                        </p>
-                      </div>
-                      {confirmRemove === item.packageName ? (
-                        <div className="flex items-center gap-1">
-                          <Button
-                            aria-label={labels.cancel}
-                            className="h-7 w-7"
-                            disabled={operation !== null}
-                            onClick={() => setConfirmRemove(null)}
-                            size="icon"
-                            variant="ghost"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            className="h-7 text-[11px]"
-                            disabled={operation !== null}
-                            onClick={() =>
-                              void mutate(`remove:${item.packageName}`, () =>
-                                adapter.management!.remove(item.packageName),
-                              )
-                            }
-                            size="sm"
-                            variant="destructive"
-                          >
-                            {operation === `remove:${item.packageName}` ? (
-                              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                            ) : null}
-                            {labels.confirmRemove}
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <Button
-                            aria-label={`${labels.updatePackage} ${item.packageName}`}
-                            className="h-7 text-[11px]"
-                            disabled={
-                              operation !== null ||
-                              !item.bundle ||
-                              !isRegistryDependencySpec(item.requestedSpec)
-                            }
-                            onClick={() =>
-                              void mutate(`update:${item.packageName}`, () =>
-                                adapter.management!.update(item.packageName),
-                              )
-                            }
-                            size="sm"
-                            title={
-                              isRegistryDependencySpec(item.requestedSpec)
-                                ? labels.updatePackage
-                                : labels.reinstallArchive
-                            }
-                            variant="ghost"
-                          >
-                            {operation === `update:${item.packageName}` ? (
-                              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <RefreshCw className="mr-1 h-3.5 w-3.5" />
-                            )}
-                            {labels.updatePackage}
-                          </Button>
-                          <Button
-                            aria-label={`${labels.removePackage} ${item.packageName}`}
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            disabled={operation !== null}
-                            onClick={() => setConfirmRemove(item.packageName)}
-                            size="icon"
-                            variant="ghost"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            {readOnly && (
+              <p className="text-xs text-muted-foreground">{labels.readOnly}</p>
+            )}
             {operation ? (
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -552,7 +499,7 @@ export function DshPluginInventoryView({
                   "grid grid-cols-[minmax(0,1.4fr)_minmax(9rem,0.8fr)_7rem] items-center gap-4 px-4 py-3",
                   index > 0 && "border-t border-border/50",
                 )}
-                key={entry.entryId}
+                key={entry.moduleName}
               >
                 <div className="min-w-0">
                   <div className="flex min-w-0 items-center gap-2">
@@ -568,17 +515,33 @@ export function DshPluginInventoryView({
                     <span className="truncate text-sm font-medium">
                       {shortModuleName(entry.moduleName)}
                     </span>
+                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      {labels[entry.source as "internal" | "external"]}
+                    </span>
+                    {entry.item?.development && (
+                      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        {labels.development}
+                      </span>
+                    )}
                   </div>
                   <p className="mt-0.5 truncate pl-3.5 font-mono text-[10px] text-muted-foreground/75">
                     {entry.moduleName}
                   </p>
                 </div>
                 <div className="min-w-0">
+                  {entry.item && (
+                    <p
+                      title={entry.item.requestedSpec}
+                      className="truncate text-[10px] text-muted-foreground"
+                    >
+                      {entry.item.version ?? entry.item.requestedSpec}
+                    </p>
+                  )}
                   <p className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground/60">
                     {labels.entry}
                   </p>
                   <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
-                    {entry.entryId}
+                    {entry.entryId || "—"}
                   </p>
                 </div>
                 <div className="text-right">
@@ -598,6 +561,103 @@ export function DshPluginInventoryView({
                       : labels.disabled}
                   </p>
                 </div>
+                {entry.item &&
+                entry.source === "external" &&
+                entry.item.mutable !== false &&
+                !readOnly &&
+                !entry.item.development &&
+                adapter.management
+                  ? (() => {
+                      const item = entry.item;
+                      return (
+                        <div className="col-span-full flex justify-end">
+                          {" "}
+                          {confirmRemove === item.packageName ? (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                aria-label={labels.cancel}
+                                className="h-7 w-7"
+                                disabled={operation !== null || readOnly}
+                                onClick={() => setConfirmRemove(null)}
+                                size="icon"
+                                variant="ghost"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                className="h-7 text-[11px]"
+                                disabled={operation !== null || readOnly}
+                                onClick={() =>
+                                  void mutate(
+                                    `remove:${item.packageName}`,
+                                    () =>
+                                      adapter.management!.remove(
+                                        item.packageName,
+                                      ),
+                                  )
+                                }
+                                size="sm"
+                                variant="destructive"
+                              >
+                                {operation === `remove:${item.packageName}` ? (
+                                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                ) : null}
+                                {labels.confirmRemove}
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                aria-label={`${labels.updatePackage} ${item.packageName}`}
+                                className="h-7 text-[11px]"
+                                disabled={
+                                  operation !== null ||
+                                  readOnly ||
+                                  !item.bundle ||
+                                  !isRegistryDependencySpec(item.requestedSpec)
+                                }
+                                onClick={() =>
+                                  void mutate(
+                                    `update:${item.packageName}`,
+                                    () =>
+                                      adapter.management!.update(
+                                        item.packageName,
+                                      ),
+                                  )
+                                }
+                                size="sm"
+                                title={
+                                  isRegistryDependencySpec(item.requestedSpec)
+                                    ? labels.updatePackage
+                                    : labels.reinstallArchive
+                                }
+                                variant="ghost"
+                              >
+                                {operation === `update:${item.packageName}` ? (
+                                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                                )}
+                                {labels.updatePackage}
+                              </Button>
+                              <Button
+                                aria-label={`${labels.removePackage} ${item.packageName}`}
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                disabled={operation !== null || readOnly}
+                                onClick={() =>
+                                  setConfirmRemove(item.packageName)
+                                }
+                                size="icon"
+                                variant="ghost"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()
+                  : null}
               </div>
             ))}
           </div>
