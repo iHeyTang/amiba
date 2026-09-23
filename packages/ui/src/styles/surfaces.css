@@ -332,3 +332,10 @@
 [data-assistant-reply-group] > [data-execution-summary] {
   padding: 12px 16px;
 }
+
+[data-amiba-product-shell] [data-background-surface="model-notice"] {
+  background: hsl(var(--background) / 0.48);
+  backdrop-filter: blur(var(--amiba-agent-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
+  border-radius: 8px;
+}
