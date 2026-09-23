@@ -1971,7 +1971,7 @@ function UserStickyBubbleUnmemoized({
           {!m.streaming ? (
             <div
               data-testid="user-message-actions"
-              className="pointer-events-none ml-auto flex h-7 w-fit items-center justify-end gap-0.5 rounded-md bg-background/90 px-1.5 pt-0.5 opacity-0 backdrop-blur transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+              className="pointer-events-none ml-auto flex h-7 w-fit items-center justify-end gap-0.5 px-1.5 pt-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
             >
               {messageTime ? (
                 <time
