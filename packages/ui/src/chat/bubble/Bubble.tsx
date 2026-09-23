@@ -1907,6 +1907,36 @@ function useMessageGlass(complete: boolean, align: "left" | "right") {
 
 }
 
+function ReplyTokenUsage({ messages }: { messages: UiMessage[] }) {
+  const { t } = useT();
+  // Execution rows can repeat the same message; count each runtime turn once.
+  const byTurn = new Map<string, NonNullable<UiMessage["tokenUsage"]>>();
+  for (const message of messages) if (message.tokenUsage) {
+    byTurn.set(message.runtimeTurn === undefined ? message.uiId : `turn:${message.runtimeTurn}`, message.tokenUsage);
+  }
+  const rows = [...byTurn.values()];
+  if (!rows.length) return null;
+  const keys = ["inputTokens", "outputTokens", "cacheWriteTokens", "cacheReadTokens"] as const;
+  const totals = keys.map(key => rows.every(row => row[key] !== undefined)
+    ? rows.reduce((sum, row) => sum + (row[key] ?? 0), 0) : undefined);
+  const total = rows.reduce((sum, row) => sum + keys.reduce((n, key) => n + (row[key] ?? 0), 0), 0);
+  const incomplete = totals.some(value => value === undefined);
+  const format = (value: number) => value.toLocaleString();
+  return <Tooltip>
+    <TooltipTrigger asChild>
+      <button type="button" aria-label={t("sidepanel.tokens.details")} className="ml-1 rounded px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground hover:bg-accent/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+        {incomplete ? "≥ " : ""}{format(total)} tokens
+      </button>
+    </TooltipTrigger>
+    <TooltipContent side="bottom" className="min-w-40 text-xs">
+      <div className="mb-2 font-medium">{t("sidepanel.tokens.details")}</div>
+      <dl className="grid grid-cols-[1fr_auto] gap-x-5 gap-y-1">
+        {keys.map((key, index) => <Fragment key={key}><dt>{t(`sidepanel.tokens.${key}`)}</dt><dd className="text-right tabular-nums">{totals[index] === undefined ? t("sidepanel.tokens.unreported") : format(totals[index]!)}</dd></Fragment>)}
+      </dl>
+    </TooltipContent>
+  </Tooltip>;
+}
+
 function AssistantReplyChrome({ messages, copyText, children, actions, timeFormat, timeLocale }: {
   messages: UiMessage[];
   copyText: string;
@@ -1937,6 +1967,7 @@ function AssistantReplyChrome({ messages, copyText, children, actions, timeForma
           if (navigator.clipboard) void navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => undefined);
         }} />
         {time && <time dateTime={time.dateTime} className="whitespace-nowrap text-[10px] tabular-nums text-muted-foreground">{time.label}</time>}
+        <ReplyTokenUsage messages={messages} />
         {last?.assistantMessageId ? actions?.(last.assistantMessageId) : null}
       </div>
     </TooltipProvider>}

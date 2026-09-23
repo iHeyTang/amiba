@@ -397,6 +397,7 @@ export class DshChatEngineClient implements ChatEngineClient {
       case "assistantMessage":
         state.assistantMessageId = event.messageId;
         state.assistantSentAt = event.sentAt;
+        state.tokenUsage = event.tokenUsage;
         break;
       case "assistantTextSource":
         applyAssistantTextSource(state.timeline, event);
@@ -450,6 +451,7 @@ export class DshChatEngineClient implements ChatEngineClient {
         state.turnId = event.turnId;
         state.runtimeTurn = event.runtimeTurn;
         delete state.assistantMessageId;
+        delete state.tokenUsage;
         delete state.assistantSentAt;
         break;
       case "approvalRequest":

@@ -407,6 +407,14 @@ export interface ChatRuntimeError {
   hint?: string;
 }
 
+/** Input excludes separately reported cache reads and writes. */
+export interface MessageTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+}
+
 export interface ChatRuntimeState {
   sessionId: string;
   assistantUiId: string | null;
@@ -415,6 +423,7 @@ export interface ChatRuntimeState {
   /** Durable identity of the completed turn’s closing assistant, when available. */
   assistantMessageId?: string;
   assistantSentAt?: number;
+  tokenUsage?: MessageTokenUsage;
   /** Exact DSH engine turn number, never a display ordinal. */
   runtimeTurn?: number;
   reasoning: string;
@@ -499,7 +508,7 @@ export type EngineToClientMessage =
 
 export type StreamEvent =
   | { kind: "begin"; assistantUiId: string }
-  | { kind: "assistantMessage"; messageId: string; sentAt?: number }
+  | { kind: "assistantMessage"; messageId: string; sentAt?: number; tokenUsage?: MessageTokenUsage }
   | { kind: "chunk"; text: string; runtimeStep?: number }
   | { kind: "assistantTextSource"; phase: "reset"; runtimeStep: number }
   | { kind: "assistantTextSource"; phase: "final"; runtimeStep: number; runtimeSeq: number; text: string }

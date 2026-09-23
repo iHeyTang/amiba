@@ -1,3 +1,4 @@
+import { TurnTokenUsage } from "./turn-token-usage"
 import { retryProgress } from "./retry"
 import { compactionUpdate } from "./compaction.js"
 import { ClosingAssistant } from "./closing-assistant"
@@ -79,6 +80,7 @@ export interface BridgedDshEvent {
 /** Stateful projection from native DSH mux frames to Amiba's UI protocol. */
 export class DshAmibaEventBridge {
   private readonly toolsBySession = new Map<string, Map<string, ToolProgress>>()
+  private readonly usage = new Map<string, TurnTokenUsage>()
   private readonly closingAssistants = new Map<string, ClosingAssistant>()
   private readonly dispatches = new Map<string, CodeDispatchTree>()
 
@@ -163,9 +165,12 @@ export class DshAmibaEventBridge {
     let closing = this.closingAssistants.get(sessionId)
     if (!closing) { closing = new ClosingAssistant(); this.closingAssistants.set(sessionId, closing) }
     closing.apply(source)
+    let usage = this.usage.get(sessionId)
+    if (!usage) { usage = new TurnTokenUsage(); this.usage.set(sessionId, usage) }
+    usage.apply(source)
     const frames = this.projectSessionEvent(sessionId, source, view)
     const messageId = source.type === "turn/end" ? closing.getMessageId() : null
-    return messageId === null ? frames : [{ sessionId, event: { kind: "assistantMessage", messageId, sentAt: source.time } }, ...frames]
+    return messageId === null ? frames : [{ sessionId, event: { kind: "assistantMessage", messageId, sentAt: source.time, ...(usage.snapshot() ? { tokenUsage: usage.snapshot() } : {}) } }, ...frames]
   }
 
   private projectSessionEvent(
@@ -223,6 +228,7 @@ export class DshAmibaEventBridge {
       // state regardless.
       tools.clear();
       this.closingAssistants.delete(sessionId);
+      this.usage.delete(sessionId);
       this.dispatches.set(sessionId, new CodeDispatchTree())
       const turn = typeof data.turn === "number" ? data.turn : source.seq
       return [{ sessionId, event: { kind: "turn", turnId: `${sessionId}:${turn}`, ...(Number.isSafeInteger(data.turn) && (data.turn as number) >= 0 ? { runtimeTurn: data.turn as number } : {}) } }]

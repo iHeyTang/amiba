@@ -2203,3 +2203,13 @@ it("copies only rendered result prose and resets the assistant copy feedback", a
     else Reflect.deleteProperty(navigator, "clipboard");
   }
 });
+
+it("shows reported turn tokens once and distinguishes missing cache counters", () => {
+  const message: UiMessage = { uiId: "usage", runtimeTurn: 7, role: "assistant", content: "Answer", tokenUsage: { inputTokens: 12, outputTokens: 5, cacheReadTokens: 30, cacheWriteTokens: 2 } };
+  const { rerender } = render(<MessageTurns messages={[message, { ...message, uiId: "duplicate", content: "Continuation" }]} />);
+  expect(screen.getByRole("button", { name: "sidepanel.tokens.details" })).toHaveTextContent("49 tokens");
+  rerender(<MessageTurns messages={[{ ...message, tokenUsage: { inputTokens: 12, outputTokens: 5 } }]} />);
+  expect(screen.getByRole("button", { name: "sidepanel.tokens.details" })).toHaveTextContent("≥ 17 tokens");
+  rerender(<MessageTurns messages={[{ ...message, tokenUsage: undefined }]} />);
+  expect(screen.queryByRole("button", { name: "sidepanel.tokens.details" })).toBeNull();
+});
