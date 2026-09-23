@@ -458,6 +458,7 @@ function FullScreenChatViewInner({
     () => new Set(),
   );
   const sidebarElementRef = useRef<HTMLElement>(null);
+  const workspaceContentRef = useRef<HTMLElement>(null);
   const sidebarContentRef = useRef<HTMLDivElement>(null);
   const sidebarResizeCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => sidebarResizeCleanupRef.current?.(), []);
@@ -775,13 +776,18 @@ function FullScreenChatViewInner({
       // Live resizing must not chase the pointer with the collapse animation,
       // or render the entire conversation once per pointer event.
       sidebar.style.transition = "none";
+      sidebar.dataset.resizing = "true";
+      // Keep expensive chat/workbench contents from rewrapping on each frame.
+      // Flex placement still follows the live sidebar edge; reflow on release.
+      const workspace = workspaceContentRef.current;
+      if (workspace) workspace.style.flex = `0 0 ${workspace.getBoundingClientRect().width}px`;
       const paintWidth = () => {
         frame = null;
         sidebar.style.width = `${width}px`;
         content.style.width = `${width}px`;
       };
       const onMove = (ev: PointerEvent) => {
-        width = snapAppSidebarWidth(startWidth + (ev.clientX - startX));
+        width = clampAppSidebarWidth(startWidth + (ev.clientX - startX));
         if (frame === null) frame = requestAnimationFrame(paintWidth);
       };
       const cleanup = () => {
@@ -792,9 +798,13 @@ function FullScreenChatViewInner({
         handle.removeEventListener("pointercancel", onUp);
         handle.removeEventListener("lostpointercapture", onUp);
         sidebar.style.removeProperty("transition");
+        delete sidebar.dataset.resizing;
+        workspace?.style.removeProperty("flex");
         sidebarResizeCleanupRef.current = null;
       };
       const onUp = () => {
+        // Snap only on release, never create a dead zone under the pointer.
+        width = snapAppSidebarWidth(width);
         // Flush the last pointer position even if release precedes the frame.
         if (frame !== null) cancelAnimationFrame(frame);
         paintWidth();
@@ -961,7 +971,7 @@ function FullScreenChatViewInner({
   return (
     <div
       data-background-surface="layout"
-      className="flex h-screen min-h-0 w-full bg-background text-foreground"
+      className="flex h-screen min-h-0 w-full overflow-hidden bg-background text-foreground"
       style={
         viewportTopInsetPx
           ? { height: `calc(100dvh - ${viewportTopInsetPx}px)` }
@@ -1065,6 +1075,7 @@ function FullScreenChatViewInner({
       >
       </div>
       <section
+        ref={workspaceContentRef}
         className="relative flex min-h-0 min-w-0 flex-1 flex-col"
         style={
           {

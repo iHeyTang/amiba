@@ -1018,7 +1018,10 @@ describe("FullScreenChatView new-chat home", () => {
     await waitFor(() => expect(sidebar).toHaveStyle({ width: "260px" }));
 
     fireEvent(handle, pointerEvent("pointermove", 248));
+    await waitFor(() => expect(sidebar).toHaveStyle({ width: "248px" }));
+    expect(sidebar).toHaveAttribute("data-resizing", "true");
     fireEvent(handle, pointerEvent("pointerup", 248));
+    expect(sidebar).not.toHaveAttribute("data-resizing");
     expect(sidebar).toHaveStyle({ width: "240px" });
     expect(screen.getByTestId("main-sidebar-content")).toHaveStyle({ width: "240px" });
     expect(sidebar.style.transition).toBe("");

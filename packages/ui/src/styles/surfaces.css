@@ -175,3 +175,8 @@
     transform: translateY(120%);
   }
 }
+
+/* Keep decorative reflection out of the resize paint path. */
+[data-resizing="true"] [data-sidebar-glass]::after {
+  animation-play-state: paused;
+}
