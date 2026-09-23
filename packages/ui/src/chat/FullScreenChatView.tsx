@@ -1027,7 +1027,6 @@ function FullScreenChatViewInner({
             : "cursor-col-resize opacity-100",
         )}
       >
-        <div className="absolute inset-y-0 right-0 w-px bg-border/35 transition-colors group-hover:bg-foreground/[0.07] group-active:bg-foreground/[0.10]" />
       </div>
       <section
         className="relative flex min-h-0 min-w-0 flex-1 flex-col"

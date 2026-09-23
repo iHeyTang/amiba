@@ -18,7 +18,11 @@
 [data-amiba-product-shell] [data-background-surface="layout"] {
   background: transparent;
 }
-[data-amiba-product-shell] [data-background-surface="navigation"],
+[data-amiba-product-shell] [data-background-surface="navigation"] {
+  background: hsl(var(--background) / var(--amiba-glass-opacity));
+  backdrop-filter: blur(var(--amiba-reading-blur)) saturate(1.08);
+  -webkit-backdrop-filter: blur(var(--amiba-reading-blur)) saturate(1.08);
+}
 [data-amiba-product-shell] [data-background-surface="workbench"] {
   background: hsl(var(--background) / var(--amiba-glass-opacity));
   backdrop-filter: blur(var(--amiba-glass-blur)) saturate(1.08);
