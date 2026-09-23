@@ -457,6 +457,10 @@ function FullScreenChatViewInner({
   const [failedSessionIds, setFailedSessionIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const sidebarElementRef = useRef<HTMLElement>(null);
+  const sidebarContentRef = useRef<HTMLDivElement>(null);
+  const sidebarResizeCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => sidebarResizeCleanupRef.current?.(), []);
   const sidebarWidthRef = useRef(sidebarWidth);
   sidebarWidthRef.current = sidebarWidth;
   const sidebarCollapsedRef = useRef(sidebarCollapsed);
@@ -758,24 +762,53 @@ function FullScreenChatViewInner({
   const onSidebarResizeStart = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       e.preventDefault();
+      sidebarResizeCleanupRef.current?.();
       const handle = e.currentTarget;
+      const sidebar = sidebarElementRef.current;
+      const content = sidebarContentRef.current;
+      if (!sidebar || !content) return;
       handle.setPointerCapture(e.pointerId);
       const startX = e.clientX;
       const startWidth = sidebarWidthRef.current;
       let width = startWidth;
+      let frame: number | null = null;
+      // Live resizing must not chase the pointer with the collapse animation,
+      // or render the entire conversation once per pointer event.
+      sidebar.style.transition = "none";
+      const paintWidth = () => {
+        frame = null;
+        sidebar.style.width = `${width}px`;
+        content.style.width = `${width}px`;
+      };
       const onMove = (ev: PointerEvent) => {
         width = snapAppSidebarWidth(startWidth + (ev.clientX - startX));
-        setSidebarWidth(width);
+        if (frame === null) frame = requestAnimationFrame(paintWidth);
       };
-      const onUp = () => {
+      const cleanup = () => {
+        if (frame !== null) cancelAnimationFrame(frame);
+        frame = null;
         handle.removeEventListener("pointermove", onMove);
         handle.removeEventListener("pointerup", onUp);
         handle.removeEventListener("pointercancel", onUp);
+        handle.removeEventListener("lostpointercapture", onUp);
+        sidebar.style.removeProperty("transition");
+        sidebarResizeCleanupRef.current = null;
+      };
+      const onUp = () => {
+        // Flush the last pointer position even if release precedes the frame.
+        if (frame !== null) cancelAnimationFrame(frame);
+        paintWidth();
+        cleanup();
+        sidebarWidthRef.current = width;
+        setSidebarWidth(width);
+        if (handle.hasPointerCapture?.(e.pointerId)) handle.releasePointerCapture(e.pointerId);
         void getPlatform().storage.set({ [SIDEBAR_WIDTH_KEY]: width });
       };
+      sidebarResizeCleanupRef.current = cleanup;
       handle.addEventListener("pointermove", onMove);
       handle.addEventListener("pointerup", onUp);
       handle.addEventListener("pointercancel", onUp);
+      handle.addEventListener("lostpointercapture", onUp);
     },
     [],
   );
@@ -936,6 +969,7 @@ function FullScreenChatViewInner({
       }
     >
       <aside
+        ref={sidebarElementRef}
         data-testid="main-sidebar"
         aria-hidden={sidebarCollapsed}
         {...(sidebarCollapsed ? { inert: "" } : {})}
@@ -944,6 +978,7 @@ function FullScreenChatViewInner({
         style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
       >
         <div
+          ref={sidebarContentRef}
           data-testid="main-sidebar-content"
           data-sidebar-glass
           data-background-surface="navigation"

@@ -996,7 +996,7 @@ describe("FullScreenChatView new-chat home", () => {
     expect(sidebar).toHaveStyle({ width: `${APP_SIDEBAR_DEFAULT_WIDTH}px` });
   });
 
-  it("snaps sidebar resizing to the shared default width", () => {
+  it("snaps sidebar resizing to the shared default width", async () => {
     mocks.useSessions.mockReturnValue(makeSessions());
 
     render(
@@ -1014,11 +1014,14 @@ describe("FullScreenChatView new-chat home", () => {
 
     fireEvent(handle, pointerEvent("pointerdown", 240));
     fireEvent(handle, pointerEvent("pointermove", 260));
-    expect(sidebar).toHaveStyle({ width: "260px" });
+    expect(sidebar.style.transition).toBe("none");
+    await waitFor(() => expect(sidebar).toHaveStyle({ width: "260px" }));
 
     fireEvent(handle, pointerEvent("pointermove", 248));
-    expect(sidebar).toHaveStyle({ width: "240px" });
     fireEvent(handle, pointerEvent("pointerup", 248));
+    expect(sidebar).toHaveStyle({ width: "240px" });
+    expect(screen.getByTestId("main-sidebar-content")).toHaveStyle({ width: "240px" });
+    expect(sidebar.style.transition).toBe("");
 
     expect(mocks.storageSet).toHaveBeenCalledWith({
       "settings.chat.sidebarWidth": APP_SIDEBAR_DEFAULT_WIDTH,
