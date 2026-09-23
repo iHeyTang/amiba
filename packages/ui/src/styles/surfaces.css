@@ -7,7 +7,7 @@
   --amiba-glass-blur: 18px;
   --amiba-reading-blur: 8px;
   --amiba-message-opacity: 0.82;
-  --amiba-message-blur: 32px;
+  --amiba-message-blur: 64px;
   --amiba-content-opacity: 0.16;
   --amiba-content-hover-opacity: 0.3;
   /* Inner cards share the pane blur, like the file-change review card. */
