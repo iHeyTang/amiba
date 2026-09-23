@@ -403,10 +403,15 @@
   background: hsl(var(--background) / var(--amiba-agent-opacity));
   backdrop-filter: blur(var(--amiba-agent-blur));
   -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
-  mask-image: var(--assistant-glass-mask);
-  -webkit-mask-image: var(--assistant-glass-mask);
+  mask-image: var(--assistant-glass-mask-closed);
+  -webkit-mask-image: var(--assistant-glass-mask-closed);
   mask-size: 100% 100%;
   -webkit-mask-size: 100% 100%;
   mask-repeat: no-repeat;
   -webkit-mask-repeat: no-repeat;
+}
+
+[data-amiba-product-shell] [data-assistant-message-chrome]:is(:hover, :focus-within) [data-assistant-glass-material] {
+  mask-image: var(--assistant-glass-mask);
+  -webkit-mask-image: var(--assistant-glass-mask);
 }

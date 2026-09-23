@@ -1903,6 +1903,8 @@ function AssistantReplyChrome({ messages, copyText, children, actions, timeForma
       const closedPath = `M12 0 H${w-12} Q${w} 0 ${w} 12 V${h-12} Q${w} ${h} ${w-12} ${h} H${tw+8} Q${tw} ${h} ${tw} ${h} V${h} Q${tw} ${h} ${tw} ${h} H12 Q0 ${h} 0 ${h-12} V12 Q0 0 12 0 Z`;
       const mask = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h+th}" viewBox="0 0 ${w} ${h+th}">${th ? `<path d="${path}" fill="white"/>` : `<rect width="${w}" height="${h}" rx="12" fill="white"/>`}</svg>`;
       chrome.style.setProperty("--assistant-glass-mask", `url("data:image/svg+xml,${encodeURIComponent(mask)}")`);
+      const closedMask = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h+th}" viewBox="0 0 ${w} ${h+th}"><rect width="${w}" height="${h}" rx="12" fill="white"/></svg>`;
+      chrome.style.setProperty("--assistant-glass-mask-closed", `url("data:image/svg+xml,${encodeURIComponent(closedMask)}")`);
       chrome.style.setProperty("--assistant-glass-closed", th ? `path('${closedPath}')` : "inset(0 round 12px)");
       chrome.style.setProperty("--assistant-glass-outline", th ? `path('${path}')` : "inset(0 round 12px)");
       chrome.setAttribute("data-unified-glass", "");
