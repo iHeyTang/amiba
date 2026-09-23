@@ -265,9 +265,9 @@ it("filters provider independently from internal/external origin", async () => {
     />,
   );
   await screen.findByText("@amiba/browser");
-  await userEvent.selectOptions(
-    screen.getByRole("combobox", { name: "提供方" }),
-    "third-party",
+  await userEvent.click(screen.getByRole("combobox", { name: "提供方" }));
+  await userEvent.click(
+    await screen.findByRole("option", { name: "第三方", exact: true }),
   );
   expect(screen.queryByText("@amiba/browser")).not.toBeInTheDocument();
   expect(screen.getAllByText("第三方 · Alice")).toHaveLength(2);

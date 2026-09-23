@@ -20,6 +20,11 @@ import {
   Input,
   PageContent,
   ScrollArea,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
   cn,
 } from "../primitives";
 import {
@@ -502,18 +507,21 @@ export function DshPluginInventoryView({
               value={query}
             />
           </div>
-          <select
-            aria-label={labels.provider}
-            className="h-8 rounded-md border border-border bg-background px-2 text-xs"
-            value={providerFilter}
-            onChange={(event) => setProviderFilter(event.target.value)}
-          >
-            {Object.entries(labels.providers).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
+          <Select value={providerFilter} onValueChange={setProviderFilter}>
+            <SelectTrigger
+              aria-label={labels.provider}
+              className="h-8 w-32 text-xs"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(labels.providers).map(([value, label]) => (
+                <SelectItem className="text-xs" key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <div className="flex items-center rounded-md bg-muted/45 p-0.5">
             {filters.map((item) => (
               <button
