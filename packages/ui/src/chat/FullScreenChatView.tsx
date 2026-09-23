@@ -946,8 +946,8 @@ function FullScreenChatViewInner({
         <div
           data-testid="main-sidebar-content"
           data-background-surface="navigation"
-          className="flex h-full min-h-0 shrink-0 flex-col bg-muted/30"
-          style={{ width: sidebarWidth }}
+          className="m-2 flex h-[calc(100%-16px)] min-h-0 shrink-0 flex-col overflow-hidden rounded-2xl border border-border/40 bg-muted/30 shadow-[0_4px_16px_hsl(var(--foreground)/0.08)]"
+          style={{ width: sidebarWidth - 16 }}
         >
           <SidebarHeader
             onGoHome={onGoHome}
@@ -955,7 +955,7 @@ function FullScreenChatViewInner({
             onCollapse={() => onSidebarCollapsedChange(true)}
             showCollapseControl={showSidebarCollapseControl}
             iconBoxVisible={headerIconBoxesVisible}
-            leftInset={topBarLeftInset}
+            leftInset={topBarLeftInset === undefined ? undefined : Math.max(0, topBarLeftInset - 8)}
             heightPx={topBarHeightPx}
             className={topBarClassName}
           />
