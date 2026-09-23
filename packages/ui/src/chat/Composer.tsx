@@ -1,4 +1,5 @@
 import { commandEnvelope } from "./composer/command-contract";
+import { ReplacementBoundary } from "./ReplacementBoundary";
 import type { ComposerDraftDocument } from "./composer-draft-document";
 import { captureComposerHistory } from "./composer/composer-history-state";
 const EMPTY_RESIDENT_SUBMISSION = Object.freeze({ pending: false, notice: null });
@@ -252,6 +253,7 @@ export interface ComposerProps {
   /** Official draft-attachment replacement; the renderer owns fallback selection. */
   renderAttachments?: ComposerAttachmentsRenderer;
   renderBar?: ComposerBarRenderer;
+  renderAgentPicker?: (fallback: ReactNode) => ReactNode;
   /**
    * Show a compact DSH inference-model selector beside the send controls.
    * The picker NODE comes from `render` — the host's renderSlot-backed
@@ -466,6 +468,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       attachments,
       renderAttachments,
       renderBar,
+      renderAgentPicker,
       modelPicker,
       approvalModePicker,
       planSeat,
@@ -1168,7 +1171,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                 disabled={disabled}
               />
               {agentPicker ? (
-                <ComposerAgentPicker
+                <ReplacementBoundary render={renderAgentPicker}><ComposerAgentPicker
                   dialogSize={pickerDialogSize}
                   disabled={disabled}
                   overlayVariant={pickerOverlayVariant}
@@ -1176,7 +1179,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
                   onChange={agentPicker.onChange}
                   refreshKey={pickerRefreshKey}
                   value={agentPicker.value}
-                />
+                /></ReplacementBoundary>
               ) : null}
               {approvalModePicker ? (
                 <ComposerApprovalModePicker

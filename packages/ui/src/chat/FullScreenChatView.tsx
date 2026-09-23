@@ -1,3 +1,4 @@
+import { RightbarRegion, type RightbarGeometry } from "./RightbarRegion";
 import { ReplacementBoundary } from "./ReplacementBoundary";
 import { NewChatWorkspaceContext, type NewChatWorkspaceRequest } from "./new-chat-workspace";
 import { ConversationViewRegion, type ConversationViewEntry } from "./ConversationViewRegion";
@@ -20,6 +21,7 @@ import type { MessageNoticeRenderer } from "./bubble/Bubble";
 
 import { Folder, Home, PanelLeftClose, Search } from "lucide-react";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -233,6 +235,7 @@ export interface FullScreenChatViewProps {
      * ChatSurface to the internal Composer.
      */
     modelPicker?: ComposerModelPickerRenderer;
+    transcript?: ReactNode;
     renderComposer?: (fallback: ReactNode) => ReactNode;
     renderAttachments?: import("./Composer").ComposerAttachmentsRenderer;
     renderBar?: import("./Composer").ComposerBarRenderer;
@@ -254,6 +257,8 @@ export interface FullScreenChatViewProps {
     notice?: MessageNoticeRenderer;
     progress?: () => ReactNode;
     toolAnnotation?: (owner: { callId: string }) => ReactNode;
+    rightbar?: (owner: RightbarGeometry, fallback: ReactNode) => ReactNode;
+    rightbarSession?: (owner: RightbarGeometry, fallback: ReactNode) => ReactNode;
     workbenchPanel?: (owner: WorkbenchPanelOwner) => ReactNode;
     /**
      * renderSlot-backed dispatch of the official keyed `tool.call.toolview`
@@ -1128,6 +1133,10 @@ function FullScreenChatViewInner({
               })}
             </PrimaryWorkspaceView>
           </div>
+          <RightbarRegion width={workspacePane.width} leftWidth={sidebarCollapsed ? 0 : sidebarWidth} render={(owner, fallback) => {
+            const sessionBody = workbenchVisible && slots?.rightbarSession ? <Fragment key={sessions.activeId}>{slots.rightbarSession(owner, fallback)}</Fragment> : fallback;
+            return slots?.rightbar ? slots.rightbar(owner, sessionBody) : sessionBody;
+          }}>
           {WorkbenchPane && <WorkbenchPane
             visible={workbenchVisible}
             renderPanel={slots?.workbenchPanel}
@@ -1143,6 +1152,7 @@ function FullScreenChatViewInner({
               return true;
             }}
           />}
+          </RightbarRegion>
         </div>
         {workbenchVisible && (
           <div

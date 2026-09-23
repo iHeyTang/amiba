@@ -2,6 +2,10 @@ import { createContext, useContext, type ReactNode } from "react";
 
 /** rc.2 replacement seats. Native presentation remains the default at priority -1. */
 export const OFFICIAL_REPLACEMENTS = {
+  "conversation.hero.workspace": { kind: "single", scope: "root" },
+  "conversation.hero.agentPreset": { kind: "single", scope: "root" },
+  "rightbar": { kind: "single", scope: "root" },
+  "rightbar.session": { kind: "single", scope: "session" },
   "conversation.composer.bar": { kind: "single", scope: "session-maybe" },
   "conversation.input.attachments": { kind: "single", scope: "session-maybe" },
   "main.conversation": { kind: "single", scope: "session-maybe" },

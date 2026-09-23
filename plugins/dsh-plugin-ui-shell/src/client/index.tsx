@@ -4,6 +4,8 @@ import {
   MessageImagesGallery,
   type MessageImagesOwner,
 } from "@amiba/ui";
+export type { HeroPreset } from "./hero-preset.js";
+import { createHeroPreset, type HeroPreset } from "./hero-preset.js";
 import { conversationSnapshotSource } from "./conversation-snapshot.js";
 import { UiConversation, ConversationController } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type { UiSession } from "@deepseek-ai/dsh-client-ui-session/client";
@@ -23,7 +25,8 @@ import { sessionPendingQueue } from "@amiba/ui/composer-runtime";
 import { createInputActionsProvider } from "./input-actions-provider.js";
 import { createSnapshotStore } from "@deepseek-ai/dsh-client-store";
 import { createDraftImageRegistry } from "./draft-image-registry.js";
-import { EMPTY_CHAT_SNAPSHOT, registerConversationNodes } from "@deepseek-ai/dsh-client-ui-chat/client";
+import { mountOfficialChatPresentation, officialChatRequested, RootSlotDispatch } from "./official-chat-presentation.js";
+import { EMPTY_CHAT_SNAPSHOT, registerConversationNodes, apply as applyOfficialChat } from "@deepseek-ai/dsh-client-ui-chat/client";
 import { createDirectoryFlow, type DirectoryFlow } from "./directory-flow.js";
 import { createConversationViewSource, type ConversationViewEntry } from "./conversation-view-source.js";
 import { CONVERSATION_ENTRY_REMOTE } from "../conversation-remote.js";
@@ -298,6 +301,8 @@ type AmibaRootProps = PropsRuntime<"root"> &
     workbenchSource: ContributionsSource<WorkbenchViewExtension>;
     workbenchShellSource: ContributionsSource<WorkbenchShellExtension>;
     summarySource: ContributionsSource<WorkbenchSummaryContribution>;
+    officialChat: import("@deepseek-ai/dsh-client-store").ObservableSnapshot<boolean>;
+    heroPreset: HeroPreset;
     directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
     conversationViews: ContributionsSource<ConversationViewEntry>;
     legacyToolDetailsAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
@@ -340,6 +345,8 @@ function AmibaRoot({
   workbenchShellSource,
   summarySource,
   directoryFlows,
+  heroPreset,
+  officialChat,
   conversationViews,
   commandRowKeys,
   legacyToolDetailsAvailable,
@@ -369,7 +376,7 @@ function AmibaRoot({
   }, []);
 
   return (
-    <ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench} shells={workbenchShells}><MarkdownProvider extensions={markdown} report={reportMarkdown}><SummaryContributionsProvider contributions={summary}><AmibaProductShell
+    <RootSlotDispatch.Provider value={{ renderSlot: renderSlot as never, renderSlotChain: renderSlotChain as never }}><ConversationSubmitProvider prepare={prepareConversation}><WorkbenchExtensionsProvider extensions={workbench} shells={workbenchShells}><MarkdownProvider extensions={markdown} report={reportMarkdown}><SummaryContributionsProvider contributions={summary}><AmibaProductShell
       usePendingInteraction={useSessionPendingInteraction}
       mainPanelList={mainPanelList}
       mainPanels={mainPanels}
@@ -395,11 +402,13 @@ function AmibaRoot({
       sessionItemMenuItems={sessionItemMenuItems}
       surfaces={surfaces}
       directoryFlows={directoryFlows}
+      heroPreset={heroPreset}
+      officialChat={officialChat}
       conversationViews={conversationViews}
       messageSources={messageSources}
       useOfficialSessions={useSessions}
       useOfficialWorkspaces={useWorkspaces}
-    /></SummaryContributionsProvider></MarkdownProvider></WorkbenchExtensionsProvider></ConversationSubmitProvider>
+    /></SummaryContributionsProvider></MarkdownProvider></WorkbenchExtensionsProvider></ConversationSubmitProvider></RootSlotDispatch.Provider>
   );
 }
 
@@ -792,6 +801,12 @@ export async function apply(ctx: ClientContext): Promise<void> {
     const panelNavigation = mainPanels;
     const mainPanelList = createMainPanelListSource(ctx.slots, id => ctx.slots.entriesOfSlot("main").some(entry => entry.options.key === id));
     const disposePanelInfo = ctx.slots.provideRoot({ hooks: { panelInfo: panelNavigation } });
+    const heroPreset = createHeroPreset(() => {
+      const presets = getPlatform().agentPresets;
+      if (!presets) throw new Error("Agent preset service unavailable");
+      return presets.list();
+    });
+    ctx.effect(() => ctx.reflect.provide("heroAgentPreset", heroPreset), "hero preset selection");
     const shellChildren = {
           "conversation.chat.turnTail": { kind: "chain", scope: "session" },
           "conversation.hero.workspace.directoryFlow": { kind: "single", scope: "root" },
@@ -999,6 +1014,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
           workbenchShellSource,
           summarySource,
           directoryFlows,
+          heroPreset,
+          officialChat: officialChatRequested(ctx.slots),
           conversationViews,
           fileMentions: (...args: Parameters<import("@deepseek-ai/dsh-client-ui-chat/client").ChatFileMentions["forClosing"]>) => ctx.get("chatFileMentions")?.forClosing(...args),
           legacyToolDetailsAvailable: {
@@ -1160,6 +1177,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
     // generic ToolRowFrame — the reference pattern for any plugin that wants
     // a bespoke row for its own tool. Registered after the root because the
     // root's children table is what declares the seat.
+    const officialChatFiber = ctx.inject(["uiConversation", "locale", "settingsScope", "remote", "sidebarRight"], scope => {
+      mountOfficialChatPresentation(scope, applyOfficialChat);
+    });
     const sidebarRightFiber = ctx.inject(['locale'], scope => {
       scope.effect(() => registerSidebarRight(scope, sidebarRightTabs, resources), 'amiba-ui-shell: optional sidebar panel');
       const files = getPlatform().workspaceFiles;
@@ -1183,6 +1203,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     return () => {
       for (const dispose of disposeReplacements) dispose();
       for (const dispose of disposeOfficialToolviews) dispose();
+      void officialChatFiber.dispose();
       void sidebarRightFiber.dispose();
       disposeAskToolview();
       void languageRowFiber.dispose();

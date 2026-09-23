@@ -94,3 +94,16 @@ it("preselects the shortcut directory, allows changing it, and resets to default
     expect.objectContaining({ workspacePath: undefined }),
   );
 });
+
+it("hands the official staged preset and workspace to the new session without opening the native chooser", async () => {
+  const reset = vi.fn();
+  const hero = { store: { getSnapshot: () => ({ current: "writer" }), subscribe: () => () => {} }, load: async () => {}, select: async () => undefined, reset };
+  render(<HomeView panelMode onOpenChat={() => {}} onOpenSettings={() => {}} heroPreset={hero}
+    workspacePicker={(request) => request.open ? <button onClick={() => request.onPick('/official/project')}>Pick official workspace</button> : null} />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Change workspace folder' }));
+  await userEvent.click(screen.getByText('Pick official workspace'));
+  expect(mocks.choose).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+  expect(mocks.queue).toHaveBeenCalledWith(expect.objectContaining({ agent: { profileId: 'writer' }, workspacePath: '/official/project' }));
+  expect(reset).toHaveBeenCalledOnce();
+});

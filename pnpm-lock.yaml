@@ -3429,6 +3429,9 @@ importers:
       '@deepseek-ai/dsh-client-store':
         specifier: 0.1.5-rc.2
         version: 0.1.5-rc.2(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-client-ui-agent-preset':
+        specifier: 0.1.5-rc.2
+        version: 0.1.5-rc.2(@deepseek-ai/cordis@4.0.2)
       '@deepseek-ai/dsh-client-ui-chat':
         specifier: 0.1.5-rc.2
         version: 0.1.5-rc.2(patch_hash=74wqweys2npoy4vneqcoserfca)(@deepseek-ai/cordis@4.0.2)

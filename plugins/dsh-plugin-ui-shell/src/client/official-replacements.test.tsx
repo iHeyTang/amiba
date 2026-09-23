@@ -116,3 +116,49 @@ it("composer chain elects by pending interaction and preserves the native draft 
   expect(screen.getByLabelText("draft")).toBe(draft);
   expect(draft.value).toBe("unsent edits");
 });
+
+it("official Chat bridge preserves keyed node owners, borrows existing slots, and restores on plugin unload", async () => {
+  const { mountOfficialChatPresentation, officialChatRequested, RootSlotDispatch, OFFICIAL_CHAT_VIEW } = await import('./official-chat-presentation.js');
+  const core = new Slots.SlotCore();
+  const binding: Slots.ScopedStandardSourceBinding = { key: 'a', ctx: {} as Context, hooks: {}, keyedHooks: {}, props: { sessionId: 'a' } };
+  const host: Slots.SlotRendererHost = {
+    subscribe: core.subscribe.bind(core), getVersion: core.getVersion.bind(core), entriesOf: core.entries.bind(core), entriesOfSlot: core.entriesOfSlot.bind(core), specOf: core.specDynamic.bind(core),
+    isLive: core.isLive.bind(core), storeOf: () => undefined, reportEntryError: core.reportEntryError.bind(core),
+    root: source({ key: undefined, hooks: {}, keyedHooks: {}, props: {} }), scopeRevision: source(0),
+    scope: () => ({ current: source(binding), resolve: () => binding, renderArea: (_binding: unknown, props: { children?: React.ReactNode }) => props.children }),
+  };
+  const node = { key: 'user:1', kind: 'user', anchorSeq: 1, visibility: 'visible', data: { text: 'real projected node' } };
+  core.register({ name: 'root', children: {
+    'conversation.view': { kind: 'list', scope: 'session' },
+    'conversation.message.images': { kind: 'single', scope: 'session' },
+  } }, ({ renderSlot }: Slots.PropsRenderSlots<'conversation.view' | 'conversation.message.images'>) => <RootSlotDispatch.Provider value={{ renderSlot: renderSlot as never, renderSlotChain: (() => null) as never }}>{renderSlot('conversation.view', { viewRequest: null, openView() {}, completeViewRequest() {} }, { only: OFFICIAL_CHAT_VIEW })}</RootSlotDispatch.Provider>);
+  core.register({ name: 'conversation.message.images' }, () => <span>borrowed images</span>);
+  const duplicate = vi.fn();
+  const slots = { register: core.register.bind(core), entriesOfSlot: core.entriesOfSlot.bind(core), subscribe: core.subscribe.bind(core) };
+  const ctx = { slots, uiConversation: { events: { register: duplicate }, views: { register: duplicate } }, uiSession: { provide: duplicate } } as unknown as Context;
+  mountOfficialChatPresentation(ctx, scope => {
+    scope.uiSession.provide({ hooks: [], resolve: () => ({ hooks: {} }) });
+    scope.uiConversation.events.register({} as never);
+    scope.slots.register({ name: 'conversation.view', id: 'chat', children: {
+      'conversation.chat.node': { kind: 'keyed', scope: 'session', inject: { hooks: { turnData: () => () => undefined } } },
+      'conversation.message.images': { kind: 'single', scope: 'session' },
+    } }, ((props: any) => <>{props.renderSlot('conversation.chat.node', { node, openFile() {}, inspectCall() {}, forkAt() {} }, { entryKey: 'user', hookContext: undefined })}{props.renderSlot('conversation.message.images', {})}</>) as never);
+    scope.slots.register({ name: 'conversation.chat.node', key: 'user' }, ((props: any) => <span>native:{props.node.key}</span>) as never);
+  });
+  expect(duplicate).not.toHaveBeenCalled();
+  const requested = officialChatRequested(slots as never);
+  expect(requested.getSnapshot()).toBe(false);
+  const view = render(renderer.renderRoot(host, {}));
+  expect(screen.getByText('native:user:1')).toBeTruthy();
+  expect(screen.getByText('borrowed images')).toBeTruthy();
+  let off!: () => void;
+  const plugin = vi.fn((props: any) => <span>plugin:{props.node.data.text}</span>);
+  await act(async () => { off = core.register({ name: 'conversation.chat.node', key: 'user' }, plugin); });
+  expect(requested.getSnapshot()).toBe(true);
+  expect(screen.getByText('plugin:real projected node')).toBeTruthy();
+  expect(plugin.mock.calls.at(-1)?.[0].node).toBe(node);
+  await act(async () => off());
+  expect(requested.getSnapshot()).toBe(false);
+  expect(screen.getByText('native:user:1')).toBeTruthy();
+  view.unmount();
+});

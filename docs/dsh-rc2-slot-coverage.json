@@ -2,7 +2,7 @@
   "target": "0.1.5-rc.2",
   "beforeCommit": "a3560301",
   "before": 43,
-  "after": 55,
+  "after": 60,
   "total": 61,
   "added": [
     "main.conversation",
@@ -16,7 +16,12 @@
     "conversation.hero.brand.mark",
     "conversation.input.attachments",
     "conversation.composer",
-    "conversation.composer.bar"
+    "conversation.composer.bar",
+    "conversation.chat.node",
+    "conversation.hero.agentPreset",
+    "conversation.hero.workspace",
+    "rightbar",
+    "rightbar.session"
   ],
   "rows": [
     {
@@ -45,7 +50,7 @@
       "kind": "keyed",
       "scope": "session",
       "before": "未接入",
-      "after": "未接入"
+      "after": "新增条件入口；插件启用时使用 rc.2 官方节点渲染链"
     },
     {
       "slot": "conversation.chat.turnTail",
@@ -80,7 +85,7 @@
       "kind": "single",
       "scope": "root",
       "before": "未接入",
-      "after": "未接入"
+      "after": "新增实际入口；共享预设暂存并传入新会话"
     },
     {
       "slot": "conversation.hero.brand.mark",
@@ -94,7 +99,7 @@
       "kind": "single",
       "scope": "root",
       "before": "未接入",
-      "after": "未接入"
+      "after": "新增实际入口；官方 WorkspaceId 映射真实目录"
     },
     {
       "slot": "conversation.hero.workspace.directoryFlow",
@@ -234,14 +239,14 @@
       "kind": "single",
       "scope": "root",
       "before": "未接入",
-      "after": "未接入"
+      "after": "新增实际入口；窗口尺寸与替换生命周期测试通过"
     },
     {
       "slot": "rightbar.session",
       "kind": "single",
       "scope": "session",
       "before": "未接入",
-      "after": "未接入"
+      "after": "新增实际入口；会话切换和首页不派发测试通过"
     },
     {
       "slot": "root",
@@ -446,5 +451,7 @@
       "before": "条件支持",
       "after": "条件支持"
     }
-  ]
+  ],
+  "extensibleTotal": 60,
+  "hostOwned": 1
 }

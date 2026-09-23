@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useNewChatWorkspace } from "../new-chat-workspace";
 import { WorkspacePane, WorkspacePaneToggle } from "../WorkspacePane";
 import { createTerminalView } from "../../../../../plugins/dsh-plugin-terminal/src/client/index";
@@ -1400,5 +1401,30 @@ describe("FullScreenChatView session lineage", () => {
       result.rerender(view(<button>Recovered lineage</button>));
       expect(screen.getByRole("button", { name: "Recovered lineage" })).toBeInTheDocument();
     } finally { errors.mockRestore(); }
+  });
+});
+
+describe('official rightbar session boundary', () => {
+  it('resets replacement state on session changes and omits the strict session slot on home', () => {
+    mocks.storageGet.mockResolvedValue({});
+    mocks.storageSet.mockResolvedValue(undefined);
+    mocks.embeddedBrowser = null;
+    const session = makeSessions();
+    mocks.useSessions.mockReturnValue(session);
+    const off = vi.fn();
+    function Seat() { useEffect(() => off, []); return <span>session rightbar</span>; }
+    const renderSession = vi.fn(() => <Seat />);
+    const draw = () => <FullScreenChatView client={makeClient() as never} openSettings={() => {}} openAgentDestination={() => {}} restoreSidebarViewOnMount={false} slots={{ rightbarSession: renderSession }} />;
+    const view = render(draw());
+    expect(screen.getByText('session rightbar')).toBeInTheDocument();
+    mocks.useSessions.mockReturnValue({ ...session, activeId: 'another-session' });
+    view.rerender(draw());
+    expect(off).toHaveBeenCalledTimes(1);
+    renderSession.mockClear();
+    mocks.useSessions.mockReturnValue({ ...session, activeId: null });
+    view.rerender(draw());
+    expect(renderSession).not.toHaveBeenCalled();
+    expect(screen.queryByText('session rightbar')).not.toBeInTheDocument();
+    expect(off).toHaveBeenCalledTimes(2);
   });
 });

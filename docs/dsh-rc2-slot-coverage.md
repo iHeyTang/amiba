@@ -4,9 +4,9 @@
 
 | 统计口径 | 升级前 a3560301 | 本分支 |
 |---|---:|---:|
-| rc.2 官方普通插槽 | 61 | 61 |
-| 有实际派发，包含部分／条件支持 | 43（70.5%） | 55（90.2%） |
-| 未接入／仅声明 | 17 | 5 |
+| rc.2 官方插槽（含 root） | 61 | 61 |
+| 有实际派发，包含部分／条件支持 | 43（70.5%） | 60（98.4%） |
+| 未接入／仅声明 | 17 | 0 |
 | root 宿主占用，单独统计 | 1 | 1 |
 
 这是入口覆盖率，不是完美兼容率。原有部分／条件支持不会因升级自动变成完全兼容。Amiba 私有槽、历史废弃名称、alpha 新增槽和工厂入口不计入。
@@ -26,21 +26,25 @@
 - bar 插件替换的是整块界面，会卸载原编辑器 DOM。Composer 层的输入动作／附件服务和上层草稿保留，第三方插件仍需实现自己的编辑界面；这不等于原官方 ComposerBar 的私有注入操作可以无改动复用。
 - 实际 rc.2 renderer 的 chain 测试验证临时接管期间草稿 DOM 不变、选举撤销／卸载后恢复；数据源测试覆盖交互更新、会话切换和订阅释放。
 
-## 未接入的 5 项
+## 最后 5 项的实现与兼容边界
 
-| 插槽 | 仍需补齐的工作 |
-|---|---|
-| conversation.chat.node | 官方 Chat 节点与 Amiba 消息投影逐类对齐，不能把消息行冒充节点 |
-| conversation.hero.agentPreset | 首页预设暂存与官方服务同步 |
-| conversation.hero.workspace | 本地目录与官方 WorkspaceId 选择映射 |
-| rightbar | 官方宽度／全屏／打开条件与工作台协调 |
-| rightbar.session | 会话级右栏状态与工作台生命周期 |
+60 个可扩展插槽均已有入口（60/60）；以原先含 root 的 61 项口径计算为 98.4%。root 仍由宿主占用，不作为普通可替换入口。没有剩余未接入项；这仍是入口覆盖，不是全部第三方插件无改动兼容率。
 
-这些都仍在 rc.2 中，后续应继续接入。`settings.plugin.item` 在 rc.2 中有效且已有使用者，本次保留；后续 alpha 移除不影响本次兼容。
+| 插槽 | 实现 | 使用建议与边界 |
+|---|---|---|
+| `conversation.chat.node` | 当有非默认节点注册生效时，聊天记录切换到发布版 rc.2 ChatView 和节点渲染器，使用真实节点、回合数据、附件及文件操作；卸载后恢复原消息视图 | 可使用。默认节点 priority=1，插件 priority=0 即可覆盖。切换的是整段聊天记录渲染方式，视觉与滚动位置可能变化，输入器保留。不是把 Amiba 消息行伪装成官方节点 |
+| `conversation.hero.agentPreset` | 原选择器和 `ctx.heroAgentPreset` 共用暂存状态，发送时读取选中 ID，提交成功后恢复默认预设 | 可使用。插件通过自己的 inject 返回 `ctx.heroAgentPreset`，可消费官方 `AgentPresetSeatInjected` 接口。插件若另建私有暂存控制器，需要改接该共享接口；不声称任意私有状态自动同步 |
+| `conversation.hero.workspace` | 保留工作区触发按钮；选择器取得官方 selectedId/open/onPick/onClose，依据实时 workspace 列表把 ID 映射为真实路径并送入新会话 | 可使用。未知或已删除 ID 不会改写目录。默认回退为原生目录选择流；插件替换时不会同时启动原生对话框 |
+| `rightbar` | 在工作台外层派发，随窗口和左栏变化提供 width/viewportWidth/canShow；没有插件时保留原工作台结构 | 可使用。width/canShow 遵循官方正常面板 300px + 中栏 400px 门槛；窄屏插件应采用自己的全屏呈现。默认工作台仍使用 Amiba 的尺寸策略 |
+| `rightbar.session` | 会话级右栏内容接管，切换会话重建替换组件，首页不派发；卸载恢复原工作台 | 可使用。整块替换会卸载原呈现组件，替换插件应承担自己的右栏界面；不把原工作台的内部实现当成官方私有注入接口 |
+
+官方 Chat 默认渲染器借用根入口已经拥有的图片／命令／回合尾部插槽，避免重复声明导致启动失败。Chat 业务投影与 `useChat` 来源仍保持单一，未重复注册。
+
+`settings.plugin.item` 在 rc.2 中有效且已有使用者，继续保留；后续 alpha 移除不影响本次兼容。后续建议转向真实第三方插件端到端兼容验收，而不是继续添加不属于 rc.2 的名称。
 
 ## 验证边界与追溯
 
-- 11 个新增 single 入口使用实际 rc.2 React 渲染器测试注册接管、owner 传递、返回 null、异常退让和卸载回退。
+- 15 个新增 single 入口使用实际 rc.2 React 渲染器测试注册接管、owner 传递、返回 null、异常退让和卸载回退。
 - UI 测试覆盖附件操作、禁用状态和原侧栏／输入布局。app-runtime 全量测试通过。
 - UI-shell 全量套件与未修改的 rc.1 checkout 对照，失败用例集合一致；不将全量套件报告为通过。
 - 三平台安装包、真实第三方插件端到端验收尚未完成；构建、启动及 CI 结果见本次 PR。
@@ -56,14 +60,14 @@
 | `conversation.approval.detail` | 审批工具详情 | 已有入口，静态对齐 | 已有入口，静态对齐 |
 | `conversation.chat.assistant-actions` | 完成回复后的操作 | 已有入口，静态对齐 | 已有入口，静态对齐 |
 | `conversation.chat.commandview` | 按命令名渲染结果 | 已有入口，静态对齐 | 已有入口，静态对齐 |
-| `conversation.chat.node` | 按聊天节点类型渲染 | 未接入 | 未接入 |
+| `conversation.chat.node` | 按聊天节点类型渲染 | 未接入 | 新增条件入口；插件启用时使用 rc.2 官方节点渲染链 |
 | `conversation.chat.turnTail` | 回合尾部附加内容 | 部分兼容 | 部分兼容 |
 | `conversation.composer` | 完整输入区域替换 | 未接入 | 新增实际入口；官方交互选举、草稿保留与会话隔离测试通过 |
 | `conversation.composer.bar` | 输入器主体 | 未接入 | 新增实际入口；首页／会话输入器 owner 与回退测试通过，整块替换仍有兼容边界 |
 | `conversation.composer.dock` | 输入器下方附加区 | 部分兼容 | 部分兼容 |
-| `conversation.hero.agentPreset` | 首页智能体预设选择 | 未接入 | 未接入 |
+| `conversation.hero.agentPreset` | 首页智能体预设选择 | 未接入 | 新增实际入口；共享预设暂存并传入新会话 |
 | `conversation.hero.brand.mark` | 首页品牌标识 | 未接入 | 新增实际入口；基础渲染测试通过 |
-| `conversation.hero.workspace` | 首页工作区选择 | 未接入 | 未接入 |
+| `conversation.hero.workspace` | 首页工作区选择 | 未接入 | 新增实际入口；官方 WorkspaceId 映射真实目录 |
 | `conversation.hero.workspace.directoryFlow` | 首页目录选择流 | 条件支持 | 条件支持 |
 | `conversation.input.attachments` | 附件呈现与拖放区域 | 仅声明 | 新增实际入口；基础渲染测试通过 |
 | `conversation.input.dock` | 输入框上方附加区 | 部分兼容 | 部分兼容 |
@@ -83,8 +87,8 @@
 | `conversation.view` | 会话视图 | 部分兼容 | 部分兼容 |
 | `main` | 按键选择主面板 | 部分兼容 | 部分兼容 |
 | `main.conversation` | 主聊天入口 | 未接入 | 新增实际入口；基础渲染测试通过 |
-| `rightbar` | 右侧栏整体 | 未接入 | 未接入 |
-| `rightbar.session` | 右侧栏会话正文 | 未接入 | 未接入 |
+| `rightbar` | 右侧栏整体 | 未接入 | 新增实际入口；窗口尺寸与替换生命周期测试通过 |
+| `rightbar.session` | 右侧栏会话正文 | 未接入 | 新增实际入口；会话切换和首页不派发测试通过 |
 | `root` | 应用根 | 宿主占用 | 宿主占用 |
 | `settings.action` | 设置页头操作 | 已有入口，静态对齐 | 已有入口，静态对齐 |
 | `settings.close` | 设置关闭按钮标签 | 已有入口，静态对齐 | 已有入口，静态对齐 |

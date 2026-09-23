@@ -12,7 +12,7 @@ import { EmptyStateVisual } from "../primitives/empty-state-visual";
  */
 
 import { Settings } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   getAgentPresets,
@@ -51,6 +51,9 @@ import type { ComposerTriggerRuntime } from "../chat/composer/triggers/contracts
 export const HOME_PENDING_DRAFT_KEY = "home.pendingDraft";
 
 export interface HomeViewProps {
+  heroPreset?: { store: import("@amiba/extension-sdk").ObservableSnapshot<{ current: string }>; load(): Promise<void>; select(id: string): Promise<string | undefined>; reset(): void };
+  renderAgentPreset?: (fallback: ReactNode) => ReactNode;
+  workspacePicker?: (request: { open: boolean; path: string | null; onPick(path: string): void; onClose(): void }, fallback: ReactNode) => ReactNode;
   renderAttachments?: import("../chat/Composer").ComposerAttachmentsRenderer;
   renderBar?: import("../chat/Composer").ComposerBarRenderer;
   brandMark?: (owner: { size: number; className?: string }, fallback: import("react").ReactNode) => import("react").ReactNode;
@@ -107,6 +110,9 @@ export default function HomeView(props: HomeViewProps) {
 // ---------------------------------------------------------------------------
 
 function Home({
+  heroPreset,
+  renderAgentPreset,
+  workspacePicker,
   renderAttachments,
   renderBar,
   brandMark,
@@ -160,7 +166,7 @@ function Home({
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const inputRef = useRef<ComposerHandle | null>(null);
   const chooseDirectory = useDirectoryChooser("home");
-  const canChooseWorkspace = Boolean(chooseDirectory);
+  const canChooseWorkspace = Boolean(chooseDirectory || workspacePicker);
 
   // Sidebar shortcuts select a draft directory without creating an empty session.
   useEffect(() => {
@@ -208,6 +214,7 @@ function Home({
   }, []);
 
   useEffect(() => {
+    if (heroPreset) return;
     let alive = true;
     void getAgentPresets().then((result) => {
       if (alive && result.ok) {
@@ -247,7 +254,20 @@ function Home({
     onOpenChat();
   }
 
+  const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false);
+  useEffect(() => { if (heroPreset) void heroPreset.load(); }, [heroPreset]);
+  useEffect(() => {
+    if (!heroPreset) return;
+    const sync = () => { const current = heroPreset.store.getSnapshot().current; if (current) setAgent({ profileId: current }); };
+    sync(); return heroPreset.store.subscribe(sync);
+  }, [heroPreset]);
+
   async function chooseWorkspace() {
+    if (workspacePicker) { setWorkspacePickerOpen(true); return; }
+    await chooseNativeWorkspace();
+  }
+
+  async function chooseNativeWorkspace() {
     const choose = chooseDirectory;
     if (!choose) return;
     try {
@@ -301,7 +321,7 @@ function Home({
       // "new"` precisely because of the orphan-session story above.
       await queueChatPrompt({
         text: trimmed || undefined,
-        agent,
+        agent: heroPreset?.store.getSnapshot().current ? { profileId: heroPreset.store.getSnapshot().current } : agent,
         modelSelection: draftModelSelection,
         // The default root is resolved again by the receiving chat surface.
         // Only carry an explicit override through the pending-prompt handoff.
@@ -336,6 +356,7 @@ function Home({
       // new staging session for the next round.
       att.setAttachments([]);
       setDraftModelSelection(undefined);
+      heroPreset?.reset();
       homeUploadSessionRef.current = shortId("home");
       goToChatTab();
     } finally {
@@ -466,9 +487,10 @@ function Home({
                 : undefined
             }
             approvalModePicker
+            renderAgentPicker={renderAgentPreset}
             agentPicker={{
               value: agent,
-              onChange: (next) => setAgent(normalizeAgentContext(next)),
+              onChange: (next) => { setAgent(normalizeAgentContext(next)); if (heroPreset) void heroPreset.select(next.profileId); },
             }}
             kbdHints={[
               { keys: "⏎", label: t("sidepanel.composer.kbd.send") },
@@ -476,7 +498,7 @@ function Home({
             ]}
             contextRail={
               canChooseWorkspace ? (
-                <WorkspaceControl
+                <><WorkspaceControl
                   path={workspacePath}
                   onChoose={() => void chooseWorkspace()}
                   onClear={
@@ -491,6 +513,11 @@ function Home({
                   }
                   disabled={busy}
                 />
+                {workspacePicker?.({ open: workspacePickerOpen, path: workspacePath,
+                  onPick: path => { setWorkspacePath(path); setWorkspaceError(null); setWorkspacePickerOpen(false); },
+                  onClose: () => setWorkspacePickerOpen(false),
+                }, <NativeWorkspaceDialog open={workspacePickerOpen} choose={chooseNativeWorkspace} close={() => setWorkspacePickerOpen(false)} />)}
+                </>
               ) : undefined
             }
             floatingNotice={
@@ -603,4 +630,11 @@ function TopBar({
       </div>
     </header>
   );
+}
+
+/** A native chooser is a fallback occupant, so replacing the slot never opens two pickers. */
+function NativeWorkspaceDialog({ open, choose, close }: { open: boolean; choose(): Promise<void>; close(): void }) {
+  const latest = useRef({ choose, close }); latest.current = { choose, close };
+  useEffect(() => { if (open) void latest.current.choose().finally(() => latest.current.close()); }, [open]);
+  return null;
 }

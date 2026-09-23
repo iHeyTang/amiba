@@ -308,6 +308,7 @@ export interface ChatSurfaceProps {
      * the composer renders nothing where the chip would sit.
      */
     modelPicker?: ComposerModelPickerRenderer;
+    transcript?: ReactNode;
     renderComposer?: (fallback: ReactNode) => ReactNode;
     renderAttachments?: import("./Composer").ComposerAttachmentsRenderer;
     renderBar?: import("./Composer").ComposerBarRenderer;
@@ -2509,6 +2510,8 @@ export default function ChatSurface({
                 )}
               </div>
             )
+          ) : slots?.transcript !== undefined ? (
+            <div className="flex min-h-0 flex-1 flex-col" style={{ paddingBottom: composerDockHeight > 0 ? composerDockHeight + 12 : undefined }}>{slots.transcript}</div>
           ) : (
             <ScrollArea
               data-conversation-scroll-region
@@ -2603,7 +2606,7 @@ export default function ChatSurface({
             </ScrollArea>
           )}
         </div>
-        {hasActive && showTurnRail && (
+        {hasActive && showTurnRail && slots?.transcript === undefined && (
           <ConversationTurnRail
             turns={railTurnWindow.visible}
             viewportRef={conversationViewportRef}

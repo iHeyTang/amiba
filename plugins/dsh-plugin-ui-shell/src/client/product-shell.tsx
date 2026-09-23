@@ -1,3 +1,5 @@
+import { OFFICIAL_CHAT_VIEW } from "./official-chat-presentation.js";
+import { HeroWorkspacePicker } from "./hero-workspace.js";
 import { ComposerRegion } from "./composer-region.js";
 import { OfficialReplacement } from "./official-replacements.js";
 import { TrajectoryNavigationContext } from "./trajectory-header-action.js";
@@ -171,6 +173,10 @@ const EMPTY_MESSAGE_SOURCES: readonly MessageSourceRow[] = [];
  * tool name as `entryKey`.
  */
 export type AmibaShellSlot =
+  | "conversation.hero.workspace"
+  | "conversation.hero.agentPreset"
+  | "rightbar"
+  | "rightbar.session"
   | "conversation.composer"
   | "conversation.composer.bar"
   | "main.conversation"
@@ -404,6 +410,8 @@ function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string)
 }
 
 interface ProductShellProps {
+  officialChat: import("@deepseek-ai/dsh-client-store").ObservableSnapshot<boolean>;
+  heroPreset: import("./hero-preset.js").HeroPreset;
   usePendingInteraction: import("@deepseek-ai/dsh-client-ui-session/client").UseSessionPendingInteraction;
   mainPanels: MainPanelNavigation;
   mainPanelList: ContributionsSource<MainPanelRow>;
@@ -466,6 +474,8 @@ export function AmibaProductShell(props: ProductShellProps): ReactElement {
 }
 
 function ProductShellInner({
+  officialChat,
+  heroPreset,
   usePendingInteraction,
   mainPanels,
   mainPanelList,
@@ -587,6 +597,7 @@ function ProductShellInner({
   }, [directoryFlows, homeDirectory.available, workspaceDirectory.available, platform]);
   const viewEntries = useSyncExternalStore(conversationViews.subscribe, conversationViews.getSnapshot, conversationViews.getSnapshot);
   const trajectory = useTrajectoryInspection(sessions.activeId, viewEntries);
+  const officialChatActive = useSyncExternalStore(officialChat.subscribe, officialChat.getSnapshot, officialChat.getSnapshot);
   const activeConversationSource = sessions.activeId ? conversationSource(sessions.activeId) : undefined;
   const loadMessageImage = useSessionImageLoader(activeConversationSource);
   // The rows the conversation pane interleaves are derived from the LIVE
@@ -943,6 +954,7 @@ function ProductShellInner({
                 sidebarSettings: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("sidebar.settings", owner, { fallback })}</OfficialReplacement>,
                 conversationViews: viewEntries,
                 conversationHeaderViewIds: ["trajectory"],
+                transcript: officialChatActive && sessions.activeId ? renderSlot("conversation.view", trajectory.owner, { only: OFFICIAL_CHAT_VIEW }) : undefined,
                 conversationView: (id) => renderSlot("conversation.view", { ...trajectory.owner, ...(loadMessageImage ? { loadImage: loadMessageImage } : {}) }, { only: id }),
                 conversationViewSelection: trajectory.selection,
                 onConversationViewSelect: trajectory.select,
@@ -951,6 +963,9 @@ function ProductShellInner({
                     triggerRuntime={triggerRuntime}
                     onOpenChat={() => {}}
                     onOpenSettings={() => settings.openAt()}
+                    heroPreset={heroPreset}
+                    renderAgentPreset={fallback => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.hero.agentPreset", {}, { fallback })}</OfficialReplacement>}
+                    workspacePicker={(request, fallback) => <HeroWorkspacePicker request={request} useWorkspaces={useOfficialWorkspaces} render={(owner) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.hero.workspace", owner, { fallback })}</OfficialReplacement>} />}
                     panelMode
                     modelPicker={renderModelPickerSeat}
                     renderBar={(owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.composer.bar", owner, { fallback })}</OfficialReplacement>}
@@ -975,6 +990,8 @@ function ProductShellInner({
                 toolAnnotation: (owner) =>
                   renderSlot("amiba.tool.activity", owner),
                 progress: () => renderSlot("amiba.conversation.progress", {}),
+                rightbar: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("rightbar", owner, { fallback })}</OfficialReplacement>,
+                rightbarSession: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("rightbar.session", owner, { fallback })}</OfficialReplacement>,
                 workbenchPanel: (owner) => <>
                   {renderSlot("amiba.workbench.panel", owner)}
                   {sessions.activeId ? <LegacyToolDetails enabled={hasLegacyDetails}
