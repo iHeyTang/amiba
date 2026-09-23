@@ -28,7 +28,8 @@
   backdrop-filter: blur(var(--amiba-glass-blur)) saturate(1.08);
   -webkit-backdrop-filter: blur(var(--amiba-glass-blur)) saturate(1.08);
 }
-[data-amiba-product-shell] [data-background-surface="reading"] {
+[data-amiba-product-shell] [data-background-surface="reading"],
+[data-amiba-product-shell] [data-conversation-canvas="reading"] {
   background: hsl(var(--background) / var(--amiba-reading-opacity));
   backdrop-filter: blur(var(--amiba-reading-blur));
   -webkit-backdrop-filter: blur(var(--amiba-reading-blur));
@@ -40,6 +41,7 @@
   -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
 }
 /* Empty space reveals the canvas, rather than applying a full-screen blur. */
+[data-amiba-product-shell] [data-conversation-canvas="canvas"],
 [data-amiba-product-shell] [data-background-surface="canvas"],
 [data-amiba-product-shell] [data-background-surface="canvas-header"] {
   background: hsl(var(--background) / 0.08);
@@ -52,20 +54,26 @@
   backdrop-filter: blur(var(--amiba-glass-blur));
   -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
 }
-/* The conversation header shares its canvas, with no independent tint. */
+/* Header, reading body, and rounded workbench cutouts share one backdrop.
+ * Do not paint the reading material twice inside the shared canvas. */
+[data-amiba-product-shell] [data-conversation-canvas] [data-background-surface="reading"],
+[data-amiba-product-shell] [data-conversation-canvas] [data-background-surface="canvas"],
 [data-amiba-product-shell] [data-conversation-header] {
   background: transparent;
-  backdrop-filter: blur(var(--amiba-reading-blur));
-  -webkit-backdrop-filter: blur(var(--amiba-reading-blur));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 /* Keep split sizing, but paint the workbench above the conversation plane. */
 [data-amiba-product-shell] [data-workspace-container] {
   z-index: 10;
 }
+[data-amiba-product-shell] [data-workspace-container]:has(> [data-background-surface="workbench"][aria-hidden="false"]) {
+  border-radius: 16px 0 0 16px;
+  box-shadow: -8px 0 24px hsl(var(--foreground) / 0.06);
+}
 [data-amiba-product-shell] [data-background-surface="workbench"] {
   border-radius: 16px 0 0 16px;
-  box-shadow: -10px 0 28px hsl(var(--foreground) / 0.12),
-    inset 1px 0 0 rgb(255 255 255 / 0.25);
+  box-shadow: inset 1px 0 0 rgb(255 255 255 / 0.25);
 }
 /* The owning pane has already blurred the backdrop. Nested chrome shares it. */
 [data-amiba-product-shell] [data-background-surface="navigation"] [data-background-surface="header"],

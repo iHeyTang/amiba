@@ -1084,6 +1084,7 @@ function FullScreenChatViewInner({
         }
       >
         <div
+          data-conversation-canvas={sidebarView === "chats" && !slots?.mainPanel ? (sessions.activeId || displayedLoad ? "reading" : "canvas") : undefined}
           data-workspace-main-row
           className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
         >
