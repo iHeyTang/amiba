@@ -87,19 +87,6 @@ export function BackgroundSettings({
     >
       <div className="flex items-center justify-between gap-4">
         <Label>{zh ? "主界面背景" : "Application background"}</Label>
-        <Select
-          value={draft.enabled ? "on" : "off"}
-          disabled={!state.ready || busy}
-          onValueChange={(value) => change({ enabled: value === "on" })}
-        >
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="off">{zh ? "默认背景" : "Default"}</SelectItem>
-            <SelectItem value="on">{zh ? "自定义背景" : "Custom"}</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
       <p className="text-xs text-muted-foreground">
         {zh
