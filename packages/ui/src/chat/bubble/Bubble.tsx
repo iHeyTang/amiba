@@ -1871,8 +1871,9 @@ function InterleavedAssistantFlow({
  */
 export const Bubble = memo(BubbleUnmemoized);
 
-function AssistantReplyChrome({ messages, children, actions, timeFormat, timeLocale }: {
+function AssistantReplyChrome({ messages, copyText, children, actions, timeFormat, timeLocale }: {
   messages: UiMessage[];
+  copyText: string;
   children: ReactNode;
   actions?: (messageId: string) => ReactNode;
   timeFormat: TimeFormatPreference;
@@ -1880,6 +1881,11 @@ function AssistantReplyChrome({ messages, children, actions, timeFormat, timeLoc
 }) {
   const { t } = useT();
   const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
   const complete = messages.every(message => !message.streaming);
   const chromeRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -1892,11 +1898,11 @@ function AssistantReplyChrome({ messages, children, actions, timeFormat, timeLoc
       if (!w || !h) return;
       const th = tab?.offsetHeight ?? 0;
       const tw = Math.min(tab?.offsetWidth ?? 0, w - 20);
-      // Keep the tint continuous, but bound blur surfaces to the body and tab.
+      // Alpha-mask the final filtered pixels, not just the layer geometry.
       const path = `M12 0 H${w-12} Q${w} 0 ${w} 12 V${h-12} Q${w} ${h} ${w-12} ${h} H${tw+8} Q${tw} ${h} ${tw} ${h+8} V${h+th-12} Q${tw} ${h+th} ${tw-12} ${h+th} H12 Q0 ${h+th} 0 ${h+th-12} V12 Q0 0 12 0 Z`;
       const closedPath = `M12 0 H${w-12} Q${w} 0 ${w} 12 V${h-12} Q${w} ${h} ${w-12} ${h} H${tw+8} Q${tw} ${h} ${tw} ${h} V${h} Q${tw} ${h} ${tw} ${h} H12 Q0 ${h} 0 ${h-12} V12 Q0 0 12 0 Z`;
-      chrome.style.setProperty("--assistant-tab-height", `${th}px`);
-      chrome.style.setProperty("--assistant-tab-width", `${tw + 8}px`);
+      const mask = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h+th}" viewBox="0 0 ${w} ${h+th}">${th ? `<path d="${path}" fill="white"/>` : `<rect width="${w}" height="${h}" rx="12" fill="white"/>`}</svg>`;
+      chrome.style.setProperty("--assistant-glass-mask", `url("data:image/svg+xml,${encodeURIComponent(mask)}")`);
       chrome.style.setProperty("--assistant-glass-closed", th ? `path('${closedPath}')` : "inset(0 round 12px)");
       chrome.style.setProperty("--assistant-glass-outline", th ? `path('${path}')` : "inset(0 round 12px)");
       chrome.setAttribute("data-unified-glass", "");
@@ -1909,10 +1915,10 @@ function AssistantReplyChrome({ messages, children, actions, timeFormat, timeLoc
     return () => observer.disconnect();
   }, [complete]);
   const last = messages.at(-1);
-  const text = messages.map(message => stripManagedResourceContext(bubbleTextContent(message.content))).filter(value => value.trim()).join("\n\n");
+  const text = copyText;
   const time = formatMessageTime(last?.sentAt, timeFormat, timeLocale);
   return <div ref={chromeRef} data-assistant-message-chrome className="group min-w-0">
-    <div data-assistant-glass-clip aria-hidden="true"><div data-assistant-body-blur /><div data-assistant-tab-blur /><div data-assistant-glass-material /></div>
+    <div data-assistant-glass-clip aria-hidden="true"><div data-assistant-glass-material /></div>
     <div data-assistant-reply-body>{children}</div>
     {complete && <TooltipProvider delayDuration={180} skipDelayDuration={80}>
       <div data-background-surface="message-actions" data-action-align="left"
@@ -1958,6 +1964,11 @@ function UserStickyBubbleUnmemoized({
   const [overflowed, setOverflowed] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
 
   useLayoutEffect(() => {
     const inner = innerRef.current;
@@ -1975,11 +1986,6 @@ function UserStickyBubbleUnmemoized({
     if (!overflowed && expanded) setExpanded(false);
   }, [overflowed, expanded]);
 
-  useEffect(() => {
-    if (!copied) return;
-    const timeout = window.setTimeout(() => setCopied(false), 1_500);
-    return () => window.clearTimeout(timeout);
-  }, [copied]);
 
   const isClipping = overflowed && !expanded;
   const messageTime = formatMessageTime(m.sentAt, timeFormat, timeLocale);
@@ -2402,6 +2408,18 @@ export function MessageTurns({
               );
               });
               const groupMessages = group.items.flatMap(({ item }) => item.kind === "execution" ? item.messages : item.kind === "message" ? [item.message] : []);
+              // Copy the same prose that the reply renderer exposes, never the
+              // persisted content that also contains execution narration.
+              const copyText = group.items.flatMap(({ item }) => {
+                if (item.kind !== "message" || item.message.role !== "assistant") return [];
+                if (!item.suppressTrace && hasInterleavedAssistantTimeline(item.message)) {
+                  const flow = buildAssistantFlow(item.message);
+                  const visible = flow.some(segment => segment.kind === "compaction" || segment.kind === "retry")
+                    ? flow : splitTrailingTextRun(flow).tail;
+                  return visible.flatMap(segment => segment.kind === "text" ? [segment.text] : []);
+                }
+                return [resolveAssistantTrace(item.message).bodyText];
+              }).map(stripManagedResourceContext).filter(value => value.trim()).join("\n\n");
               const ownsReview = group === replyGroups.findLast(candidate => candidate.assistant);
               const body = group.assistant
                 ? <div data-assistant-reply-group data-background-surface="assistant-message">
@@ -2412,7 +2430,7 @@ export function MessageTurns({
                   </div>
                 : content;
               return group.assistant && groupMessages.some(message => bubbleTextContent(message.content).trim())
-                ? <AssistantReplyChrome key={group.items[0]!.item.id} messages={groupMessages} actions={assistantActions} timeFormat={timeFormat} timeLocale={language}>{body}</AssistantReplyChrome>
+                ? <AssistantReplyChrome key={group.items[0]!.item.id} messages={groupMessages} copyText={copyText} actions={assistantActions} timeFormat={timeFormat} timeLocale={language}>{body}</AssistantReplyChrome>
                 : <Fragment key={group.items[0]!.item.id}>{body}</Fragment>;
             })}
             </ExecutionNoticesContext.Provider>

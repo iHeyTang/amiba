@@ -2176,3 +2176,30 @@ it("adds one left assistant tab per reply, copying all fragments and hosting act
     else Reflect.deleteProperty(navigator, "clipboard");
   }
 });
+
+it("copies only rendered result prose and resets the assistant copy feedback", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  const clipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  vi.useFakeTimers();
+  try {
+    render(<MessageTurns messages={[{
+      uiId: "result", role: "assistant", content: "Earlier progress.Final answer.",
+      assistantTimeline: [
+        { kind: "text", id: "before", text: "Earlier progress." },
+        { kind: "tool", id: "tool", toolCallId: "write" },
+        { kind: "text", id: "after", text: "Final answer." },
+      ],
+      toolProgress: [{ toolCallId: "write", toolName: "write_file", status: "success" }],
+    }]} />);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "common.copy" })));
+    expect(writeText).toHaveBeenCalledWith("Final answer.");
+    expect(screen.getByRole("button", { name: "common.copied" })).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(2000));
+    expect(screen.getByRole("button", { name: "common.copy" })).toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+    if (clipboard) Object.defineProperty(navigator, "clipboard", clipboard);
+    else Reflect.deleteProperty(navigator, "clipboard");
+  }
+});
