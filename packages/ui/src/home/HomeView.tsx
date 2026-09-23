@@ -402,7 +402,7 @@ function Home({
             // Let the companion lead, with one quiet invitation above the composer.
             <div className="flex flex-col items-center gap-2 text-center">
               <EmptyStateVisual scene="home"><AmibaLogo size={56} /></EmptyStateVisual>
-              <p className="text-balance text-sm font-normal leading-6 text-muted-foreground">
+              <p data-home-greeting className="text-balance text-sm font-normal leading-6 text-muted-foreground">
                 {t("newtab.subtitle")}
               </p>
             </div>

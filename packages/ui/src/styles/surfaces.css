@@ -54,7 +54,14 @@
   border-color: hsl(var(--border) / 0.6);
 }
 [data-amiba-product-shell] [data-background-surface="sticky-message"] {
-  background: hsl(var(--background));
+  border-radius: 12px;
+  background: hsl(var(--background) / 0.94);
+  backdrop-filter: blur(var(--amiba-glass-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
+}
+[data-amiba-product-shell] [data-home-greeting] {
+  color: hsl(var(--foreground));
+  text-shadow: 0 1px 3px hsl(var(--background)), 0 0 10px hsl(var(--background));
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   [data-amiba-product-shell] {
