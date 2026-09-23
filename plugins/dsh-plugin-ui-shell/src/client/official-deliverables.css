@@ -1,8 +1,8 @@
 /* DSH 0.1.5-rc.1 Deliverables: override its fixed neutral palette locally.
  * Higher specificity also wins over lazily injected plugin CSS in dark mode. */
 :root body .nyYjTG_root {
-  --deliverable-fill: hsl(var(--card));
-  --deliverable-hover: hsl(var(--accent));
+  --deliverable-fill: var(--amiba-content-fill, hsl(var(--muted) / 0.16));
+  --deliverable-hover: var(--amiba-content-hover, hsl(var(--muted) / 0.3));
 }
 
 /* Keep official interactions, with Amiba's compact file-row proportions. */
@@ -10,6 +10,9 @@
   border-radius: 10px;
   height: 64px;
   padding: 10px;
+  border-color: hsl(var(--border) / 0.45);
+  backdrop-filter: blur(var(--amiba-content-blur, 10px));
+  -webkit-backdrop-filter: blur(var(--amiba-content-blur, 10px));
 }
 :root body .nyYjTG_fileIcon {
   width: 36px;
@@ -22,6 +25,8 @@
 }
 :root body .nyYjTG_split {
   border-radius: 6px;
+  background: var(--deliverable-fill);
+  border-color: hsl(var(--border) / 0.45);
 }
 :root body .nyYjTG_open {
   font-size: 12px;

@@ -6,6 +6,11 @@
   --amiba-input-opacity: 0.9;
   --amiba-glass-blur: 18px;
   --amiba-reading-blur: 8px;
+  --amiba-content-opacity: 0.16;
+  --amiba-content-hover-opacity: 0.3;
+  --amiba-content-blur: 10px;
+  --amiba-content-fill: hsl(var(--muted) / var(--amiba-content-opacity));
+  --amiba-content-hover: hsl(var(--muted) / var(--amiba-content-hover-opacity));
 }
 .amiba-background-frame [data-amiba-product-shell],
 [data-amiba-product-shell] [data-background-surface="layout"] {
@@ -46,9 +51,29 @@
 }
 [data-amiba-product-shell] [data-section-header="rail"] {
   border-radius: 8px;
-  background: hsl(var(--background) / 0.72);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--amiba-content-fill);
+  backdrop-filter: blur(var(--amiba-content-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-content-blur));
+}
+[data-amiba-product-shell] [data-section-header="rail"]:hover,
+[data-amiba-product-shell] [data-session-row]:is([data-active="true"], :hover, :focus-within) {
+  background: var(--amiba-content-hover);
+  backdrop-filter: blur(var(--amiba-content-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-content-blur));
+}
+[data-amiba-product-shell] [data-section-header="rail"] > button {
+  background: transparent;
+}
+/* Only the table frame blurs; cells remain transparent to avoid stacked filters. */
+[data-amiba-product-shell] .chat-md.chat-md [data-streamdown="table-wrapper"] {
+  background: var(--amiba-content-fill);
+  border-color: hsl(var(--border) / 0.45);
+  backdrop-filter: blur(var(--amiba-content-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-content-blur));
+}
+[data-amiba-product-shell] .chat-md.chat-md [data-streamdown="table-header-cell"] {
+  background: var(--amiba-content-fill);
+  border-color: hsl(var(--border) / 0.45);
 }
 [data-amiba-product-shell] [data-composer-card] {
   background: hsl(var(--background) / var(--amiba-input-opacity));
@@ -69,6 +94,8 @@
     --amiba-glass-opacity: 1;
     --amiba-reading-opacity: 1;
     --amiba-input-opacity: 1;
+    --amiba-content-opacity: 1;
+    --amiba-content-hover-opacity: 1;
   }
 }
 @media (prefers-reduced-transparency: reduce) {
@@ -76,6 +103,9 @@
     --amiba-glass-opacity: 1;
     --amiba-reading-opacity: 1;
     --amiba-input-opacity: 1;
+    --amiba-content-opacity: 1;
+    --amiba-content-hover-opacity: 1;
+    --amiba-content-blur: 0px;
     --amiba-glass-blur: 0px;
     --amiba-reading-blur: 0px;
   }
