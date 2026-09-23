@@ -1047,6 +1047,7 @@ function FullScreenChatViewInner({
               testId="chats-view"
             >
               <ContentHeader
+                canvas={!sessions.activeId && !displayedLoad}
                 title={displayedLoad ? (sessions.sessions.find(item => item.id === displayedLoad?.sessionId)?.title ?? "") : chatTopBarPlaceholder}
                 icon={<Folder className="h-4 w-4" />}
                 actions={displayedLoad ? undefined : slots?.headerActions}
@@ -1300,6 +1301,7 @@ interface ContentHeaderProps {
   heightPx?: number;
   className?: string;
   seamless?: boolean;
+  canvas?: boolean;
 }
 
 function ContentHeader({
@@ -1316,11 +1318,13 @@ function ContentHeader({
   heightPx = 40,
   className,
   seamless = false,
+  canvas = false,
 }: ContentHeaderProps) {
   const [titleEditing, setTitleEditing] = useState(false);
 
   return (
     <PaneHeaderBar
+      data-background-surface={canvas ? "canvas-header" : "header"}
       heightPx={heightPx}
       leftInset={sidebarCollapsed ? leftInset : 0}
       bordered={!seamless}
