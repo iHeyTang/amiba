@@ -276,11 +276,48 @@
 
 /* The revealed action tab continues the user bubble's material and right edge. */
 [data-amiba-product-shell] [data-background-surface="message-actions"] {
+  position: relative;
   background: hsl(var(--background) / var(--amiba-message-opacity));
   backdrop-filter: blur(var(--amiba-message-blur));
   -webkit-backdrop-filter: blur(var(--amiba-message-blur));
   border-radius: 0 0 12px 12px;
+  /* Reserve layout space; animate only the visual tab. */
+  transform: translateY(-6px);
+  transform-origin: top right;
+  transition: opacity 160ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 [data-amiba-product-shell] [data-user-message-chrome]:has([data-background-surface="message-actions"]):is(:hover, :focus-within) [data-background-surface="sticky-message"] {
   border-bottom-right-radius: 0;
+}
+
+/* A concave fillet joins the tab's left shoulder to the bubble above. */
+[data-amiba-product-shell] [data-background-surface="message-actions"]::before {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  top: 0;
+  left: -8px;
+  width: 8px;
+  height: 8px;
+  background: inherit;
+  backdrop-filter: blur(var(--amiba-message-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-message-blur));
+  mask-image: radial-gradient(circle at 0 100%, transparent 7.5px, black 8px);
+  -webkit-mask-image: radial-gradient(circle at 0 100%, transparent 7.5px, black 8px);
+}
+
+[data-amiba-product-shell] [data-user-message-chrome]:is(:hover, :focus-within) [data-background-surface="message-actions"] {
+  transform: translateY(0);
+}
+[data-amiba-product-shell] [data-user-message-chrome] [data-background-surface="sticky-message"] {
+  position: relative;
+  z-index: 1;
+  transition: border-bottom-right-radius 160ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-amiba-product-shell] [data-background-surface="message-actions"],
+  [data-amiba-product-shell] [data-user-message-chrome] [data-background-surface="sticky-message"] {
+    transform: none;
+    transition: none;
+  }
 }
