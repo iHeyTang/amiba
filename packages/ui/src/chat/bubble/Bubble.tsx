@@ -374,7 +374,7 @@ function BubbleUnmemoized({
     return (
       <div
         data-selection="text"
-        className="min-w-0 rounded-xl border border-border/60 bg-chat-surface px-4 py-3 text-sm text-secondary-foreground"
+        className="min-w-0 rounded-xl px-4 py-3 text-sm text-foreground"
       >
         {sourceLabel && (
           <div

@@ -38,10 +38,10 @@
   -webkit-backdrop-filter: none;
 }
 [data-amiba-product-shell] [data-background-surface="assistant-message"] {
-  background: hsl(var(--background) / var(--amiba-agent-opacity));
+  background: transparent;
   backdrop-filter: blur(var(--amiba-agent-blur));
   -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
-  border: 1px solid hsl(var(--border) / 0.3);
+  border: 0;
   border-radius: 12px;
 }
 /* Recovery copy must stay legible even over a high-contrast wallpaper. */
@@ -117,7 +117,7 @@
 }
 [data-amiba-product-shell] [data-background-surface="sticky-message"] {
   border-radius: 12px;
-  background: hsl(var(--background) / var(--amiba-message-opacity));
+  background: transparent;
   /* Sticky messages pass over live text, unlike ordinary content cards. */
   backdrop-filter: blur(var(--amiba-message-blur));
   -webkit-backdrop-filter: blur(var(--amiba-message-blur));

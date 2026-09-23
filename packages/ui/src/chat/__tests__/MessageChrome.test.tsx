@@ -459,7 +459,7 @@ describe("chat message chrome", () => {
     expect(
       screen.queryByText("sidepanel.message.task"),
     ).not.toBeInTheDocument();
-    expect(container.firstElementChild).toHaveClass("bg-chat-surface");
+    expect(container.firstElementChild).not.toHaveClass("bg-chat-surface");
     expect(container.firstElementChild).toHaveAttribute(
       "data-selection",
       "text",
