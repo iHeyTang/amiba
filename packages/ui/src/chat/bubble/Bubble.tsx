@@ -1912,7 +1912,7 @@ function UserStickyBubbleUnmemoized({
   return (
     <div className="sticky top-0 z-20">
       <TooltipProvider delayDuration={180} skipDelayDuration={80}>
-        <div data-user-message-chrome className="group pb-2">
+        <div data-user-message-chrome className="group">
           <div className="relative">
             <div
               data-background-surface="sticky-message"
