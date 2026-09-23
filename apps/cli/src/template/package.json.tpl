@@ -23,7 +23,9 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && vite build",
-    "dev": "amiba plugin dev",
+    "dev": "amiba plugin dev --target dev",
+    "connect:dev": "amiba plugin dev --target dev",
+    "connect:release": "amiba plugin dev --target release",
     "pack": "amiba plugin pack",
     "typecheck": "tsc --noEmit"
   },
