@@ -1,7 +1,10 @@
+import { OFFICIAL_CHAT_VIEW } from "./official-chat-presentation.js";
+import { HeroWorkspacePicker } from "./hero-workspace.js";
+import { ComposerRegion } from "./composer-region.js";
+import { OfficialReplacement } from "./official-replacements.js";
 import { TrajectoryNavigationContext } from "./trajectory-header-action.js";
 import { MainPanelList, type MainPanelRow } from "./main-panel-list.js";
 import type { MainPanelNavigation } from "./main-panel-navigation.js";
-import { LegacyToolDetails } from "./legacy-tool-details.js";
 import { sessionLineage, equalSessionLineage } from "./session-lineage.js";
 import { useSessionImageLoader } from "./session-image-loader.js";
 import { useTrajectoryInspection } from "./trajectory-inspection.js";
@@ -157,18 +160,31 @@ const EMPTY_MESSAGE_SOURCES: readonly MessageSourceRow[] = [];
  * `conversation.session.header.actions`, the conversation-edge action row —
  * and the two composer control seats, `conversation.input.model` and
  * `conversation.input.plan`, and the composer's floating overlay anchor,
- * `conversation.input.overlay`). Two names from the public vocabulary are
- * absent on purpose:
+ * `conversation.input.overlay`). One name is owned by another plugin:
  *   - `amiba.agentPreset.section` is declared (and dispatched) by
- *     dsh-plugin-agent-preset as a child of its own settings section;
- *   - `amiba.composer.modelPicker` is dispatched through the composer's
- *     `modelPicker` render prop rather than by the shell markup directly.
+ *     dsh-plugin-agent-preset as a child of its own settings section.
  *
  * `tool.call.toolview` is the one KEYED member: it rides the chat surface's
  * `toolView` render prop, dispatched once per tool row with the row's wire
  * tool name as `entryKey`.
  */
 export type AmibaShellSlot =
+  | "conversation.hero.workspace"
+  | "conversation.hero.agentPreset"
+  | "rightbar"
+  | "rightbar.session"
+  | "conversation.composer"
+  | "conversation.composer.bar"
+  | "main.conversation"
+  | "conversation.session"
+  | "conversation.session.header"
+  | "sidebar"
+  | "sidebar.brand.mark"
+  | "sidebar.brand.name"
+  | "sidebar.workspaces"
+  | "sidebar.settings"
+  | "conversation.hero.brand.mark"
+
   | "main"
   | "sidebar.panellist"
   | Exclude<AmibaRootSlot, "amiba.agentPreset.section">
@@ -189,9 +205,6 @@ export type AmibaShellSlot =
   | "conversation.session.header.actions"
   | "conversation.input.model"
   | "amiba.conversation.notice"
-  | "amiba.tool.execution"
-  | "amiba.tool.activity"
-  | "amiba.conversation.progress"
   | "amiba.workbench.panel"
   | "conversation.input.plan"
   | "conversation.input.overlay"
@@ -206,7 +219,6 @@ export type AmibaShellSlot =
   | "conversation.message.images"
   | "conversation.approval.detail"
   | "conversation.chat.assistant-actions"
-  | "conversation.details.tool"
   | "tool.call.toolview"
   | "tool.call.images";
 
@@ -335,6 +347,7 @@ async function drainPendingPrompt(): Promise<PendingPromptResult | null> {
       workspacePath,
       agent,
       modelSelection,
+      sessionId: typeof value.sessionId === "string" && value.sessionId ? value.sessionId : undefined,
     };
   } catch {
     return null;
@@ -390,10 +403,12 @@ function createChatClient(dshClient: DshApiClient, resolveSubagent: (id: string)
 }
 
 interface ProductShellProps {
+  officialChat: import("@deepseek-ai/dsh-client-store").ObservableSnapshot<boolean>;
+  heroPreset: import("./hero-preset.js").HeroPreset;
+  usePendingInteraction: import("@deepseek-ai/dsh-client-ui-session/client").UseSessionPendingInteraction;
   mainPanels: MainPanelNavigation;
   mainPanelList: ContributionsSource<MainPanelRow>;
   renderSlotChain: PropsRenderSlots<AmibaShellSlot>["renderSlotChain"];
-  legacyToolDetailsAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
   toolImagesAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
   commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
   conversationSource: (sessionId: string) => import("./conversation-snapshot.js").ConversationSource | undefined;
@@ -451,11 +466,13 @@ export function AmibaProductShell(props: ProductShellProps): ReactElement {
 }
 
 function ProductShellInner({
+  officialChat,
+  heroPreset,
+  usePendingInteraction,
   mainPanels,
   mainPanelList,
   renderSlotChain,
   commandRowKeys,
-  legacyToolDetailsAvailable,
   toolImagesAvailable,
   conversationSource,
   fileMentions,
@@ -482,9 +499,8 @@ function ProductShellInner({
   const { activePanelId } = useSyncExternalStore(mainPanels.subscribe, mainPanels.getSnapshot, mainPanels.getSnapshot);
   const leaveMainPanel = useCallback(() => mainPanels.leavePanel(), [mainPanels]);
   const hasLineage = useSyncExternalStore(lineageAvailable.subscribe, lineageAvailable.getSnapshot, lineageAvailable.getSnapshot);
-  const hasLegacyDetails = useSyncExternalStore(legacyToolDetailsAvailable.subscribe, legacyToolDetailsAvailable.getSnapshot, legacyToolDetailsAvailable.getSnapshot);
-  const [legacySelections, setLegacySelections] = useState<Record<string, string>>({});
   const hasToolImages = useSyncExternalStore(toolImagesAvailable.subscribe, toolImagesAvailable.getSnapshot, toolImagesAvailable.getSnapshot);
+  const [homeSessionId, setHomeSessionId] = useState("");
   const platform = getPlatform();
   const desktop = platform.kind === "desktop";
   const topBarHeightPx = platform.windowChrome?.topBarHeightPx ?? 40;
@@ -551,7 +567,6 @@ function ProductShellInner({
   });
   const { open: settingsOpen, close: closeSettings } = settings;
   const sessions = useSessions(PRODUCT_SHELL_STATE_KEYS);
-  const detailsCwd = useOfficialSessions(list => sessions.activeId ? Object.values(list.byId).find(row => row.id === sessions.activeId)?.cwd : undefined);
   const lineage = useOfficialSessions(list => sessionLineage(list, sessions.activeId), equalSessionLineage);
   const childAddressSource = useRef<(id: string) => AgentSubagentAddress | undefined>(() => undefined);
   childAddressSource.current = (id) => sessions.sessions.find((session) => session.id === id)?.subagentAddress
@@ -571,6 +586,7 @@ function ProductShellInner({
   }, [directoryFlows, homeDirectory.available, workspaceDirectory.available, platform]);
   const viewEntries = useSyncExternalStore(conversationViews.subscribe, conversationViews.getSnapshot, conversationViews.getSnapshot);
   const trajectory = useTrajectoryInspection(sessions.activeId, viewEntries);
+  const officialChatActive = useSyncExternalStore(officialChat.subscribe, officialChat.getSnapshot, officialChat.getSnapshot);
   const activeConversationSource = sessions.activeId ? conversationSource(sessions.activeId) : undefined;
   const loadMessageImage = useSessionImageLoader(activeConversationSource);
   // The rows the conversation pane interleaves are derived from the LIVE
@@ -684,9 +700,7 @@ function ProductShellInner({
   // official wire), the vendor session-less hero seat while drafting.
   const renderModelPickerSeat = useCallback(
     (request: ComposerModelPickerRequest) =>
-      request.seat === "session"
-        ? renderSlot("conversation.input.model", request.owner)
-        : renderSlot("amiba.composer.modelPicker", request.owner),
+      renderSlot("conversation.input.model", request.owner),
     [renderSlot],
   );
 
@@ -717,14 +731,9 @@ function ProductShellInner({
         entryKey: request.owner.toolName,
         fallback: renderOfficialToolFallback(owner, request.fallback),
       });
-      const row = renderSlot(
-        "amiba.tool.execution",
-        { ...owner, fallback },
-        { fallback },
-      );
       const withImages = <ToolImageEvidenceProvider callId={owner.callId}
         render={hasToolImages && loadMessageImage ? images => renderSlot("tool.call.images", { images, loadImage: loadMessageImage, align: "start" }) : undefined}>
-        {row}
+        {fallback}
       </ToolImageEvidenceProvider>;
       return withImages;
     },
@@ -847,8 +856,8 @@ function ProductShellInner({
   // or the already-committed render resolves the official session-scoped
   // seats under the previous session and that stale frame is painted.
   useLayoutEffect(() => {
-    sessionsBridge?.setActive(sessions.activeId);
-  }, [sessionsBridge, sessions.activeId]);
+    sessionsBridge?.setActive(sessions.activeId || homeSessionId);
+  }, [sessionsBridge, sessions.activeId, homeSessionId]);
 
   if (
     platform.kind === "desktop" &&
@@ -917,23 +926,42 @@ function ProductShellInner({
               itemMenuItems={sessionMenuItemList}
               messageSourceLabel={messageSourceLabel}
               slots={{
+                mainConversation: fallback => <OfficialReplacement fallback={fallback}>{renderSlot("main.conversation", {}, { fallback })}</OfficialReplacement>,
+                sessionBody: fallback => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.session", {}, { fallback })}</OfficialReplacement>,
+                sessionHeader: fallback => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.session.header", {}, { fallback })}</OfficialReplacement>,
+                sidebar: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("sidebar", owner, { fallback })}</OfficialReplacement>,
+                sidebarBrandMark: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("sidebar.brand.mark", owner, { fallback })}</OfficialReplacement>,
+                sidebarBrandName: fallback => <OfficialReplacement fallback={fallback}>{renderSlot("sidebar.brand.name", {}, { fallback })}</OfficialReplacement>,
+                sidebarWorkspaces: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("sidebar.workspaces", owner, { fallback })}</OfficialReplacement>,
+                sidebarSettings: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("sidebar.settings", owner, { fallback })}</OfficialReplacement>,
                 conversationViews: viewEntries,
                 conversationHeaderViewIds: ["trajectory"],
+                transcript: officialChatActive && sessions.activeId ? renderSlot("conversation.view", trajectory.owner, { only: OFFICIAL_CHAT_VIEW }) : undefined,
                 conversationView: (id) => renderSlot("conversation.view", { ...trajectory.owner, ...(loadMessageImage ? { loadImage: loadMessageImage } : {}) }, { only: id }),
                 conversationViewSelection: trajectory.selection,
                 onConversationViewSelect: trajectory.select,
                 emptyState: (
                   <HomeView
+                    onPreparedSession={setHomeSessionId}
                     triggerRuntime={triggerRuntime}
                     onOpenChat={() => {}}
                     onOpenSettings={() => settings.openAt()}
+                    heroPreset={heroPreset}
+                    renderAgentPreset={fallback => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.hero.agentPreset", {}, { fallback })}</OfficialReplacement>}
+                    workspacePicker={(request, fallback) => <HeroWorkspacePicker request={request} useWorkspaces={useOfficialWorkspaces} render={(owner) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.hero.workspace", owner, { fallback })}</OfficialReplacement>} />}
                     panelMode
                     modelPicker={renderModelPickerSeat}
+                    renderBar={(owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.composer.bar", owner, { fallback })}</OfficialReplacement>}
+                    renderAttachments={(owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.input.attachments", owner, { fallback })}</OfficialReplacement>}
+                    brandMark={(owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.hero.brand.mark", owner, { fallback })}</OfficialReplacement>}
                   />
                 ),
                 settingsTrigger: renderSettingsTrigger,
                 sidebarFooterActions: owner => renderSlot("sidebar.footer.action", owner),
                 modelPicker: renderModelPickerSeat,
+                renderComposer: fallback => sessions.activeId ? <ComposerRegion sessionId={sessions.activeId} source={conversationSource(sessions.activeId)} usePendingInteraction={usePendingInteraction} fallback={fallback} render={(owner, native) => renderSlotChain("conversation.composer", owner, { fallback: native, overlay: true })} /> : fallback,
+                renderBar: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.composer.bar", owner, { fallback })}</OfficialReplacement>,
+                renderAttachments: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.input.attachments", owner, { fallback })}</OfficialReplacement>,
                 planSeat: renderPlanSeat,
                 notice: (owner, fallback) =>
                   renderSlot("amiba.conversation.notice", owner, {
@@ -942,19 +970,9 @@ function ProductShellInner({
                       : owner.source,
                     fallback,
                   }),
-                toolAnnotation: (owner) =>
-                  renderSlot("amiba.tool.activity", owner),
-                progress: () => renderSlot("amiba.conversation.progress", {}),
-                workbenchPanel: (owner) => <>
-                  {renderSlot("amiba.workbench.panel", owner)}
-                  {sessions.activeId ? <LegacyToolDetails enabled={hasLegacyDetails}
-                    source={conversationSource(sessions.activeId)} sessionId={sessions.activeId} cwd={detailsCwd}
-                    panel={owner} selectedCallId={legacySelections[sessions.activeId] ?? null}
-                    onSelect={callId => setLegacySelections(current => ({ ...current, [sessions.activeId!]: callId }))}
-                    render={details => renderSlot("conversation.details.tool", details)}
-                    label={t("sidepanel.trace.toolDetails")} emptyLabel={t("sidepanel.trace.selectTool")}
-                  /> : null}
-                </>,
+                rightbar: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("rightbar", owner, { fallback })}</OfficialReplacement>,
+                rightbarSession: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("rightbar.session", owner, { fallback })}</OfficialReplacement>,
+                workbenchPanel: (owner) => renderSlot("amiba.workbench.panel", owner),
                 // The official composer overlay anchor. The seat declares NO owner
                 // share, so `{}` is the faithful dispatch — anything else would be
                 // a fabricated owner. Session-scoped: the renderer resolves the
@@ -979,7 +997,6 @@ function ProductShellInner({
                   content: renderSlot("main", {}, { entryKey: activePanelId }),
                 },
                 onNativeNavigation: leaveMainPanel,
-                navigationBefore: renderSlot("amiba.navigation.before", {}),
                 workspaceNavigation: (activeView, visibleSessionId) => <>
                   {renderSlot("amiba.workspace.navigation", {
                     activeView,
@@ -993,7 +1010,6 @@ function ProductShellInner({
                   <MainPanelList source={mainPanelList} navigation={mainPanels} conversationActive={activeView === "chats"}
                     renderIcon={(id, owner) => renderSlot("sidebar.panellist", owner, { only: id })} />
                 </>,
-                navigationAfter: renderSlot("amiba.navigation.after", {}),
                 workspaceView: (viewId, owner) =>
                   renderSlot(
                     "amiba.workspace.view",
@@ -1041,7 +1057,6 @@ function ProductShellInner({
                     {renderSlot("conversation.session.header.actions", {})}
                   </TrajectoryNavigationContext.Provider>
                 ),
-                contentOverlay: renderSlot("amiba.chat.content.overlay", {}),
               }}
             />
           </div>
@@ -1108,10 +1123,6 @@ function ProductShellInner({
                 ),
                 action: renderSlot("settings.action", {}),
                 generalItem: renderSlot("settings.general.item", {}),
-                contentOverlay: renderSlot(
-                  "amiba.settings.content.overlay",
-                  {},
-                ),
               }}
               // No OS-chrome reserve inside the dialog. `topBarLeftInset` /
               // `topBarHeightPx` still go to the chat surface above (which does

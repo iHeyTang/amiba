@@ -21,12 +21,19 @@ export function MentionSerializePlugin({ value, onChange, draftSource }: {
   const [editor] = useLexicalComposerContext()
   const document = useSyncExternalStore(draftSource?.subscribe ?? noSubscribe,
     draftSource?.getDocument ?? noDocument, draftSource?.getDocument ?? noDocument)
+  const awaitingHistory = useRef(false)
   const lastEmitted = useRef<string | null>(null)
   const lastDocument = useRef<ComposerDraftDocument | undefined>()
   const lastSource = useRef<ComposerDraftSource | undefined>()
 
   useEffect(() => editor.registerUpdateListener(({ editorState, tags }) => {
     if (tags.has(RESTORE_TAG)) return
+    // Autofocus can flush the new editor's empty tree before the history
+    // plugin commits its saved tree. Only that history commit may publish.
+    if (awaitingHistory.current) {
+      if (!tags.has("historic")) return
+      awaitingHistory.current = false
+    }
     editorState.read(() => {
       const text = $getRoot().getTextContent()
       if (draftSource) {
@@ -48,7 +55,8 @@ export function MentionSerializePlugin({ value, onChange, draftSource }: {
     lastSource.current = draftSource
     lastDocument.current = document
     lastEmitted.current = document?.text ?? value
-    if (document && consumeRestoredDocument(editor, document)) return
+    awaitingHistory.current = !!document && consumeRestoredDocument(editor, document)
+    if (awaitingHistory.current) return
     const parts = document?.parts ?? parseTokens(value)
     editor.update(() => {
       const root = $getRoot()

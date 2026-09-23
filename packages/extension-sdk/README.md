@@ -284,9 +284,12 @@ need to know the child name.
 
 ### 执行生命周期展示与调用定位
 
-UI Shell 提供单实例 `amiba.tool.execution` 槽，owner 为原 `ToolCallOwnerProps`
-加 `fallback: ReactNode`。它包围既有 `tool.call.toolview` 分发，允许执行生命周期
-插件依据精确调用身份提供持续状态；不接管的调用必须返回 fallback。
+工具展示统一使用官方 keyed 插槽 `tool.call.toolview`，按工具 wire name 注册。
+`conversation.details.tool`、`amiba.tool.execution`、`amiba.tool.activity` 和
+`amiba.conversation.progress` 已移除；旧名称不再派发。
+旧详情插件需要适配 `ToolCallToolviewOwnerProps`，不能仅替换注册名称：原详情页
+已移除，新的展示位置是工具调用行。执行包装插件需改成按工具名注册，不能继续
+依赖旧 `fallback` 包装参数。工具附加状态并入对应工具展示；会话进度使用原生提示。
 `presentation: "summary"` 的内联、非交互要求仍然适用。
 
 工具 owner 的 `revealToolCall(callId)` 用于定位已载入的原调用，核心先展开所属执行组，

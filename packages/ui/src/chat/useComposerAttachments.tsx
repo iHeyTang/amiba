@@ -1,4 +1,5 @@
-import { deleteUnretainedAttachments } from "./internal/attachment-ownership"
+import { composerAttachmentDraft } from "./composer-attachment-store"
+import { deleteUnretainedAttachments, retainDraftAttachments } from "./internal/attachment-ownership"
 import { getPlatform } from "@amiba/app-runtime/platform"
 /**
  * Composer-attachment hook + `<AttachmentToolbar>` component.
@@ -41,6 +42,8 @@ import { Plus } from "lucide-react"
 import {
   useCallback,
   useEffect,
+  useMemo,
+  useSyncExternalStore,
   useRef,
   useState,
   type ChangeEvent,
@@ -55,6 +58,11 @@ import {
 export const ATTACHMENT_INPUT_ACCEPT = "*/*"
 
 export interface UseComposerAttachmentsOptions {
+  /** Stable owner shared by remounts; omitted for disposable composers. */
+  draftScope?: object
+  /** Reacquire ownership when Home becomes the prepared conversation. */
+  draftKey?: string
+
   registerDraftImage?: ComposerTriggerRuntime["registerDraftImage"]
   /** Queue mirrors can still own the same Host staging file after a chip is removed. */
   isAttachmentRetained?: (attachmentId: string) => boolean
@@ -136,25 +144,26 @@ export interface UseComposerAttachmentsResult {
 export function useComposerAttachments(
   opts: UseComposerAttachmentsOptions,
 ): UseComposerAttachmentsResult {
-  const retentionRef = useRef(opts.isAttachmentRetained)
+  const state = useMemo(() => composerAttachmentDraft(opts.draftScope), [opts.draftScope, opts.draftKey])
+  const retentionRef = useMemo(() => ({ current: opts.isAttachmentRetained }), [state])
   retentionRef.current = opts.isAttachmentRetained
-  const [attachments, setAttachmentState] = useState<Attachment[]>([])
-  const attachmentState = useRef(attachments)
-  const imageSnapshot = useRef<readonly ComposerAttachment[]>(Object.freeze([]))
-  const registrationRef = useRef(opts.registerDraftImage)
-  registrationRef.current = opts.registerDraftImage
-  const restores = useRef(new Map<string, { attachmentId: string; register: NonNullable<UseComposerAttachmentsOptions["registerDraftImage"]> }>())
-  const mounted = useRef(true)
-  const uploads = useRef(0)
-  const imageListeners = useRef(new Set<() => void>())
-  const imageAttachmentIds = useRef(new Map<string, string>())
-  const draftImages = useRef(new Map<string, NonNullable<ReturnType<NonNullable<ComposerTriggerRuntime["registerDraftImage"]>>>>())
+  const { attachments, busy: attachmentBusy, error: attachmentError } = useSyncExternalStore(state.subscribe, state.getSnapshot, state.getSnapshot)
+  const { attachmentState, imageSnapshot, uploads, imageListeners, imageAttachmentIds, draftImages } = state
+  const mounted = useMemo(() => ({ current: true }), [state])
+  const retained = Boolean(opts.draftScope)
+  const setAttachmentBusy = useCallback<Dispatch<SetStateAction<boolean>>>(update => {
+    state.update({ busy: typeof update === "function" ? update(state.getSnapshot().busy) : update })
+  }, [state])
+  const setAttachmentError = useCallback<Dispatch<SetStateAction<string | null>>>(update => {
+    state.update({ error: typeof update === "function" ? update(state.getSnapshot().error) : update })
+  }, [state])
   // Keep imperative extension reads synchronous while React renders the same
   // attachment list. Functional updates run once against the latest value.
   const setAttachments = useCallback<Dispatch<SetStateAction<Attachment[]>>>(update => {
     const next = typeof update === "function" ? update(attachmentState.current) : update
-    if (!mounted.current) return
+    if (!mounted.current && !retained) return
     attachmentState.current = next
+    retainDraftAttachments(state, next)
     for (const attachment of next) {
       const registration = draftImages.current.get(attachment.uiId)
       if (!registration || !attachment.attachmentId) continue
@@ -173,43 +182,40 @@ export function useComposerAttachments(
     const previous = imageSnapshot.current
     const changed = previous.length !== images.length || images.some((image, i) => image !== previous[i])
     if (changed) imageSnapshot.current = Object.freeze(images)
-    setAttachmentState(next)
-    if (changed) for (const listener of imageListeners.current) listener()
-  }, [])
-  const getDraftImages = useCallback(() => {
-    const adapter = getPlatform().agentAttachments;
-    return adapter?.drafts ? adapter.drafts(attachmentState.current.flatMap(a => a.attachmentId ? [a.attachmentId] : [])) : imageSnapshot.current;
-  }, [])
-  const [, refreshUploads] = useState(0)
-  useEffect(() => getPlatform().agentAttachments?.subscribe?.(() => {
-    refreshUploads(value => value + 1)
-    for (const listener of imageListeners.current) listener()
-  }), [])
-  useEffect(() => {
-    const retained = new Set(attachmentState.current.map(a => a.uiId))
+    const retainedIds = new Set(next.map(a => a.uiId))
     for (const [uiId, registration] of draftImages.current) {
-      if (!retained.has(uiId)) {
+      if (!retainedIds.has(uiId)) {
         draftImages.current.delete(uiId)
         imageAttachmentIds.current.delete(uiId)
         registration.release()
       }
     }
-  }, [attachments])
+    state.update({ attachments: next })
+    if (changed) for (const listener of imageListeners.current) listener()
+  }, [state, mounted, retained])
+  const getDraftImages = useCallback(() => {
+    const adapter = getPlatform().agentAttachments;
+    return adapter?.drafts ? adapter.drafts(attachmentState.current.flatMap(a => a.attachmentId ? [a.attachmentId] : [])) : imageSnapshot.current;
+  }, [state])
+  const [, refreshUploads] = useState(0)
+  useEffect(() => getPlatform().agentAttachments?.subscribe?.(() => {
+    refreshUploads(value => value + 1)
+    for (const listener of imageListeners.current) listener()
+  }), [state])
   useEffect(() => {
     mounted.current = true
     return () => {
       mounted.current = false
+      if (retained) return
       attachmentState.current = []
+      retainDraftAttachments(state, [])
       imageSnapshot.current = Object.freeze([])
       imageListeners.current.clear()
-      restores.current.clear()
       for (const registration of draftImages.current.values()) registration.release()
       draftImages.current.clear()
       imageAttachmentIds.current.clear()
     }
-  }, [])
-  const [attachmentBusy, setAttachmentBusy] = useState(false)
-  const [attachmentError, setAttachmentError] = useState<string | null>(null)
+  }, [state, mounted, retained])
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -233,7 +239,7 @@ export function useComposerAttachments(
         let sessionId: string | undefined
         if (!supplied) {
           sessionId = await opts.getSessionId()
-          if (!mounted.current) return
+          if (!mounted.current && !retained) return
         }
         const errors: string[] = []
         const pending: Attachment[] = files.map((f, i) => {
@@ -258,7 +264,7 @@ export function useComposerAttachments(
         pendingUiIds.push(...pending.map((p) => p.uiId))
         setAttachments((prev) => [...prev, ...pending])
         if (sessionId === undefined && pending.some(item => item.uploading)) sessionId = await opts.getSessionId()
-        if (!mounted.current) return
+        if (!mounted.current && !retained) return
         for (let i = 0; i < files.length; i += 1) {
           if (!pending[i].uploading) continue
           const f = files[i]
@@ -298,14 +304,12 @@ export function useComposerAttachments(
   )
 
   const removeAttachment = useCallback((uiId: string) => {
-    setAttachments((prev) => {
-      const target = prev.find((a) => a.uiId === uiId)
-      if (target?.attachmentId && !retentionRef.current?.(target.attachmentId)) deleteUnretainedAttachments([target], [])
-      return prev.filter((a) => a.uiId !== uiId)
-    })
-  }, [])
+    const target = attachmentState.current.find(a => a.uiId === uiId)
+    setAttachments(prev => prev.filter(a => a.uiId !== uiId))
+    if (target?.attachmentId && !retentionRef.current?.(target.attachmentId)) deleteUnretainedAttachments([target], [])
+  }, [state, setAttachments, retentionRef])
 
-  const canAddDraftImages = useCallback(() => mounted.current && uploads.current === 0, [])
+  const canAddDraftImages = useCallback(() => mounted.current && uploads.current === 0, [state, mounted])
   const addDraftImages = useCallback((images: readonly ComposerDraftImageRegistration[]) => {
     void addFiles(images.map(image => image.image.file), images)
   }, [addFiles])
@@ -313,13 +317,13 @@ export function useComposerAttachments(
     for (const item of attachmentState.current) {
       if (item.attachmentId === id) removeAttachment(item.uiId)
     }
-  }, [removeAttachment])
+  }, [state, removeAttachment])
   const pruneDraftImages = useCallback((ids: readonly ComposerAttachment["id"][]) => {
     const available = new Set(ids)
     for (const item of attachmentState.current) {
       if (item.attachmentId && !available.has(item.attachmentId as ComposerAttachment["id"])) removeAttachment(item.uiId)
     }
-  }, [removeAttachment])
+  }, [state, removeAttachment])
   const subscribeDraftImages = useCallback((listener: () => void) => {
     imageListeners.current.add(listener)
     let active = true
@@ -328,16 +332,13 @@ export function useComposerAttachments(
       active = false
       imageListeners.current.delete(listener)
     }
-  }, [])
+  }, [state])
 
   const clearAttachments = useCallback(() => {
-    setAttachments((prev) => {
-      for (const a of prev) {
-        if (a.attachmentId && !retentionRef.current?.(a.attachmentId)) deleteUnretainedAttachments([a], [])
-      }
-      return []
-    })
-  }, [])
+    const previous = attachmentState.current
+    setAttachments([])
+    deleteUnretainedAttachments(previous.filter(a => !a.attachmentId || !retentionRef.current?.(a.attachmentId)), [])
+  }, [state, setAttachments, retentionRef])
 
   const openFilePicker = useCallback(async () => {
     type WithPicker = Window & {

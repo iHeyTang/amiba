@@ -26,18 +26,18 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "catalog:",
-    "@deepseek-ai/dsh-agent": "0.1.5-rc.1",
-    "@deepseek-ai/dsh-commands": "0.1.5-rc.1",
-    "@deepseek-ai/dsh-api-remotes": "0.1.5-rc.1"
+    "@deepseek-ai/dsh-agent": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-commands": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-api-remotes": "0.1.5-rc.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "catalog:",
-    "@deepseek-ai/dsh-agent": "0.1.5-rc.1",
-    "@deepseek-ai/dsh-commands": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-agent": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-commands": "0.1.5-rc.2",
     "@types/node": "22.9.0",
     "typescript": "5.6.3",
     "vitest": "^2.1.4",
-    "@deepseek-ai/dsh-api-remotes": "0.1.5-rc.1"
+    "@deepseek-ai/dsh-api-remotes": "0.1.5-rc.2"
   },
   "author": "Amiba",
   "repository": {

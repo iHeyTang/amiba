@@ -19,7 +19,7 @@ interface RawEntry {
  * Read the installed agent presets as picker options; [] on any failure.
  *
  * The call resolves to the bare result envelope `{ ok, value }` — the shape
- * DSH 0.1.5-rc.1 `remote.<namespace>` methods return, read the same way by
+ * DSH 0.1.5-rc.2 `remote.<namespace>` methods return, read the same way by
  * `dsh-plugin-agent-preset`'s `client/data.ts` `unwrap()`; `value.presets`
  * carries camelCase `AgentPresetEntry` rows. `name` is the display name and
  * falls back to `id` (DSH's own contract); `description` is a longer blurb

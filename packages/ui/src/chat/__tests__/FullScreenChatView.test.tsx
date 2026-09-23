@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useNewChatWorkspace } from "../new-chat-workspace";
 import { WorkspacePane, WorkspacePaneToggle } from "../WorkspacePane";
 import { createTerminalView } from "../../../../../plugins/dsh-plugin-terminal/src/client/index";
@@ -278,6 +279,35 @@ describe("FullScreenChatView new-chat home", () => {
         };
       },
     );
+  });
+
+  it("dispatches replacements at the actual session and sidebar boundaries", async () => {
+    mocks.useSessions.mockReturnValue(makeSessions());
+    const body = vi.fn(() => <div>replacement body</div>);
+    const header = vi.fn(() => <div>replacement header</div>);
+    const sidebar = vi.fn((_owner, fallback) => <div data-testid="replacement-sidebar">{fallback}</div>);
+    render(<FullScreenChatView client={makeClient() as never} openSettings={() => {}} openAgentDestination={() => {}} restoreSidebarViewOnMount={false}
+      slots={{ sessionBody: body, sessionHeader: header, sidebar }} />);
+    await act(async () => {});
+    expect(screen.getByText("replacement body")).toBeInTheDocument();
+    expect(screen.getByText("replacement header")).toBeInTheDocument();
+    expect(screen.queryByText("chat-surface")).not.toBeInTheDocument();
+    expect(screen.getByTestId("replacement-sidebar")).toBeInTheDocument();
+    expect(sidebar).toHaveBeenCalledWith(expect.objectContaining({ collapsed: false, width: expect.any(Number) }), expect.anything());
+  });
+
+  it("does not invoke strict session replacements on the home surface", async () => {
+    mocks.useSessions.mockReturnValue({ ...makeSessions(), activeId: "", openTabIds: [], openTabs: [] });
+    const body = vi.fn(() => null);
+    const header = vi.fn(() => null);
+    const main = vi.fn(fallback => fallback);
+    render(<FullScreenChatView client={makeClient() as never} openSettings={() => {}} openAgentDestination={() => {}} restoreSidebarViewOnMount={false}
+      slots={{ sessionBody: body, sessionHeader: header, mainConversation: main }} />);
+    await act(async () => {});
+    expect(main).toHaveBeenCalled();
+    expect(body).not.toHaveBeenCalled();
+    expect(header).not.toHaveBeenCalled();
+    expect(screen.getByText("chat-surface")).toBeInTheDocument();
   });
 
   it.each(["main-panel", "workspace", "conversation"])(
@@ -1371,5 +1401,30 @@ describe("FullScreenChatView session lineage", () => {
       result.rerender(view(<button>Recovered lineage</button>));
       expect(screen.getByRole("button", { name: "Recovered lineage" })).toBeInTheDocument();
     } finally { errors.mockRestore(); }
+  });
+});
+
+describe('official rightbar session boundary', () => {
+  it('resets replacement state on session changes and omits the strict session slot on home', () => {
+    mocks.storageGet.mockResolvedValue({});
+    mocks.storageSet.mockResolvedValue(undefined);
+    mocks.embeddedBrowser = null;
+    const session = makeSessions();
+    mocks.useSessions.mockReturnValue(session);
+    const off = vi.fn();
+    function Seat() { useEffect(() => off, []); return <span>session rightbar</span>; }
+    const renderSession = vi.fn(() => <Seat />);
+    const draw = () => <FullScreenChatView client={makeClient() as never} openSettings={() => {}} openAgentDestination={() => {}} restoreSidebarViewOnMount={false} slots={{ rightbarSession: renderSession }} />;
+    const view = render(draw());
+    expect(screen.getByText('session rightbar')).toBeInTheDocument();
+    mocks.useSessions.mockReturnValue({ ...session, activeId: 'another-session' });
+    view.rerender(draw());
+    expect(off).toHaveBeenCalledTimes(1);
+    renderSession.mockClear();
+    mocks.useSessions.mockReturnValue({ ...session, activeId: null });
+    view.rerender(draw());
+    expect(renderSession).not.toHaveBeenCalled();
+    expect(screen.queryByText('session rightbar')).not.toBeInTheDocument();
+    expect(off).toHaveBeenCalledTimes(2);
   });
 });

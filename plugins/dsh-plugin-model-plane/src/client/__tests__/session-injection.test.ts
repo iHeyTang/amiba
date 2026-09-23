@@ -72,7 +72,7 @@ describe("session picker dependency injection", () => {
           >[0],
         ),
       ).toBeUndefined();
-      expect(seats.has("amiba.composer.modelPicker")).toBe(true);
+      expect(seats.has("amiba.composer.modelPicker")).toBe(false);
     } finally {
       await fiber.dispose();
       await services.dispose();

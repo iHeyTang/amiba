@@ -1,3 +1,9 @@
+import { bindHomeComposerDraft, finishHomeComposerDraft } from "../chat/composer-draft-store";
+import { moveComposerAttachmentDraft } from "../chat/composer-attachment-store";
+import { beginHomeDraftHandoff } from "./home-draft-handoff";
+import { prepareHomeSession, consumeHomeSession } from "./prepared-session";
+import { ReplacementBoundary } from "../chat/ReplacementBoundary";
+import { useSessionComposerDraft } from "../chat/use-session-composer-draft";
 import { useNewChatWorkspace } from "../chat/new-chat-workspace";
 import { useDirectoryChooser } from "../directory-chooser";
 import { InteractionRegion } from "../primitives/interaction-region";
@@ -11,7 +17,7 @@ import { EmptyStateVisual } from "../primitives/empty-state-visual";
  */
 
 import { Settings } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   getAgentPresets,
@@ -32,7 +38,7 @@ import {
   type ComposerHandle,
   type ComposerModelPickerRenderer,
 } from "../chat";
-import { getPlatform, type AgentModelSelection } from "@amiba/app-runtime/platform";
+import { getPlatform } from "@amiba/app-runtime/platform";
 import { shortId } from "@amiba/app-runtime/utils";
 import { useT } from "@amiba/i18n";
 import { useResolvedTheme } from "../theme";
@@ -50,6 +56,14 @@ import type { ComposerTriggerRuntime } from "../chat/composer/triggers/contracts
 export const HOME_PENDING_DRAFT_KEY = "home.pendingDraft";
 
 export interface HomeViewProps {
+  /** Bind a prepared real session to the official model seat without opening chat. */
+  onPreparedSession?: (id: string) => void;
+  heroPreset?: { store: import("@amiba/extension-sdk").ObservableSnapshot<{ current: string }>; load(): Promise<void>; select(id: string): Promise<string | undefined>; reset(): void; prepareSubmission?(): Promise<{ profileId: string; commit(): void }> };
+  renderAgentPreset?: (fallback: ReactNode) => ReactNode;
+  workspacePicker?: (request: { anchorRef?: import("react").RefObject<HTMLButtonElement>; open: boolean; path: string | null; onPick(path: string): void; onClose(): void }, fallback: ReactNode) => ReactNode;
+  renderAttachments?: import("../chat/Composer").ComposerAttachmentsRenderer;
+  renderBar?: import("../chat/Composer").ComposerBarRenderer;
+  brandMark?: (owner: { size: number; className?: string }, fallback: import("react").ReactNode) => import("react").ReactNode;
   triggerRuntime?: ComposerTriggerRuntime;
   /** Where to send the user when they hit "Open in tab" / submit chat. */
   onOpenChat: () => void;
@@ -86,8 +100,8 @@ export interface HomeViewProps {
   panelMode?: boolean;
   /**
    * renderSlot-backed composer model-picker renderer, forwarded to
-   * ``<Composer modelPicker>`` together with HomeView's own draft-selection
-   * state. Hosts without a DSH plugin runtime omit it; the composer then
+   * ``<Composer modelPicker>`` together with HomeView's prepared session id.
+   * Hosts without a DSH plugin runtime omit it; the composer then
    * renders nothing where the chip would sit.
    */
   modelPicker?: ComposerModelPickerRenderer;
@@ -103,6 +117,13 @@ export default function HomeView(props: HomeViewProps) {
 // ---------------------------------------------------------------------------
 
 function Home({
+  onPreparedSession,
+  heroPreset,
+  renderAgentPreset,
+  workspacePicker,
+  renderAttachments,
+  renderBar,
+  brandMark,
   onOpenChat,
   onOpenSettings,
   headerLeftInset,
@@ -119,8 +140,10 @@ function Home({
   // The session id scopes the host attachment staging directory;
   // we use a stable HomeView-scoped one so re-uploads land in the same
   // bucket and clean up cleanly on chat hand-off.
+  const [input, setInput, , draftSource] = useSessionComposerDraft(null);
   const homeUploadSessionRef = useRef<string>(shortId("home"));
   const att = useComposerAttachments({
+    draftScope: draftSource,
     getSessionId: () => homeUploadSessionRef.current,
   });
 
@@ -138,12 +161,14 @@ function Home({
     [t],
   );
 
-  const [input, setInput] = useState("");
   const [agent, setAgent] = useState<AgentExecutionContext>({
     profileId: "default",
   });
-  const [draftModelSelection, setDraftModelSelection] =
-    useState<AgentModelSelection>();
+  const [preparedId, setPreparedId] = useState("");
+  const preparationRevision = useRef(0);
+  const lastPrepared = useRef<{ id: string; cwd: string } | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [handedOff, setHandedOff] = useState(false);
   const [busy, setBusy] = useState(false);
   const newChatWorkspace = useNewChatWorkspace();
   const [workspacePath, setWorkspacePath] = useState<string | null>(newChatWorkspace?.path ?? null);
@@ -153,9 +178,9 @@ function Home({
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const inputRef = useRef<ComposerHandle | null>(null);
   const chooseDirectory = useDirectoryChooser("home");
-  const canChooseWorkspace = Boolean(chooseDirectory);
+  const canChooseWorkspace = Boolean(chooseDirectory || workspacePicker);
 
-  // Sidebar shortcuts select a draft directory without creating an empty session.
+  // Sidebar shortcuts select the directory for the prepared Home session.
   useEffect(() => {
     if (!newChatWorkspace) return;
     setWorkspacePath(newChatWorkspace.path ?? defaultWorkspaceRoot);
@@ -201,6 +226,7 @@ function Home({
   }, []);
 
   useEffect(() => {
+    if (heroPreset) return;
     let alive = true;
     void getAgentPresets().then((result) => {
       if (alive && result.ok) {
@@ -240,15 +266,57 @@ function Home({
     onOpenChat();
   }
 
+  useEffect(() => {
+    if (!onPreparedSession || handedOff) return;
+    let live = true;
+    const revision = ++preparationRevision.current;
+    setPreparedId("");
+    onPreparedSession("");
+    setPreparing(Boolean(workspacePath && sessions.ready));
+    if (workspacePath && sessions.ready) {
+      void (async () => {
+        const preset = await heroPreset?.prepareSubmission?.();
+        const previous = lastPrepared.current;
+        const id = await prepareHomeSession(workspacePath, preset?.profileId ?? agent.profileId,
+          previous?.cwd !== workspacePath ? previous?.id : undefined);
+        if (!live || revision !== preparationRevision.current) return;
+        bindHomeComposerDraft(getPlatform().storage, id);
+        lastPrepared.current = { id, cwd: workspacePath };
+        setPreparedId(id);
+        onPreparedSession(id);
+        setWorkspaceError(null);
+      })().catch(error => { if (live) setWorkspaceError(String(error.message ?? error)); })
+        .finally(() => { if (live) setPreparing(false); });
+    }
+    return () => { live = false; };
+  }, [workspacePath, sessions.ready, agent.profileId, heroPreset, onPreparedSession, handedOff]);
+  useEffect(() => () => { onPreparedSession?.(""); }, [onPreparedSession]);
+
+  const workspaceAnchor = useRef<HTMLButtonElement>(null);
+  const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false);
+  useEffect(() => { if (heroPreset) void heroPreset.load(); }, [heroPreset]);
+  useEffect(() => {
+    if (!heroPreset) return;
+    const sync = () => { const current = heroPreset.store.getSnapshot().current; if (current) setAgent({ profileId: current }); };
+    sync(); return heroPreset.store.subscribe(sync);
+  }, [heroPreset]);
+
   async function chooseWorkspace() {
+    if (workspacePicker) { setWorkspacePickerOpen(true); return; }
+    await chooseNativeWorkspace();
+  }
+
+  async function chooseNativeWorkspace(signal?: AbortSignal) {
     const choose = chooseDirectory;
     if (!choose) return;
     try {
       await choose(workspacePath ?? undefined, async (selected) => {
+        if (signal?.aborted) return;
         setWorkspacePath(selected);
         setWorkspaceError(null);
       });
     } catch (e) {
+      if (signal?.aborted) return;
       setWorkspaceError(
         t("workspace.pickerFailed", {
           error: String((e as Error)?.message || e),
@@ -264,38 +332,27 @@ function Home({
     );
     if (att.attachmentUploading) return;
     if (!trimmed && readyAttachments.length === 0) return;
-    if (busy || !sessions.ready) return;
+    if (busy || handedOff || !sessions.ready || (onPreparedSession && (preparing || !workspacePath))) return;
+    const submittedDocument = draftSource.getDocument();
     setBusy(true);
+    let releaseHandoff: (() => void) | undefined;
     try {
-      // HomeView only carries the *intent* to start a chat — the
-      // receiving surface (``ChatSurface`` in panelMode, or
-      // ``tabs/chat.html``'s ``FullScreenChatView`` after navigation)
-      // is what actually creates the session via ``ensureActive``
-      // inside its autosend chain.
-      //
-      // Previously HomeView called ``sessions.createNew()`` itself
-      // before writing the pending prompt. That worked in panel mode
-      // (same Store → the new session id propagates immediately) but
-      // produced an orphan unnamed conversation in the cross-window
-      // case: newtab's local Store minted session A; navigating to
-      // ``tabs/chat.html`` mounts a fresh per-window Store whose
-      // ``activeId`` starts empty (per-window selection — see
-      // ``SessionsStore``); chat.html's autosend then calls
-      // ``ensureActive`` which mints session B. Session A is left
-      // dangling in the rail as an unnamed empty row.
-      //
-      // Letting only the receiving surface create the session avoids
-      // that fork entirely. The home surface has no active id, so the
-      // autosend path creates exactly one session when it submits the
-      // first message.
-      //
-      // Uses `queueChatPrompt` (the bare write — no `createNew`)
-      // rather than the `useChatSessionRequester` hook with `mode:
-      // "new"` precisely because of the orphan-session story above.
+      // Address the already-created Host session explicitly, including across windows.
+      const revision = preparationRevision.current;
+      const presetSubmission = await heroPreset?.prepareSubmission?.();
+      const sessionId = onPreparedSession && workspacePath
+        ? await prepareHomeSession(workspacePath, presetSubmission?.profileId ?? agent.profileId)
+        : undefined;
+      if (revision !== preparationRevision.current) throw new Error("Workspace changed before sending; please retry.");
+      if (sessionId) {
+        bindHomeComposerDraft(getPlatform().storage, sessionId);
+        releaseHandoff = beginHomeDraftHandoff(sessionId);
+      }
       await queueChatPrompt({
+        sessionId,
         text: trimmed || undefined,
-        agent,
-        modelSelection: draftModelSelection,
+        agent: presetSubmission ? { profileId: presetSubmission.profileId } : heroPreset?.store.getSnapshot().current ? { profileId: heroPreset.store.getSnapshot().current } : agent,
+
         // The default root is resolved again by the receiving chat surface.
         // Only carry an explicit override through the pending-prompt handoff.
         workspacePath:
@@ -324,14 +381,26 @@ function Home({
                 }))
             : undefined,
       });
+      const nextDraft = sessionId
+        ? finishHomeComposerDraft(getPlatform().storage, sessionId, draftSource, submittedDocument)
+        : undefined;
+      if (!sessionId) draftSource.commitSend(submittedDocument);
       // Hand-off done — drop them from the composer state without
       // deleting the files (the chat surface now owns them). Mint a
       // new staging session for the next round.
-      att.setAttachments([]);
-      setDraftModelSelection(undefined);
+      setHandedOff(Boolean(sessionId));
+      const submittedIds = new Set(readyAttachments.map(attachment => attachment.uiId));
+      att.setAttachments(current => current.filter(attachment => !submittedIds.has(attachment.uiId)));
+      if (nextDraft) moveComposerAttachmentDraft(draftSource, nextDraft);
+      if (sessionId) consumeHomeSession(sessionId);
+      if (presetSubmission) presetSubmission.commit();
+      else heroPreset?.reset();
       homeUploadSessionRef.current = shortId("home");
       goToChatTab();
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : String(error));
     } finally {
+      releaseHandoff?.();
       setBusy(false);
     }
   }
@@ -339,9 +408,10 @@ function Home({
   const canSend =
     (input.trim().length > 0 || att.hasReadyAttachment()) &&
     !busy &&
+    !handedOff &&
     !att.attachmentUploading &&
     !att.attachmentBusy &&
-    sessions.ready;
+    sessions.ready && (!onPreparedSession || (!preparing && !!workspacePath));
 
   return (
     <InteractionRegion
@@ -401,7 +471,7 @@ function Home({
           {panelMode ? (
             // Let the companion lead, with one quiet invitation above the composer.
             <div className="flex flex-col items-center gap-2 text-center">
-              <EmptyStateVisual scene="home"><AmibaLogo size={56} /></EmptyStateVisual>
+              <ReplacementBoundary render={brandMark ? fallback => brandMark({ size: 56 }, fallback) : undefined}><EmptyStateVisual scene="home"><AmibaLogo size={56} /></EmptyStateVisual></ReplacementBoundary>
               <p className="text-balance text-sm font-normal leading-6 text-muted-foreground">
                 {t("newtab.subtitle")}
               </p>
@@ -437,6 +507,7 @@ function Home({
             triggerRuntime={triggerRuntime}
             ref={inputRef}
             value={input}
+            draftSource={draftSource}
             onChange={setInput}
             onSubmit={(text) => void submitToChat(text)}
             busy={busy}
@@ -445,21 +516,23 @@ function Home({
             maxTextareaPx={280}
             placeholder={{ typewriter: placeholderExamples }}
             attachments={att}
+            renderAttachments={renderAttachments}
+            renderBar={renderBar}
             dropOverlay={t("newtab.dropOverlay")}
             sendTitle={t("newtab.send.tooltip")}
             modelPicker={
-              modelPicker
+              modelPicker && preparedId
                 ? {
                     render: modelPicker,
-                    draftSelection: draftModelSelection,
-                    onDraftSelectionChange: setDraftModelSelection,
+                    sessionId: preparedId || undefined,
                   }
                 : undefined
             }
             approvalModePicker
+            renderAgentPicker={renderAgentPreset}
             agentPicker={{
               value: agent,
-              onChange: (next) => setAgent(normalizeAgentContext(next)),
+              onChange: (next) => { setAgent(normalizeAgentContext(next)); if (heroPreset) void heroPreset.select(next.profileId); },
             }}
             kbdHints={[
               { keys: "⏎", label: t("sidepanel.composer.kbd.send") },
@@ -467,7 +540,9 @@ function Home({
             ]}
             contextRail={
               canChooseWorkspace ? (
-                <WorkspaceControl
+                <><WorkspaceControl
+                  buttonRef={workspaceAnchor}
+                  expanded={workspacePicker ? workspacePickerOpen : undefined}
                   path={workspacePath}
                   onChoose={() => void chooseWorkspace()}
                   onClear={
@@ -482,6 +557,11 @@ function Home({
                   }
                   disabled={busy}
                 />
+                {workspacePicker?.({ anchorRef: workspaceAnchor, open: workspacePickerOpen, path: workspacePath,
+                  onPick: path => { setWorkspacePath(path); setWorkspaceError(null); setWorkspacePickerOpen(false); },
+                  onClose: () => setWorkspacePickerOpen(false),
+                }, <NativeWorkspaceDialog open={workspacePickerOpen} choose={chooseNativeWorkspace} close={() => setWorkspacePickerOpen(false)} />)}
+                </>
               ) : undefined
             }
             floatingNotice={
@@ -594,4 +674,20 @@ function TopBar({
       </div>
     </header>
   );
+}
+
+/** A native chooser is a fallback occupant, so replacing the slot never opens two pickers. */
+function NativeWorkspaceDialog({ open, choose, close }: { open: boolean; choose(signal?: AbortSignal): Promise<void>; close(): void }) {
+  const latest = useRef({ choose, close }); latest.current = { choose, close };
+  useEffect(() => {
+    if (!open) return;
+    const request = new AbortController();
+    // Defer the native call so React StrictMode's discarded effect cannot
+    // launch a second OS dialog. A replaced/unmounted seat cannot commit.
+    void Promise.resolve().then(() => {
+      if (!request.signal.aborted) return latest.current.choose(request.signal);
+    }).finally(() => { if (!request.signal.aborted) latest.current.close(); });
+    return () => request.abort();
+  }, [open]);
+  return null;
 }

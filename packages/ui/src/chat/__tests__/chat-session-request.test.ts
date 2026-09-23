@@ -32,6 +32,7 @@ describe("queueChatPrompt workspace hand-off", () => {
 
   it("keeps a draft workspace with the first prompt without creating a session", async () => {
     await queueChatPrompt({
+      sessionId: "prepared-home",
       text: "Review this repository",
       workspacePath: "/workspaces/amiba-project",
     });
@@ -39,6 +40,7 @@ describe("queueChatPrompt workspace hand-off", () => {
     expect(storageSet).toHaveBeenCalledOnce();
     expect(storageSet.mock.calls[0]?.[0]).toMatchObject({
       "home.pendingPrompt": {
+        sessionId: "prepared-home",
         text: "Review this repository",
         workspacePath: "/workspaces/amiba-project",
       },

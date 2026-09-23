@@ -509,18 +509,11 @@ export interface EmptyStateVisualOwner {
 export const AMIBA_ROOT_SLOTS = [
   "amiba.session.observer",
   "amiba.emptyState.visual",
-  "amiba.navigation.before",
-  "amiba.navigation.after",
   "amiba.workspace.navigation",
   "amiba.workspace.view",
   // amiba.chat.header.after is RETIRED: the seat's official equivalent is
   // `conversation.session.header.utilities` (list, session scope, empty
   // owner), inherited from @deepseek-ai/dsh-client-ui-conversation above.
-  "amiba.chat.content.overlay",
-  // The session-less hero model seat; its session-scoped counterpart is the
-  // official `conversation.input.model` (see AmibaComposerModelPickerOwner).
-  "amiba.composer.modelPicker",
-  "amiba.settings.content.overlay",
   "amiba.agentPreset.section",
   // The KEYED per-question seat: one entry per question id, so a plugin
   // claims exactly its own question kind and every other question keeps
@@ -572,55 +565,6 @@ export interface AmibaWorkspaceViewOwner {
 export interface AmibaWorkspaceNavigationOwner {
   sessionActivity?: AmibaSessionActivity;
   activeView?: string;
-}
-
-/**
- * Engine-native model selection. Structural mirror of
- * `@amiba/app-runtime/platform`'s `AgentModelSelection` — that type stays the
- * canonical definition (the engine surface is host-owned); this SDK repeats
- * the shape only so the public slot contract carries no app-runtime import.
- */
-export interface AmibaComposerModelSelection {
-  provider: string;
-  model: string;
-  reasoningEffort?: string;
-}
-
-/**
- * Owner props of `amiba.composer.modelPicker` — the SESSION-LESS hero model
- * seat (root scope, list), the vendor counterpart of the official
- * `conversation.input.model` seat. The split: while the composer has a
- * session id, it dispatches the official session-scoped seat (owner
- * `{ locked }` only — engine data reaches the occupant over the official
- * wire faces, `session.models` / `session.selectModel` via
- * `ctx.get("connection").api`); while drafting (home composer, no session)
- * it dispatches THIS seat, whose owner carries the surface-held draft
- * selection. Architecturally consistent with the official package's own
- * root-scoped `conversation.hero.*` seats.
- *
- * Mechanism-clean by design: engine-native selection shapes and host chrome
- * only, no model-plane catalog types (contributions bring their own catalog
- * source). The former `agentModels` owner pass-through is retired — engine
- * data is no longer an owner concern on either seat.
- *
- * Transport: the Composer computes these owner props and hands them to its
- * `modelPicker` render prop; the product shell backs that render prop with
- * the official renderSlot dispatch of whichever seat applies. Surfaces
- * outside a DSH plugin runtime (Quick-Ask) pass no render prop and the
- * composer renders nothing where the chip would sit.
- */
-export interface AmibaComposerModelPickerOwner {
-  /** Pre-session model choice held by the surface (blank composer). */
-  draftSelection?: AmibaComposerModelSelection;
-  /** Surface callback that stores a pre-session model choice. */
-  onDraftSelectionChange?: (selection: AmibaComposerModelSelection) => void;
-  disabled?: boolean;
-  /** Height treatment for the picker dialog in constrained hosts. */
-  dialogSize?: "default" | "tall";
-  /** Modal overlay treatment (mirrors `@amiba/ui`'s DialogOverlayVariant). */
-  overlayVariant?: "dimmed" | "transparent";
-  /** Bumped when a persistent host is re-activated; reloads picker state. */
-  refreshKey?: number;
 }
 
 /**
@@ -694,8 +638,6 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
     "main": { kind: "keyed"; scope: "root" };
     "sidebar.panellist": { kind: "list"; scope: "root"; owner: { size: number; active: boolean } };
     "amiba.emptyState.visual": { kind: "list"; scope: "root"; owner: EmptyStateVisualOwner };
-    "amiba.navigation.before": { kind: "list"; scope: "root" };
-    "amiba.navigation.after": { kind: "list"; scope: "root" };
     "amiba.workspace.navigation": {
       kind: "list";
       scope: "root";
@@ -708,13 +650,6 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
       scope: "root";
       owner: AmibaWorkspaceViewOwner;
     };
-    "amiba.chat.content.overlay": { kind: "list"; scope: "root" };
-    "amiba.composer.modelPicker": {
-      kind: "list";
-      scope: "root";
-      owner: AmibaComposerModelPickerOwner;
-    };
-    "amiba.settings.content.overlay": { kind: "list"; scope: "root" };
     "amiba.models.extension": { kind: "list"; scope: "root"; owner: AmibaModelsExtensionOwner };
     "amiba.agentPreset.section": {
       kind: "list";
@@ -786,6 +721,8 @@ export interface ConversationInputZoneOwner {
 
 export type ConversationInputActions = PropsRuntime<"conversation.input.left">["inputActions"];
 
+export type ComposerBarOwner = OwnerOf<"conversation.composer.bar">;
+
 export type ComposerAttachmentsOwner = OwnerOf<"conversation.input.attachments">;
 
 export type CommandRowOwner = OwnerOf<"conversation.chat.commandview">;
@@ -852,18 +789,5 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotMap {
     "settings.models.footer": { kind: "list"; scope: "root"; owner: ModelsFooterOwnerProps };
     "settings.models.provider-card": { kind: "keyed"; scope: "root"; owner: ProviderCardExtrasOwnerProps };
-  }
-}
-
-/** Legacy Amiba details seat retained after upstream removed the named slot. */
-export interface DetailsToolOwnerProps {
-  block: import("@deepseek-ai/dsh-client-ui-conversation/client").ToolCallBlock;
-  cwd?: string;
-}
-
-/** Retained compatibility seat for plugins authored before the details view was removed upstream. */
-declare module "@deepseek-ai/dsh-client-ui-slots" {
-  interface SlotMap {
-    "conversation.details.tool": { kind: "single"; scope: "session"; owner: DetailsToolOwnerProps };
   }
 }

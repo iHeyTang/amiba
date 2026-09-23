@@ -74,10 +74,10 @@
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "tailwindcss": "^3.4.0",
-    "@deepseek-ai/dsh-schedule": "0.1.5-rc.1"
+    "@deepseek-ai/dsh-schedule": "0.1.5-rc.2"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-client-ui-renderer": "0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.1.5-rc.2",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.5.2",
@@ -88,6 +88,6 @@
     "tailwindcss": "3.4.15",
     "typescript": "5.6.3",
     "vitest": "^2.1.4",
-    "@deepseek-ai/dsh-schedule": "0.1.5-rc.1"
+    "@deepseek-ai/dsh-schedule": "0.1.5-rc.2"
   }
 }

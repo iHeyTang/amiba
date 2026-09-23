@@ -1,3 +1,5 @@
+import { RightbarRegion, type RightbarGeometry } from "./RightbarRegion";
+import { ReplacementBoundary } from "./ReplacementBoundary";
 import { NewChatWorkspaceContext, type NewChatWorkspaceRequest } from "./new-chat-workspace";
 import { ConversationViewRegion, type ConversationViewEntry } from "./ConversationViewRegion";
 import { createToolNavigation } from "./bubble/tool-navigation";
@@ -19,6 +21,7 @@ import type { MessageNoticeRenderer } from "./bubble/Bubble";
 
 import { Folder, Home, PanelLeftClose, Search } from "lucide-react";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -181,12 +184,16 @@ export interface FullScreenChatViewProps {
      * empty state instead of a separate route.
      */
     emptyState?: ReactNode;
-    /** Additive DSH entries before built-in navigation rows. */
-    navigationBefore?: ReactNode;
+    mainConversation?: (fallback: ReactNode) => ReactNode;
+    sessionBody?: (fallback: ReactNode) => ReactNode;
+    sessionHeader?: (fallback: ReactNode) => ReactNode;
+    sidebar?: (owner: { collapsed: boolean; width: number }, fallback: ReactNode) => ReactNode;
+    sidebarBrandMark?: (owner: { size: number }, fallback: ReactNode) => ReactNode;
+    sidebarBrandName?: (fallback: ReactNode) => ReactNode;
+    sidebarWorkspaces?: (owner: { wide: boolean; expandSidebar: () => void }, fallback: ReactNode) => ReactNode;
+    sidebarSettings?: (owner: { wide: boolean }, fallback: ReactNode) => ReactNode;
     /** DSH workspace plugin entries, rendered inside the existing sidebar. */
     workspaceNavigation?: (activeView: string, visibleSessionId: string) => ReactNode;
-    /** Additive DSH entries after built-in navigation rows. */
-    navigationAfter?: ReactNode;
     /** Active DSH workspace plugin body, keyed by the selected destination. */
     workspaceView?: (
       viewId: string,
@@ -217,13 +224,15 @@ export interface FullScreenChatViewProps {
     headerAfter?: ReactNode;
     /** Optional session corner control after the existing right-edge controls. */
     headerCorner?: ReactNode;
-    /** Frame-wide overlay for chat modules; entries opt into pointer events. */
-    contentOverlay?: ReactNode;
     /**
      * renderSlot-backed composer model-picker renderer, forwarded through
      * ChatSurface to the internal Composer.
      */
     modelPicker?: ComposerModelPickerRenderer;
+    transcript?: ReactNode;
+    renderComposer?: (fallback: ReactNode) => ReactNode;
+    renderAttachments?: import("./Composer").ComposerAttachmentsRenderer;
+    renderBar?: import("./Composer").ComposerBarRenderer;
     /**
      * renderSlot-backed dispatch of the official `conversation.input.plan`
      * seat, forwarded through ChatSurface to the internal Composer.
@@ -242,6 +251,8 @@ export interface FullScreenChatViewProps {
     notice?: MessageNoticeRenderer;
     progress?: () => ReactNode;
     toolAnnotation?: (owner: { callId: string }) => ReactNode;
+    rightbar?: (owner: RightbarGeometry, fallback: ReactNode) => ReactNode;
+    rightbarSession?: (owner: RightbarGeometry, fallback: ReactNode) => ReactNode;
     workbenchPanel?: (owner: WorkbenchPanelOwner) => ReactNode;
     /**
      * renderSlot-backed dispatch of the official keyed `tool.call.toolview`
@@ -947,7 +958,10 @@ function FullScreenChatViewInner({
           className="flex h-full min-h-0 shrink-0 flex-col bg-muted/30"
           style={{ width: sidebarWidth }}
         >
+          <ReplacementBoundary render={slots?.sidebar ? fallback => slots.sidebar!({ collapsed: sidebarCollapsed, width: sidebarCollapsed ? 0 : sidebarWidth }, fallback) : undefined}>
           <SidebarHeader
+            brandMark={slots?.sidebarBrandMark}
+            brandName={slots?.sidebarBrandName}
             onGoHome={onGoHome}
             onSearch={() => palette.setOpen(true)}
             onCollapse={() => onSidebarCollapsedChange(true)}
@@ -958,9 +972,7 @@ function FullScreenChatViewInner({
             className={topBarClassName}
           />
           <Sidebar
-            navigationBefore={slots?.navigationBefore}
             workspaceNavigation={slots?.workspaceNavigation?.(slots?.mainPanel ? "" : sidebarView, visibleSessionId)}
-            navigationAfter={slots?.navigationAfter}
             onNewChat={() => void onNewChatAndShow()}
             onNewWorkspaceChat={(path) => void onNewChatAndShow(path)}
             sessions={chatSessions}
@@ -1002,12 +1014,16 @@ function FullScreenChatViewInner({
             onOpenSettings={(tab) => openSettings(tab)}
             settingsTrigger={slots?.settingsTrigger}
             sidebarFooterActions={slots?.sidebarFooterActions}
+            workspaceRegion={slots?.sidebarWorkspaces}
+            settingsRegion={slots?.sidebarSettings}
+            expandSidebar={() => onSidebarCollapsedChange(false)}
             settingsOpen={settingsOpen}
             wide={!sidebarCollapsed}
             className="min-w-0 flex-1"
             itemMenuItems={itemMenuItems}
             groups={groups}
           />
+          </ReplacementBoundary>
         </div>
       </aside>
       {/* Resize divider: invisible 4px hit area straddling the sidebar edge. */}
@@ -1044,6 +1060,8 @@ function FullScreenChatViewInner({
               active={(sidebarView === "chats" && !slots?.mainPanel)}
               testId="chats-view"
             >
+              <ReplacementBoundary render={slots?.mainConversation}>
+              <ReplacementBoundary render={sessions.activeId && !displayedLoad ? slots?.sessionHeader : undefined}>
               <ContentHeader
                 title={displayedLoad ? (sessions.sessions.find(item => item.id === displayedLoad?.sessionId)?.title ?? "") : chatTopBarPlaceholder}
                 icon={<Folder className="h-4 w-4" />}
@@ -1064,6 +1082,7 @@ function FullScreenChatViewInner({
                 )}
                 seamless
               />
+              </ReplacementBoundary>
               {displayedLoad ? (
                 <SessionLoadPanel
                   language={language}
@@ -1072,7 +1091,7 @@ function FullScreenChatViewInner({
                   onRetry={() => void onOpenSession(sessions.sessionLoad?.sessionId ?? displayedLoad!.sessionId)}
                   onHome={() => void onNewChatAndShow()}
                 />
-              ) : <ConversationViewRegion headerViewIds={slots?.conversationHeaderViewIds} selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
+              ) : <ReplacementBoundary render={sessions.activeId ? slots?.sessionBody : undefined}><ConversationViewRegion headerViewIds={slots?.conversationHeaderViewIds} selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
                 <NewChatWorkspaceContext.Provider value={newChatWorkspace}>
                   <ChatSurface
                     messagesMaxWidth={messagesWidth}
@@ -1086,7 +1105,8 @@ function FullScreenChatViewInner({
                     messageSourceLabel={messageSourceLabel}
                   />
                 </NewChatWorkspaceContext.Provider>
-              </ConversationViewRegion>}
+              </ConversationViewRegion></ReplacementBoundary>}
+              </ReplacementBoundary>
             </PrimaryWorkspaceView>
             {slots?.mainPanel && (
               <PrimaryWorkspaceView active testId="official-main-panel">
@@ -1105,6 +1125,10 @@ function FullScreenChatViewInner({
               })}
             </PrimaryWorkspaceView>
           </div>
+          <RightbarRegion width={workspacePane.width} leftWidth={sidebarCollapsed ? 0 : sidebarWidth} render={(owner, fallback) => {
+            const sessionBody = workbenchVisible && slots?.rightbarSession ? <Fragment key={sessions.activeId}>{slots.rightbarSession(owner, fallback)}</Fragment> : fallback;
+            return slots?.rightbar ? slots.rightbar(owner, sessionBody) : sessionBody;
+          }}>
           {WorkbenchPane && <WorkbenchPane
             visible={workbenchVisible}
             renderPanel={slots?.workbenchPanel}
@@ -1120,6 +1144,7 @@ function FullScreenChatViewInner({
               return true;
             }}
           />}
+          </RightbarRegion>
         </div>
         {workbenchVisible && (
           <div
@@ -1142,14 +1167,6 @@ function FullScreenChatViewInner({
             )}
           </div>
         )}
-        {slots?.contentOverlay ? (
-          <div
-            data-amiba-slot="amiba.chat.content.overlay"
-            className="pointer-events-none absolute inset-0 z-[var(--z-app-overlay)]"
-          >
-            {slots.contentOverlay}
-          </div>
-        ) : null}
       </section>
       <CommandPalette
         open={palette.open}
@@ -1169,6 +1186,8 @@ function FullScreenChatViewInner({
 // ---------------------------------------------------------------------------
 
 interface SidebarHeaderProps {
+  brandMark?: (owner: { size: number }, fallback: ReactNode) => ReactNode;
+  brandName?: (fallback: ReactNode) => ReactNode;
   onGoHome?: () => void;
   onSearch: () => void;
   onCollapse: () => void;
@@ -1229,6 +1248,8 @@ function HeaderAction({
 }
 
 function SidebarHeader({
+  brandMark,
+  brandName,
   onGoHome,
   onSearch,
   onCollapse,
@@ -1254,9 +1275,10 @@ function SidebarHeader({
       >
         {onGoHome && (
           <HeaderAction label={t("chat.goHome")} onClick={onGoHome}>
-            <Home className="h-4 w-4" />
+            <ReplacementBoundary render={brandMark ? fallback => brandMark({ size: 16 }, fallback) : undefined}><Home className="h-4 w-4" /></ReplacementBoundary>
           </HeaderAction>
         )}
+        <ReplacementBoundary render={brandName}>{null}</ReplacementBoundary>
         <div className="ml-auto flex items-center gap-0.5">
           <HeaderAction label={t("chat.search")} onClick={onSearch}>
             <Search className="h-4 w-4" />

@@ -9,6 +9,7 @@ interface ScrollAreaProps
     React.ElementRef<typeof ScrollAreaPrimitive.Viewport>
   >;
   hideScrollbar?: boolean;
+  viewportProps?: React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Viewport>;
 }
 
 const ScrollArea = React.forwardRef<
@@ -16,7 +17,7 @@ const ScrollArea = React.forwardRef<
   ScrollAreaProps
 >(
   (
-    { className, children, viewportRef, hideScrollbar = false, ...props },
+    { className, children, viewportRef, viewportProps, hideScrollbar = false, ...props },
     ref,
   ) => (
     <ScrollAreaPrimitive.Root
@@ -28,6 +29,7 @@ const ScrollArea = React.forwardRef<
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
+        {...viewportProps}
         ref={viewportRef}
         className={cn(
           "h-full w-full rounded-[inherit]",

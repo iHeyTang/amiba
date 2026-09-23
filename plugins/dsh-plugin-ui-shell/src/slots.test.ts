@@ -12,7 +12,6 @@ describe("Amiba root slot contract", () => {
       expect.arrayContaining([
         "amiba.workspace.navigation",
         "amiba.workspace.view",
-        "amiba.settings.content.overlay",
         "amiba.agentPreset.section",
         "amiba.conversation.question",
       ]),

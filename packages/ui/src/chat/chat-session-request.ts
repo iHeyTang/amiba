@@ -56,6 +56,8 @@ interface PendingPromptPayload {
   workspacePath?: string;
   agent?: AgentExecutionContext;
   modelSelection?: AgentModelSelection;
+  /** Exact prepared session; never create another on receipt. */
+  sessionId?: string;
   ts: number;
 }
 
@@ -87,6 +89,8 @@ export interface ChatSessionRequest {
   agent?: AgentExecutionContext;
   /** Model selected on the id-less new-task surface for the first turn. */
   modelSelection?: AgentModelSelection;
+  /** Exact prepared session; never create another on receipt. */
+  sessionId?: string;
   /**
    * Extra storage keys to write in the same atomic patch as the pending
    * prompt. Use for "set this companion setting only when the user
@@ -127,6 +131,7 @@ export async function queueChatPrompt(req: ChatSessionRequest): Promise<void> {
     workspacePath: req.workspacePath?.trim() || undefined,
     agent: req.agent,
     modelSelection: req.modelSelection,
+    sessionId: req.sessionId,
     ts: Date.now(),
   };
   await getPlatform().storage.set({

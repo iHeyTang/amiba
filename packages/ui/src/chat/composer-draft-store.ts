@@ -19,11 +19,11 @@ export interface ComposerDraftSource {
   set(value: string | ((previous: string) => string)): void;
 }
 
-type NativeComposerDraftSource = ComposerDraftSource & Required<Pick<ComposerDraftSource, "commitSend" | "getHistoryVersion">>;
+type NativeComposerDraftSource = ComposerDraftSource & Required<Pick<ComposerDraftSource, "commitSend" | "getHistoryVersion">> & { attach(storage: StorageAdapter, sessionId: string): void };
 
 /** Shared native draft; the document preserves literal text and reference identity. */
 export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: string): NativeComposerDraftSource {
-  const key = sessionId ? `amiba.composer.draft.${sessionId}` : undefined;
+  let key = sessionId ? `amiba.composer.draft.${sessionId}` : undefined;
   let document = composerDraftDocument([]);
   const inputProjection = new ResidentInputProjection();
   let inputDraft = inputProjection.update(document);
@@ -52,22 +52,44 @@ export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: 
   };
   const save = (next: ComposerDraftDocument) => {
     if (!storage || !key) return;
+    const adapter = storage, draftKey = key;
     pendingWrites++;
-    writes = writes.then(() => next.text === "" ? storage.remove(key) : storage.set({ [key]: { version: 2, ...next } }))
+    writes = writes.then(() => next.text === "" ? adapter.remove(draftKey) : adapter.set({ [draftKey]: { version: 2, ...next } }))
       .catch(error => console.warn("[composer] draft save failed", error))
       .finally(() => { pendingWrites--; });
   };
   const hydrate = () => {
     if (!storage || !key) return;
+    const draftKey = key;
     const before = revision;
     const generation = ++readGeneration;
     void storage.get(key).then(values => {
       if (revision !== before || generation !== readGeneration || pendingWrites) return;
-      const next = decodeComposerDraft(values[key]);
+      const next = decodeComposerDraft(values[draftKey]);
       if (next !== undefined) publish(next);
     }).catch(error => console.warn("[composer] draft restore failed", error));
   };
+  const watch = () => {
+    offStorage?.();
+    if (!storage || !key || !listeners.size) return;
+    const currentKey = key;
+    offStorage = storage.watch(currentKey, changes => {
+      if (!(currentKey in changes) || pendingWrites) return;
+      const next = decodeComposerDraft(changes[currentKey].newValue);
+      if (next === undefined) return;
+      revision++;
+      publish(next);
+    });
+  };
   return {
+    attach(adapter, id) {
+      storage = adapter;
+      key = `amiba.composer.draft.${id}`;
+      // The prepared draft is authoritative; do not hydrate or publish an old
+      // empty value during handoff. Subsequent ordinary edits persist normally.
+      readGeneration++;
+      watch();
+    },
     getSnapshot: () => document.text,
     getDocument: () => document,
     getHistoryVersion: () => historyVersion,
@@ -98,13 +120,7 @@ export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: 
     subscribe(listener) {
       listeners.add(listener);
       if (listeners.size === 1 && storage && key) {
-        offStorage = storage.watch(key, changes => {
-          if (!(key in changes) || pendingWrites) return;
-          const next = decodeComposerDraft(changes[key].newValue);
-          if (next === undefined) return;
-          revision++;
-          publish(next);
-        });
+        watch();
         if (!pendingWrites) hydrate();
       }
       return () => {
@@ -132,4 +148,45 @@ export function sessionComposerDraft(storage: StorageAdapter, sessionId: string)
   let source = sessions.get(sessionId);
   if (!source) { source = createComposerDraftSource(storage, sessionId); sessions.set(sessionId, source); }
   return source;
+}
+
+// Only the preparation interval has no session ID. This pointer follows the
+// same source registered under the prepared session, not a second draft copy.
+const homeStores = new WeakMap<StorageAdapter, NativeComposerDraftSource>();
+export function homeComposerDraft(storage: StorageAdapter): NativeComposerDraftSource {
+  let source = homeStores.get(storage);
+  if (!source) {
+    source = createComposerDraftSource();
+    homeStores.set(storage, source);
+  }
+  return source;
+}
+
+/** Adopt the preparation draft into the canonical session registry, preserving
+ * editor history, reference identity, and in-flight attachment ownership. */
+export function bindHomeComposerDraft(storage: StorageAdapter, sessionId: string) {
+  const source = homeComposerDraft(storage);
+  let sessions = stores.get(storage);
+  if (!sessions) { sessions = new Map(); stores.set(storage, sessions); }
+  for (const [id, previous] of sessions) {
+    if (previous === source && id !== sessionId) sessions.delete(id);
+  }
+  sessions.set(sessionId, source);
+  return source;
+}
+
+export function finishHomeComposerDraft(storage: StorageAdapter, sessionId: string, source: ReturnType<typeof homeComposerDraft>, submitted: ComposerDraftDocument) {
+  // A later Home may already have moved this source to a different workspace.
+  // The old send owns its payload, not that new draft or its persistence key.
+  if (stores.get(storage)?.get(sessionId) !== source) return source;
+  const next = createComposerDraftSource();
+  if (!source.commitSend(submitted)) {
+    // Edits made while the storage handoff was pending belong to the next Home
+    // draft. The receiver will populate this session with the submitted text.
+    next.setParts(source.getDocument().parts);
+    source.commitSend(source.getDocument());
+  }
+  if (homeStores.get(storage) === source) homeStores.set(storage, next);
+  source.attach(storage, sessionId);
+  return next;
 }
