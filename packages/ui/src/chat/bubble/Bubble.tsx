@@ -1919,13 +1919,12 @@ function ReplyTokenUsage({ messages }: { messages: UiMessage[] }) {
   const keys = ["inputTokens", "outputTokens", "cacheWriteTokens", "cacheReadTokens"] as const;
   const totals = keys.map(key => rows.every(row => row[key] !== undefined)
     ? rows.reduce((sum, row) => sum + (row[key] ?? 0), 0) : undefined);
-  const total = rows.reduce((sum, row) => sum + keys.reduce((n, key) => n + (row[key] ?? 0), 0), 0);
-  const incomplete = totals.some(value => value === undefined);
+  const outputTokens = rows.reduce((sum, row) => sum + row.outputTokens, 0);
   const format = (value: number) => value.toLocaleString();
   return <Tooltip>
     <TooltipTrigger asChild>
       <button type="button" aria-label={t("sidepanel.tokens.details")} className="ml-1 rounded px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground hover:bg-accent/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-        {incomplete ? "≥ " : ""}{format(total)} tokens
+        {t("sidepanel.tokens.outputTokens")} {format(outputTokens)} tokens
       </button>
     </TooltipTrigger>
     <TooltipContent side="bottom" className="min-w-40 text-xs">
