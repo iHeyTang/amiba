@@ -30,9 +30,12 @@ keep their takeover semantics:
   default stays the shared gallery tiles. The owner shape
   (`images`/`loadImage`/`align`/`compact`) is unchanged from the official
   contract.
-- `conversation.input.attachments`: kept declared for third-party hosts that
-  dispatch it themselves; Amiba's composer renders the gallery natively from
-  its attachment hook and no longer forwards this seat.
+- `conversation.input.attachments`: dispatched by both home and session composers
+  with actual drafts, file uploads and add/remove/retry actions. The native
+  gallery is the priority-1 fallback; an ordinary priority-0 plugin can replace it.
+
+The rc.2 behavior ledger and tested boundaries are in
+[`docs/dsh-rc2-slot-coverage.md`](../../../../docs/dsh-rc2-slot-coverage.md).
 
 Run `node plugins/dsh-plugin-ui-shell/scripts/audit-official-theme.mjs` from the
 workspace after installing dependencies. This checks DSH token references in

@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -106,4 +107,44 @@ it("hands the official staged preset and workspace to the new session without op
   await userEvent.click(screen.getByRole('button', { name: 'Send' }));
   expect(mocks.queue).toHaveBeenCalledWith(expect.objectContaining({ agent: { profileId: 'writer' }, workspacePath: '/official/project' }));
   expect(reset).toHaveBeenCalledOnce();
+});
+
+it("opens only one native dialog in StrictMode and ignores its result after replacement", async () => {
+  let accept!: (path: string) => Promise<void>;
+  let finish!: () => void;
+  mocks.choose.mockImplementation((_initial, callback) => {
+    accept = callback;
+    return new Promise<void>(resolve => { finish = resolve; });
+  });
+  const draw = (replace: boolean) => <StrictMode><HomeView panelMode onOpenChat={() => {}} onOpenSettings={() => {}}
+    workspacePicker={(_request, fallback) => replace ? null : fallback} /></StrictMode>;
+  const view = render(draw(false));
+  await userEvent.click(await screen.findByRole('button', { name: 'Change workspace folder' }));
+  await waitFor(() => expect(mocks.choose).toHaveBeenCalledOnce());
+  view.rerender(draw(true));
+  await accept('/stale-result'); finish();
+  expect(screen.getByRole('button', { name: 'Change workspace folder' })).not.toHaveAttribute('title', '/stale-result');
+});
+it("consumes a prepared preset only after a successful prompt handoff", async () => {
+  const commit = vi.fn();
+  const prepareSubmission = vi.fn(async () => ({ profileId: 'prepared', commit }));
+  const reset = vi.fn();
+  const hero = { store: { getSnapshot: () => ({ current: 'stale' }), subscribe: () => () => {} }, load: async () => {}, select: async () => undefined, reset, prepareSubmission };
+  render(<HomeView panelMode onOpenChat={() => {}} onOpenSettings={() => {}} heroPreset={hero} />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Send' }));
+  expect(mocks.queue).toHaveBeenCalledWith(expect.objectContaining({ agent: { profileId: 'prepared' } }));
+  expect(commit).toHaveBeenCalledOnce();
+  expect(reset).not.toHaveBeenCalled();
+});
+
+it("reports a rejected preset preparation without queuing or consuming the selection", async () => {
+  const commit = vi.fn(), reset = vi.fn();
+  const hero = { store: { getSnapshot: () => ({ current: 'writer' }), subscribe: () => () => {} }, load: async () => {}, select: async () => undefined, reset,
+    prepareSubmission: vi.fn(async () => { throw new Error('Preset is busy'); return { profileId: 'writer', commit }; }) };
+  render(<HomeView panelMode onOpenChat={() => {}} onOpenSettings={() => {}} heroPreset={hero} />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Send' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Preset is busy');
+  expect(mocks.queue).not.toHaveBeenCalled();
+  expect(reset).not.toHaveBeenCalled();
+  expect(commit).not.toHaveBeenCalled();
 });

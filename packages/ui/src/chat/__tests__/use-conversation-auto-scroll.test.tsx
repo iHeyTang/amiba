@@ -62,3 +62,25 @@ it("pauses on wheel intent before scroll arrives and resets for another conversa
   rerender({ sessionId: "second", content: 2, clearance: 60 });
   expect(viewport.scrollTop).toBe(700);
 });
+
+it('yields scroll writes to an official transcript and resumes without forcing a reader to the bottom', () => {
+  const viewport = document.createElement('div');
+  Object.defineProperties(viewport, { scrollHeight: { value: 1000 }, clientHeight: { value: 400 } });
+  const ref = { current: viewport };
+  const hook = renderHook(({ enabled, content }) => useConversationAutoScroll(ref, 'same', content, 60, enabled), { initialProps: { enabled: true, content: 0 } });
+  viewport.scrollTop = 200; fireEvent.scroll(viewport);
+  hook.rerender({ enabled: false, content: 1 });
+  expect(viewport.scrollTop).toBe(200);
+  hook.rerender({ enabled: true, content: 2 });
+  expect(viewport.scrollTop).toBe(200);
+});
+
+it('does not assume the replacement reader is following when no scroll event was delivered', () => {
+  const viewport = document.createElement('div');
+  Object.defineProperties(viewport, { scrollHeight: { value: 1000 }, clientHeight: { value: 400 } });
+  viewport.scrollTop = 200;
+  const ref = { current: viewport };
+  const hook = renderHook(({ enabled }) => useConversationAutoScroll(ref, 'same', 0, 60, enabled), { initialProps: { enabled: false } });
+  hook.rerender({ enabled: true });
+  expect(viewport.scrollTop).toBe(200);
+});

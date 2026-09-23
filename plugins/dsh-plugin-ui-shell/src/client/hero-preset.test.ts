@@ -34,3 +34,37 @@ it('can retry a synchronous service-not-ready error', async () => {
   await hero.load(); await hero.load();
   expect(hero.store.getSnapshot()).toMatchObject({ current: 'default', error: null });
 });
+
+it('captures a submitted choice and does not consume a newer selection', async () => {
+  const hero = createHeroPreset(async () => ({ presets }) as never);
+  await hero.select('writer');
+  const submitted = await hero.prepareSubmission();
+  expect(submitted.profileId).toBe('writer');
+  await hero.select('default'); await hero.select('writer');
+  submitted.commit();
+  expect(hero.store.getSnapshot().current).toBe('writer');
+  const next = await hero.prepareSubmission(); next.commit();
+  expect(hero.store.getSnapshot().current).toBe('default');
+});
+it('loads the deployment default before an early send and refuses a removed preset', async () => {
+  const load = vi.fn().mockResolvedValue({ presets });
+  const hero = createHeroPreset(load);
+  expect((await hero.prepareSubmission()).profileId).toBe('default');
+  await hero.select('writer');
+  load.mockResolvedValue({ presets: [presets[0]] });
+  await expect(hero.prepareSubmission()).rejects.toThrow('no longer available');
+  expect(hero.store.getSnapshot().current).toBe('writer');
+});
+it('does not invent a preset when the initial roster cannot be loaded', async () => {
+  const hero = createHeroPreset(async () => { throw new Error('offline'); });
+  await expect(hero.prepareSubmission()).rejects.toThrow('offline');
+});
+
+it('passes the elected plugin-owned preset into the handoff instead of the native default', async () => {
+  const read = vi.fn(async () => 'plugin-private');
+  const hero = createHeroPreset(async () => ({ presets }) as never, read);
+  await hero.load();
+  expect(hero.store.getSnapshot().current).toBe('default');
+  expect((await hero.prepareSubmission()).profileId).toBe('plugin-private');
+  expect(read).toHaveBeenCalledOnce();
+});

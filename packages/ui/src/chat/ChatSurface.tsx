@@ -1,3 +1,4 @@
+import { TranscriptScrollPositionContext, readTranscriptScrollPosition } from "./transcript-scroll-position";
 import { useConversationAutoScroll } from "./use-conversation-auto-scroll";
 import { ensureSessionWorkspace } from "@amiba/app-runtime/platform";
 import { nativeSubmissionAdmission } from "./internal/native-submission-admission";
@@ -800,6 +801,9 @@ export default function ChatSurface({
   const conversationFrameRef = useRef<HTMLDivElement | null>(null);
   const conversationViewportRef = useRef<HTMLDivElement | null>(null);
   const conversationContentRef = useRef<HTMLDivElement | null>(null);
+  const scrollSessionRef = useRef(sessions.activeId);
+  const readTranscriptPosition = useCallback(() => readTranscriptScrollPosition(conversationViewportRef.current, scrollSessionRef.current, sessions.activeId), [sessions.activeId]);
+  useLayoutEffect(() => { scrollSessionRef.current = sessions.activeId; }, [sessions.activeId]);
   const composerDockRef = useRef<HTMLElement | null>(null);
   const composerDockHeightRef = useRef(0);
   const [composerDockHeight, setComposerDockHeight] = useState(0);
@@ -808,6 +812,7 @@ export default function ChatSurface({
     sessions.activeId,
     sessions.activeMessages,
     composerDockHeight,
+    slots?.transcript === undefined,
   );
   // The chunk-buffer / RAF-flush machinery used to live inline here; now
   // owned by `useStreamBuffer` (`stream.*`).
@@ -2510,13 +2515,13 @@ export default function ChatSurface({
                 )}
               </div>
             )
-          ) : slots?.transcript !== undefined ? (
-            <div className="flex min-h-0 flex-1 flex-col" style={{ paddingBottom: composerDockHeight > 0 ? composerDockHeight + 12 : undefined }}>{slots.transcript}</div>
           ) : (
+            <TranscriptScrollPositionContext.Provider value={readTranscriptPosition}>
             <ScrollArea
               data-conversation-scroll-region
               className="min-h-0 min-w-0 flex-1"
               viewportRef={conversationViewportRef}
+              viewportProps={{ "data-conversation-scroll": "" } as import("react").HTMLAttributes<HTMLDivElement>}
               hideScrollbar={showTurnRail}
             >
               <div
@@ -2535,7 +2540,7 @@ export default function ChatSurface({
                     composer seats) and this is only the last hop down to
                     ToolChip. `cwd` is the conversation's workspace binding —
                     the `cwd` member of the official owner share. */}
-                <MessageNoticeRendererContext.Provider value={slots?.notice}>
+                {slots?.transcript !== undefined ? slots.transcript : <MessageNoticeRendererContext.Provider value={slots?.notice}>
                 <ToolCallSeatProvider
                   navigation={slots?.toolNavigation}
                   activity={slots?.toolAnnotation}
@@ -2597,13 +2602,14 @@ export default function ChatSurface({
                     </MessageSourceLabelContext.Provider>
                   </AwaitingUserInputContext.Provider>
                 </ToolCallSeatProvider>
-                </MessageNoticeRendererContext.Provider>
+                </MessageNoticeRendererContext.Provider>}
 
                 {error && (
                   <ErrorBlock error={error} onOpenSettings={openSettings} onRetry={error.source === "run" && sessions.activeId ? () => void retryFailedRun() : undefined} retryDisabled={busy} />
                 )}
               </div>
             </ScrollArea>
+            </TranscriptScrollPositionContext.Provider>
           )}
         </div>
         {hasActive && showTurnRail && slots?.transcript === undefined && (

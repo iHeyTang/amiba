@@ -1,4 +1,5 @@
-import { createContext, createElement, useContext, type ComponentType, type ReactNode } from "react";
+import { TranscriptScrollPositionContext } from "@amiba/ui";
+import { createContext, createElement, useContext, useState, type ComponentType, type ReactNode } from "react";
 import type { Context } from '@deepseek-ai/cordis';
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store';
 
@@ -18,6 +19,11 @@ export function mountOfficialChatPresentation(ctx: Context, apply: (ctx: Context
         ...(options.name === 'conversation.view' ? { id: OFFICIAL_CHAT_VIEW } : { priority: 1 }) };
       function OfficialPresentation(props: Record<string, unknown>) {
         const root = useContext(RootSlotDispatch);
+        const readPosition = useContext(TranscriptScrollPositionContext);
+        // Capture before React replaces the old transcript DOM. rc.2 reads
+        // twice during mount (state + layout); both must see the same handoff.
+        const [handoff] = useState(() => options.name === 'conversation.view' ? readPosition?.() : undefined);
+        const chatScroll = props.chatScroll as { read(): unknown; save(value: unknown): void } | undefined;
         const dispatch = (method: 'renderSlot' | 'renderSlotChain'): Dispatch => (name, owner, options) => {
           if (borrowed.has(name)) {
             if (!root) throw new Error('Official Chat presentation requires the Amiba root slot owner');
@@ -25,7 +31,7 @@ export function mountOfficialChatPresentation(ctx: Context, apply: (ctx: Context
           }
           return (props[method] as Dispatch)(name, owner, options);
         };
-        return createElement(component as ComponentType<Record<string, unknown>>, { ...props, renderSlot: dispatch('renderSlot'), renderSlotChain: dispatch('renderSlotChain') });
+        return createElement(component as ComponentType<Record<string, unknown>>, { ...props, ...(chatScroll && handoff !== undefined ? { chatScroll: { ...chatScroll, read: () => handoff } } : {}), renderSlot: dispatch('renderSlot'), renderSlotChain: dispatch('renderSlotChain') });
       }
       return target.register(owned as never, OfficialPresentation as never);
     };

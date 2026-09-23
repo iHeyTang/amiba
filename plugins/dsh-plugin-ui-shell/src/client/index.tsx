@@ -1,4 +1,5 @@
-import { OFFICIAL_REPLACEMENTS, NativeOfficialPresentation } from "./official-replacements.js";
+import { createRegisteredHeroPresetReader } from "./hero-preset-entry.js";
+import { OFFICIAL_REPLACEMENTS, NativeOfficialPresentation, NATIVE_REPLACEMENT_PRIORITY } from "./official-replacements.js";
 import { TrajectoryHeaderAction } from "./trajectory-header-action.js";
 import {
   MessageImagesGallery,
@@ -805,8 +806,15 @@ export async function apply(ctx: ClientContext): Promise<void> {
       const presets = getPlatform().agentPresets;
       if (!presets) throw new Error("Agent preset service unavailable");
       return presets.list();
-    });
+    }, createRegisteredHeroPresetReader(ctx.slots));
     ctx.effect(() => ctx.reflect.provide("heroAgentPreset", heroPreset), "hero preset selection");
+    ctx.effect(() => {
+      const offSettings = ctx.remote.$on("settings/document-updated", ns => {
+        if (ns === "agent-presets") void heroPreset.load();
+      });
+      const offReset = ctx.on("connection/reset", () => { void heroPreset.load(); });
+      return () => { offSettings(); offReset(); };
+    }, "hero preset roster invalidation");
     const shellChildren = {
           "conversation.chat.turnTail": { kind: "chain", scope: "session" },
           "conversation.hero.workspace.directoryFlow": { kind: "single", scope: "root" },
@@ -1079,10 +1087,10 @@ export async function apply(ctx: ClientContext): Promise<void> {
       },
       AmibaRoot,
     );
-    // Keep the current product UI while permitting explicit plugin takeovers at
-    // priority < SHADOW_PRIORITY. Official default occupants remain shadowed.
+    // Native presentation is a fallback. Ordinary official registrations at 0
+    // must work without an Amiba-specific negative-priority override.
     const disposeReplacements = (Object.keys(OFFICIAL_REPLACEMENTS) as (keyof typeof OFFICIAL_REPLACEMENTS)[]).map(name =>
-      ctx.slots.register({ name, priority: SHADOW_PRIORITY }, NativeOfficialPresentation),
+      ctx.slots.register({ name, priority: NATIVE_REPLACEMENT_PRIORITY }, NativeOfficialPresentation),
     );
 
     // CELL SHADOWS of the two official `conversation.input.overlay` entries.

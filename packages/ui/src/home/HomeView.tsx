@@ -51,9 +51,9 @@ import type { ComposerTriggerRuntime } from "../chat/composer/triggers/contracts
 export const HOME_PENDING_DRAFT_KEY = "home.pendingDraft";
 
 export interface HomeViewProps {
-  heroPreset?: { store: import("@amiba/extension-sdk").ObservableSnapshot<{ current: string }>; load(): Promise<void>; select(id: string): Promise<string | undefined>; reset(): void };
+  heroPreset?: { store: import("@amiba/extension-sdk").ObservableSnapshot<{ current: string }>; load(): Promise<void>; select(id: string): Promise<string | undefined>; reset(): void; prepareSubmission?(): Promise<{ profileId: string; commit(): void }> };
   renderAgentPreset?: (fallback: ReactNode) => ReactNode;
-  workspacePicker?: (request: { open: boolean; path: string | null; onPick(path: string): void; onClose(): void }, fallback: ReactNode) => ReactNode;
+  workspacePicker?: (request: { anchorRef?: import("react").RefObject<HTMLButtonElement>; open: boolean; path: string | null; onPick(path: string): void; onClose(): void }, fallback: ReactNode) => ReactNode;
   renderAttachments?: import("../chat/Composer").ComposerAttachmentsRenderer;
   renderBar?: import("../chat/Composer").ComposerBarRenderer;
   brandMark?: (owner: { size: number; className?: string }, fallback: import("react").ReactNode) => import("react").ReactNode;
@@ -254,6 +254,7 @@ function Home({
     onOpenChat();
   }
 
+  const workspaceAnchor = useRef<HTMLButtonElement>(null);
   const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false);
   useEffect(() => { if (heroPreset) void heroPreset.load(); }, [heroPreset]);
   useEffect(() => {
@@ -267,15 +268,17 @@ function Home({
     await chooseNativeWorkspace();
   }
 
-  async function chooseNativeWorkspace() {
+  async function chooseNativeWorkspace(signal?: AbortSignal) {
     const choose = chooseDirectory;
     if (!choose) return;
     try {
       await choose(workspacePath ?? undefined, async (selected) => {
+        if (signal?.aborted) return;
         setWorkspacePath(selected);
         setWorkspaceError(null);
       });
     } catch (e) {
+      if (signal?.aborted) return;
       setWorkspaceError(
         t("workspace.pickerFailed", {
           error: String((e as Error)?.message || e),
@@ -319,9 +322,10 @@ function Home({
       // Uses `queueChatPrompt` (the bare write — no `createNew`)
       // rather than the `useChatSessionRequester` hook with `mode:
       // "new"` precisely because of the orphan-session story above.
+      const presetSubmission = await heroPreset?.prepareSubmission?.();
       await queueChatPrompt({
         text: trimmed || undefined,
-        agent: heroPreset?.store.getSnapshot().current ? { profileId: heroPreset.store.getSnapshot().current } : agent,
+        agent: presetSubmission ? { profileId: presetSubmission.profileId } : heroPreset?.store.getSnapshot().current ? { profileId: heroPreset.store.getSnapshot().current } : agent,
         modelSelection: draftModelSelection,
         // The default root is resolved again by the receiving chat surface.
         // Only carry an explicit override through the pending-prompt handoff.
@@ -356,9 +360,12 @@ function Home({
       // new staging session for the next round.
       att.setAttachments([]);
       setDraftModelSelection(undefined);
-      heroPreset?.reset();
+      if (presetSubmission) presetSubmission.commit();
+      else heroPreset?.reset();
       homeUploadSessionRef.current = shortId("home");
       goToChatTab();
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
@@ -499,6 +506,8 @@ function Home({
             contextRail={
               canChooseWorkspace ? (
                 <><WorkspaceControl
+                  buttonRef={workspaceAnchor}
+                  expanded={workspacePicker ? workspacePickerOpen : undefined}
                   path={workspacePath}
                   onChoose={() => void chooseWorkspace()}
                   onClear={
@@ -513,7 +522,7 @@ function Home({
                   }
                   disabled={busy}
                 />
-                {workspacePicker?.({ open: workspacePickerOpen, path: workspacePath,
+                {workspacePicker?.({ anchorRef: workspaceAnchor, open: workspacePickerOpen, path: workspacePath,
                   onPick: path => { setWorkspacePath(path); setWorkspaceError(null); setWorkspacePickerOpen(false); },
                   onClose: () => setWorkspacePickerOpen(false),
                 }, <NativeWorkspaceDialog open={workspacePickerOpen} choose={chooseNativeWorkspace} close={() => setWorkspacePickerOpen(false)} />)}
@@ -633,8 +642,17 @@ function TopBar({
 }
 
 /** A native chooser is a fallback occupant, so replacing the slot never opens two pickers. */
-function NativeWorkspaceDialog({ open, choose, close }: { open: boolean; choose(): Promise<void>; close(): void }) {
+function NativeWorkspaceDialog({ open, choose, close }: { open: boolean; choose(signal?: AbortSignal): Promise<void>; close(): void }) {
   const latest = useRef({ choose, close }); latest.current = { choose, close };
-  useEffect(() => { if (open) void latest.current.choose().finally(() => latest.current.close()); }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const request = new AbortController();
+    // Defer the native call so React StrictMode's discarded effect cannot
+    // launch a second OS dialog. A replaced/unmounted seat cannot commit.
+    void Promise.resolve().then(() => {
+      if (!request.signal.aborted) return latest.current.choose(request.signal);
+    }).finally(() => { if (!request.signal.aborted) latest.current.close(); });
+    return () => request.abort();
+  }, [open]);
   return null;
 }

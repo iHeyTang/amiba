@@ -1,6 +1,7 @@
 import { createContext, useContext, type ReactNode } from "react";
 
-/** rc.2 replacement seats. Native presentation remains the default at priority -1. */
+/** Native fallback yields to an ordinary rc.2 registration (implicit priority 0). */
+export const NATIVE_REPLACEMENT_PRIORITY = 1;
 export const OFFICIAL_REPLACEMENTS = {
   "conversation.hero.workspace": { kind: "single", scope: "root" },
   "conversation.hero.agentPreset": { kind: "single", scope: "root" },

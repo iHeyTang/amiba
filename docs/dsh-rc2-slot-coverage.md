@@ -13,7 +13,7 @@
 
 ## 新入口的运行规则
 
-- single 槽的默认界面作为 priority=-1 的占用组件；插件用更小的优先级（如 -2）接管，沿用现有图片槽的规则。
+- 本次新增的 15 个 single 槽默认界面使用 priority=1；普通插件不写 priority（官方默认 0）即可接管。原有图片／触发菜单的同 cell shadow 规则单独保留，不能套用到所有新入口。
 - 插件返回 null 表示有意不显示。卸载或渲染异常退让后恢复默认界面。
 - 严格 session 槽在首页不派发；main.conversation 和附件使用 session-maybe。
 - 附件入口传递实际浏览器草稿（含文件）、上传状态和添加／删除／重试动作，覆盖首页与会话输入框。
@@ -32,19 +32,32 @@
 
 | 插槽 | 实现 | 使用建议与边界 |
 |---|---|---|
-| `conversation.chat.node` | 当有非默认节点注册生效时，聊天记录切换到发布版 rc.2 ChatView 和节点渲染器，使用真实节点、回合数据、附件及文件操作；卸载后恢复原消息视图 | 可使用。默认节点 priority=1，插件 priority=0 即可覆盖。切换的是整段聊天记录渲染方式，视觉与滚动位置可能变化，输入器保留。不是把 Amiba 消息行伪装成官方节点 |
-| `conversation.hero.agentPreset` | 原选择器和 `ctx.heroAgentPreset` 共用暂存状态，发送时读取选中 ID，提交成功后恢复默认预设 | 可使用。插件通过自己的 inject 返回 `ctx.heroAgentPreset`，可消费官方 `AgentPresetSeatInjected` 接口。插件若另建私有暂存控制器，需要改接该共享接口；不声称任意私有状态自动同步 |
-| `conversation.hero.workspace` | 保留工作区触发按钮；选择器取得官方 selectedId/open/onPick/onClose，依据实时 workspace 列表把 ID 映射为真实路径并送入新会话 | 可使用。未知或已删除 ID 不会改写目录。默认回退为原生目录选择流；插件替换时不会同时启动原生对话框 |
-| `rightbar` | 在工作台外层派发，随窗口和左栏变化提供 width/viewportWidth/canShow；没有插件时保留原工作台结构 | 可使用。width/canShow 遵循官方正常面板 300px + 中栏 400px 门槛；窄屏插件应采用自己的全屏呈现。默认工作台仍使用 Amiba 的尺寸策略 |
+| `conversation.chat.node` | 当有非默认节点注册生效时，聊天记录切换到发布版 rc.2 ChatView 和节点渲染器，使用真实节点、回合数据、附件及文件操作；卸载后恢复原消息视图 | 可使用。默认节点 priority=1，插件 priority=0 即可覆盖。切换的是整段聊天记录渲染方式，视觉仍采用官方渲染器；共用滚动容器，切入时交接阅读位置，退出时按实际位置恢复跟随，输入器保留。不同排版的同一像素位置不保证对应同一文字行。不是把 Amiba 消息行伪装成官方节点 |
+| `conversation.hero.agentPreset` | 发送前读取当前获选插件声明的 `AgentPresetSeatInjected`，否则使用原选择器和 `ctx.heroAgentPreset` 的共享暂存状态；提交成功后按提交版本消费本地选择 | 建议接入。使用官方 `AgentPresetSeatInjected` 的插件可保留自己的 store，无须改接 Amiba 服务；忙碌、预设删除或读取时插件卸载均不会提交旧选择。完全未暴露该业务接口的私有状态不能由宿主猜测 |
+| `conversation.hero.workspace` | 保留工作区触发按钮；选择器取得官方 selectedId/open/onPick/onClose，依据实时 workspace 列表把 ID 映射为真实路径并送入新会话 | 可使用。真实按钮 anchorRef 可定位菜单；旧回调按最新工作区列表检查，关闭后不再接受选择。原生回退避免 StrictMode 重复打开，卸载后忽略迟到结果 |
+| `rightbar` | 在工作台外层派发，随窗口和左栏变化提供 width/viewportWidth/canShow；没有插件时保留原工作台结构 | 可使用。width/canShow 保留官方 300px 面板、400px 中栏、70% 宽度上限，按 Amiba 左栏实际占用计算，不再虚构左栏已收起。窄屏插件仍需处理自身的全屏呈现；默认工作台沿用 Amiba 布局 |
 | `rightbar.session` | 会话级右栏内容接管，切换会话重建替换组件，首页不派发；卸载恢复原工作台 | 可使用。整块替换会卸载原呈现组件，替换插件应承担自己的右栏界面；不把原工作台的内部实现当成官方私有注入接口 |
 
 官方 Chat 默认渲染器借用根入口已经拥有的图片／命令／回合尾部插槽，避免重复声明导致启动失败。Chat 业务投影与 `useChat` 来源仍保持单一，未重复注册。
 
 `settings.plugin.item` 在 rc.2 中有效且已有使用者，继续保留；后续 alpha 移除不影响本次兼容。后续建议转向真实第三方插件端到端兼容验收，而不是继续添加不属于 rc.2 的名称。
 
+## 行为兼容复核（2026-09-23）
+
+| 已确认问题 | 本次修复 | 验证依据 |
+|---|---|---|
+| 新入口必须使用 Amiba 特定负优先级才能生效 | 15 个新增 single 默认占用退至 1，插件默认 0 可接管 | 发布版 rc.2 renderer 验证注册、owner、空输出、异常退让、卸载 |
+| 插件独立的预设 store 未进入新会话参数 | 读取获选 root 注册的公开业务注入接口，并将 profileId 送入 queueChatPrompt | 真 SlotCore 的选举／卸载／异常退让，加 Home 提交参数测试 |
+| 预设未加载、提交过程中改选或预设删除 | 发送前准备；只消费已提交的选择版本；错误保留草稿及附件并显示提示 | 默认加载、移除、读取失败、并发改选、拒绝提交测试 |
+| 工作区弹层缺锚点、异步返回覆盖新界面 | 真实 anchorRef、最新工作区查找、关闭／卸载取消、原生对话框去重 | 菜单 owner 与 Home StrictMode／替换测试 |
+| 聊天节点启用时重建滚动容器、双滚动控制器 | 共享 viewport，交接 rc.2 chatScroll，官方视图显示时暂停原跟随写入 | 真实 renderer 注入交接、阅读／跟随状态测试 |
+| 右栏假定左栏会自动让位 | 基于真实左栏占用计算宽度及可展示性 | 窄屏、最小宽度、70% 上限、窗口变化测试 |
+
+这些验证覆盖已列出的公共插槽行为；没有把单元测试写成“所有第三方插件端到端通过”。官方 `ComposerBarInjected` 在 rc.2 源码中明确属于 package-private，不能与 SlotMap 的 owner／标准 session props 混为一谈。整块 single 替换卸载原组件是替换语义，本身不等于兼容缺陷。Amiba 的外观和默认布局不要求与官方产品逐像素一致。
+
 ## 验证边界与追溯
 
-- 15 个新增 single 入口使用实际 rc.2 React 渲染器测试注册接管、owner 传递、返回 null、异常退让和卸载回退。
+- 15 个新增 single 入口使用实际 rc.2 React 渲染器测试默认优先级注册接管、owner 传递、返回 null、异常退让和卸载回退。
 - UI 测试覆盖附件操作、禁用状态和原侧栏／输入布局。app-runtime 全量测试通过。
 - UI-shell 全量套件与未修改的 rc.1 checkout 对照，失败用例集合一致；不将全量套件报告为通过。
 - 三平台安装包、真实第三方插件端到端验收尚未完成；构建、启动及 CI 结果见本次 PR。
@@ -65,9 +78,9 @@
 | `conversation.composer` | 完整输入区域替换 | 未接入 | 新增实际入口；官方交互选举、草稿保留与会话隔离测试通过 |
 | `conversation.composer.bar` | 输入器主体 | 未接入 | 新增实际入口；首页／会话输入器 owner 与回退测试通过，整块替换仍有兼容边界 |
 | `conversation.composer.dock` | 输入器下方附加区 | 部分兼容 | 部分兼容 |
-| `conversation.hero.agentPreset` | 首页智能体预设选择 | 未接入 | 新增实际入口；共享预设暂存并传入新会话 |
+| `conversation.hero.agentPreset` | 首页智能体预设选择 | 未接入 | 公开业务注入状态自动接入新会话；本地暂存／失败／并发消费验证通过 |
 | `conversation.hero.brand.mark` | 首页品牌标识 | 未接入 | 新增实际入口；基础渲染测试通过 |
-| `conversation.hero.workspace` | 首页工作区选择 | 未接入 | 新增实际入口；官方 WorkspaceId 映射真实目录 |
+| `conversation.hero.workspace` | 首页工作区选择 | 未接入 | 真实按钮锚点及 WorkspaceId 映射；关闭／移除／异步返回保护验证通过 |
 | `conversation.hero.workspace.directoryFlow` | 首页目录选择流 | 条件支持 | 条件支持 |
 | `conversation.input.attachments` | 附件呈现与拖放区域 | 仅声明 | 新增实际入口；基础渲染测试通过 |
 | `conversation.input.dock` | 输入框上方附加区 | 部分兼容 | 部分兼容 |

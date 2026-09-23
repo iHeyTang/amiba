@@ -10,7 +10,7 @@ import * as Cordis from "@deepseek-ai/cordis";
 import type { Context } from "@deepseek-ai/cordis";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { OFFICIAL_REPLACEMENTS, OfficialReplacement, NativeOfficialPresentation } from "./official-replacements.js";
+import { OFFICIAL_REPLACEMENTS, OfficialReplacement, NativeOfficialPresentation, NATIVE_REPLACEMENT_PRIORITY } from "./official-replacements.js";
 
 afterEach(cleanup);
 const require = createRequire(import.meta.url);
@@ -48,25 +48,23 @@ it.each(Object.keys(OFFICIAL_REPLACEMENTS) as (keyof typeof OFFICIAL_REPLACEMENT
     const fallback = <span>native</span>;
     return <OfficialReplacement fallback={fallback}>{renderSlot(name, owner as never, { fallback })}</OfficialReplacement>;
   });
-  core.register({ name, priority: 0 }, () => <span>upstream default</span>);
-  core.register({ name, priority: -1 }, NativeOfficialPresentation);
+  core.register({ name, priority: NATIVE_REPLACEMENT_PRIORITY }, NativeOfficialPresentation);
   const view = render(renderer.renderRoot(host, {}));
   expect(screen.getByText("native")).toBeTruthy();
-  expect(screen.queryByText("upstream default")).toBeNull();
   let off!: () => void;
   const plugin = vi.fn((_props: object) => <span>plugin</span>);
-  await act(async () => { off = core.register({ name, priority: -2 }, plugin); });
+  await act(async () => { off = core.register({ name }, plugin); });
   expect(screen.getByText("plugin")).toBeTruthy();
   expect(plugin.mock.calls[0]?.[0]).toEqual(expect.objectContaining(owner));
   expect(screen.queryByText("native")).toBeNull();
   await act(async () => off());
   expect(screen.getByText("native")).toBeTruthy();
-  await act(async () => { off = core.register({ name, priority: -2 }, () => null); });
+  await act(async () => { off = core.register({ name }, () => null); });
   expect(view.container.textContent).toBe("");
   await act(async () => off());
   const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
-    await act(async () => { off = core.register({ name, priority: -2 }, () => { throw new Error("plugin crash"); }); });
+    await act(async () => { off = core.register({ name }, () => { throw new Error("plugin crash"); }); });
     expect(report).toHaveBeenCalled();
     expect(screen.getByText("native")).toBeTruthy();
     await act(async () => off());
@@ -136,19 +134,25 @@ it("official Chat bridge preserves keyed node owners, borrows existing slots, an
   const duplicate = vi.fn();
   const slots = { register: core.register.bind(core), entriesOfSlot: core.entriesOfSlot.bind(core), subscribe: core.subscribe.bind(core) };
   const ctx = { slots, uiConversation: { events: { register: duplicate }, views: { register: duplicate } }, uiSession: { provide: duplicate } } as unknown as Context;
+  const upstreamRead = vi.fn(() => null);
+  const receivedPosition = vi.fn();
   mountOfficialChatPresentation(ctx, scope => {
     scope.uiSession.provide({ hooks: [], resolve: () => ({ hooks: {} }) });
     scope.uiConversation.events.register({} as never);
-    scope.slots.register({ name: 'conversation.view', id: 'chat', children: {
+    scope.slots.register({ name: 'conversation.view', id: 'chat', inject: () => ({ chatScroll: { read: upstreamRead, save() {} } }), children: {
       'conversation.chat.node': { kind: 'keyed', scope: 'session', inject: { hooks: { turnData: () => () => undefined } } },
       'conversation.message.images': { kind: 'single', scope: 'session' },
-    } }, ((props: any) => <>{props.renderSlot('conversation.chat.node', { node, openFile() {}, inspectCall() {}, forkAt() {} }, { entryKey: 'user', hookContext: undefined })}{props.renderSlot('conversation.message.images', {})}</>) as never);
+    } }, ((props: any) => { receivedPosition(props.chatScroll.read()); return <>{props.renderSlot('conversation.chat.node', { node, openFile() {}, inspectCall() {}, forkAt() {} }, { entryKey: 'user', hookContext: undefined })}{props.renderSlot('conversation.message.images', {})}</>; }) as never);
     scope.slots.register({ name: 'conversation.chat.node', key: 'user' }, ((props: any) => <span>native:{props.node.key}</span>) as never);
   });
   expect(duplicate).not.toHaveBeenCalled();
   const requested = officialChatRequested(slots as never);
   expect(requested.getSnapshot()).toBe(false);
-  const view = render(renderer.renderRoot(host, {}));
+  const { TranscriptScrollPositionContext } = await import('@amiba/ui');
+  const position = { anchorKey: '', anchorTop: 0, scrollTop: 240 };
+  const view = render(<TranscriptScrollPositionContext.Provider value={() => position}>{renderer.renderRoot(host, {})}</TranscriptScrollPositionContext.Provider>);
+  expect(receivedPosition).toHaveBeenLastCalledWith(position);
+  expect(upstreamRead).not.toHaveBeenCalled();
   expect(screen.getByText('native:user:1')).toBeTruthy();
   expect(screen.getByText('borrowed images')).toBeTruthy();
   let off!: () => void;

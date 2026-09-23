@@ -3,7 +3,10 @@ import { expect, it, vi } from 'vitest';
 import { RightbarRegion, rightbarGeometry } from '../RightbarRegion';
 it('reports resolved normal width and narrow-screen/fullscreen eligibility', () => {
   expect(rightbarGeometry(1200, 240, 520)).toEqual({ viewportWidth: 1200, canShow: true, width: 520 });
-  expect(rightbarGeometry(800, 240, 520)).toEqual({ viewportWidth: 800, canShow: true, width: 400 });
+  expect(rightbarGeometry(800, 240, 520)).toEqual({ viewportWidth: 800, canShow: false, width: 0 });
+  expect(rightbarGeometry(800, 0, 520)).toEqual({ viewportWidth: 800, canShow: true, width: 400 });
+  expect(rightbarGeometry(2000, 0, 1900)).toEqual({ viewportWidth: 2000, canShow: true, width: 1400 });
+  expect(rightbarGeometry(940, 240, 299)).toEqual({ viewportWidth: 940, canShow: true, width: 300 });
   expect(rightbarGeometry(699, 0, 520)).toEqual({ viewportWidth: 699, canShow: false, width: 0 });
 });
 it('updates geometry on resize, preserves native column placement, and releases listeners', () => {

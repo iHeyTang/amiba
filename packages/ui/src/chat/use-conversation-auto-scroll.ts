@@ -6,15 +6,17 @@ export function useConversationAutoScroll(
   sessionId: string | null | undefined,
   content: unknown,
   bottomClearance: number,
+  enabled = true,
 ) {
   const following = useRef(true);
   const lastTop = useRef(0);
+  const wasEnabled = useRef(enabled);
 
   useLayoutEffect(() => {
     following.current = true;
     const viewport = viewportRef.current;
     if (!viewport) return;
-    viewport.scrollTop = viewport.scrollHeight;
+    if (enabled) viewport.scrollTop = viewport.scrollHeight;
     lastTop.current = viewport.scrollTop;
 
     const onWheel = (event: WheelEvent) => {
@@ -41,8 +43,12 @@ export function useConversationAutoScroll(
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
-    if (!viewport || !following.current) return;
+    const resumed = enabled && !wasEnabled.current;
+    wasEnabled.current = enabled;
+    if (!viewport || !enabled) return;
+    if (resumed) following.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 24;
+    if (!following.current) return;
     viewport.scrollTop = viewport.scrollHeight;
     lastTop.current = viewport.scrollTop;
-  }, [viewportRef, sessionId, content, bottomClearance]);
+  }, [viewportRef, sessionId, content, bottomClearance, enabled]);
 }
