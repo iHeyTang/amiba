@@ -1,6 +1,9 @@
-/* One window canvas, with independent glass panels. These materials also
- * apply over the default theme canvas; custom media only changes what is below. */
+/* Shared surface roles: wallpaper glass and default-theme hierarchy. */
 [data-amiba-product-shell] {
+  --amiba-pane-color: var(--background);
+  --amiba-agent-color: var(--background);
+  --amiba-user-color: var(--background);
+  --amiba-header-fill: hsl(var(--background) / 0.6);
   --amiba-glass-opacity: 0.64;
   --amiba-reading-opacity: 0.72;
   --amiba-input-opacity: 0.9;
@@ -21,12 +24,12 @@
   background: transparent;
 }
 [data-amiba-product-shell] [data-background-surface="navigation"] {
-  background: hsl(var(--background) / var(--amiba-glass-opacity));
+  background: hsl(var(--amiba-pane-color) / var(--amiba-glass-opacity));
   backdrop-filter: blur(var(--amiba-reading-blur)) saturate(1.08);
   -webkit-backdrop-filter: blur(var(--amiba-reading-blur)) saturate(1.08);
 }
 [data-amiba-product-shell] [data-background-surface="workbench"] {
-  background: hsl(var(--background) / var(--amiba-glass-opacity));
+  background: hsl(var(--amiba-pane-color) / var(--amiba-glass-opacity));
   backdrop-filter: blur(var(--amiba-glass-blur)) saturate(1.08);
   -webkit-backdrop-filter: blur(var(--amiba-glass-blur)) saturate(1.08);
 }
@@ -38,7 +41,7 @@
   -webkit-backdrop-filter: none;
 }
 [data-amiba-product-shell] [data-background-surface="assistant-message"] {
-  background: hsl(var(--background) / var(--amiba-agent-opacity));
+  background: hsl(var(--amiba-agent-color) / var(--amiba-agent-opacity));
   backdrop-filter: blur(var(--amiba-agent-blur));
   -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
   border: 0;
@@ -60,7 +63,7 @@
 }
 [data-amiba-product-shell] [data-background-surface="header"],
 [data-amiba-product-shell] [data-testid="native-window-titlebar"] {
-  background: hsl(var(--background) / var(--amiba-glass-opacity));
+  background: hsl(var(--amiba-pane-color) / var(--amiba-glass-opacity));
   backdrop-filter: blur(var(--amiba-glass-blur));
   -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
 }
@@ -117,7 +120,7 @@
 }
 [data-amiba-product-shell] [data-background-surface="sticky-message"] {
   border-radius: 12px;
-  background: hsl(var(--background) / var(--amiba-message-opacity));
+  background: hsl(var(--amiba-user-color) / var(--amiba-message-opacity));
   /* Sticky messages pass over live text, unlike ordinary content cards. */
   backdrop-filter: blur(var(--amiba-message-blur));
   -webkit-backdrop-filter: blur(var(--amiba-message-blur));
@@ -236,7 +239,7 @@
   height: 30px;
   transform: translateY(-50%);
   border-radius: 8px;
-  background: hsl(var(--background) / 0.6);
+  background: var(--amiba-header-fill);
   backdrop-filter: blur(var(--amiba-glass-blur));
   -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
   box-shadow: inset 0 0 0 1px hsl(var(--border) / 0.4);
@@ -277,7 +280,7 @@
 /* The revealed action tab continues the user bubble's material and right edge. */
 [data-amiba-product-shell] [data-background-surface="message-actions"] {
   position: relative;
-  background: hsl(var(--background) / var(--amiba-message-opacity));
+  background: hsl(var(--amiba-user-color) / var(--amiba-message-opacity));
   backdrop-filter: blur(var(--amiba-message-blur));
   -webkit-backdrop-filter: blur(var(--amiba-message-blur));
   border-radius: 0 0 12px 12px;
@@ -342,7 +345,7 @@
 
 /* Assistant tabs mirror the user's tab, attached at the left edge. */
 [data-amiba-product-shell] [data-assistant-message-chrome] [data-background-surface="message-actions"] {
-  background: hsl(var(--background) / var(--amiba-agent-opacity));
+  background: hsl(var(--amiba-agent-color) / var(--amiba-agent-opacity));
   backdrop-filter: blur(var(--amiba-agent-blur));
   -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
 }
@@ -401,7 +404,7 @@
 [data-amiba-product-shell] [data-assistant-glass-material] {
   position: absolute;
   inset: 0;
-  background: hsl(var(--background) / var(--message-glass-opacity, var(--amiba-agent-opacity)));
+  background: hsl(var(--message-glass-color, var(--amiba-agent-color)) / var(--message-glass-opacity, var(--amiba-agent-opacity)));
   backdrop-filter: blur(var(--message-glass-blur, var(--amiba-agent-blur)));
   -webkit-backdrop-filter: blur(var(--message-glass-blur, var(--amiba-agent-blur)));
   mask-image: var(--assistant-glass-mask-closed);
@@ -419,8 +422,9 @@
 
 /* Mirror only the silhouette, keeping the backdrop in its original orientation. */
 [data-amiba-product-shell] [data-user-message-chrome] {
-  --message-glass-opacity: 0.82;
-  --message-glass-blur: 64px;
+  --message-glass-color: var(--amiba-user-color);
+  --message-glass-opacity: var(--amiba-message-opacity);
+  --message-glass-blur: var(--amiba-message-blur);
 }
 [data-amiba-product-shell] [data-user-message-chrome] > [data-assistant-glass-clip],
 [data-amiba-product-shell] [data-user-message-chrome] [data-assistant-glass-material] {
@@ -428,3 +432,37 @@
 }
 [data-amiba-product-shell] [data-action-align="left"] { padding-right: 16px; }
 [data-amiba-product-shell] [data-action-align="right"] { padding-left: 16px; }
+
+/* A flat canvas needs tonal separation; translucent white alone disappears.
+ * One mode boundary also covers missing/failed/disabled wallpaper media. */
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] {
+  --amiba-pane-color: var(--muted);
+  --amiba-agent-color: var(--muted);
+  --amiba-user-color: var(--secondary);
+  --amiba-glass-opacity: 1;
+  --amiba-agent-opacity: 0.5;
+  --amiba-message-opacity: 1;
+  --amiba-input-opacity: 1;
+  --amiba-content-opacity: 0.85;
+  --amiba-content-fill: hsl(var(--foreground) / 0.035);
+  --amiba-content-hover: hsl(var(--foreground) / 0.08);
+  --amiba-header-fill: hsl(var(--muted));
+  --amiba-glass-blur: 0px;
+  --amiba-reading-blur: 0px;
+  --amiba-agent-blur: 0px;
+  --amiba-message-blur: 0px;
+}
+.amiba-background-frame:not([data-background-active="true"]) [data-sidebar-glass]::before,
+.amiba-background-frame:not([data-background-active="true"]) [data-sidebar-glass]::after {
+  display: none;
+}
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-composer-card] {
+  border-color: hsl(var(--border));
+  box-shadow: 0 2px 12px hsl(var(--foreground) / 0.06);
+}
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-background-surface="workbench"] {
+  box-shadow: inset 1px 0 0 hsl(var(--border));
+}
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-background-surface="model-notice"] {
+  background: hsl(var(--muted));
+}
