@@ -73,6 +73,9 @@
 [data-amiba-product-shell] [data-background-surface="sticky-message"] {
   border-radius: 12px;
   background: var(--amiba-content-fill);
+  /* Sticky messages pass over live text, unlike ordinary content cards. */
+  backdrop-filter: blur(var(--amiba-glass-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
 }
 [data-amiba-product-shell] [data-home-greeting] {
   color: hsl(var(--foreground));
