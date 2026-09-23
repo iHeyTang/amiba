@@ -301,6 +301,12 @@
   background: var(--amiba-content-fill, hsl(var(--muted) / 0.16));
   overflow: visible;
 }
+/* Streamdown paints both its body and Shiki's pre. The frame owns the
+ * material; only syntax foregrounds belong to the highlighter. Important
+ * also handles themes that emit an inline background on pre. */
+.chat-md.chat-md [data-streamdown="code-block-body"] > pre {
+  background: transparent !important;
+}
 /* Give the code toolbar a readable identity, including unlabeled fences.
  * The language span is supplied by Streamdown; :lang follows the app locale. */
 .chat-md.chat-md [data-streamdown="code-block-header"] {
@@ -410,6 +416,7 @@
 
 /* Only the outer frame draws an outline. Inner content clips the corners. */
 .chat-md.chat-md [data-streamdown="code-block-body"] {
+  background: transparent;
   border: 0;
   border-radius: 0 0 7px 7px;
   padding: 12px 16px;
