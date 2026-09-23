@@ -6,6 +6,8 @@
   --amiba-input-opacity: 0.9;
   --amiba-glass-blur: 18px;
   --amiba-reading-blur: 8px;
+  --amiba-message-opacity: 0.82;
+  --amiba-message-blur: 32px;
   --amiba-content-opacity: 0.16;
   --amiba-content-hover-opacity: 0.3;
   /* Inner cards share the pane blur, like the file-change review card. */
@@ -78,10 +80,10 @@
 }
 [data-amiba-product-shell] [data-background-surface="sticky-message"] {
   border-radius: 12px;
-  background: var(--amiba-content-fill);
+  background: hsl(var(--background) / var(--amiba-message-opacity));
   /* Sticky messages pass over live text, unlike ordinary content cards. */
-  backdrop-filter: blur(var(--amiba-glass-blur));
-  -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
+  backdrop-filter: blur(var(--amiba-message-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-message-blur));
 }
 [data-amiba-product-shell] [data-home-greeting] {
   color: hsl(var(--foreground));
@@ -92,6 +94,7 @@
     --amiba-glass-opacity: 1;
     --amiba-reading-opacity: 1;
     --amiba-input-opacity: 1;
+    --amiba-message-opacity: 1;
     --amiba-content-opacity: 1;
     --amiba-content-hover-opacity: 1;
   }
@@ -101,10 +104,12 @@
     --amiba-glass-opacity: 1;
     --amiba-reading-opacity: 1;
     --amiba-input-opacity: 1;
+    --amiba-message-opacity: 1;
     --amiba-content-opacity: 1;
     --amiba-content-hover-opacity: 1;
     --amiba-glass-blur: 0px;
     --amiba-reading-blur: 0px;
+    --amiba-message-blur: 0px;
   }
 }
 
