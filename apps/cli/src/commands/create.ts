@@ -114,8 +114,7 @@ export async function createCommand(
 
   console.log(kleur.bold("\nNext steps:"))
   console.log("  ", kleur.cyan(`cd ${finalName}`))
-  console.log("  ", kleur.cyan("pnpm dev"))
-  console.log(
-    "    └─ Add the package to a DSH bundle/Loader graph; Electron does not load plugins.",
-  )
+  console.log("  ", kleur.cyan("npm run connect:dev"))
+  console.log("  ", kleur.cyan("npm run connect:release"), "(installed desktop)")
+  console.log("    Open the matching Amiba first. Ctrl+C disconnects the temporary plugin.")
 }
