@@ -280,6 +280,35 @@ describe("FullScreenChatView new-chat home", () => {
     );
   });
 
+  it("dispatches replacements at the actual session and sidebar boundaries", async () => {
+    mocks.useSessions.mockReturnValue(makeSessions());
+    const body = vi.fn(() => <div>replacement body</div>);
+    const header = vi.fn(() => <div>replacement header</div>);
+    const sidebar = vi.fn((_owner, fallback) => <div data-testid="replacement-sidebar">{fallback}</div>);
+    render(<FullScreenChatView client={makeClient() as never} openSettings={() => {}} openAgentDestination={() => {}} restoreSidebarViewOnMount={false}
+      slots={{ sessionBody: body, sessionHeader: header, sidebar }} />);
+    await act(async () => {});
+    expect(screen.getByText("replacement body")).toBeInTheDocument();
+    expect(screen.getByText("replacement header")).toBeInTheDocument();
+    expect(screen.queryByText("chat-surface")).not.toBeInTheDocument();
+    expect(screen.getByTestId("replacement-sidebar")).toBeInTheDocument();
+    expect(sidebar).toHaveBeenCalledWith(expect.objectContaining({ collapsed: false, width: expect.any(Number) }), expect.anything());
+  });
+
+  it("does not invoke strict session replacements on the home surface", async () => {
+    mocks.useSessions.mockReturnValue({ ...makeSessions(), activeId: "", openTabIds: [], openTabs: [] });
+    const body = vi.fn(() => null);
+    const header = vi.fn(() => null);
+    const main = vi.fn(fallback => fallback);
+    render(<FullScreenChatView client={makeClient() as never} openSettings={() => {}} openAgentDestination={() => {}} restoreSidebarViewOnMount={false}
+      slots={{ sessionBody: body, sessionHeader: header, mainConversation: main }} />);
+    await act(async () => {});
+    expect(main).toHaveBeenCalled();
+    expect(body).not.toHaveBeenCalled();
+    expect(header).not.toHaveBeenCalled();
+    expect(screen.getByText("chat-surface")).toBeInTheDocument();
+  });
+
   it.each(["main-panel", "workspace", "conversation"])(
     "opens the active session from %s and only toggles a visible conversation",
     async (surface) => {

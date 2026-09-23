@@ -1,3 +1,4 @@
+import { OfficialReplacement } from "./official-replacements.js";
 import { TrajectoryNavigationContext } from "./trajectory-header-action.js";
 import { MainPanelList, type MainPanelRow } from "./main-panel-list.js";
 import type { MainPanelNavigation } from "./main-panel-navigation.js";
@@ -169,6 +170,16 @@ const EMPTY_MESSAGE_SOURCES: readonly MessageSourceRow[] = [];
  * tool name as `entryKey`.
  */
 export type AmibaShellSlot =
+  | "main.conversation"
+  | "conversation.session"
+  | "conversation.session.header"
+  | "sidebar"
+  | "sidebar.brand.mark"
+  | "sidebar.brand.name"
+  | "sidebar.workspaces"
+  | "sidebar.settings"
+  | "conversation.hero.brand.mark"
+
   | "main"
   | "sidebar.panellist"
   | Exclude<AmibaRootSlot, "amiba.agentPreset.section">
@@ -917,6 +928,14 @@ function ProductShellInner({
               itemMenuItems={sessionMenuItemList}
               messageSourceLabel={messageSourceLabel}
               slots={{
+                mainConversation: fallback => <OfficialReplacement fallback={fallback}>{renderSlot("main.conversation", {}, { fallback })}</OfficialReplacement>,
+                sessionBody: fallback => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.session", {}, { fallback })}</OfficialReplacement>,
+                sessionHeader: fallback => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.session.header", {}, { fallback })}</OfficialReplacement>,
+                sidebar: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("sidebar", owner, { fallback })}</OfficialReplacement>,
+                sidebarBrandMark: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("sidebar.brand.mark", owner, { fallback })}</OfficialReplacement>,
+                sidebarBrandName: fallback => <OfficialReplacement fallback={fallback}>{renderSlot("sidebar.brand.name", {}, { fallback })}</OfficialReplacement>,
+                sidebarWorkspaces: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("sidebar.workspaces", owner, { fallback })}</OfficialReplacement>,
+                sidebarSettings: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("sidebar.settings", owner, { fallback })}</OfficialReplacement>,
                 conversationViews: viewEntries,
                 conversationHeaderViewIds: ["trajectory"],
                 conversationView: (id) => renderSlot("conversation.view", { ...trajectory.owner, ...(loadMessageImage ? { loadImage: loadMessageImage } : {}) }, { only: id }),
@@ -929,11 +948,14 @@ function ProductShellInner({
                     onOpenSettings={() => settings.openAt()}
                     panelMode
                     modelPicker={renderModelPickerSeat}
+                    renderAttachments={(owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.input.attachments", owner, { fallback })}</OfficialReplacement>}
+                    brandMark={(owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.hero.brand.mark", owner, { fallback })}</OfficialReplacement>}
                   />
                 ),
                 settingsTrigger: renderSettingsTrigger,
                 sidebarFooterActions: owner => renderSlot("sidebar.footer.action", owner),
                 modelPicker: renderModelPickerSeat,
+                renderAttachments: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("conversation.input.attachments", owner, { fallback })}</OfficialReplacement>,
                 planSeat: renderPlanSeat,
                 notice: (owner, fallback) =>
                   renderSlot("amiba.conversation.notice", owner, {

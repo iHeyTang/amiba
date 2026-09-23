@@ -1,3 +1,4 @@
+import { ReplacementBoundary } from "./ReplacementBoundary";
 /**
  * Single-level sidebar — replaces the old icon `ActivityBar` rail AND the
  * `w-72` session-list aside. Three vertical regions:
@@ -54,6 +55,9 @@ function workspaceName(path: string): string {
 }
 
 export interface SidebarProps {
+  workspaceRegion?: (owner: { wide: boolean; expandSidebar: () => void }, fallback: ReactNode) => ReactNode;
+  settingsRegion?: (owner: { wide: boolean }, fallback: ReactNode) => ReactNode;
+  expandSidebar?: () => void;
   navigationBefore?: ReactNode;
   workspaceNavigation?: ReactNode;
   navigationAfter?: ReactNode;
@@ -108,6 +112,9 @@ export interface SidebarProps {
 }
 
 export function Sidebar({
+  workspaceRegion,
+  settingsRegion,
+  expandSidebar,
   navigationBefore,
   workspaceNavigation,
   navigationAfter,
@@ -248,6 +255,7 @@ export function Sidebar({
       </div>
 
       {/* History groups share one scroll area and follow their content height. */}
+      <ReplacementBoundary render={workspaceRegion ? fallback => workspaceRegion({ wide, expandSidebar: expandSidebar ?? (() => {}) }, fallback) : undefined}>
       <ScrollArea className="min-h-0 flex-1 px-2">
         <TopSection
           headerTestId="sessions-header"
@@ -382,17 +390,20 @@ export function Sidebar({
           />
         </TopSection>
       </ScrollArea>
+      </ReplacementBoundary>
 
       <div className="px-2">
         {sidebarFooterActions?.({ wide })}
       </div>
       <div className="mt-1 border-t border-border/30 p-2">
+        <ReplacementBoundary render={settingsRegion ? fallback => settingsRegion({ wide }, fallback) : undefined}>
         <ProfileMenu
           wide={wide}
           settingsOpen={settingsOpen}
           settingsTrigger={settingsTrigger}
           onOpenSettings={onOpenSettings}
         />
+        </ReplacementBoundary>
       </div>
     </nav>
   );

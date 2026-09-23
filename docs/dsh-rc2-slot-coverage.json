@@ -1,0 +1,448 @@
+{
+  "target": "0.1.5-rc.2",
+  "beforeCommit": "a3560301",
+  "before": 43,
+  "after": 53,
+  "total": 61,
+  "added": [
+    "main.conversation",
+    "conversation.session",
+    "conversation.session.header",
+    "sidebar",
+    "sidebar.brand.mark",
+    "sidebar.brand.name",
+    "sidebar.workspaces",
+    "sidebar.settings",
+    "conversation.hero.brand.mark",
+    "conversation.input.attachments"
+  ],
+  "rows": [
+    {
+      "slot": "conversation.approval.detail",
+      "kind": "single",
+      "scope": "session",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "conversation.chat.assistant-actions",
+      "kind": "list",
+      "scope": "session",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "conversation.chat.commandview",
+      "kind": "keyed",
+      "scope": "session",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "conversation.chat.node",
+      "kind": "keyed",
+      "scope": "session",
+      "before": "未接入",
+      "after": "未接入"
+    },
+    {
+      "slot": "conversation.chat.turnTail",
+      "kind": "chain",
+      "scope": "session",
+      "before": "部分兼容",
+      "after": "部分兼容"
+    },
+    {
+      "slot": "conversation.composer",
+      "kind": "chain",
+      "scope": "session",
+      "before": "未接入",
+      "after": "未接入"
+    },
+    {
+      "slot": "conversation.composer.bar",
+      "kind": "single",
+      "scope": "session-maybe",
+      "before": "未接入",
+      "after": "未接入"
+    },
+    {
+      "slot": "conversation.composer.dock",
+      "kind": "list",
+      "scope": "session",
+      "before": "部分兼容",
+      "after": "部分兼容"
+    },
+    {
+      "slot": "conversation.hero.agentPreset",
+      "kind": "single",
+      "scope": "root",
+      "before": "未接入",
+      "after": "未接入"
+    },
+    {
+      "slot": "conversation.hero.brand.mark",
+      "kind": "single",
+      "scope": "root",
+      "before": "未接入",
+      "after": "新增实际入口；基础渲染测试通过"
+    },
+    {
+      "slot": "conversation.hero.workspace",
+      "kind": "single",
+      "scope": "root",
+      "before": "未接入",
+      "after": "未接入"
+    },
+    {
+      "slot": "conversation.hero.workspace.directoryFlow",
+      "kind": "single",
+      "scope": "root",
+      "before": "条件支持",
+      "after": "条件支持"
+    },
+    {
+      "slot": "conversation.input.attachments",
+      "kind": "single",
+      "scope": "session-maybe",
+      "before": "仅声明",
+      "after": "新增实际入口；基础渲染测试通过"
+    },
+    {
+      "slot": "conversation.input.dock",
+      "kind": "list",
+      "scope": "session",
+      "before": "部分兼容",
+      "after": "部分兼容"
+    },
+    {
+      "slot": "conversation.input.left",
+      "kind": "list",
+      "scope": "session",
+      "before": "部分兼容",
+      "after": "部分兼容"
+    },
+    {
+      "slot": "conversation.input.model",
+      "kind": "single",
+      "scope": "session",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "conversation.input.overlay",
+      "kind": "list",
+      "scope": "session",
+      "before": "部分兼容",
+      "after": "部分兼容"
+    },
+    {
+      "slot": "conversation.input.plan",
+      "kind": "single",
+      "scope": "session",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "conversation.input.right",
+      "kind": "list",
+      "scope": "session",
+      "before": "部分兼容",
+      "after": "部分兼容"
+    },
+    {
+      "slot": "conversation.message.images",
+      "kind": "single",
+      "scope": "session",
+      "before": "部分兼容",
+      "after": "部分兼容"
+    },
+    {
+      "slot": "conversation.session",
+      "kind": "single",
+      "scope": "session",
+      "before": "未接入",
+      "after": "新增实际入口；基础渲染测试通过"
+    },
+    {
+      "slot": "conversation.session.header",
+      "kind": "single",
+      "scope": "session",
+      "before": "未接入",
+      "after": "新增实际入口；基础渲染测试通过"
+    },
+    {
+      "slot": "conversation.session.header.actions",
+      "kind": "list",
+      "scope": "session",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "conversation.session.header.corner",
+      "kind": "single",
+      "scope": "session",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "conversation.session.header.lineage",
+      "kind": "single",
+      "scope": "session",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "conversation.session.header.utilities",
+      "kind": "list",
+      "scope": "session",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "conversation.trajectory.images",
+      "kind": "single",
+      "scope": "session",
+      "before": "条件支持",
+      "after": "条件支持"
+    },
+    {
+      "slot": "conversation.view",
+      "kind": "list",
+      "scope": "session",
+      "before": "部分兼容",
+      "after": "部分兼容"
+    },
+    {
+      "slot": "main",
+      "kind": "keyed",
+      "scope": "root",
+      "before": "部分兼容",
+      "after": "部分兼容"
+    },
+    {
+      "slot": "main.conversation",
+      "kind": "single",
+      "scope": "session-maybe",
+      "before": "未接入",
+      "after": "新增实际入口；基础渲染测试通过"
+    },
+    {
+      "slot": "rightbar",
+      "kind": "single",
+      "scope": "root",
+      "before": "未接入",
+      "after": "未接入"
+    },
+    {
+      "slot": "rightbar.session",
+      "kind": "single",
+      "scope": "session",
+      "before": "未接入",
+      "after": "未接入"
+    },
+    {
+      "slot": "root",
+      "kind": "single",
+      "scope": "root",
+      "before": "宿主占用",
+      "after": "宿主占用"
+    },
+    {
+      "slot": "settings.action",
+      "kind": "list",
+      "scope": "root",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "settings.close",
+      "kind": "single",
+      "scope": "root",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "settings.general.item",
+      "kind": "list",
+      "scope": "root",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "settings.header",
+      "kind": "single",
+      "scope": "root",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "settings.models.footer",
+      "kind": "list",
+      "scope": "root",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "settings.models.provider-card",
+      "kind": "keyed",
+      "scope": "root",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "settings.onboarding",
+      "kind": "list",
+      "scope": "root",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "settings.plugin.item",
+      "kind": "keyed",
+      "scope": "root",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "settings.plugins.tab",
+      "kind": "list",
+      "scope": "root",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "settings.section",
+      "kind": "list",
+      "scope": "root",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "settings.trigger",
+      "kind": "single",
+      "scope": "root",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "shell.overlay",
+      "kind": "list",
+      "scope": "root",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "sidebar",
+      "kind": "single",
+      "scope": "root",
+      "before": "未接入",
+      "after": "新增实际入口；基础渲染测试通过"
+    },
+    {
+      "slot": "sidebar.brand.mark",
+      "kind": "single",
+      "scope": "root",
+      "before": "未接入",
+      "after": "新增实际入口；基础渲染测试通过"
+    },
+    {
+      "slot": "sidebar.brand.name",
+      "kind": "single",
+      "scope": "root",
+      "before": "未接入",
+      "after": "新增实际入口；基础渲染测试通过"
+    },
+    {
+      "slot": "sidebar.footer.action",
+      "kind": "list",
+      "scope": "root",
+      "before": "已有入口，静态对齐",
+      "after": "已有入口，静态对齐"
+    },
+    {
+      "slot": "sidebar.panellist",
+      "kind": "list",
+      "scope": "root",
+      "before": "部分兼容",
+      "after": "部分兼容"
+    },
+    {
+      "slot": "sidebar.right.pane.tab",
+      "kind": "keyed",
+      "scope": "session",
+      "before": "条件支持",
+      "after": "条件支持"
+    },
+    {
+      "slot": "sidebar.right.pane.tab.title",
+      "kind": "keyed",
+      "scope": "session",
+      "before": "条件支持",
+      "after": "条件支持"
+    },
+    {
+      "slot": "sidebar.right.tab.document",
+      "kind": "keyed",
+      "scope": "session",
+      "before": "条件支持",
+      "after": "条件支持"
+    },
+    {
+      "slot": "sidebar.right.tab.guide",
+      "kind": "chain",
+      "scope": "session",
+      "before": "条件支持",
+      "after": "条件支持"
+    },
+    {
+      "slot": "sidebar.right.tab.menu.item",
+      "kind": "list",
+      "scope": "session",
+      "before": "条件支持",
+      "after": "条件支持"
+    },
+    {
+      "slot": "sidebar.settings",
+      "kind": "single",
+      "scope": "root",
+      "before": "未接入",
+      "after": "新增实际入口；基础渲染测试通过"
+    },
+    {
+      "slot": "sidebar.workspaces",
+      "kind": "single",
+      "scope": "root",
+      "before": "未接入",
+      "after": "新增实际入口；基础渲染测试通过"
+    },
+    {
+      "slot": "sidebar.workspaces.directoryFlow",
+      "kind": "single",
+      "scope": "root",
+      "before": "条件支持",
+      "after": "条件支持"
+    },
+    {
+      "slot": "tool.call.images",
+      "kind": "single",
+      "scope": "session",
+      "before": "条件支持",
+      "after": "条件支持"
+    },
+    {
+      "slot": "tool.call.toolview",
+      "kind": "keyed",
+      "scope": "session",
+      "before": "部分兼容",
+      "after": "部分兼容"
+    },
+    {
+      "slot": "tool.view.cordis",
+      "kind": "keyed",
+      "scope": "session",
+      "before": "条件支持",
+      "after": "条件支持"
+    }
+  ]
+}

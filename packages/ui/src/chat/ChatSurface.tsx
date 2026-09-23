@@ -308,6 +308,7 @@ export interface ChatSurfaceProps {
      * the composer renders nothing where the chip would sit.
      */
     modelPicker?: ComposerModelPickerRenderer;
+    renderAttachments?: import("./Composer").ComposerAttachmentsRenderer;
     /**
      * renderSlot-backed dispatch of the official `conversation.input.plan`
      * seat, forwarded verbatim to ``<Composer planSeat>``. Hosts inside a
@@ -2351,6 +2352,7 @@ export default function ChatSurface({
       approvalModePicker
       planSeat={slots?.planSeat}
       inputOverlay={slots?.inputOverlay}
+      renderAttachments={slots?.renderAttachments}
       inputDock={slots?.inputDock}
       composerDock={slots?.composerDock}
       inputLeft={slots?.inputLeft}

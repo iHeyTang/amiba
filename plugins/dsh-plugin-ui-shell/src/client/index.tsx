@@ -1,3 +1,4 @@
+import { OFFICIAL_REPLACEMENTS, NativeOfficialPresentation } from "./official-replacements.js";
 import { TrajectoryHeaderAction } from "./trajectory-header-action.js";
 import {
   MessageImagesGallery,
@@ -891,16 +892,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // declaration site differs. The render site is the composer card
           // (`[data-composer-card]`), which is the anchor the official
           // occupants position against and probe with `closest()`.
+          ...OFFICIAL_REPLACEMENTS,
           "conversation.input.overlay": { kind: "list", scope: "session" },
           "conversation.input.dock": { kind: "list", scope: "session" },
           "conversation.composer.dock": { kind: "list", scope: "session" },
           "conversation.chat.commandview": { kind: "keyed", scope: "session" },
-          // Official vocabulary: the composer's draft-attachment seat. Kept
-          // declared so third-party hosts can still dispatch it; Amiba's
-          // composer renders the unified AttachmentGallery natively (files +
-          // images in one compact row, matching the user-message bubble), so
-          // it no longer forwards this seat from ChatSurface.
-          "conversation.input.attachments": { kind: "single", scope: "session-maybe" },
           "conversation.input.left": { kind: "list", scope: "session" },
           "conversation.input.right": { kind: "list", scope: "session" },
           // Official vocabulary: the KEYED per-tool call row, from
@@ -1063,6 +1059,12 @@ export async function apply(ctx: ClientContext): Promise<void> {
       },
       AmibaRoot,
     );
+    // Keep the current product UI while permitting explicit plugin takeovers at
+    // priority < SHADOW_PRIORITY. Official default occupants remain shadowed.
+    const disposeReplacements = (Object.keys(OFFICIAL_REPLACEMENTS) as (keyof typeof OFFICIAL_REPLACEMENTS)[]).map(name =>
+      ctx.slots.register({ name, priority: SHADOW_PRIORITY }, NativeOfficialPresentation),
+    );
+
     // CELL SHADOWS of the two official `conversation.input.overlay` entries.
     // Same ids, `priority: -1` against their implicit `0`, so the ledger
     // elects Amiba's component per cell while the official SERVICES stay
@@ -1176,6 +1178,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
         ),
     );
     return () => {
+      for (const dispose of disposeReplacements) dispose();
       for (const dispose of disposeOfficialToolviews) dispose();
       void sidebarRightFiber.dispose();
       disposeAskToolview();

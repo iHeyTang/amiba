@@ -146,3 +146,38 @@ describe("composer attachment gallery", () => {
     expect(card(container).querySelector("[data-attachment-gallery]")).toBeNull();
   });
 });
+
+describe("official attachment presentation", () => {
+  it("passes file drafts and upload failures through the real add/remove/retry paths", () => {
+    const file = new File(["hello"], "notes.txt", { type: "text/plain" });
+    const addFiles = vi.fn(async () => {});
+    const removeAttachment = vi.fn();
+    const retryFileUpload = vi.fn();
+    const draft = { kind: "file" as const, id: "draft-file", file };
+    const uploads = { "draft-file": { status: "error" as const, message: "offline" } };
+    const attachments = {
+      attachments: [{ uiId: "chip-file", attachmentId: "draft-file", kind: "file", name: "notes.txt" }],
+      draftImages: [draft], getDraftImages: () => [draft], fileUploads: uploads,
+      attachmentBusy: false, attachmentUploading: false, addFiles, removeAttachment, retryFileUpload,
+      dropHandlers: {}, fileInputProps: { type: "file", className: "hidden" },
+    } as unknown as import("../useComposerAttachments").UseComposerAttachmentsResult;
+    let owner!: import("@amiba/extension-sdk").ComposerAttachmentsOwner;
+    const renderAttachments: import("../Composer").ComposerAttachmentsRenderer = (value, fallback) => { owner = value; return fallback; };
+    const view = render(<Composer value="" onChange={() => {}} onSubmit={() => {}} attachments={attachments} renderAttachments={renderAttachments} />);
+    expect(owner.attachments).toEqual([draft]);
+    expect(owner.uploads).toBe(uploads);
+    expect(owner.canAcceptDrop).toBe(true);
+    owner.onAddFiles([file]);
+    owner.onRemoveAttachment(draft.id as never);
+    owner.onRetryFile(draft.id as never);
+    expect(addFiles).toHaveBeenCalledWith([file]);
+    expect(removeAttachment).toHaveBeenCalledWith("chip-file");
+    expect(retryFileUpload).toHaveBeenCalledWith("draft-file");
+    view.rerender(<Composer value="" onChange={() => {}} onSubmit={() => {}} disabled attachments={attachments} renderAttachments={renderAttachments} />);
+    expect(owner.canAcceptDrop).toBe(false);
+    owner.onAddFiles([file]); owner.onRemoveAttachment(draft.id as never); owner.onRetryFile(draft.id as never);
+    expect(addFiles).toHaveBeenCalledTimes(1);
+    expect(removeAttachment).toHaveBeenCalledTimes(1);
+    expect(retryFileUpload).toHaveBeenCalledTimes(1);
+  });
+});

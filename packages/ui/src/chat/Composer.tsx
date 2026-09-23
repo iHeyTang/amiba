@@ -108,7 +108,7 @@ export type ComposerModelPickerRenderer = (
  * no reserved space. Surfaces without a DSH plugin runtime (Quick-Ask) pass
  * no renderer and the same nothing renders.
  */
-export type ComposerAttachmentsRenderer = (owner: ComposerAttachmentsOwner) => ReactNode;
+export type ComposerAttachmentsRenderer = (owner: ComposerAttachmentsOwner, fallback: ReactNode) => ReactNode;
 
 export type ComposerPlanSeatRenderer = (
   owner: ConversationInputPlanOwnerProps,
@@ -247,6 +247,8 @@ export interface ComposerProps {
    * any of those pieces render.
    */
   attachments?: UseComposerAttachmentsResult;
+  /** Official draft-attachment replacement; the renderer owns fallback selection. */
+  renderAttachments?: ComposerAttachmentsRenderer;
   /**
    * Show a compact DSH inference-model selector beside the send controls.
    * The picker NODE comes from `render` — the host's renderSlot-backed
@@ -459,6 +461,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
       onKeyDownExtra,
       onPaste,
       attachments,
+      renderAttachments,
       modelPicker,
       approvalModePicker,
       planSeat,
@@ -978,6 +981,24 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         </div>
       ) : null;
 
+    const attachmentPresentation = attachments && renderAttachments
+      ? renderAttachments({
+          attachments: attachments.getDraftImages?.() ?? attachments.draftImages ?? [],
+          uploads: attachments.fileUploads ?? {},
+          canAcceptDrop: !disabled && !attachments.attachmentBusy && !attachments.attachmentUploading,
+          onAddFiles: files => {
+            if (!disabled && !attachments.attachmentBusy && !attachments.attachmentUploading) void attachments.addFiles([...files]);
+          },
+          onRemoveAttachment: id => {
+            if (disabled) return;
+            const item = attachments.attachments.find(item => item.attachmentId === id);
+            if (item) attachments.removeAttachment(item.uiId);
+            else attachments.removeDraftImage?.(id);
+          },
+          onRetryFile: id => { if (!disabled) attachments.retryFileUpload?.(id); },
+        }, renderedGalleryRow)
+      : renderedGalleryRow;
+
     const addMenuItems = useMemo<MenuItem[]>(() => {
       if (!attachments || disabled || attachments.attachmentBusy || attachments.attachmentUploading) return [];
       return [{
@@ -1076,7 +1097,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
             </div>
           ) : null}
           {topAffordance}
-          {renderedGalleryRow}
+          {attachmentPresentation}
           <div className="flex items-start">
             <div className="min-w-0 flex-1">
               <RichComposerEditor

@@ -1,3 +1,4 @@
+import { ReplacementBoundary } from "./ReplacementBoundary";
 import { NewChatWorkspaceContext, type NewChatWorkspaceRequest } from "./new-chat-workspace";
 import { ConversationViewRegion, type ConversationViewEntry } from "./ConversationViewRegion";
 import { createToolNavigation } from "./bubble/tool-navigation";
@@ -181,6 +182,14 @@ export interface FullScreenChatViewProps {
      * empty state instead of a separate route.
      */
     emptyState?: ReactNode;
+    mainConversation?: (fallback: ReactNode) => ReactNode;
+    sessionBody?: (fallback: ReactNode) => ReactNode;
+    sessionHeader?: (fallback: ReactNode) => ReactNode;
+    sidebar?: (owner: { collapsed: boolean; width: number }, fallback: ReactNode) => ReactNode;
+    sidebarBrandMark?: (owner: { size: number }, fallback: ReactNode) => ReactNode;
+    sidebarBrandName?: (fallback: ReactNode) => ReactNode;
+    sidebarWorkspaces?: (owner: { wide: boolean; expandSidebar: () => void }, fallback: ReactNode) => ReactNode;
+    sidebarSettings?: (owner: { wide: boolean }, fallback: ReactNode) => ReactNode;
     /** Additive DSH entries before built-in navigation rows. */
     navigationBefore?: ReactNode;
     /** DSH workspace plugin entries, rendered inside the existing sidebar. */
@@ -224,6 +233,7 @@ export interface FullScreenChatViewProps {
      * ChatSurface to the internal Composer.
      */
     modelPicker?: ComposerModelPickerRenderer;
+    renderAttachments?: import("./Composer").ComposerAttachmentsRenderer;
     /**
      * renderSlot-backed dispatch of the official `conversation.input.plan`
      * seat, forwarded through ChatSurface to the internal Composer.
@@ -947,7 +957,10 @@ function FullScreenChatViewInner({
           className="flex h-full min-h-0 shrink-0 flex-col bg-muted/30"
           style={{ width: sidebarWidth }}
         >
+          <ReplacementBoundary render={slots?.sidebar ? fallback => slots.sidebar!({ collapsed: sidebarCollapsed, width: sidebarCollapsed ? 0 : sidebarWidth }, fallback) : undefined}>
           <SidebarHeader
+            brandMark={slots?.sidebarBrandMark}
+            brandName={slots?.sidebarBrandName}
             onGoHome={onGoHome}
             onSearch={() => palette.setOpen(true)}
             onCollapse={() => onSidebarCollapsedChange(true)}
@@ -1002,12 +1015,16 @@ function FullScreenChatViewInner({
             onOpenSettings={(tab) => openSettings(tab)}
             settingsTrigger={slots?.settingsTrigger}
             sidebarFooterActions={slots?.sidebarFooterActions}
+            workspaceRegion={slots?.sidebarWorkspaces}
+            settingsRegion={slots?.sidebarSettings}
+            expandSidebar={() => onSidebarCollapsedChange(false)}
             settingsOpen={settingsOpen}
             wide={!sidebarCollapsed}
             className="min-w-0 flex-1"
             itemMenuItems={itemMenuItems}
             groups={groups}
           />
+          </ReplacementBoundary>
         </div>
       </aside>
       {/* Resize divider: invisible 4px hit area straddling the sidebar edge. */}
@@ -1044,6 +1061,8 @@ function FullScreenChatViewInner({
               active={(sidebarView === "chats" && !slots?.mainPanel)}
               testId="chats-view"
             >
+              <ReplacementBoundary render={slots?.mainConversation}>
+              <ReplacementBoundary render={sessions.activeId && !displayedLoad ? slots?.sessionHeader : undefined}>
               <ContentHeader
                 title={displayedLoad ? (sessions.sessions.find(item => item.id === displayedLoad?.sessionId)?.title ?? "") : chatTopBarPlaceholder}
                 icon={<Folder className="h-4 w-4" />}
@@ -1064,6 +1083,7 @@ function FullScreenChatViewInner({
                 )}
                 seamless
               />
+              </ReplacementBoundary>
               {displayedLoad ? (
                 <SessionLoadPanel
                   language={language}
@@ -1072,7 +1092,7 @@ function FullScreenChatViewInner({
                   onRetry={() => void onOpenSession(sessions.sessionLoad?.sessionId ?? displayedLoad!.sessionId)}
                   onHome={() => void onNewChatAndShow()}
                 />
-              ) : <ConversationViewRegion headerViewIds={slots?.conversationHeaderViewIds} selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
+              ) : <ReplacementBoundary render={sessions.activeId ? slots?.sessionBody : undefined}><ConversationViewRegion headerViewIds={slots?.conversationHeaderViewIds} selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
                 <NewChatWorkspaceContext.Provider value={newChatWorkspace}>
                   <ChatSurface
                     messagesMaxWidth={messagesWidth}
@@ -1086,7 +1106,8 @@ function FullScreenChatViewInner({
                     messageSourceLabel={messageSourceLabel}
                   />
                 </NewChatWorkspaceContext.Provider>
-              </ConversationViewRegion>}
+              </ConversationViewRegion></ReplacementBoundary>}
+              </ReplacementBoundary>
             </PrimaryWorkspaceView>
             {slots?.mainPanel && (
               <PrimaryWorkspaceView active testId="official-main-panel">
@@ -1169,6 +1190,8 @@ function FullScreenChatViewInner({
 // ---------------------------------------------------------------------------
 
 interface SidebarHeaderProps {
+  brandMark?: (owner: { size: number }, fallback: ReactNode) => ReactNode;
+  brandName?: (fallback: ReactNode) => ReactNode;
   onGoHome?: () => void;
   onSearch: () => void;
   onCollapse: () => void;
@@ -1229,6 +1252,8 @@ function HeaderAction({
 }
 
 function SidebarHeader({
+  brandMark,
+  brandName,
   onGoHome,
   onSearch,
   onCollapse,
@@ -1254,9 +1279,10 @@ function SidebarHeader({
       >
         {onGoHome && (
           <HeaderAction label={t("chat.goHome")} onClick={onGoHome}>
-            <Home className="h-4 w-4" />
+            <ReplacementBoundary render={brandMark ? fallback => brandMark({ size: 16 }, fallback) : undefined}><Home className="h-4 w-4" /></ReplacementBoundary>
           </HeaderAction>
         )}
+        <ReplacementBoundary render={brandName}>{null}</ReplacementBoundary>
         <div className="ml-auto flex items-center gap-0.5">
           <HeaderAction label={t("chat.search")} onClick={onSearch}>
             <Search className="h-4 w-4" />

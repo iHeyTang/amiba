@@ -1,3 +1,4 @@
+import { ReplacementBoundary } from "../chat/ReplacementBoundary";
 import { useNewChatWorkspace } from "../chat/new-chat-workspace";
 import { useDirectoryChooser } from "../directory-chooser";
 import { InteractionRegion } from "../primitives/interaction-region";
@@ -50,6 +51,8 @@ import type { ComposerTriggerRuntime } from "../chat/composer/triggers/contracts
 export const HOME_PENDING_DRAFT_KEY = "home.pendingDraft";
 
 export interface HomeViewProps {
+  renderAttachments?: import("../chat/Composer").ComposerAttachmentsRenderer;
+  brandMark?: (owner: { size: number; className?: string }, fallback: import("react").ReactNode) => import("react").ReactNode;
   triggerRuntime?: ComposerTriggerRuntime;
   /** Where to send the user when they hit "Open in tab" / submit chat. */
   onOpenChat: () => void;
@@ -103,6 +106,8 @@ export default function HomeView(props: HomeViewProps) {
 // ---------------------------------------------------------------------------
 
 function Home({
+  renderAttachments,
+  brandMark,
   onOpenChat,
   onOpenSettings,
   headerLeftInset,
@@ -401,7 +406,7 @@ function Home({
           {panelMode ? (
             // Let the companion lead, with one quiet invitation above the composer.
             <div className="flex flex-col items-center gap-2 text-center">
-              <EmptyStateVisual scene="home"><AmibaLogo size={56} /></EmptyStateVisual>
+              <ReplacementBoundary render={brandMark ? fallback => brandMark({ size: 56 }, fallback) : undefined}><EmptyStateVisual scene="home"><AmibaLogo size={56} /></EmptyStateVisual></ReplacementBoundary>
               <p className="text-balance text-sm font-normal leading-6 text-muted-foreground">
                 {t("newtab.subtitle")}
               </p>
@@ -445,6 +450,7 @@ function Home({
             maxTextareaPx={280}
             placeholder={{ typewriter: placeholderExamples }}
             attachments={att}
+            renderAttachments={renderAttachments}
             dropOverlay={t("newtab.dropOverlay")}
             sendTitle={t("newtab.send.tooltip")}
             modelPicker={

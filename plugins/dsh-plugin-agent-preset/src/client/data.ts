@@ -3,7 +3,7 @@
  *
  * The official `@deepseek-ai/dsh-client-ui-agent-preset` reference consumes the
  * `agentPresets` face (`{list,copy,read,deletePreset}`) plus the `settings`
- * face for default-preset writes. Since DSH 0.1.5-rc.1 those faces are reached
+ * face for default-preset writes. Since DSH 0.1.5-rc.2 those faces are reached
  * through `ctx.remote.<namespace>` — the gateway installs every selected wire
  * namespace as its own `remote.<namespace>` service — so the consuming
  * plugin's `inject` must list each face it touches (`remote.agentPresets`,
