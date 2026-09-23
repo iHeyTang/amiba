@@ -3892,7 +3892,7 @@ export function WorkspacePane({
           pane.open ? "opacity-100" : "invisible opacity-0",
         )}
       >
-        <div className="absolute inset-y-0 left-1/2 w-px bg-border transition-colors group-hover:bg-primary/60 group-focus-visible:bg-primary/60 group-active:bg-primary/80" />
+        <div className="absolute inset-y-0 left-1/2 w-px bg-transparent transition-colors group-hover:bg-primary/60 group-focus-visible:bg-primary/60 group-active:bg-primary/80" />
       </div>
       {resizing && createPortal(
         <div

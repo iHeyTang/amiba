@@ -1111,7 +1111,6 @@ function FullScreenChatViewInner({
                   topBarClassName,
                   messagesWidth !== "full" && "amiba-chat-header--wide-overlay",
                 )}
-                seamless
               />
               {displayedLoad ? (
                 <SessionLoadPanel
@@ -1346,7 +1345,6 @@ interface ContentHeaderProps {
   leftInset?: number;
   heightPx?: number;
   className?: string;
-  seamless?: boolean;
   canvas?: boolean;
 }
 
@@ -1363,17 +1361,17 @@ function ContentHeader({
   leftInset = 0,
   heightPx = 40,
   className,
-  seamless = false,
   canvas = false,
 }: ContentHeaderProps) {
   const [titleEditing, setTitleEditing] = useState(false);
 
   return (
     <PaneHeaderBar
+      data-conversation-header
       data-background-surface={canvas ? "canvas-header" : "header"}
       heightPx={heightPx}
       leftInset={sidebarCollapsed ? leftInset : 0}
-      bordered={!seamless}
+      bordered={false}
       style={{
         paddingRight: `var(--amiba-header-actions-right, ${HEADER_RIGHT_PADDING_PX}px)`,
         "--amiba-header-height": `${heightPx}px`,

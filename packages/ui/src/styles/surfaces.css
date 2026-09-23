@@ -52,6 +52,21 @@
   backdrop-filter: blur(var(--amiba-glass-blur));
   -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
 }
+/* The conversation header shares its canvas, with no independent tint. */
+[data-amiba-product-shell] [data-conversation-header] {
+  background: transparent;
+  backdrop-filter: blur(var(--amiba-reading-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-reading-blur));
+}
+/* Keep split sizing, but paint the workbench above the conversation plane. */
+[data-amiba-product-shell] [data-workspace-container] {
+  z-index: 10;
+}
+[data-amiba-product-shell] [data-background-surface="workbench"] {
+  border-radius: 16px 0 0 16px;
+  box-shadow: -10px 0 28px hsl(var(--foreground) / 0.12),
+    inset 1px 0 0 rgb(255 255 255 / 0.25);
+}
 /* The owning pane has already blurred the backdrop. Nested chrome shares it. */
 [data-amiba-product-shell] [data-background-surface="navigation"] [data-background-surface="header"],
 [data-amiba-product-shell] [data-background-surface="workbench"] [data-background-surface="header"],
