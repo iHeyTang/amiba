@@ -18,7 +18,7 @@ it('shares staged selection, preserves it on roster refresh, then resets after h
   expect(hero.store.getSnapshot().current).toBe('writer');
   expect(await hero.select('missing')).toBeTruthy();
   expect(hero.store.getSnapshot().current).toBe('writer');
-  hero.reset(); await hero.load();
+  hero.reset(); expect(hero.store.getSnapshot().current).toBe('default'); await hero.load();
   expect(hero.store.getSnapshot().current).toBe('default');
 });
 it('retains the staged preset on a failed roster refresh', async () => {
@@ -26,4 +26,11 @@ it('retains the staged preset on a failed roster refresh', async () => {
   const hero = createHeroPreset(load);
   await hero.select('writer'); await hero.load();
   expect(hero.store.getSnapshot()).toMatchObject({ current: 'writer', error: 'Error: offline' });
+});
+
+it('can retry a synchronous service-not-ready error', async () => {
+  const load = vi.fn().mockImplementationOnce(() => { throw new Error('not ready'); }).mockResolvedValue({ presets });
+  const hero = createHeroPreset(load);
+  await hero.load(); await hero.load();
+  expect(hero.store.getSnapshot()).toMatchObject({ current: 'default', error: null });
 });
