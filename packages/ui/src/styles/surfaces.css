@@ -142,3 +142,36 @@
     border-top-right-radius: 0;
   }
 }
+
+/* A narrow glass edge, with a slow moving reflection rather than a divider. */
+[data-sidebar-glass]::before,
+[data-sidebar-glass]::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+[data-sidebar-glass]::before {
+  inset-block: 0;
+  width: 4px;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.16));
+}
+[data-sidebar-glass]::after {
+  top: 0;
+  width: 3px;
+  height: 28%;
+  border-radius: 50%;
+  background: linear-gradient(180deg, transparent, rgb(255 255 255 / 0.28), transparent);
+  animation: amiba-sidebar-reflection 18s ease-in-out infinite alternate;
+}
+@keyframes amiba-sidebar-reflection {
+  from { transform: translateY(-110%); }
+  to { transform: translateY(370%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-sidebar-glass]::after {
+    animation: none;
+    transform: translateY(120%);
+  }
+}
