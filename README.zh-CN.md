@@ -1,5 +1,7 @@
 # Amiba
 
+[DSH 官方插槽兼容维护台账](docs/dsh-slot-compatibility.md) — 官方版本对照、Amiba 支持程度、接入与退役决策的长期维护入口。
+
 **以 DSH 为唯一智能体内核的桌面工作台。** · [English](./README.md)
 
 Amiba 是一个构建在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）

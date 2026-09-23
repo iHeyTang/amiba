@@ -35,7 +35,7 @@ keep their takeover semantics:
   gallery is the priority-1 fallback; an ordinary priority-0 plugin can replace it.
 
 The rc.2 behavior ledger and tested boundaries are in
-[`docs/dsh-rc2-slot-coverage.md`](../../../../docs/dsh-rc2-slot-coverage.md).
+[`docs/dsh-slot-compatibility.md`](../../../../docs/dsh-slot-compatibility.md).
 
 Run `node plugins/dsh-plugin-ui-shell/scripts/audit-official-theme.mjs` from the
 workspace after installing dependencies. This checks DSH token references in

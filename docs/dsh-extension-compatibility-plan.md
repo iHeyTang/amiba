@@ -1,3 +1,5 @@
+> 本文保留历史审计／设计背景；官方插槽的当前状态及后续接入、同步、退役决策统一维护于 [DSH 官方插槽兼容维护台账](dsh-slot-compatibility.md)，不再在本文更新插槽当前状态。
+
 # DSH extension compatibility implementation
 
 Base: `main` at `3cbcaaa2dbf4b9036c43c5e0a175bcdcccaefecb`.

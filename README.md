@@ -1,5 +1,7 @@
 # Amiba
 
+[DSH slot compatibility ledger](docs/dsh-slot-compatibility.md) — maintained release comparison, Amiba support, and adoption/retirement decisions (Chinese).
+
 **A DSH-native desktop agent workspace.** · [中文文档](./README.zh-CN.md)
 
 Amiba is a desktop agent workspace built on top of
