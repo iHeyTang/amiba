@@ -2399,15 +2399,21 @@ export function MessageTurns({
               );
               });
               const groupMessages = group.items.flatMap(({ item }) => item.kind === "execution" ? item.messages : item.kind === "message" ? [item.message] : []);
-              const body = group.assistant && group.items.length > 1
-                ? <div data-assistant-reply-group data-background-surface="assistant-message">{content}</div>
+              const ownsReview = group === replyGroups.findLast(candidate => candidate.assistant);
+              const body = group.assistant
+                ? <div data-assistant-reply-group data-background-surface="assistant-message">
+                    {content}
+                    {ownsReview && reviewResource && onReviewWorkspaceChanges && <div className="px-4 pb-3">
+                      <WorkspaceChangesCard resource={reviewResource} onReview={onReviewWorkspaceChanges} />
+                    </div>}
+                  </div>
                 : content;
               return group.assistant && groupMessages.some(message => bubbleTextContent(message.content).trim())
                 ? <AssistantReplyChrome key={group.items[0]!.item.id} messages={groupMessages} actions={assistantActions} timeFormat={timeFormat} timeLocale={language}>{body}</AssistantReplyChrome>
                 : <Fragment key={group.items[0]!.item.id}>{body}</Fragment>;
             })}
             </ExecutionNoticesContext.Provider>
-            {reviewResource && onReviewWorkspaceChanges ? (
+            {!replyGroups.some(group => group.assistant) && reviewResource && onReviewWorkspaceChanges ? (
               <WorkspaceChangesCard
                 resource={reviewResource}
                 onReview={onReviewWorkspaceChanges}

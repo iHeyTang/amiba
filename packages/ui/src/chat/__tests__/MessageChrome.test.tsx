@@ -88,6 +88,7 @@ describe("chat message chrome", () => {
               uiId: "assistant-1",
               role: "assistant",
               content: "Done",
+              runtimeTurn: 7,
               toolProgress: [
                 {
                   tool: "edit",
@@ -112,9 +113,15 @@ describe("chat message chrome", () => {
           ] as UiMessage[]
         }
         onReviewWorkspaceChanges={onReview}
+        openTurnFile={() => {}}
+        turnTail={() => <div>Produced report.pdf</div>}
       />,
     );
 
+    const group = screen.getByText("Done").closest("[data-assistant-reply-group]");
+    expect(group).toContainElement(screen.getByText("Produced report.pdf"));
+    expect(group).toContainElement(screen.getByRole("button", { name: "workspacePane.review" }));
+    expect(group?.closest("[data-assistant-message-chrome]")?.querySelectorAll('[data-action-align="left"]')).toHaveLength(1);
     expect(screen.getByText("src/App.tsx")).toBeInTheDocument();
     expect(screen.getByText("src/theme.css")).toBeInTheDocument();
     expect(screen.getByText("+2")).toBeInTheDocument();
@@ -2137,7 +2144,7 @@ it("groups continuous assistant records while notices and user turns remain boun
   ];
   const { container } = render(<MessageTurns messages={messages} />);
   const group = container.querySelector('[data-assistant-reply-group]')!;
-  expect(container.querySelectorAll('[data-assistant-reply-group]')).toHaveLength(1);
+  expect(container.querySelectorAll('[data-assistant-reply-group]')).toHaveLength(3);
   expect(group).toHaveTextContent('Waiting for approval');
   expect(group).toHaveTextContent('Activated');
   expect(group).not.toHaveTextContent('Model update');
