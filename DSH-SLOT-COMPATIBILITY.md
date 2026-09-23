@@ -343,33 +343,48 @@
 
 以下 25 项仍在维护；源码引用已核实，专项运行验收待补。已停止支持的私有槽不再列入当前清单。
 
-| 私有插槽 | 源码证据 | 维护建议 |
-| --- | --- | --- |
-| `amiba.agentPreset.section` | [源码](plugins/dsh-plugin-agent-preset/src/client/index.tsx) | 保留产品能力 |
-| `amiba.chat.content.overlay` | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 保留产品能力 |
-| `amiba.composer.modelPicker` | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 保留产品能力 |
-| `amiba.connection.access` | [源码](plugins/dsh-plugin-connector-core/src/client/index.tsx) | 保留产品能力 |
-| `amiba.conversation.notice` | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 保留产品能力 |
-| `amiba.conversation.question` | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 保留产品能力 |
-| `amiba.emptyState.visual` | [源码](plugins/dsh-plugin-ui-shell/src/client/surface-provider.tsx) | 保留产品能力 |
-| `amiba.filePreview.renderer` | [源码](plugins/dsh-plugin-file-preview/src/client/index.tsx) | 保留产品能力 |
-| `amiba.markdown.extension` | [源码](plugins/dsh-plugin-ui-shell/src/client/index.tsx) | 保留产品能力 |
-| `amiba.message.source` | [源码](plugins/dsh-plugin-ui-shell/src/client/index.tsx) | 保留产品能力 |
-| `amiba.models.extension` | [源码](plugins/dsh-plugin-model-plane/src/client/index.tsx) | 保留产品能力 |
-| `amiba.navigation.after` | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 保留产品能力 |
-| `amiba.navigation.before` | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 保留产品能力 |
-| `amiba.onboarding.companion` | [源码](plugins/dsh-plugin-onboarding/src/client/Guide.tsx) | 保留产品能力 |
-| `amiba.onboarding.step` | [源码](plugins/dsh-plugin-onboarding/src/client/Guide.tsx) | 保留产品能力 |
-| `amiba.session.observer` | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 保留产品能力 |
-| `amiba.sessions.item.menu` | [源码](plugins/dsh-plugin-ui-shell/src/client/index.tsx) | 保留产品能力 |
-| `amiba.sessions.list.group` | [源码](plugins/dsh-plugin-ui-shell/src/client/index.tsx) | 保留产品能力 |
-| `amiba.settings.content.overlay` | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 保留产品能力 |
-| `amiba.workbench.panel` | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 保留产品能力 |
-| `amiba.workbench.shell` | [源码](plugins/dsh-plugin-ui-shell/src/client/index.tsx) | 保留产品能力 |
-| `amiba.workbench.summary` | [源码](plugins/dsh-plugin-ui-shell/src/client/index.tsx) | 保留产品能力 |
-| `amiba.workbench.view` | [源码](plugins/dsh-plugin-ui-shell/src/client/index.tsx) | 保留产品能力 |
-| `amiba.workspace.navigation` | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 保留产品能力 |
-| `amiba.workspace.view` | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 保留产品能力 |
+本次替代审查基于 `83befefc` 的 Amiba 源码和官方 rc.2 声明，只评估迁移方向，尚未实施替换。**未发现可以保证行为不变、仅改名称即可替换的槽。**
+
+优先收敛普通页面的导航和正文（2 项）；导航附加区及局部浮层（4 项）按用途决定迁移；工作台和文件预览（4 项）需整体迁移配套服务；其余 15 项暂时保留。表中“条件迁移”不代表已兼容，也不授权改变现有页面布局。
+
+| 私有插槽／源码 | 官方候选（以 rc.2 为准） | 维护建议 | 判断依据／迁移条件 |
+|---|---|---|---|
+| `amiba.agentPreset.section`<br>[源码](plugins/dsh-plugin-agent-preset/src/client/index.tsx) | 无等价槽 | 保留 | 这是预设详情的子区块；`conversation.hero.agentPreset` 替换整个首页选择器，粒度不同。 |
+| `amiba.chat.content.overlay`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | `shell.overlay`（仅全局浮层） | 条件迁移 | 当前挂在聊天区域内；全局浮层可迁，局部遮罩需保留定位、裁剪和显示条件。仓库未找到注册方，先确认是否还需要此扩展点。 |
+| `amiba.composer.modelPicker`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | `conversation.input.model`（会话内） | 保留 | 私有槽承载首页无会话的草稿选择；官方槽为 session，不能覆盖首页场景。 |
+| `amiba.connection.access`<br>[源码](plugins/dsh-plugin-connector-core/src/client/index.tsx) | 无等价槽 | 保留 | 连接配置子区块带 ownerId/recordId；通用设置槽不提供等价配置上下文。 |
+| `amiba.conversation.notice`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 无等价槽 | 保留 | 按通知 source/reference 分派并传入正文；聊天 node/commandview 的数据契约不同。 |
+| `amiba.conversation.question`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 无等价槽 | 保留 | 按问题 ID 分派并提供 respond/cancel、错误及提交状态；toolview 是工具行，不是待回答交互。 |
+| `amiba.emptyState.visual`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/surface-provider.tsx) | `conversation.hero.brand.mark`（仅首页品牌） | 保留 | 空态视觉覆盖多种 surface；官方品牌槽只对应首页，不能替代完整能力。 |
+| `amiba.filePreview.renderer`<br>[源码](plugins/dsh-plugin-file-preview/src/client/index.tsx) | `sidebar.right.tab.document` | 随文件框架迁移 | 私有槽按 MIME/扩展名选 renderer，并提供 document/readBytes；官方为 session/keyed、预加载 content 和 tabInfo。须迁移资源地址、加载与标签页上下文。 |
+| `amiba.markdown.extension`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/index.tsx) | 无等价槽 | 保留 | 这是 Markdown 扩展业务注册表；替换聊天节点无法等价保留全部 Markdown 使用场景。 |
+| `amiba.message.source`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/index.tsx) | 无等价槽 | 保留 | 按来源 ID 提供标签及动态解析；不属于官方 UI 渲染槽契约。 |
+| `amiba.models.extension`<br>[源码](plugins/dsh-plugin-model-plane/src/client/index.tsx) | `settings.models.footer`／`settings.models.provider-card`（局部） | 保留 | 当前是模型分配区且向父层回传 provider inventory；官方页脚/卡片不能直接保留位置和 onModelsChange。 |
+| `amiba.navigation.after`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | `sidebar.panellist`（页面导航） | 条件迁移 | 若是页面入口，迁往官方导航；任意 UI 内容和固定前后位置不等价。仓库未找到注册方。 |
+| `amiba.navigation.before`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | `sidebar.panellist`（页面导航） | 条件迁移 | 若是页面入口，迁往官方导航；官方 order 不保证位于原生新建按钮之前。仓库未找到注册方。 |
+| `amiba.onboarding.companion`<br>[源码](plugins/dsh-plugin-onboarding/src/client/Guide.tsx) | 无等价槽 | 保留 | 引导角色消费 mood/reactionId；`settings.onboarding` 是整个步骤入口。 |
+| `amiba.onboarding.step`<br>[源码](plugins/dsh-plugin-onboarding/src/client/Guide.tsx) | `settings.onboarding`（外层已接入） | 保留子槽 | 私有步骤支持持久化完成、角色对话、共享操作区；当前引导已通过官方外层槽接入，子步骤不是重复入口。 |
+| `amiba.session.observer`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | 无等价槽 | 保留 | 提供已读状态给通知观察者；不是可见 UI 区块。 |
+| `amiba.sessions.item.menu`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/index.tsx) | rc.2 无；后续 `sidebar.workspaces.session.menu.item` | 按 rc.2 保留 | 当前为 visible/run/subscribe 业务贡献。后续名称不在目标版，不能以此替换。 |
+| `amiba.sessions.list.group`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/index.tsx) | 无等价槽 | 保留 | 按 claim 分配会话并管理分组；`sidebar.workspaces` 替换整个区域，不能替代分组贡献契约。 |
+| `amiba.settings.content.overlay`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | `shell.overlay`（仅全局浮层） | 条件迁移 | 当前仅在设置内容区挂载；全局浮层可迁，须保留设置打开条件和焦点/遮罩边界。仓库未找到注册方。 |
+| `amiba.workbench.panel`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | `sidebar.right.pane.tab` | 随工作台迁移 | 私有 owner 同时处理 tab/content、openPanel 和工具定位；官方使用 tabInfo/资源类型，需同步迁移面板插件。 |
+| `amiba.workbench.shell`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/index.tsx) | `rightbar`／`rightbar.session` | 随工作台迁移 | 官方可承载右栏，但私有贡献还提供 toggle、排序选举及 renderPanel；需合并控制器和布局状态。 |
+| `amiba.workbench.summary`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/index.tsx) | `shell.overlay`（仅承载层） | 保留 | 官方浮层不提供按会话汇总卡片的注册、排序及消费；搬到浮层不等于替代此注册表。 |
+| `amiba.workbench.view`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/index.tsx) | `sidebar.right.pane.tab` | 随工作台迁移 | 需迁移 resourceType、launcher、onClose、后台 host、实例复用和 URL 解析到官方资源/标签服务；不是改槽名。 |
+| `amiba.workspace.navigation`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | `sidebar.panellist` | 优先迁移普通页面 | 官方现有入口已支持图标、标签和 main key 导航；Cron/Steward 的未读信息与私有 openWorkspace 依赖要先迁到独立服务。 |
+| `amiba.workspace.view`<br>[源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) | `main`；桌面宠物 → `shell.overlay` | 优先拆分迁移 | 普通页面按 key 迁到 main；桌面宠物是浮层，不应混用页面槽。须保留 sessionActivity、窗口留白和侧栏状态。 |
+
+<details>
+<summary>替代判断的主要契约与实现依据</summary>
+
+- [Amiba 私有 owner 和作用域](packages/extension-sdk/src/slots.ts)、[工作台业务贡献契约](packages/extension-sdk/src/workbench.ts)。
+- [官方 main/sidebar.panellist 的现有消费入口](plugins/dsh-plugin-ui-shell/src/client/main-panel-list.tsx)、[页面与浮层的实际挂载位置](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx)。
+- [引导步骤的私有能力](plugins/dsh-plugin-onboarding/src/client/contracts.ts)、[引导的官方外层接入](plugins/dsh-plugin-onboarding/src/client/index.tsx)。
+- [文件 renderer 的选举与读取契约](plugins/dsh-plugin-file-preview/src/client/renderers.ts)、[模型扩展回传和官方 footer 并列派发](plugins/dsh-plugin-model-plane/src/client/index.tsx)。
+- 官方 rc.2：[主布局](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.5-rc.2/packages/client/ui-layout/src/client/index.ts)、[右栏 tab 契约](https://unpkg.com/@deepseek-ai/dsh-client-ui-sidebar-right@0.1.5-rc.2/lib/types/client/contract/slots.d.ts)、[文档预览契约](https://unpkg.com/@deepseek-ai/dsh-client-ui-sidebar-documentpreview@0.1.5-rc.2/lib/types/client/document/contract.d.ts)。本次实际读取本地固定 tag／发布包声明，未把后续 alpha 的能力算入 rc.2。
+
+</details>
 
 <a id="maintenance"></a>
 
