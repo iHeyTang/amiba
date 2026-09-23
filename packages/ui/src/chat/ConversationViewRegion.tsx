@@ -61,7 +61,7 @@ export function ConversationViewRegion({
         <div
           role="tablist"
           aria-label={chatLabel}
-          className="mx-3 my-2 inline-flex h-9 w-fit max-w-full shrink-0 items-center overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground"
+          className="mx-3 my-2 inline-flex h-9 w-fit max-w-full shrink-0 items-center overflow-x-auto rounded-lg bg-chat-surface p-1 text-muted-foreground"
           onKeyDown={(event) => {
             const next =
               event.key === "ArrowRight"
@@ -95,7 +95,7 @@ export function ConversationViewRegion({
               onClick={() => select(row.id)}
               className={cn(
                 "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                index === position && "bg-background text-foreground shadow",
+                index === position && "bg-chat-surface text-foreground shadow",
               )}
             >
               {row.label}

@@ -51,7 +51,7 @@ export function SessionLoadPanel({ error, language, retrying = false, onRetry, o
             <ChevronRight aria-hidden className="size-3 transition-transform group-open:rotate-90" />
             {zh ? "错误详情" : "Error details"}
           </summary>
-          <pre className="absolute inset-x-0 top-full mt-3 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-muted/50 p-4 font-mono text-[11px] leading-5 text-muted-foreground">{error}</pre>
+          <pre className="absolute inset-x-0 top-full mt-3 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-chat-surface p-4 font-mono text-[11px] leading-5 text-muted-foreground">{error}</pre>
         </details>}
       </div>
     </div>

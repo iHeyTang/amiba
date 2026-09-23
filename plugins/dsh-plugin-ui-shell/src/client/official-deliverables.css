@@ -11,8 +11,8 @@
   height: 64px;
   padding: 10px;
   border-color: hsl(var(--border) / 0.45);
-  backdrop-filter: blur(var(--amiba-content-blur, 10px));
-  -webkit-backdrop-filter: blur(var(--amiba-content-blur, 10px));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 :root body .nyYjTG_fileIcon {
   width: 36px;

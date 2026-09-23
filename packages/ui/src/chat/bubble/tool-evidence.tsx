@@ -126,7 +126,7 @@ export function CodeEvidence({
 }) {
   if (!text.trim()) return null;
   return (
-    <section className="min-w-0 overflow-hidden rounded-md border border-border/45 bg-muted/20">
+    <section className="min-w-0 overflow-hidden rounded-md border border-border/45 bg-chat-surface">
       <pre
         className={cn(
           "max-h-72 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[10.5px] leading-[1.6]",
@@ -154,7 +154,7 @@ export function TerminalEvidence({
   failed?: boolean;
 }) {
   return (
-    <section className="overflow-hidden rounded-md border border-border/45 bg-muted/20">
+    <section className="overflow-hidden rounded-md border border-border/45 bg-chat-surface">
       <pre
         className={cn(
           "max-h-80 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[10.5px] leading-[1.65]",
@@ -181,7 +181,7 @@ export function TerminalEvidence({
 export function DiffEvidence({ diff }: { diff: string }) {
   const lines = stripAnsi(diff).split("\n");
   return (
-    <section className="overflow-hidden rounded-md border border-border/45 bg-muted/15">
+    <section className="overflow-hidden rounded-md border border-border/45 bg-chat-surface">
       <pre className="max-h-80 overflow-auto py-1.5 font-mono text-[10.5px] leading-[1.55]">
         {lines.map((line, index) => {
           const added = line.startsWith("+") && !line.startsWith("+++");
@@ -212,7 +212,7 @@ export function DiffEvidence({ diff }: { diff: string }) {
 export function TodoEvidence({ value }: { value: unknown }) {
   if (!Array.isArray(value) || value.length === 0) return null;
   return (
-    <ul className="overflow-hidden rounded-md border border-border/45 bg-muted/15">
+    <ul className="overflow-hidden rounded-md border border-border/45 bg-chat-surface">
       {value.slice(0, 30).map((item, index) => {
         const record = recordOf(item);
         const text =
@@ -326,7 +326,7 @@ export function StructuredEvidence({ value }: { value: unknown }) {
     return null;
   }
   return (
-    <section className="overflow-hidden rounded-md border border-border/45 bg-muted/15">
+    <section className="overflow-hidden rounded-md border border-border/45 bg-chat-surface">
       <div className="px-3 py-2 text-[11px]">
         <StructuredValue value={value} />
       </div>

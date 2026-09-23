@@ -6,6 +6,11 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        // Conversation surfaces share one neutral material, including tool cards.
+        "chat-surface": {
+          DEFAULT: "var(--amiba-content-fill, hsl(var(--muted) / 0.16))",
+          hover: "var(--amiba-content-hover, hsl(var(--muted) / 0.3))",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

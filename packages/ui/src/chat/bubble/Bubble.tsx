@@ -184,7 +184,7 @@ function MessageNoticeRow({
         className={cn(
           "group/notice inline-flex min-h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left text-[11px] text-muted-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
           hasBody
-            ? "cursor-pointer hover:bg-muted/45 hover:text-foreground"
+            ? "cursor-pointer hover:bg-chat-surface-hover hover:text-foreground"
             : "cursor-default",
         )}
       >
@@ -374,12 +374,12 @@ function BubbleUnmemoized({
     return (
       <div
         data-selection="text"
-        className="min-w-0 rounded-xl border border-border/60 bg-secondary px-4 py-3 text-sm text-secondary-foreground"
+        className="min-w-0 rounded-xl border border-border/60 bg-chat-surface px-4 py-3 text-sm text-secondary-foreground"
       >
         {sourceLabel && (
           <div
             data-testid="message-source"
-            className="mb-2 inline-flex rounded bg-muted px-1 py-0.5 text-[10px] leading-none text-muted-foreground"
+            className="mb-2 inline-flex rounded bg-chat-surface px-1 py-0.5 text-[10px] leading-none text-muted-foreground"
           >
             {t("sidepanel.message.from", { source: sourceLabel })}
           </div>
@@ -562,7 +562,7 @@ function BubbleUnmemoized({
   return (
     <div
       data-selection="text"
-      className="mx-3 rounded-md bg-muted/50 p-2 font-mono text-xs"
+      className="mx-3 rounded-md bg-chat-surface p-2 font-mono text-xs"
     >
       [{m.role}] {bubbleTextContent(m.content)}
     </div>
@@ -787,7 +787,7 @@ function TraceDisclosure({
             : t("sidepanel.trace.expandDetails")
         }
         onClick={() => setExpanded((value) => !value)}
-        className="group/trace inline-flex min-h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="group/trace inline-flex min-h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-chat-surface-hover hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       >
         <span className={cn("min-w-0 truncate", labelClassName)}>{label}</span>
         <ChevronRight
@@ -1058,7 +1058,7 @@ function ExecutionDisclosure({
         className={cn(
           "group/run inline-flex min-h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left text-[11px] text-muted-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
           hasDetails
-            ? "cursor-pointer hover:bg-muted/45 hover:text-foreground"
+            ? "cursor-pointer hover:bg-chat-surface-hover hover:text-foreground"
             : "cursor-default",
         )}
       >
@@ -2345,7 +2345,7 @@ function WorkspaceChangesCard({
       aria-label={t("workspacePane.filesChanged", {
         count: review.files.length,
       })}
-      className="overflow-hidden rounded-lg border border-border/45 bg-muted/[0.16]"
+      className="overflow-hidden rounded-lg border border-border/45 bg-chat-surface"
     >
       <div className="flex min-h-8 items-center gap-2 px-2.5 py-1">
         <FileDiff className="h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
@@ -2367,7 +2367,7 @@ function WorkspaceChangesCard({
         <button
           type="button"
           onClick={() => void onReview(resource)}
-          className="inline-flex h-6 shrink-0 items-center rounded-md px-2 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-muted/70 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
+          className="inline-flex h-6 shrink-0 items-center rounded-md px-2 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-chat-surface-hover hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/35"
         >
           {t("workspacePane.review")}
         </button>

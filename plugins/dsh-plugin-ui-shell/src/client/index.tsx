@@ -138,17 +138,15 @@ export const inject = ["slots", "sessions", "remote", "uiSession", "fileUpload"]
 
 const PACKAGE_ID = "@amiba/dsh-plugin-ui-shell";
 const STYLE_ID = `${PACKAGE_ID}/product-shell.css`;
-if (
-  typeof document !== "undefined" &&
-  document.querySelector(
+if (typeof document !== "undefined") {
+  // Reuse the node, but refresh its CSS when DSH reloads the client module.
+  const tag = document.querySelector<HTMLStyleElement>(
     `style[data-plugin-css=${JSON.stringify(STYLE_ID)}]`,
-  ) === null
-) {
-  const tag = document.createElement("style");
+  ) ?? document.createElement("style");
   tag.dataset.plugin = PACKAGE_ID;
   tag.dataset.pluginCss = STYLE_ID;
   tag.textContent = shellCss;
-  document.head.append(tag);
+  if (!tag.isConnected) document.head.append(tag);
 }
 
 export type {

@@ -91,17 +91,17 @@ function approvalOutcomeInfo(t: TranslateFn): Record<ApprovalOutcome, ApprovalOu
     cancelled: {
       label: t("sidepanel.permission.denied"),
       tooltip: t("sidepanel.permission.denied.tooltip"),
-      className: "border-border bg-muted/40 text-muted-foreground"
+      className: "border-border bg-chat-surface text-muted-foreground"
     },
     unavailable: {
       label: t("sidepanel.permission.expired"),
       tooltip: t("sidepanel.permission.expired.tooltip"),
-      className: "border-border bg-muted/40 text-muted-foreground"
+      className: "border-border bg-chat-surface text-muted-foreground"
     },
     expired: {
       label: t("sidepanel.permission.expired"),
       tooltip: t("sidepanel.permission.expired.tooltip"),
-      className: "border-border bg-muted/40 text-muted-foreground"
+      className: "border-border bg-chat-surface text-muted-foreground"
     },
     failed: {
       label: t("sidepanel.permission.submitFailed"),
@@ -192,7 +192,7 @@ export function ApprovalBanner({
               {command && (
                 <pre
                   data-selection="text"
-                  className="approval-code mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border/45 bg-muted/25 px-3 py-2.5 font-mono text-xs leading-[1.55] text-foreground/85 [overflow-wrap:anywhere]">
+                  className="approval-code mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border/45 bg-chat-surface px-3 py-2.5 font-mono text-xs leading-[1.55] text-foreground/85 [overflow-wrap:anywhere]">
                   <ApprovalCode command={command} tool={req.tool} />
                 </pre>
               )}
@@ -217,7 +217,7 @@ export function ApprovalBanner({
                       className={cn(
                         "inline-flex h-7 select-none items-center justify-center gap-1.5 rounded-md border px-2.5 text-[11px] font-medium transition-[background-color,color,border-color,opacity] focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/50",
                         d.variant === "neutral" &&
-                          "border-border/50 bg-transparent text-foreground/70 hover:bg-muted/40 hover:text-foreground",
+                          "border-border/50 bg-transparent text-foreground/70 hover:bg-chat-surface-hover hover:text-foreground",
                         d.variant === "destructive" &&
                           "ml-auto border-transparent bg-transparent text-destructive/85 hover:bg-destructive/[0.06] hover:text-destructive",
                         anyPending && "cursor-not-allowed opacity-50",
@@ -356,7 +356,7 @@ export function ApprovalRecordChip({ record }: { record: ApprovalRecord }) {
       <span
         className={cn(
           "inline-flex h-5 shrink-0 items-center gap-1 rounded-full border px-1.5 font-medium",
-          meta ? meta.className : "border-border bg-muted/30 text-muted-foreground"
+          meta ? meta.className : "border-border bg-chat-surface text-muted-foreground"
         )}>
         {!meta && <Loader2 className="h-2.5 w-2.5 shrink-0 animate-spin" aria-hidden />}
         <span>{meta ? meta.label : t("sidepanel.permission.waiting")}</span>

@@ -108,7 +108,7 @@ export function ToolRowFrame({
         className={cn(
           "group/tool inline-flex min-h-7 max-w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-[11px] text-muted-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
           actionable
-            ? "cursor-pointer hover:bg-muted/45 hover:text-foreground"
+            ? "cursor-pointer hover:bg-chat-surface-hover hover:text-foreground"
             : "cursor-default",
           running && "text-foreground/75",
         )}

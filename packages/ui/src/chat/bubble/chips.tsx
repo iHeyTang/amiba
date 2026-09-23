@@ -78,7 +78,7 @@ export function ErrorBlock({ error, onOpenSettings, onRetry, retryDisabled }: Er
       role="alert"
       data-selection="text"
       data-chat-error-kind={presentation.kind}
-      className="w-full max-w-lg rounded-xl border border-border/70 bg-background/90 px-3 py-2.5 text-left shadow-[0_1px_2px_hsl(var(--foreground)/0.04)]"
+      className="w-full max-w-lg rounded-xl border border-border/70 bg-chat-surface px-3 py-2.5 text-left shadow-[0_1px_2px_hsl(var(--foreground)/0.04)]"
     >
       <div className="flex items-start gap-2">
         <span
@@ -94,7 +94,7 @@ export function ErrorBlock({ error, onOpenSettings, onRetry, retryDisabled }: Er
               {t(presentation.titleKey)}
             </p>
             {presentation.status && (
-              <span className="rounded-md bg-muted/70 px-1.5 py-0.5 font-mono text-[9px] leading-none text-muted-foreground/80">
+              <span className="rounded-md bg-chat-surface px-1.5 py-0.5 font-mono text-[9px] leading-none text-muted-foreground/80">
                 HTTP {presentation.status}
               </span>
             )}
@@ -111,7 +111,7 @@ export function ErrorBlock({ error, onOpenSettings, onRetry, retryDisabled }: Er
           <button
             type="button"
             onClick={() => onOpenSettings(presentation.settingsTarget)}
-            className="-ml-1.5 mt-1.5 inline-flex h-6 items-center gap-1 self-start rounded-md px-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50"
+            className="-ml-1.5 mt-1.5 inline-flex h-6 items-center gap-1 self-start rounded-md px-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-chat-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/50"
           >
             {t(presentation.actionKey)}
             <ArrowRight className="h-3 w-3" />
@@ -147,7 +147,7 @@ export function AgentDestinationChip({ url, title, onOpen }: AgentDestinationChi
       type="button"
       onClick={() => void onOpen(url)}
       title={t("sidepanel.attachment.openInBrowser", { name: display })}
-      className="mt-2 inline-flex max-w-full items-center gap-1 rounded-full border border-border/60 bg-background/70 px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
+      className="mt-2 inline-flex max-w-full items-center gap-1 rounded-full border border-border/60 bg-chat-surface px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
       <ExternalLink className="h-2.5 w-2.5 shrink-0" />
       <span className="truncate">{display}</span>
     </button>
@@ -252,11 +252,11 @@ export function AttachmentChip({ attachment, onRemove }: AttachmentChipProps) {
   }
   return (
     <div
-      className="group inline-flex h-6 max-w-[80px] items-center gap-1 rounded-full border border-border bg-muted/40 pl-0.5 pr-1 text-[11px] text-muted-foreground"
+      className="group inline-flex h-6 max-w-[80px] items-center gap-1 rounded-full border border-border bg-chat-surface pl-0.5 pr-1 text-[11px] text-muted-foreground"
       title={titleLines.join("\n")}
       aria-busy={attachment.uploading || undefined}>
       {attachment.uploading ? (
-        <span className="ml-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted/60">
+        <span className="ml-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-chat-surface">
           <Loader2
             className="h-3.5 w-3.5 animate-spin text-foreground"
             aria-label={t("sidepanel.attachment.uploading")}
@@ -335,7 +335,7 @@ export function AttachmentBadgeView({ badge }: AttachmentBadgeViewProps) {
   // Single pill template. Image variant uses ``pl-0.5`` to give the
   // thumbnail an inset that lines up with the icon-variant text.
   const pillClass = cn(
-    "inline-flex max-w-full items-center gap-1 rounded-full border border-border/60 bg-background/70 text-[10px] text-muted-foreground",
+    "inline-flex max-w-full items-center gap-1 rounded-full border border-border/60 bg-chat-surface text-[10px] text-muted-foreground",
     isClickableImage
       ? "py-0.5 pl-0.5 pr-2 ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
       : "px-2 py-0.5",

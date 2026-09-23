@@ -2311,7 +2311,7 @@ export default function ChatSurface({
                 <button
                   type="button"
                   onClick={() => setPendingSourceApp(null)}
-                  className="ml-0.5 shrink-0 rounded-md p-1 text-muted-foreground/65 transition-colors hover:bg-background/70 hover:text-foreground"
+                  className="ml-0.5 shrink-0 rounded-md p-1 text-muted-foreground/65 transition-colors hover:bg-chat-surface-hover hover:text-foreground"
                   aria-label={t("sidepanel.context.dismissSource")}
                 >
                   <X className="h-3 w-3" />
@@ -2365,7 +2365,7 @@ export default function ChatSurface({
               type="button"
               onClick={cancelQueueEdit}
               title={t("sidepanel.composer.cancelEdit")}
-              className="rounded p-0.5 transition-colors hover:bg-muted hover:text-foreground"
+              className="rounded p-0.5 transition-colors hover:bg-chat-surface-hover hover:text-foreground"
               aria-label={t("sidepanel.composer.cancelEdit.aria")}
             >
               <X className="h-2.5 w-2.5" />
@@ -2468,7 +2468,7 @@ export default function ChatSurface({
                   {pendingSourceApp && (
                     <div className="app-drag-region mb-1 flex shrink-0 items-center gap-1 px-1 text-[11px] text-muted-foreground">
                       <span>{t("quickAsk.selectionFrom")}</span>
-                      <span className="rounded-full border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+                      <span className="rounded-full border border-border/60 bg-chat-surface px-1.5 py-0.5 text-[10px] font-medium text-foreground">
                         {pendingSourceApp}
                       </span>
                     </div>
