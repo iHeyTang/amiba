@@ -27,6 +27,12 @@
   backdrop-filter: blur(var(--amiba-reading-blur));
   -webkit-backdrop-filter: blur(var(--amiba-reading-blur));
 }
+/* Recovery copy must stay legible even over a high-contrast wallpaper. */
+[data-amiba-product-shell] [data-background-surface="recovery"] {
+  background: hsl(var(--background) / var(--amiba-reading-opacity));
+  backdrop-filter: blur(var(--amiba-glass-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
+}
 /* Empty space reveals the canvas, rather than applying a full-screen blur. */
 [data-amiba-product-shell] [data-background-surface="canvas"],
 [data-amiba-product-shell] [data-background-surface="canvas-header"] {
