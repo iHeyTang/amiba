@@ -7,6 +7,7 @@ export interface AmibaDshProfilePlugin {
   source?: "internal" | "external";
   provider?: "dsh" | "amiba" | "third-party" | "unknown";
   author?: string;
+  modules?: readonly string[];
   development?: boolean;
   mutable?: boolean;
 }

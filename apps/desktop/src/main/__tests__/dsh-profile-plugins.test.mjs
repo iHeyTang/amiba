@@ -10,6 +10,7 @@ import {
   isRegistryDependencySpec,
   listDshProfilePlugins,
   packageProvider,
+  inventoryPackageName,
   registryPackageName,
 } from "../dsh-profile-plugins.ts";
 
@@ -282,11 +283,20 @@ test("reads metadata for transitive Loader packages without making them external
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify({ name, author: "Alice", version: "2" }));
     const manager = new DshProfilePluginManager({ paths, runtime: { async ensureManagedProfile() {}, async ensureStarted() {}, async stop() {} } });
-    const { packages } = await manager.list([name, name, "../../secret"]);
+    const { packages } = await manager.list([`${name}/startup`, `${name}/other`, "../../secret"]);
     assert.equal(packages.length, 1);
+    assert.deepEqual(packages[0].modules, [`${name}/startup`, `${name}/other`]);
     assert.equal(packages[0].source, "internal");
     assert.equal(packages[0].provider, "third-party");
     assert.equal(packages[0].author, "Alice");
     assert.equal(packages[0].mutable, false);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("resolves submodules and the framework include to their owning package", () => {
+  assert.equal(inventoryPackageName("@deepseek-ai/dsh-web-app/startup"), "@deepseek-ai/dsh-web-app");
+  assert.equal(inventoryPackageName("example/sub/module"), "example");
+  assert.equal(inventoryPackageName("cordis:include"), "@deepseek-ai/dsh-app-boot");
+  assert.equal(inventoryPackageName("@scope/pkg/../../secret"), undefined);
+  assert.equal(inventoryPackageName("/absolute/file"), undefined);
 });

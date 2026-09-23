@@ -275,3 +275,43 @@ it("filters provider independently from internal/external origin", async () => {
   expect(screen.getByText("@vendor/builtin")).toBeInTheDocument();
   expect(screen.queryByText("@vendor/installed")).not.toBeInTheDocument();
 });
+
+it("shows one package row and reveals the distinct module states on expansion", async () => {
+  document.documentElement.lang = "zh-CN";
+  const packageName = "@deepseek-ai/dsh-web-app";
+  const list = vi.fn().mockResolvedValue({
+    entries: [
+      {
+        moduleName: `${packageName}/startup`,
+        entryId: "start",
+        enabled: true,
+        fiberPhase: "active",
+      },
+      {
+        moduleName: `${packageName}/settings`,
+        entryId: "settings",
+        enabled: false,
+        fiberPhase: null,
+      },
+    ],
+  });
+  render(<DshPluginInventoryView adapter={{ list }} />);
+  await screen.findByRole("button", { name: "全部 1" });
+  expect(screen.getByText("2 个模块")).toBeInTheDocument();
+  expect(screen.queryByText(`${packageName}/startup`)).not.toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("button", { name: `展开模块 ${packageName}` }),
+  );
+  expect(screen.getByText(`${packageName}/startup`)).toBeInTheDocument();
+  expect(screen.getByText(`${packageName}/settings`)).toBeInTheDocument();
+  expect(screen.getByText("已停用")).toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("button", { name: `收起模块 ${packageName}` }),
+  );
+  expect(screen.queryByText(`${packageName}/startup`)).not.toBeInTheDocument();
+  await userEvent.type(
+    screen.getByRole("textbox", { name: "搜索模块或 Loader entry" }),
+    "startup",
+  );
+  expect(screen.getByText("dsh-web-app")).toBeInTheDocument();
+});

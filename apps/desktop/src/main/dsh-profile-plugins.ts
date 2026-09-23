@@ -100,6 +100,15 @@ function packageDirectory(profileDir: string, packageName: string): string {
   return path.join(profileDir, "node_modules", ...packageName.split("/"));
 }
 
+/** Resolve Loader entry specifiers to the package that supplies their implementation. */
+export function inventoryPackageName(specifier: string): string | undefined {
+  if (specifier === "cordis:include") return "@deepseek-ai/dsh-app-boot";
+  const parts = specifier.split("/");
+  if (parts.some(part => !part || part === "." || part === "..")) return undefined;
+  const name = parts.slice(0, specifier.startsWith("@") ? 2 : 1).join("/");
+  return PACKAGE_NAME_PATTERN.test(name) ? name : undefined;
+}
+
 /** Provider is package-declared attribution, independent of installation source. */
 export function packageProvider(manifest: Record<string, unknown> | null): Pick<AmibaDshProfilePlugin, "provider" | "author"> {
   const rawAuthor = manifest?.author;
@@ -375,7 +384,7 @@ export class DshProfilePluginManager {
     const temporary = profileManifest !== this.paths.profileManifest;
     const packages = [...await listDshProfilePlugins(activePaths)];
     // Loader may expose transitive runtime packages which are absent from profile dependencies.
-    for (const name of new Set(moduleNames)) {
+    for (const name of new Set(moduleNames.map(inventoryPackageName).filter((name): name is string => Boolean(name)))) {
       if (!PACKAGE_NAME_PATTERN.test(name) || packages.some(item => item.packageName === name)) continue;
       const runtimeModules = path.resolve(this.paths.runtimeAppBinDir, "..");
       const bundled = existsSync(packageDirectory(path.dirname(runtimeModules), name) + "/package.json");
@@ -387,6 +396,7 @@ export class DshProfilePluginManager {
     }
     return { readOnly: temporary, packages: packages.map(item => ({
       ...item,
+      modules: moduleNames.filter(name => inventoryPackageName(name) === item.packageName),
       source: Object.hasOwn(internal, item.packageName) ? "internal" as const : "external" as const,
       development: development.has(item.packageName),
       mutable: !temporary && !Object.hasOwn(internal, item.packageName),

@@ -1,5 +1,7 @@
 import {
   Boxes,
+  ChevronDown,
+  ChevronRight,
   CircleAlert,
   Download,
   Loader2,
@@ -54,6 +56,7 @@ export interface DshInstalledPluginPackage {
   source?: "internal" | "external";
   provider?: "dsh" | "amiba" | "third-party" | "unknown";
   author?: string;
+  modules?: readonly string[];
   development?: boolean;
   mutable?: boolean;
 }
@@ -109,6 +112,9 @@ function copy(language: PluginLanguage) {
         loading: "正在读取 DSH Loader…",
         retry: "重试",
         module: "模块",
+        modules: "个模块",
+        expand: "展开模块",
+        collapse: "收起模块",
         entry: "Entry",
         phase: "生命周期",
         phases: {
@@ -158,6 +164,9 @@ function copy(language: PluginLanguage) {
         loading: "Reading the DSH Loader…",
         retry: "Retry",
         module: "Module",
+        modules: "modules",
+        expand: "Expand modules",
+        collapse: "Collapse modules",
         entry: "Entry",
         phase: "Lifecycle",
         phases: {
@@ -220,6 +229,7 @@ export function DshPluginInventoryView({
   const [query, setQuery] = useState("");
   const [readOnly, setReadOnly] = useState(false);
   const [registrySpec, setRegistrySpec] = useState("");
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [providerFilter, setProviderFilter] = useState("all");
   const [filter, setFilter] = useState<PluginFilter>("all");
   const [loading, setLoading] = useState(true);
@@ -288,12 +298,21 @@ export function DshPluginInventoryView({
       }
     >();
     for (const entry of entries) {
-      const row = grouped.get(entry.moduleName) ?? {
-        moduleName: entry.moduleName,
+      const packageName =
+        packages.find((item) => item.modules?.includes(entry.moduleName))
+          ?.packageName ??
+        (entry.moduleName === "cordis:include"
+          ? "@deepseek-ai/dsh-app-boot"
+          : entry.moduleName
+              .split("/")
+              .slice(0, entry.moduleName.startsWith("@") ? 2 : 1)
+              .join("/"));
+      const row = grouped.get(packageName) ?? {
+        moduleName: packageName,
         entries: [],
       };
       row.entries.push(entry);
-      grouped.set(entry.moduleName, row);
+      grouped.set(packageName, row);
     }
     for (const item of packages) {
       const row = grouped.get(item.packageName) ?? {
@@ -343,7 +362,7 @@ export function DshPluginInventoryView({
         return false;
       return (
         !needle ||
-        `${entry.moduleName} ${entry.entryId} ${entry.item?.author ?? ""}`
+        `${entry.moduleName} ${entry.entryId} ${entry.entries.map((module) => module.moduleName).join(" ")} ${entry.item?.author ?? ""}`
           .toLocaleLowerCase()
           .includes(needle)
       );
@@ -547,9 +566,31 @@ export function DshPluginInventoryView({
                           : "bg-muted-foreground/25",
                       )}
                     />
-                    <span className="truncate text-sm font-medium">
-                      {shortModuleName(entry.moduleName)}
-                    </span>
+                    <button
+                      type="button"
+                      disabled={!entry.entries.length}
+                      aria-expanded={expanded.has(entry.moduleName)}
+                      aria-label={`${expanded.has(entry.moduleName) ? labels.collapse : labels.expand} ${entry.moduleName}`}
+                      className="flex min-w-0 items-center gap-1 text-left text-sm font-medium"
+                      onClick={() =>
+                        setExpanded((previous) => {
+                          const next = new Set(previous);
+                          if (next.has(entry.moduleName))
+                            next.delete(entry.moduleName);
+                          else next.add(entry.moduleName);
+                          return next;
+                        })
+                      }
+                    >
+                      {expanded.has(entry.moduleName) ? (
+                        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                      )}
+                      <span className="truncate">
+                        {shortModuleName(entry.moduleName)}
+                      </span>
+                    </button>
                     <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                       {labels[entry.source as "internal" | "external"]}
                     </span>
@@ -581,11 +622,8 @@ export function DshPluginInventoryView({
                       {entry.item.version ?? entry.item.requestedSpec}
                     </p>
                   )}
-                  <p className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground/60">
-                    {labels.entry}
-                  </p>
-                  <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
-                    {entry.entryId || "—"}
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {entry.entries.length} {labels.modules}
                   </p>
                 </div>
                 <div className="text-right">
@@ -605,6 +643,37 @@ export function DshPluginInventoryView({
                       : labels.disabled}
                   </p>
                 </div>
+                {expanded.has(entry.moduleName) && (
+                  <div className="col-span-full space-y-2 border-t border-border/40 pt-3 pl-5">
+                    {entry.entries.map((module) => (
+                      <div
+                        key={module.entryId}
+                        className="flex min-w-0 items-center justify-between gap-4 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <p className="break-all font-mono">
+                            {module.moduleName}
+                          </p>
+                          <p className="mt-0.5 break-all font-mono text-[10px] text-muted-foreground">
+                            {module.entryId}
+                          </p>
+                        </div>
+                        <span
+                          className={cn(
+                            "shrink-0",
+                            module.fiberPhase === "failed"
+                              ? "text-destructive"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          {module.enabled
+                            ? phaseLabel(module.fiberPhase, labels)
+                            : labels.disabled}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {entry.item &&
                 entry.source === "external" &&
                 entry.item.mutable !== false &&
