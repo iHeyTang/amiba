@@ -9,7 +9,8 @@ import {
 import { useT } from "@amiba/i18n";
 import { isVideo } from "../../background/model.js";
 import type { BackgroundController } from "./controller.js";
-import "./background.css";
+// DSH loads the plugin's JavaScript only, not Vite's extracted CSS asset.
+import backgroundCss from "./background.css?inline";
 
 export function BackgroundFrame({
   controller,
@@ -137,6 +138,7 @@ export function BackgroundFrame({
         } as CSSProperties
       }
     >
+      <style data-amiba-background-styles>{backgroundCss}</style>
       {enabled && media && media.id === config.assetId && (
         <div
           className="amiba-background-media"
