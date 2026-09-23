@@ -2464,7 +2464,7 @@ export function MessageTurns({
                 }
                 return [resolveAssistantTrace(item.message).bodyText];
               }).map(stripManagedResourceContext).filter(value => value.trim()).join("\n\n");
-              const ownsReview = group === replyGroups.findLast(candidate => candidate.assistant);
+              const ownsReview = group === [...replyGroups].reverse().find(candidate => candidate.assistant);
               const body = group.assistant
                 ? <div data-assistant-reply-group data-background-surface="assistant-message">
                     {content}
