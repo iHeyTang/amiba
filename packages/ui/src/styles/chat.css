@@ -235,7 +235,7 @@
   margin: 0.75rem 0;
   padding: 0.15rem 0 0.15rem 0.85rem;
   border-left: 3px solid hsl(var(--border));
-  color: hsl(var(--muted-foreground));
+  color: hsl(var(--foreground) / 0.82);
   font-style: normal;
 }
 
