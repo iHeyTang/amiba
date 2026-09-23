@@ -5,7 +5,6 @@ import { OfficialReplacement } from "./official-replacements.js";
 import { TrajectoryNavigationContext } from "./trajectory-header-action.js";
 import { MainPanelList, type MainPanelRow } from "./main-panel-list.js";
 import type { MainPanelNavigation } from "./main-panel-navigation.js";
-import { LegacyToolDetails } from "./legacy-tool-details.js";
 import { sessionLineage, equalSessionLineage } from "./session-lineage.js";
 import { useSessionImageLoader } from "./session-image-loader.js";
 import { useTrajectoryInspection } from "./trajectory-inspection.js";
@@ -209,9 +208,6 @@ export type AmibaShellSlot =
   | "conversation.session.header.actions"
   | "conversation.input.model"
   | "amiba.conversation.notice"
-  | "amiba.tool.execution"
-  | "amiba.tool.activity"
-  | "amiba.conversation.progress"
   | "amiba.workbench.panel"
   | "conversation.input.plan"
   | "conversation.input.overlay"
@@ -226,7 +222,6 @@ export type AmibaShellSlot =
   | "conversation.message.images"
   | "conversation.approval.detail"
   | "conversation.chat.assistant-actions"
-  | "conversation.details.tool"
   | "tool.call.toolview"
   | "tool.call.images";
 
@@ -416,7 +411,6 @@ interface ProductShellProps {
   mainPanels: MainPanelNavigation;
   mainPanelList: ContributionsSource<MainPanelRow>;
   renderSlotChain: PropsRenderSlots<AmibaShellSlot>["renderSlotChain"];
-  legacyToolDetailsAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
   toolImagesAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
   commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
   conversationSource: (sessionId: string) => import("./conversation-snapshot.js").ConversationSource | undefined;
@@ -481,7 +475,6 @@ function ProductShellInner({
   mainPanelList,
   renderSlotChain,
   commandRowKeys,
-  legacyToolDetailsAvailable,
   toolImagesAvailable,
   conversationSource,
   fileMentions,
@@ -508,8 +501,6 @@ function ProductShellInner({
   const { activePanelId } = useSyncExternalStore(mainPanels.subscribe, mainPanels.getSnapshot, mainPanels.getSnapshot);
   const leaveMainPanel = useCallback(() => mainPanels.leavePanel(), [mainPanels]);
   const hasLineage = useSyncExternalStore(lineageAvailable.subscribe, lineageAvailable.getSnapshot, lineageAvailable.getSnapshot);
-  const hasLegacyDetails = useSyncExternalStore(legacyToolDetailsAvailable.subscribe, legacyToolDetailsAvailable.getSnapshot, legacyToolDetailsAvailable.getSnapshot);
-  const [legacySelections, setLegacySelections] = useState<Record<string, string>>({});
   const hasToolImages = useSyncExternalStore(toolImagesAvailable.subscribe, toolImagesAvailable.getSnapshot, toolImagesAvailable.getSnapshot);
   const platform = getPlatform();
   const desktop = platform.kind === "desktop";
@@ -577,7 +568,6 @@ function ProductShellInner({
   });
   const { open: settingsOpen, close: closeSettings } = settings;
   const sessions = useSessions(PRODUCT_SHELL_STATE_KEYS);
-  const detailsCwd = useOfficialSessions(list => sessions.activeId ? Object.values(list.byId).find(row => row.id === sessions.activeId)?.cwd : undefined);
   const lineage = useOfficialSessions(list => sessionLineage(list, sessions.activeId), equalSessionLineage);
   const childAddressSource = useRef<(id: string) => AgentSubagentAddress | undefined>(() => undefined);
   childAddressSource.current = (id) => sessions.sessions.find((session) => session.id === id)?.subagentAddress
@@ -744,14 +734,9 @@ function ProductShellInner({
         entryKey: request.owner.toolName,
         fallback: renderOfficialToolFallback(owner, request.fallback),
       });
-      const row = renderSlot(
-        "amiba.tool.execution",
-        { ...owner, fallback },
-        { fallback },
-      );
       const withImages = <ToolImageEvidenceProvider callId={owner.callId}
         render={hasToolImages && loadMessageImage ? images => renderSlot("tool.call.images", { images, loadImage: loadMessageImage, align: "start" }) : undefined}>
-        {row}
+        {fallback}
       </ToolImageEvidenceProvider>;
       return withImages;
     },
@@ -987,21 +972,9 @@ function ProductShellInner({
                       : owner.source,
                     fallback,
                   }),
-                toolAnnotation: (owner) =>
-                  renderSlot("amiba.tool.activity", owner),
-                progress: () => renderSlot("amiba.conversation.progress", {}),
                 rightbar: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("rightbar", owner, { fallback })}</OfficialReplacement>,
                 rightbarSession: (owner, fallback) => <OfficialReplacement fallback={fallback}>{renderSlot("rightbar.session", owner, { fallback })}</OfficialReplacement>,
-                workbenchPanel: (owner) => <>
-                  {renderSlot("amiba.workbench.panel", owner)}
-                  {sessions.activeId ? <LegacyToolDetails enabled={hasLegacyDetails}
-                    source={conversationSource(sessions.activeId)} sessionId={sessions.activeId} cwd={detailsCwd}
-                    panel={owner} selectedCallId={legacySelections[sessions.activeId] ?? null}
-                    onSelect={callId => setLegacySelections(current => ({ ...current, [sessions.activeId!]: callId }))}
-                    render={details => renderSlot("conversation.details.tool", details)}
-                    label={t("sidepanel.trace.toolDetails")} emptyLabel={t("sidepanel.trace.selectTool")}
-                  /> : null}
-                </>,
+                workbenchPanel: (owner) => renderSlot("amiba.workbench.panel", owner),
                 // The official composer overlay anchor. The seat declares NO owner
                 // share, so `{}` is the faithful dispatch — anything else would be
                 // a fabricated owner. Session-scoped: the renderer resolves the

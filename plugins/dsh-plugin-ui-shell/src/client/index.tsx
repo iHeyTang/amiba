@@ -273,9 +273,6 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
     "amiba.sessions.item.menu": { kind: "list"; scope: "root" };
     "amiba.message.source": { kind: "list"; scope: "root" };
     "amiba.conversation.notice": { kind: "keyed"; scope: "session"; owner: { source: string; summary: string; body: string; reference?: NoticeReference } };
-    "amiba.tool.execution": { kind: "single"; scope: "session"; owner: import("@amiba/extension-sdk").ToolCallOwnerProps & { fallback: import("react").ReactNode } };
-    "amiba.tool.activity": { kind: "list"; scope: "session"; owner: { callId: string } };
-    "amiba.conversation.progress": { kind: "list"; scope: "session" };
     "amiba.workbench.panel": { kind: "list"; scope: "session"; owner: import("@amiba/extension-sdk").WorkbenchPanelOwner };
   }
 }
@@ -306,7 +303,6 @@ type AmibaRootProps = PropsRuntime<"root"> &
     heroPreset: HeroPreset;
     directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
     conversationViews: ContributionsSource<ConversationViewEntry>;
-    legacyToolDetailsAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
     toolImagesAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
     lineageAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
     commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
@@ -350,7 +346,6 @@ function AmibaRoot({
   officialChat,
   conversationViews,
   commandRowKeys,
-  legacyToolDetailsAvailable,
   toolImagesAvailable,
   lineageAvailable,
   conversationSource,
@@ -388,7 +383,6 @@ function AmibaRoot({
         : renderSlot(name, owner, options)) as typeof renderSlot}
       renderSlotChain={((...args) => <SessionProvider>{renderSlotChain(...args)}</SessionProvider>) as typeof renderSlotChain}
       commandRowKeys={commandRowKeys}
-      legacyToolDetailsAvailable={legacyToolDetailsAvailable}
       toolImagesAvailable={toolImagesAvailable}
       lineageAvailable={lineageAvailable}
       conversationSource={conversationSource}
@@ -894,9 +888,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
           // ("unoccupied, the seat renders nothing at all").
           "conversation.input.plan": { kind: "single", scope: "session" },
           "amiba.conversation.notice": { kind: "keyed", scope: "session" },
-          "amiba.tool.execution": { kind: "single", scope: "session" },
-          "amiba.tool.activity": { kind: "list", scope: "session" },
-          "amiba.conversation.progress": { kind: "list", scope: "session" },
           "amiba.workbench.panel": { kind: "list", scope: "session" },
           "amiba.workbench.view": { kind: "list", scope: "root" },
           "amiba.workbench.shell": { kind: "list", scope: "root" },
@@ -950,7 +941,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
           "tool.call.images": { kind: "single", scope: "session" },
           "conversation.approval.detail": { kind: "single", scope: "session" },
           "conversation.chat.assistant-actions": { kind: "list", scope: "session" },
-          "conversation.details.tool": { kind: "single", scope: "session" },
           "tool.call.toolview": { kind: "keyed", scope: "session" },
           // Amiba's keyed question seat: one entry per question id (a
           // plugin-owned question kind claims exactly its own id), `fallback`
@@ -1026,10 +1016,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
           officialChat: officialChatRequested(ctx.slots),
           conversationViews,
           fileMentions: (...args: Parameters<import("@deepseek-ai/dsh-client-ui-chat/client").ChatFileMentions["forClosing"]>) => ctx.get("chatFileMentions")?.forClosing(...args),
-          legacyToolDetailsAvailable: {
-            getSnapshot: () => ctx.slots.entriesOfSlot("conversation.details.tool").length > 0,
-            subscribe: (listener: () => void) => ctx.slots.subscribe("conversation.details.tool", listener),
-          },
           toolImagesAvailable: {
             getSnapshot: () => ctx.slots.entriesOfSlot("tool.call.images").length > 0,
             subscribe: (listener: () => void) => ctx.slots.subscribe("tool.call.images", listener),

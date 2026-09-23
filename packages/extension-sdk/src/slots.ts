@@ -856,16 +856,3 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
     "settings.models.provider-card": { kind: "keyed"; scope: "root"; owner: ProviderCardExtrasOwnerProps };
   }
 }
-
-/** Legacy Amiba details seat retained after upstream removed the named slot. */
-export interface DetailsToolOwnerProps {
-  block: import("@deepseek-ai/dsh-client-ui-conversation/client").ToolCallBlock;
-  cwd?: string;
-}
-
-/** Retained compatibility seat for plugins authored before the details view was removed upstream. */
-declare module "@deepseek-ai/dsh-client-ui-slots" {
-  interface SlotMap {
-    "conversation.details.tool": { kind: "single"; scope: "session"; owner: DetailsToolOwnerProps };
-  }
-}
