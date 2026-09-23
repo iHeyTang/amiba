@@ -1,6 +1,7 @@
 {
   "name": "@{{AUTHOR}}/{{NAME}}",
   "version": "0.1.0",
+  "author": "{{AUTHOR}}",
   "private": true,
   "description": "An independent Amiba DSH plugin.",
   "type": "module",

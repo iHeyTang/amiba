@@ -39,5 +39,11 @@
   },
   "dependencies": {
     "@amiba/dsh-plugin-notification-hub": "workspace:*"
+  },
+  "author": "Amiba",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iHeyTang/amiba.git",
+    "directory": "plugins/dsh-plugin-conversation-notifications"
   }
 }

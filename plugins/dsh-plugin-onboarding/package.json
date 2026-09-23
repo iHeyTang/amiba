@@ -76,5 +76,11 @@
     "vitest": "^2.1.4",
     "@amiba/app-runtime": "workspace:*",
     "@amiba/i18n": "workspace:*"
+  },
+  "author": "Amiba",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iHeyTang/amiba.git",
+    "directory": "plugins/dsh-plugin-onboarding"
   }
 }

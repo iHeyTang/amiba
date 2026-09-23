@@ -2,7 +2,7 @@
   "name": "@amiba/dsh-plugin-steward",
   "version": "0.1.0",
   "private": true,
-  "description": "Amiba steward (\u5927\u7ba1\u5bb6): independent user-defined stewards that route work to owned task sessions and report results.",
+  "description": "Amiba steward (大管家): independent user-defined stewards that route work to owned task sessions and report results.",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -99,5 +99,11 @@
     "lucide-react": "^0.460.0",
     "@deepseek-ai/dsh-session-persistence": "0.1.5-rc.1",
     "@deepseek-ai/dsh-util-values": "0.1.5-rc.1"
+  },
+  "author": "Amiba",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iHeyTang/amiba.git",
+    "directory": "plugins/dsh-plugin-steward"
   }
 }

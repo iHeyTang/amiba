@@ -86,5 +86,11 @@
     "lucide-react": "^0.460.0",
     "@deepseek-ai/dsh-util-values": "0.1.5-rc.1",
     "@deepseek-ai/dsh-session-persistence": "0.1.5-rc.1"
+  },
+  "author": "Amiba",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iHeyTang/amiba.git",
+    "directory": "plugins/dsh-plugin-cron"
   }
 }
