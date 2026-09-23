@@ -1880,11 +1880,36 @@ function AssistantReplyChrome({ messages, children, actions, timeFormat, timeLoc
 }) {
   const { t } = useT();
   const [copied, setCopied] = useState(false);
+  const complete = messages.every(message => !message.streaming);
+  const chromeRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const chrome = chromeRef.current;
+    const body = chrome?.querySelector<HTMLElement>("[data-assistant-reply-body]");
+    const tab = chrome?.querySelector<HTMLElement>('[data-action-align="left"]');
+    if (!chrome || !body) return;
+    const measure = () => {
+      const w = chrome.clientWidth, h = body.offsetHeight;
+      if (!w || !h) return;
+      const th = tab?.offsetHeight ?? 0;
+      const tw = Math.min(tab?.offsetWidth ?? 0, w - 20);
+      // One clipped backdrop samples the wallpaper for both body and tab.
+      const path = `M12 0 H${w-12} Q${w} 0 ${w} 12 V${h-12} Q${w} ${h} ${w-12} ${h} H${tw+8} Q${tw} ${h} ${tw} ${h+8} V${h+th-12} Q${tw} ${h+th} ${tw-12} ${h+th} H12 Q0 ${h+th} 0 ${h+th-12} V12 Q0 0 12 0 Z`;
+      const closedPath = `M12 0 H${w-12} Q${w} 0 ${w} 12 V${h-12} Q${w} ${h} ${w-12} ${h} H${tw+8} Q${tw} ${h} ${tw} ${h} V${h} Q${tw} ${h} ${tw} ${h} H12 Q0 ${h} 0 ${h-12} V12 Q0 0 12 0 Z`;
+      chrome.style.setProperty("--assistant-glass-closed", th ? `path('${closedPath}')` : "inset(0 round 12px)");
+      chrome.style.setProperty("--assistant-glass-outline", th ? `path('${path}')` : "inset(0 round 12px)");
+      chrome.setAttribute("data-unified-glass", "");
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(chrome);
+    observer.observe(body);
+    if (tab) observer.observe(tab);
+    return () => observer.disconnect();
+  }, [complete]);
   const last = messages.at(-1);
   const text = messages.map(message => stripManagedResourceContext(bubbleTextContent(message.content))).filter(value => value.trim()).join("\n\n");
-  const complete = messages.every(message => !message.streaming);
   const time = formatMessageTime(last?.sentAt, timeFormat, timeLocale);
-  return <div data-assistant-message-chrome className="group min-w-0">
+  return <div ref={chromeRef} data-assistant-message-chrome className="group min-w-0">
     <div data-assistant-reply-body>{children}</div>
     {complete && <TooltipProvider delayDuration={180} skipDelayDuration={80}>
       <div data-background-surface="message-actions" data-action-align="left"
