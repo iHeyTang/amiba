@@ -143,7 +143,7 @@ export function SummaryHeaderAction({ sessionId }: { sessionId: string }) {
         aria-label={t("summary.title")}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-chat-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="amiba-header-action w-7"
       >
         <LayoutGrid className="size-3.5" aria-hidden="true" />
         {pane.attention && (

@@ -26,7 +26,7 @@ export function TrajectoryHeaderAction({ sessionId }: { sessionId: string }) {
   return (
     <button
       type="button"
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="amiba-header-action gap-1.5 px-1.5 text-xs"
       title={
         navigation.active
           ? label

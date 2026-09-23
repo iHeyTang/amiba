@@ -248,3 +248,28 @@
 [data-amiba-product-shell] [data-content-header-leading][data-header-glass] :is(button, span) {
   color: hsl(var(--foreground) / 0.9);
 }
+
+/* Shared interaction material for all conversation header actions. */
+.amiba-header-action {
+  position: relative;
+  display: inline-flex;
+  height: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: transparent;
+  color: hsl(var(--foreground) / 0.9);
+  transition: background-color 120ms ease;
+}
+.amiba-header-action:is(:hover, :focus-visible, [aria-pressed="true"], [aria-expanded="true"]) {
+  background: var(--amiba-content-hover, hsl(var(--muted) / 0.3));
+}
+.amiba-header-action:focus-visible {
+  outline: 2px solid hsl(var(--ring) / 0.4);
+  outline-offset: -2px;
+}
+.amiba-header-action:disabled {
+  pointer-events: none;
+  opacity: 0.3;
+}

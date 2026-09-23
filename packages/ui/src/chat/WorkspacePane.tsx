@@ -1380,10 +1380,7 @@ export function WorkspacePaneToggle({
       aria-pressed={pane.open}
       aria-keyshortcuts="Meta+Shift+Backslash Control+Shift+Backslash"
       className={cn(
-        "app-no-drag relative inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors",
-        "hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-        "disabled:pointer-events-none disabled:opacity-30",
-        pane.open && "bg-foreground/5 text-foreground",
+        "app-no-drag amiba-header-action w-7",
         className,
       )}
     >
