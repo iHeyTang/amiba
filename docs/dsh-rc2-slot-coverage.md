@@ -60,6 +60,7 @@
 - 15 个新增 single 入口使用实际 rc.2 React 渲染器测试默认优先级注册接管、owner 传递、返回 null、异常退让和卸载回退。
 - UI 测试覆盖附件操作、禁用状态和原侧栏／输入布局。app-runtime 全量测试通过。
 - UI-shell 全量套件与未修改的 rc.1 checkout 对照，失败用例集合一致；不将全量套件报告为通过。
+- `node scripts/verify-rc2-preset-handoff.mjs`（先构建 UI Shell）直接执行发布版 rc.2 预设插件的 apply／私有控制器，验证自有暂存选择、Amiba 读取、匹配会话消费、下一会话恢复默认及卸载；只替代 observable transport 和远程／会话宿主，不冒充完整浏览器端到端。
 - 三平台安装包、真实第三方插件端到端验收尚未完成；构建、启动及 CI 结果见本次 PR。
 - 官方目录：[rc.2 发布产物](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.1.5-rc.2/lib/client.js)。
 - 新入口声明和默认占用：`plugins/dsh-plugin-ui-shell/src/client/official-replacements.tsx`；派发：同目录 `product-shell.tsx`。
