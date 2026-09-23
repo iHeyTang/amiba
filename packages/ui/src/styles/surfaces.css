@@ -440,7 +440,7 @@
   --amiba-agent-color: var(--muted);
   --amiba-user-color: var(--secondary);
   --amiba-glass-opacity: 1;
-  --amiba-agent-opacity: 0.5;
+  --amiba-agent-opacity: 0;
   --amiba-message-opacity: 1;
   --amiba-input-opacity: 1;
   --amiba-content-opacity: 0.85;
