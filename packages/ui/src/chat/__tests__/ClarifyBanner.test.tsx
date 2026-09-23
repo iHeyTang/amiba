@@ -6,6 +6,8 @@ vi.mock("@amiba/i18n", () => ({
 }));
 
 vi.mock("streamdown", () => ({
+  defaultRemarkPlugins: {},
+  defaultRehypePlugins: {},
   Streamdown: ({ children }: { children?: string }) => <div>{children}</div>,
 }));
 
