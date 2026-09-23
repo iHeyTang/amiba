@@ -1884,7 +1884,7 @@ function AssistantReplyChrome({ messages, children, actions, timeFormat, timeLoc
   const text = messages.map(message => stripManagedResourceContext(bubbleTextContent(message.content))).filter(value => value.trim()).join("\n\n");
   const complete = messages.every(message => !message.streaming);
   const time = formatMessageTime(last?.sentAt, timeFormat, timeLocale);
-  return <div data-assistant-message-chrome className="group min-w-0 pb-1">
+  return <div data-assistant-message-chrome className="group min-w-0">
     <div data-assistant-reply-body>{children}</div>
     {complete && <TooltipProvider delayDuration={180} skipDelayDuration={80}>
       <div data-background-surface="message-actions" data-action-align="left"
