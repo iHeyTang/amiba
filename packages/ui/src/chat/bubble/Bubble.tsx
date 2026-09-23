@@ -2258,6 +2258,15 @@ export function MessageTurns({
             for (const message of item.messages) lastItemForMessage.set(message.uiId, index);
           } else lastItemForMessage.set(item.id.slice("boundary:".length), index);
         });
+        // Storage fragments do not create visual breaks in a continuous reply.
+        // Notices and explicit run boundaries keep their own presentation.
+        const replyGroups: Array<{ assistant: boolean; items: Array<{ item: TurnReplyItem; index: number }> }> = [];
+        replyItems.forEach((item, index) => {
+          const assistant = item.kind === "execution" || (item.kind === "message" && item.message.role === "assistant");
+          const previous = replyGroups.at(-1);
+          if (assistant && previous?.assistant) previous.items.push({ item, index });
+          else replyGroups.push({ assistant, items: [{ item, index }] });
+        });
         const extrasAfter = new Map<number, ReactNode[]>();
         const appendExtra = (index: number, node: ReactNode) => extrasAfter.set(index, [...(extrasAfter.get(index) ?? []), node]);
         let previousItem = -1;
@@ -2312,7 +2321,8 @@ export function MessageTurns({
             )}
             <ExecutionNoticesContext.Provider value={executionNotices}>
             {renderTailsAfter(-1)}
-            {replyItems.map((item, itemIndex) => {
+            {replyGroups.map(group => {
+              const content = group.items.map(({ item, index: itemIndex }) => {
               if (item.kind === "execution") {
                 return (
                   <Fragment key={item.id}><TurnExecutionDisclosure
@@ -2345,6 +2355,10 @@ export function MessageTurns({
                   ? assistantActions?.(item.message.assistantMessageId) : null}
                 </Fragment>
               );
+              });
+              return group.assistant && group.items.length > 1
+                ? <div key={group.items[0]!.item.id} data-assistant-reply-group data-background-surface="assistant-message">{content}</div>
+                : <Fragment key={group.items[0]!.item.id}>{content}</Fragment>;
             })}
             </ExecutionNoticesContext.Provider>
             {reviewResource && onReviewWorkspaceChanges ? (

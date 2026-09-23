@@ -2124,3 +2124,23 @@ it("renders model changes as a readable glass notice and preserves unknown notic
   fireEvent.click(screen.getByRole("button"));
   expect(screen.getByText("[model changed: details]")).toBeInTheDocument();
 });
+
+it("groups continuous assistant records while notices and user turns remain boundaries", () => {
+  const messages: UiMessage[] = [
+    { uiId: "u", role: "user", content: "Start" },
+    { uiId: "a1", role: "assistant", content: "Waiting for approval" },
+    { uiId: "a2", role: "assistant", content: "Activated" },
+    { uiId: "notice", role: "user", content: "Changed", notice: { summary: "Model update" } },
+    { uiId: "a3", role: "assistant", content: "After notice" },
+    { uiId: "u2", role: "user", content: "Next" },
+    { uiId: "a4", role: "assistant", content: "New reply" },
+  ];
+  const { container } = render(<MessageTurns messages={messages} />);
+  const group = container.querySelector('[data-assistant-reply-group]')!;
+  expect(container.querySelectorAll('[data-assistant-reply-group]')).toHaveLength(1);
+  expect(group).toHaveTextContent('Waiting for approval');
+  expect(group).toHaveTextContent('Activated');
+  expect(group).not.toHaveTextContent('Model update');
+  expect(group).not.toHaveTextContent('After notice');
+  expect(group).not.toHaveTextContent('New reply');
+});
