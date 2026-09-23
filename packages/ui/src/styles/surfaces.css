@@ -58,9 +58,7 @@
 }
 [data-amiba-product-shell] [data-background-surface="sticky-message"] {
   border-radius: 12px;
-  background: hsl(var(--background) / 0.94);
-  backdrop-filter: blur(var(--amiba-glass-blur));
-  -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
+  background: hsl(var(--secondary));
 }
 [data-amiba-product-shell] [data-home-greeting] {
   color: hsl(var(--foreground));

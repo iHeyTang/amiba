@@ -274,7 +274,9 @@ describe("chat message chrome", () => {
       "group-focus-within:opacity-100",
       "group-focus-within:pointer-events-auto",
     );
-    expect(actions.className).not.toMatch(/\bbg-|\bborder/);
+    expect(actions).toHaveClass("w-fit", "ml-auto", "bg-background/90");
+    expect(actions.closest(".sticky")?.className).not.toMatch(/\bbg-|\bbackdrop-/);
+    expect(actions.closest(".sticky")?.querySelector('[data-background-surface="sticky-message"]')).toHaveClass("rounded-xl", "overflow-hidden");
 
     const time = actions.querySelector("time");
     expect(time).toHaveAttribute(

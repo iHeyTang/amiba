@@ -1910,11 +1910,12 @@ function UserStickyBubbleUnmemoized({
   };
 
   return (
-    <div data-background-surface="sticky-message" className="sticky top-0 z-20 -mx-3 bg-background px-3">
+    <div className="sticky top-0 z-20">
       <TooltipProvider delayDuration={180} skipDelayDuration={80}>
         <div className="group">
           <div className="relative">
             <div
+              data-background-surface="sticky-message"
               className={cn(
                 "rounded-xl",
                 expanded
@@ -1970,7 +1971,7 @@ function UserStickyBubbleUnmemoized({
           {!m.streaming ? (
             <div
               data-testid="user-message-actions"
-              className="pointer-events-none flex h-7 items-center justify-end gap-0.5 px-1.5 pt-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+              className="pointer-events-none ml-auto flex h-7 w-fit items-center justify-end gap-0.5 rounded-md bg-background/90 px-1.5 pt-0.5 opacity-0 backdrop-blur transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
             >
               {messageTime ? (
                 <time
