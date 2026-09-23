@@ -1871,6 +1871,34 @@ function InterleavedAssistantFlow({
  */
 export const Bubble = memo(BubbleUnmemoized);
 
+function AssistantReplyChrome({ messages, children, actions, timeFormat, timeLocale }: {
+  messages: UiMessage[];
+  children: ReactNode;
+  actions?: (messageId: string) => ReactNode;
+  timeFormat: TimeFormatPreference;
+  timeLocale?: string;
+}) {
+  const { t } = useT();
+  const [copied, setCopied] = useState(false);
+  const last = messages.at(-1);
+  const text = messages.map(message => stripManagedResourceContext(bubbleTextContent(message.content))).filter(value => value.trim()).join("\n\n");
+  const complete = messages.every(message => !message.streaming);
+  const time = formatMessageTime(last?.sentAt, timeFormat, timeLocale);
+  return <div data-assistant-message-chrome className="group min-w-0 pb-1">
+    <div data-assistant-reply-body>{children}</div>
+    {complete && <TooltipProvider delayDuration={180} skipDelayDuration={80}>
+      <div data-background-surface="message-actions" data-action-align="left"
+        className="pointer-events-none flex h-7 w-fit max-w-full items-center gap-1 px-2 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+        <UserActionButton label={t(copied ? "common.copied" : "common.copy")} icon={copied ? <Check /> : <Copy />} onClick={() => {
+          if (navigator.clipboard) void navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => undefined);
+        }} />
+        {time && <time dateTime={time.dateTime} className="whitespace-nowrap text-[10px] tabular-nums text-muted-foreground">{time.label}</time>}
+        {last?.assistantMessageId ? actions?.(last.assistantMessageId) : null}
+      </div>
+    </TooltipProvider>}
+  </div>;
+}
+
 /**
  * Sticky user-question strip with a static height cap.
  *
@@ -2342,14 +2370,16 @@ export function MessageTurns({
                   onOpenAgentDestination={onOpenAgentDestination}
                 />}
                 {renderTailsAfter(itemIndex)}
-                {item.message.role === "assistant" && !item.message.streaming && item.message.assistantMessageId
-                  ? assistantActions?.(item.message.assistantMessageId) : null}
                 </Fragment>
               );
               });
-              return group.assistant && group.items.length > 1
-                ? <div key={group.items[0]!.item.id} data-assistant-reply-group data-background-surface="assistant-message">{content}</div>
-                : <Fragment key={group.items[0]!.item.id}>{content}</Fragment>;
+              const groupMessages = group.items.flatMap(({ item }) => item.kind === "execution" ? item.messages : item.kind === "message" ? [item.message] : []);
+              const body = group.assistant && group.items.length > 1
+                ? <div data-assistant-reply-group data-background-surface="assistant-message">{content}</div>
+                : content;
+              return group.assistant && groupMessages.some(message => bubbleTextContent(message.content).trim())
+                ? <AssistantReplyChrome key={group.items[0]!.item.id} messages={groupMessages} actions={assistantActions} timeFormat={timeFormat} timeLocale={language}>{body}</AssistantReplyChrome>
+                : <Fragment key={group.items[0]!.item.id}>{body}</Fragment>;
             })}
             </ExecutionNoticesContext.Provider>
             {reviewResource && onReviewWorkspaceChanges ? (

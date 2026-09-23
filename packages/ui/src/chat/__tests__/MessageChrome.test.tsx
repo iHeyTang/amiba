@@ -2144,3 +2144,28 @@ it("groups continuous assistant records while notices and user turns remain boun
   expect(group).not.toHaveTextContent('After notice');
   expect(group).not.toHaveTextContent('New reply');
 });
+
+it("adds one left assistant tab per reply, copying all fragments and hosting actions", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  const clipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  try {
+    const messages: UiMessage[] = [
+      { uiId: "a1", role: "assistant", content: "First paragraph", assistantMessageId: "first" },
+      { uiId: "a2", role: "assistant", content: "Second paragraph", assistantMessageId: "last", sentAt: 1750000000000 },
+    ];
+    const { container, rerender } = render(<MessageTurns messages={messages} assistantActions={id => <button>Extra {id}</button>} />);
+    const tabs = container.querySelectorAll('[data-action-align="left"]');
+    expect(tabs).toHaveLength(1);
+    expect(tabs[0]!.querySelector("time")).not.toBeNull();
+    expect(tabs[0]).toContainElement(screen.getByRole("button", { name: "Extra last" }));
+    expect(screen.queryByRole("button", { name: "Extra first" })).toBeNull();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "common.copy" })));
+    expect(writeText).toHaveBeenCalledWith("First paragraph\n\nSecond paragraph");
+    rerender(<MessageTurns messages={[messages[0]!, { ...messages[1]!, streaming: true }]} />);
+    expect(container.querySelector('[data-action-align="left"]')).toBeNull();
+  } finally {
+    if (clipboard) Object.defineProperty(navigator, "clipboard", clipboard);
+    else Reflect.deleteProperty(navigator, "clipboard");
+  }
+});

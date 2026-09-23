@@ -339,3 +339,28 @@
   -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
   border-radius: 8px;
 }
+
+/* Assistant tabs mirror the user's tab, attached at the left edge. */
+[data-amiba-product-shell] [data-assistant-message-chrome] [data-background-surface="message-actions"] {
+  background: hsl(var(--background) / var(--amiba-agent-opacity));
+  backdrop-filter: blur(var(--amiba-agent-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
+}
+[data-amiba-product-shell] [data-background-surface="message-actions"][data-action-align="left"]::before {
+  left: auto;
+  right: -8px;
+  backdrop-filter: blur(var(--amiba-agent-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
+  mask-image: radial-gradient(circle at 100% 100%, transparent 7.5px, black 8px);
+  -webkit-mask-image: radial-gradient(circle at 100% 100%, transparent 7.5px, black 8px);
+}
+[data-amiba-product-shell] [data-assistant-message-chrome]:is(:hover, :focus-within) [data-background-surface="message-actions"] {
+  transform: translateY(0);
+}
+[data-amiba-product-shell] [data-assistant-message-chrome] [data-assistant-reply-body] {
+  position: relative;
+  z-index: 1;
+}
+[data-amiba-product-shell] [data-assistant-message-chrome]:has([data-background-surface="message-actions"]):is(:hover, :focus-within) [data-background-surface="assistant-message"] {
+  border-bottom-left-radius: 0;
+}
