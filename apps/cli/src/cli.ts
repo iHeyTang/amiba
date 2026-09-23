@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { Command } from "commander"
+import { Command, Option } from "commander"
 import { createCommand } from "./commands/create.js"
 import { devCommand } from "./commands/dev.js"
 import { buildCommand } from "./commands/build.js"
@@ -73,6 +73,7 @@ plugin
   .command("dev")
   .description("Connect a local plugin to running Amiba and rebuild on changes")
   .option("--no-connect", "build and watch without connecting to desktop")
+  .addOption(new Option("--target <target>", "connect only to the dev or release desktop").choices(["dev", "release"]))
   .action(options => devCommand({ ...options, home: program.opts().dshHome }))
 
 plugin.command("build").description("Production build").action(buildCommand)

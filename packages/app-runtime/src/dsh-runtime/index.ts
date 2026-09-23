@@ -129,13 +129,26 @@ export function resolveAmibaDshHomes(
   return roots.map(root => path.join(root, "dsh", "home"))
 }
 
-/** Include isolated previews in plugin development discovery; explicit homes stay authoritative. */
+/** Restrict plugin discovery to a channel when requested; explicit homes stay authoritative. */
+export type DesktopDevelopmentTarget = "dev" | "release"
+
 export function resolveAmibaDshDevelopmentHomes(
   explicit?: string,
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
   userHome = homedir(),
+  target?: DesktopDevelopmentTarget,
 ): string[] {
+  const channelHome = target === "dev" ? env.AMIBA_PLUGIN_DEV_HOME : target === "release" ? env.AMIBA_PLUGIN_RELEASE_HOME : undefined
+  if (target) {
+    if (explicit?.trim() || channelHome?.trim()) return [path.resolve(explicit?.trim() || channelHome!.trim())]
+    // Unscoped DSH overrides may belong to the other running desktop. An explicit
+    // channel uses only its own override or its platform defaults.
+    const homes = resolveAmibaDshHomes(undefined, {
+      ...env, AMIBA_DSH_HOME: undefined, DSH_HOME: undefined, AMIBA_USER_DATA_DIR: undefined,
+    }, platform, userHome)
+    return target === "release" ? homes : homes.map(home => path.join(`${path.dirname(path.dirname(home))}-dev`, "dsh", "home"))
+  }
   const homes = resolveAmibaDshHomes(explicit, env, platform, userHome)
   if (explicit?.trim() || env.AMIBA_DSH_HOME?.trim() || env.DSH_HOME?.trim() || env.AMIBA_USER_DATA_DIR?.trim()) return homes
   return [...homes.map(home => path.join(`${path.dirname(path.dirname(home))}-dev`, "dsh", "home")), ...homes]
