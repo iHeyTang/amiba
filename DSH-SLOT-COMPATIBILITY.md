@@ -71,7 +71,7 @@
 | `conversation.hero.agentPreset` | 不晚于 0.0.1-rc.3 | single/root | 读取获选 AgentPresetSeatInjected 的插件自有状态；忙碌／删除／卸载保护、提交版本消费。未公开的私有状态不能推断。V1、V2 升级注意：0.1.7-alpha.2 改为 single/session-maybe。 [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
 | `conversation.hero.brand.mark` | 0.1.0-rc.8 | single/root | 默认优先级 1；普通插件默认 0 可接管。V1；私有依赖另验。 [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.1.0-rc.8/lib/client.js) |
 | `conversation.hero.workspace` | 不晚于 0.0.1-rc.3 | single/root | 真实按钮锚点与 WorkspaceId → 路径；关闭、删除、原生异步返回保护。V2 [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
-| `conversation.hero.workspace.directoryFlow` | 不晚于 0.0.1-rc.3 | single/root | 由发布版 rc.2 `ui-workspace` 的父条目独占声明与分派；Amiba 根不重复声明。原生回退使用平台目录选择器，保留起始路径及调用方写入权限，不跨父组件分派此子槽。V8；桌面与独立 Web 的真实选择器交互另验。 [源码](plugins/dsh-plugin-ui-shell/src/client/shell-children.ts) |
+| `conversation.hero.workspace.directoryFlow` | 不晚于 0.0.1-rc.3 | single/root | Amiba 根独占声明并在原生界面分派，保留官方目录流 owner 契约。挂载 rc.2 工作区服务但停用其默认界面；第三方目录插件照常接入。保留原生回退、起始路径和调用方写入权限。V8；独立 Web 的真实选择器交互另验。 [源码](plugins/dsh-plugin-ui-shell/src/client/shell-children.ts) |
 
 </details>
 
@@ -136,7 +136,7 @@
 
 | 插槽 | 首次核验 | rc.2 kind/scope | 边界与证据 |
 | --- | --- | --- | --- |
-| `conversation.approval.detail` | 0.1.2-alpha.2 | single/session | 由发布版 rc.2 `ui-approval` 的 composer 条目独占声明并渲染；Amiba 根不重复声明或直接分派。原生审批回退保留自身内容，不接管此子槽。V8；真实审批交互仍按宿主专项验收。 [源码](plugins/dsh-plugin-ui-shell/src/client/shell-children.ts) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.1.2-alpha.2/lib/client.js) |
+| `conversation.approval.detail` | 0.1.2-alpha.2 | single/session | Amiba 根独占声明，由原生 ApprovalBanner 分派，保留官方 callId owner 契约。停用官方默认审批 UI；Amiba 宿主审批控制器、四种决定及详情扩展继续工作。V8；真实审批交互仍按宿主专项验收。 [源码](plugins/dsh-plugin-ui-shell/src/client/shell-children.ts) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.1.2-alpha.2/lib/client.js) |
 | `conversation.chat.assistant-actions` | 不晚于 0.0.1-rc.3 | list/session | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
 | `conversation.chat.commandview` | 不晚于 0.0.1-rc.3 | keyed/session | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
 | `conversation.chat.node` | 不晚于 0.0.1-rc.3 | keyed/session | 有节点贡献时使用 rc.2 ChatView；共享 viewport、阅读位置及会话隔离；排版不同不保证文字行相同。V1、V3 [源码](plugins/dsh-plugin-ui-shell/src/client/official-chat-presentation.ts) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
@@ -248,7 +248,7 @@
 | `sidebar.right.tab.menu.item` | 0.1.5-alpha.1 | list/session | 依赖 Amiba 工作台及 sidebarRight/resources/tabInfo 适配服务；独立 Web、跨会话和卸载需分别验收。 [源码](plugins/dsh-plugin-ui-shell/src/client/sidebar-right/native-seat.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.1.5-alpha.1/lib/client.js) |
 | `sidebar.settings` | 不晚于 0.0.1-rc.3 | single/root | 默认优先级 1；普通插件默认 0 可接管。V1；私有依赖另验。 [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
 | `sidebar.workspaces` | 不晚于 0.0.1-rc.3 | single/root | 默认优先级 1；普通插件默认 0 可接管。V1；私有依赖另验。 [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
-| `sidebar.workspaces.directoryFlow` | 不晚于 0.0.1-rc.3 | single/root | 由发布版 rc.2 `ui-workspace` 的父条目独占声明与分派；Amiba 根不重复声明。原生回退使用平台目录选择器，保留起始路径及调用方写入权限，不跨父组件分派此子槽。V8；桌面与独立 Web 的真实选择器交互另验。 [源码](plugins/dsh-plugin-ui-shell/src/client/shell-children.ts) |
+| `sidebar.workspaces.directoryFlow` | 不晚于 0.0.1-rc.3 | single/root | Amiba 根独占声明并在原生界面分派，保留官方目录流 owner 契约。挂载 rc.2 工作区服务但停用其默认界面；第三方目录插件照常接入。保留原生回退、起始路径和调用方写入权限。V8；独立 Web 的真实选择器交互另验。 [源码](plugins/dsh-plugin-ui-shell/src/client/shell-children.ts) |
 
 </details>
 
@@ -441,7 +441,7 @@
 | V5 | `pnpm runtime:prepare`、`pnpm runtime:verify`、`pnpm runtime:smoke` | 4d2edf82 对应代码的最终构建、完整性和运行时集成通过，DSH rc.2 / Node 22.22.0；不是三平台安装包或全部第三方浏览器验收 |
 | V6 | [工具展示](plugins/dsh-plugin-ui-shell/src/client/official-toolviews.test.tsx)、[官方工具行入口](packages/ui/src/chat/__tests__/ToolCallToolviewSeat.test.tsx)、[消息渲染](packages/ui/src/chat/__tests__/MessageChrome.test.tsx)、[会话](packages/ui/src/chat/__tests__/FullScreenChatView.test.tsx)、[后台任务](plugins/dsh-plugin-background-jobs/src/client/activity.test.tsx) | `5aca2b07` 退役后相关 189 项通过；SDK 类型及 UI Shell 生产 TypeScript 通过。运行 Node 22.17.0，有低于仓库要求的 engine 警告；未重跑运行时打包或外部插件端到端 |
 | V7 | [侧栏](packages/ui/src/chat/__tests__/Sidebar.test.tsx)、[会话](packages/ui/src/chat/__tests__/FullScreenChatView.test.tsx)、[设置](packages/ui/src/settings/__tests__/SettingsView.test.tsx)、[槽契约](plugins/dsh-plugin-ui-shell/src/slots.test.ts)、[官方替换](plugins/dsh-plugin-ui-shell/src/client/official-replacements.test.tsx) | `58da9b44`：91 项通过；SDK 与 UI Shell 生产类型检查通过。Node 22.17.0 有 engine 警告；全量架构检查修改前后均因 bundle 插件清单不一致失败，未声称通过 |
-| V8 | [发布版插件启动组合](plugins/dsh-plugin-ui-shell/src/client/published-shell-startup.test.tsx)、[原生目录回退](packages/ui/src/directory-chooser.test.tsx)、[原生审批](packages/ui/src/chat/__tests__/ApprovalBanner.test.tsx) | rc.2 的真实 renderer/registry、审批、工作区、目录插件：两种启动顺序、根卸载及重载通过；与现有替换渲染及槽契约共 29 项通过。服务数据及原生选择器返回值为测试替身；不能替代完整宿主交互验收。 |
+| V8 | [发布版插件启动组合](plugins/dsh-plugin-ui-shell/src/client/published-shell-startup.test.tsx)、[目录流生命周期](plugins/dsh-plugin-ui-shell/src/client/directory-flow.test.ts)、[原生目录回退](packages/ui/src/directory-chooser.test.tsx)、[原生审批](packages/ui/src/chat/__tests__/ApprovalBanner.test.tsx) | rc.2 真实 renderer/registry、工作区服务及目录插件：两种启动顺序、根卸载与重载、第三方注册及默认 UI 停用策略；另含目录流生命周期、原生审批与替换渲染验证。服务数据及原生选择器返回值为测试替身；不能替代完整宿主交互验收。 |
 
 实现基线 `4d2edf82` 的相关 UI 58 项、renderer／SlotCore／数据源 31 项，共 89 项通过；生产 TypeScript、V4、V5 通过。已有全量 UI-shell／架构检查基线失败并未标为全绿。入口覆盖、专项测试、完整插件、安装包、发布是不同证据层级。
 

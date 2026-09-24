@@ -9,6 +9,7 @@ import * as Cordis from "@deepseek-ai/cordis";
 import * as Slots from "@deepseek-ai/dsh-client-ui-slots";
 import * as Store from "@deepseek-ai/dsh-client-store";
 import { afterEach, expect, it, vi } from "vitest";
+import { mountOfficialWorkspaceServices } from "./official-workspace-services.js";
 import { createShellChildren } from "./shell-children.js";
 import { NATIVE_REPLACEMENT_PRIORITY, NativeOfficialPresentation, OFFICIAL_REPLACEMENTS } from "./official-replacements.js";
 
@@ -37,7 +38,7 @@ function published(name: string): { apply(ctx: Cordis.Context): void } {
 }
 const renderer = published("@deepseek-ai/dsh-client-ui-renderer");
 const workspace = published("@deepseek-ai/dsh-client-ui-workspace");
-const approval = published("@deepseek-ai/dsh-client-ui-approval");
+
 const picker = published("@deepseek-ai/dsh-client-ui-directory-picker-native");
 const contexts: Cordis.Context[] = [];
 afterEach(async () => { for (const ctx of contexts.splice(0)) await ctx.fiber.dispose(); });
@@ -69,7 +70,7 @@ it.each(["shell-first", "plugins-first"])("boots the production slot composition
       ctx.slots.register({ name, priority: NATIVE_REPLACEMENT_PRIORITY }, NativeOfficialPresentation);
     return dispose;
   };
-  const mountPlugins = () => { approval.apply(ctx); workspace.apply(ctx); picker.apply(ctx); };
+  const mountPlugins = () => { mountOfficialWorkspaceServices(ctx, workspace.apply); picker.apply(ctx); };
   let off!: () => void;
   expect(() => {
     if (order === "shell-first") { off = mountShell(); mountPlugins(); }
@@ -78,17 +79,36 @@ it.each(["shell-first", "plugins-first"])("boots the production slot composition
   const verify = () => {
     for (const [parent, child] of ownedChildren) {
       const owners = ctx.slots.entries(parent).filter(entry => child in (entry.children ?? {}));
-      expect(owners).toHaveLength(1);
-      expect(ctx.slots.entries("root")[0]?.children).not.toHaveProperty(child);
+      expect(owners).toHaveLength(0);
+      expect(ctx.slots.entries("root")[0]?.children).toHaveProperty(child);
       expect(ctx.slots.spec(child)).toBeDefined();
     }
     for (const name of ["sidebar.workspaces.directoryFlow", "conversation.hero.workspace.directoryFlow"] as const)
       expect(ctx.slots.entriesOfSlot(name)).toHaveLength(1);
   };
+  expect(ctx.get("uiWorkspace")).toBeDefined();
   verify();
   off();
   for (const [, child] of ownedChildren) expect(ctx.slots.spec(child)).toBeUndefined();
   off = mountShell();
   verify();
   off();
+});
+
+// Pin the composition policy: defaults must not reclaim shell-owned children.
+it("disables only conflicting default UI while retaining picker plugins", () => {
+  const patch = readFileSync(require.resolve("../../../../bundles/dsh-bundle-amiba-web/cordis.patch.yml"), "utf8");
+  for (const id of ["ui-workspace", "ui-approval", "ui-brand-official"])
+    expect(patch).toMatch(new RegExp(`- id: ${id}\\n  disabled: true`));
+  expect(patch).not.toMatch(/- id: ui-directory-picker/);
+});
+
+it("keeps third-party registrations outside the workspace facade", () => {
+  const ctx = fixture();
+  ctx.slots.register({ name: "root", children: createShellChildren(() => {}) }, () => null);
+  mountOfficialWorkspaceServices(ctx, workspace.apply);
+  const off = ctx.slots.register({ name: "sidebar.workspaces.directoryFlow" }, () => null);
+  expect(ctx.slots.entriesOfSlot("sidebar.workspaces.directoryFlow")).toHaveLength(1);
+  off();
+  expect(ctx.slots.entriesOfSlot("sidebar.workspaces.directoryFlow")).toHaveLength(0);
 });

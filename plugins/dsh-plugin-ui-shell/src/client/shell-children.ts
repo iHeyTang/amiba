@@ -1,11 +1,11 @@
 import { OFFICIAL_REPLACEMENTS } from "./official-replacements.js";
 
-/** Only slots owned by the Amiba root. Child slots of live official plugins
- * (workspace directory flows and approval details) stay with those entries.
- * Declaring them here too prevents the official plugins from starting. */
+/** Amiba owns the declarations; plugins use the official names and contracts. */
 export function createShellChildren(openWorkspace: (viewId: string) => void) {
   return {
     "conversation.chat.turnTail": { kind: "chain", scope: "session" },
+    "conversation.hero.workspace.directoryFlow": { kind: "single", scope: "root" },
+    "sidebar.workspaces.directoryFlow": { kind: "single", scope: "root" },
     "sidebar.footer.action": { kind: "list", scope: "root" },
     "amiba.emptyState.visual": { kind: "list", scope: "root" },
     // The two generic session-list extension points (a "group" that
@@ -128,6 +128,7 @@ export function createShellChildren(openWorkspace: (viewId: string) => void) {
     // align/compact straight off the official contract.
     "conversation.message.images": { kind: "single", scope: "session" },
     "tool.call.images": { kind: "single", scope: "session" },
+    "conversation.approval.detail": { kind: "single", scope: "session" },
     "conversation.chat.assistant-actions": { kind: "list", scope: "session" },
     "tool.call.toolview": { kind: "keyed", scope: "session" },
     // Amiba's keyed question seat: one entry per question id (a

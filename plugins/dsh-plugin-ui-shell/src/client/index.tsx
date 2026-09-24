@@ -1,3 +1,6 @@
+import { createShellChildren } from "./shell-children.js";
+import { mountOfficialWorkspaceServices } from "./official-workspace-services.js";
+import { apply as applyOfficialWorkspace } from "@deepseek-ai/dsh-client-ui-workspace/client";
 import { BACKGROUND_REMOTE } from "../background/remote.js";
 import { createBackgroundController, type BackgroundController } from "./background/controller.js";
 import { BackgroundFrame } from "./background/BackgroundFrame.js";
@@ -32,7 +35,7 @@ import { createSnapshotStore } from "@deepseek-ai/dsh-client-store";
 import { createDraftImageRegistry } from "./draft-image-registry.js";
 import { mountOfficialChatPresentation, officialChatRequested, RootSlotDispatch } from "./official-chat-presentation.js";
 import { EMPTY_CHAT_SNAPSHOT, registerConversationNodes, apply as applyOfficialChat } from "@deepseek-ai/dsh-client-ui-chat/client";
-import { createShellChildren } from "./shell-children.js";
+import { createDirectoryFlow, type DirectoryFlow } from "./directory-flow.js";
 import { createConversationViewSource, type ConversationViewEntry } from "./conversation-view-source.js";
 import { CONVERSATION_ENTRY_REMOTE } from "../conversation-remote.js";
 import { createConversationPreparer } from "./conversation-submit.js";
@@ -300,6 +303,7 @@ type AmibaRootProps = PropsRuntime<"root"> &
     summarySource: ContributionsSource<WorkbenchSummaryContribution>;
     officialChat: import("@deepseek-ai/dsh-client-store").ObservableSnapshot<boolean>;
     heroPreset: HeroPreset;
+    directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
     conversationViews: ContributionsSource<ConversationViewEntry>;
     toolImagesAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
     lineageAvailable: import("@amiba/extension-sdk").ObservableSnapshot<boolean>;
@@ -339,6 +343,7 @@ function AmibaRoot({
   workbenchSource,
   workbenchShellSource,
   summarySource,
+  directoryFlows,
   heroPreset,
   officialChat,
   conversationViews,
@@ -394,6 +399,7 @@ function AmibaRoot({
       sessionListGroups={sessionListGroups}
       sessionItemMenuItems={sessionItemMenuItems}
       surfaces={surfaces}
+      directoryFlows={directoryFlows}
       heroPreset={heroPreset}
       officialChat={officialChat}
       conversationViews={conversationViews}
@@ -776,6 +782,15 @@ export async function apply(ctx: ClientContext): Promise<void> {
     const workbenchShellSource = createWorkbenchShellSource(ctx.slots);
     const summarySource = createSummarySource(ctx.slots);
     const conversationViews = createConversationViewSource(ctx.slots);
+    const adoptDirectory = async (path: string) => {
+      const workspaces = ctx.get("workspaces");
+      if (!workspaces) throw new Error("Workspace service is unavailable");
+      return workspaces.create({ path });
+    };
+    const directoryFlows = {
+      home: createDirectoryFlow(ctx.slots, "conversation.hero.workspace.directoryFlow", adoptDirectory),
+      workspace: createDirectoryFlow(ctx.slots, "sidebar.workspaces.directoryFlow", adoptDirectory),
+    };
     const surfaces = createSurfaceSelections(ctx.slots, getPlatform().storage);
     mainPanels = new MainPanelNavigation(navigation, {
       hasPanel: id => ctx.slots.entriesOfSlot("main").some(entry => entry.options.key === id),
@@ -818,6 +833,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           workbenchSource,
           workbenchShellSource,
           summarySource,
+          directoryFlows,
           heroPreset,
           officialChat: officialChatRequested(ctx.slots),
           conversationViews,
@@ -982,6 +998,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
     const officialChatFiber = ctx.inject(["uiConversation", "locale", "settingsScope", "remote", "sidebarRight"], scope => {
       mountOfficialChatPresentation(scope, applyOfficialChat);
     });
+    const workspaceFiber = ctx.inject(["sessions", "workspaces", "locale", "remote", "remote.directoryPicker", "layout"], scope => {
+      mountOfficialWorkspaceServices(scope, applyOfficialWorkspace);
+    });
     const sidebarRightFiber = ctx.inject(['locale'], scope => {
       scope.effect(() => registerSidebarRight(scope, sidebarRightTabs, resources), 'amiba-ui-shell: optional sidebar panel');
       const files = getPlatform().workspaceFiles;
@@ -1005,6 +1024,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     return () => {
       for (const dispose of disposeReplacements) dispose();
       for (const dispose of disposeOfficialToolviews) dispose();
+      void workspaceFiber.dispose();
       void officialChatFiber.dispose();
       void sidebarRightFiber.dispose();
       disposeAskToolview();
@@ -1023,6 +1043,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
       void conversationDataFiber.dispose();
       void sourcesFiber.dispose();
       void disposeComposerInputs();
+      directoryFlows.home.dispose();
+      directoryFlows.workspace.dispose();
       panelNavigation.dispose();
       disposePanelInfo();
       if (mainPanels === panelNavigation) mainPanels = undefined;

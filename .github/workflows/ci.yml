@@ -59,6 +59,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Validate published plugin slot ownership and fallback rendering
-        run: pnpm --dir plugins/dsh-plugin-ui-shell exec vitest run src/client/published-shell-startup.test.tsx src/client/official-replacements.test.tsx src/slots.test.ts
+        run: pnpm --dir plugins/dsh-plugin-ui-shell exec vitest run src/client/published-shell-startup.test.tsx src/client/directory-flow.test.ts src/client/official-replacements.test.tsx src/slots.test.ts
       - name: Validate native directory and approval fallbacks
         run: pnpm --dir packages/ui exec vitest run src/directory-chooser.test.tsx src/chat/__tests__/ApprovalBanner.test.tsx
