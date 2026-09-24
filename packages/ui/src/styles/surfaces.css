@@ -57,6 +57,16 @@
   border: 0;
   border-radius: 12px;
 }
+/* The file-change review card keeps its own glass panel even when nested
+ * inside an assistant reply — the consecutive-record share/wipe rule must
+ * never flatten it to the bubble's material. */
+[data-amiba-product-shell] [data-file-change-card] {
+  background: hsl(var(--amiba-agent-color) / var(--amiba-agent-opacity));
+  backdrop-filter: blur(var(--amiba-agent-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
+  border-color: hsl(var(--border) / 0.55);
+  border-radius: 12px;
+}
 /* Recovery copy must stay legible even over a high-contrast wallpaper. */
 [data-amiba-product-shell] [data-background-surface="recovery"] {
   background: hsl(var(--background) / var(--amiba-reading-opacity));
@@ -507,5 +517,8 @@
   box-shadow: inset 1px 0 0 hsl(var(--border));
 }
 .amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-background-surface="model-notice"] {
+  background: hsl(var(--muted));
+}
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-file-change-card] {
   background: hsl(var(--muted));
 }
