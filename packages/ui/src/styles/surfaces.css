@@ -4,6 +4,7 @@
   --amiba-agent-color: var(--background);
   --amiba-user-color: var(--background);
   --amiba-header-fill: hsl(var(--background) / 0.4);
+  --amiba-header-edge: inset 0 0 0 1px hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 0.4));
   --amiba-glass-opacity: 0.46;
   --amiba-workspace-opacity: 0.24;
   --amiba-workspace-hover-opacity: 0.38;
@@ -263,7 +264,7 @@
   background: var(--amiba-header-fill);
   backdrop-filter: blur(var(--amiba-glass-blur));
   -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
-  box-shadow: inset 0 0 0 1px hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 0.4));
+  box-shadow: var(--amiba-header-edge);
 }
 [data-amiba-product-shell] :is([data-content-header-leading][data-header-glass], [data-content-header-actions], [data-workspace-edge-toggle]) :is(button, [role="button"]) {
   color: hsl(var(--foreground) / 0.9);
@@ -470,6 +471,7 @@
   --amiba-content-fill: hsl(var(--foreground) / 0.035);
   --amiba-content-hover: hsl(var(--foreground) / 0.08);
   --amiba-header-fill: hsl(var(--muted));
+  --amiba-header-edge: none;
   --amiba-glass-blur: 0px;
   --amiba-reading-blur: 0px;
   --amiba-agent-blur: 0px;
@@ -488,4 +490,11 @@
 }
 .amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-background-surface="model-notice"] {
   background: hsl(var(--muted));
+}
+
+/* Filled cards already separate themselves on the flat canvas. Keep form
+   control boundaries and focus rings; remove only decorative card chrome. */
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] .amiba-card-surface:not(:focus-visible) {
+  border-color: transparent;
+  box-shadow: none;
 }

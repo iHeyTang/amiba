@@ -158,6 +158,12 @@ function Preview() {
           </Dialog>
         </div>
       </section>
+      <section className="amiba-background-frame" data-background-active="false">
+        <div data-amiba-product-shell className="space-y-4 rounded-xl bg-background p-4">
+          <div className="flex items-center justify-between gap-4"><div data-content-header-leading data-header-glass className="relative flex h-8 items-center text-sm">创建 Amiba 功能与场景子代理</div><div data-content-header-actions className="relative flex h-8 items-center gap-3 text-sm"><button>会话记录</button><button>2 个后台任务</button></div></div>
+          <div className="amiba-card-surface rounded-lg border bg-muted p-4 text-sm">无壁纸：已有底色的容器使用色差分层</div>
+        </div>
+      </section>
       <section className="nyYjTG_root flex gap-3 rounded-xl bg-muted/30 p-4" aria-label="文件打开按钮样式预览">
         {["生成式AI实战指南.pptx", "make_ppt_detail.py"].map(name => <div key={name} className="nyYjTG_file flex flex-1 items-center justify-between gap-3 border"><span className="truncate text-sm">{name}</span><div className="nyYjTG_split inline-flex overflow-hidden border"><button className="nyYjTG_open px-2 py-1">打开</button><button aria-label={`${name} 的更多操作`} className="nyYjTG_chevron border-l px-2 py-1">⌄</button></div></div>)}
       </section>
