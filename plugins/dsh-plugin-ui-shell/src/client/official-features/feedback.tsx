@@ -1,3 +1,4 @@
+import { useT } from "@amiba/i18n";
 import { MessageActionButton } from "@amiba/ui";
 import { useEffect, useRef, useState } from "react";
 import { ThumbsDown, ThumbsUp } from "lucide-react";
@@ -132,6 +133,7 @@ export function FeedbackDialog({
   dismissToast,
   t,
 }: FeedbackDialogProps) {
+  const { t: amibaT } = useT();
   const state = useDialog((s) => s);
   useEffect(() => {
     if (!state.toast) return;
@@ -156,8 +158,13 @@ export function FeedbackDialog({
       >
         <DialogContent size="compact">
           <DialogHeader>
-            <DialogTitle>{t("dialog.title")}</DialogTitle>
-            <DialogDescription>{t("dialog.hint")}</DialogDescription>
+            <DialogTitle>{amibaT("shell.feedback.title")}</DialogTitle>
+            <DialogDescription className="space-y-2" asChild>
+              <div>
+                <p>{amibaT("shell.feedback.destination")}</p>
+                <p>{amibaT("shell.feedback.privacy")}</p>
+              </div>
+            </DialogDescription>
           </DialogHeader>
           <div
             role="group"
@@ -183,7 +190,7 @@ export function FeedbackDialog({
           </div>
           <Textarea
             aria-label={t("dialog.detail")}
-            placeholder={t("dialog.hint")}
+            placeholder={amibaT("shell.feedback.placeholder")}
             value={state.text}
             readOnly={state.submitting}
             onChange={(event) => edit({ text: event.target.value })}
@@ -204,7 +211,7 @@ export function FeedbackDialog({
               {t("close")}
             </Button>
             <Button disabled={state.submitting} onClick={() => void submit()}>
-              {t(state.submitting ? "submitting" : "submit")}
+              {state.submitting ? t("submitting") : amibaT("shell.feedback.submit")}
             </Button>
           </DialogFooter>
         </DialogContent>

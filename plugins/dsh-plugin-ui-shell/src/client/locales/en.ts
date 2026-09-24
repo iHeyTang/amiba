@@ -7,6 +7,11 @@
  * `./messages.ts`.
  */
 export const en = {
+  "shell.feedback.title": "Send feedback to DeepSeek",
+  "shell.feedback.destination": "This sends feedback to DeepSeek through DSH’s official feedback service. Submitted content includes logs from the current conversation.",
+  "shell.feedback.privacy": "Amiba only adapts this interface. Amiba does not receive this feedback or collect the feedback and conversation logs on Amiba servers.",
+  "shell.feedback.placeholder": "Describe the issue or suggestion for DeepSeek.",
+  "shell.feedback.submit": "Submit to DeepSeek",
   "app.initializing": "Waking your local agent",
   "shell.ask.action": "Ask the user",
   "shell.ask.waiting": "Waiting for answers…",

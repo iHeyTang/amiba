@@ -1,3 +1,4 @@
+import { installAmibaMessageCatalog } from "../client/messages";
 import { JobsAction } from "../client/official-features/jobs";
 import { WorkflowRun } from "../client/official-features/workflow";
 import { apply as jobs } from "@deepseek-ai/dsh-client-ui-jobs/client";
@@ -25,6 +26,7 @@ import {
 } from "../client/official-features/subagent";
 import { Button } from "@amiba/ui/primitives";
 import "./surfaces.css";
+installAmibaMessageCatalog();
 setPlatform({ storage: { get: async () => ({}), set: async () => {}, remove: async () => {}, watch: () => () => {} } } as unknown as PlatformAdapter);
 const dictionaries: Record<string, Record<string, string>> = {};
 let Plan!: ComponentType<Record<string, unknown>>;

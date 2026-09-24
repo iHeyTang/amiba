@@ -1,3 +1,4 @@
+import { installAmibaMessageCatalog } from "../messages";
 // @vitest-environment jsdom
 import {
   cleanup,
@@ -17,6 +18,7 @@ import type {
 import type { GoalDock as OfficialGoalDock } from "@deepseek-ai/dsh-client-ui-goal/client";
 import type { SubagentHeaderLineageProps } from "@deepseek-ai/dsh-client-ui-subagent/client";
 
+installAmibaMessageCatalog();
 afterEach(cleanup);
 const t = (key: string) => key;
 it("opens the official feedback draft, retracts an existing rating, and reports conflicts", async () => {
@@ -102,7 +104,9 @@ it("keeps feedback draft visible on failure and forwards category/text edits", (
   });
   expect(edit).toHaveBeenCalledWith({ text: "new note" });
   expect(screen.getByRole("alert").textContent).toBe("error.noteTooLarge");
-  fireEvent.click(screen.getByText("submit"));
+  expect(screen.getByText(/Amiba only adapts|Amiba 仅提供界面适配/)).toBeTruthy();
+  expect(screen.getByText(/Submitted content includes logs|提交内容包含当前对话日志/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: /Submit to DeepSeek|提交给 DeepSeek/ }));
   expect(submit).toHaveBeenCalledOnce();
 });
 it("matches goal activation by revision, edits trimmed text, and preserves a failed action", async () => {
