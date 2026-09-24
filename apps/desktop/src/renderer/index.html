@@ -26,6 +26,7 @@
     <script>
       (() => {
         if (new URLSearchParams(window.location.search).get("desktopPet") === "1") document.documentElement.dataset.desktopPet = "true";
+        if (new URLSearchParams(window.location.search).get("startupGlass") === "1") document.documentElement.dataset.startupGlass = "true";
         const theme = new URLSearchParams(window.location.search).get(
           "startupTheme",
         )
@@ -83,8 +84,24 @@
         background: var(--amiba-boot-canvas);
         color: var(--amiba-boot-ink);
       }
+      /* Only the native macOS window opts in: CSS blur cannot sample the desktop. */
+      html[data-startup-glass="true"]:has(#amiba-startup),
+      html[data-startup-glass="true"]:has(#amiba-startup) body {
+        background: transparent !important;
+      }
+      html[data-startup-glass="true"]:has(#amiba-startup) #root {
+        visibility: hidden;
+      }
+      html[data-startup-glass="true"] .amiba-startup-screen {
+        background: color-mix(in srgb, var(--amiba-boot-canvas) 28%, transparent);
+      }
+      @media (prefers-reduced-transparency: reduce) {
+        html[data-startup-glass="true"] .amiba-startup-screen {
+          background: var(--amiba-boot-canvas);
+        }
+      }
       .amiba-startup-content { width: 160px; text-align: center; }
-      .amiba-startup-status { margin-top: 12px; font: 13px/1.5 system-ui; color: #737373; }
+      .amiba-startup-status { margin-top: 12px; font: 13px/1.5 system-ui; color: color-mix(in srgb, var(--amiba-boot-ink) 70%, transparent); }
       .amiba-startup-progress { height: 3px; margin: 10px auto; width: 96px; overflow: hidden; border-radius: 3px; background: #8883; }
       .amiba-startup-progress::after { content: ""; display: block; height: 100%; width: 40%; background: #808080; animation: startup-loading 1.25s ease-in-out infinite alternate; }
       @keyframes startup-loading { to { transform: translateX(150%); } }

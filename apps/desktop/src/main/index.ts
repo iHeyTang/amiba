@@ -430,10 +430,10 @@ function createWindow() {
     // doesn't need to inflate to fit the worst case.
     minHeight: 800,
     title: "Amiba",
-    // Match the critical HTML shell exactly. Electron paints this native
-    // color before Chromium parses index.html, eliminating the old black
-    // frame that preceded the renderer's loading state.
-    backgroundColor: startupPalette.background,
+    // macOS paints the desktop behind the startup surface through native
+    // vibrancy. The renderer restores its opaque canvas once loading ends.
+    backgroundColor: IS_MAC ? "#00000000" : startupPalette.background,
+    ...(IS_MAC ? { vibrancy: "under-window" as const, visualEffectState: "active" as const } : {}),
     icon: IS_MAC ? undefined : iconPath(),
     // Immersive title bar. macOS uses `hidden` (not `hiddenInset`) so we
     // can drive the traffic-light position ourselves via
@@ -532,6 +532,7 @@ function createWindow() {
   if (isDev && RENDERER_DEV_URL) {
     const rendererUrl = new URL(RENDERER_DEV_URL);
     rendererUrl.searchParams.set("startupTheme", startupWindowTheme);
+    if (IS_MAC) rendererUrl.searchParams.set("startupGlass", "1");
     win.loadURL(rendererUrl.toString());
     // DevTools auto-open is opt-in via env so it stays out of the
     // user's face by default. Set `AMIBA_DEVTOOLS=1` in the env to
@@ -544,6 +545,7 @@ function createWindow() {
     win.loadFile(path.join(__dirname, "../renderer/index.html"), {
       query: {
         startupTheme: startupWindowTheme,
+        ...(IS_MAC ? { startupGlass: "1" } : {}),
         // Lets the renderer skip dev-only machinery (DSH client rebuild SSE)
         // in packaged builds while keeping it in `electron-vite preview`.
         ...(app.isPackaged ? { packaged: "1" } : {}),
