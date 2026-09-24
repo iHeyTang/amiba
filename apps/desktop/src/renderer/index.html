@@ -89,8 +89,16 @@
       html[data-startup-glass="true"]:has(#amiba-startup) body {
         background: transparent !important;
       }
-      html[data-startup-glass="true"]:has(#amiba-startup) #root {
-        visibility: hidden;
+      /* Descendants can explicitly set visibility: visible (header controls).
+         Keep them hidden too until the startup overlay is removed, while
+         preserving layout so shell measurement and warmup can finish. */
+      html:has(#amiba-startup) #root,
+      html:has(#amiba-startup) #root * {
+        visibility: hidden !important;
+      }
+      html:has(#amiba-startup) #root {
+        opacity: 0;
+        pointer-events: none;
       }
       html[data-startup-glass="true"] .amiba-startup-screen {
         background: color-mix(in srgb, var(--amiba-boot-canvas) 28%, transparent);
