@@ -162,6 +162,15 @@ function Preview() {
         <div data-amiba-product-shell className="space-y-4 rounded-xl bg-background p-4">
           <div className="flex items-center justify-between gap-4"><div data-content-header-leading data-header-glass className="relative flex h-8 items-center text-sm">创建 Amiba 功能与场景子代理</div><div data-content-header-actions className="relative flex h-8 items-center gap-3 text-sm"><button>会话记录</button><button>2 个后台任务</button></div></div>
           <div className="amiba-card-surface rounded-lg border bg-muted p-4 text-sm">无壁纸：已有底色的容器使用色差分层</div>
+          <aside className="max-w-sm bg-muted p-2" aria-label="侧栏底色预览">
+            <section data-sidebar-section="rail">
+              <div data-section-header="rail" className="px-4 py-2 text-sm text-muted-foreground">任务</div>
+              <div data-section-content><nav data-session-rows>
+                <div data-session-row data-active="true" className="px-4 py-2 text-sm"><button>创建 Amiba 功能与场景子代理</button></div>
+                <div data-session-row className="px-4 py-2 text-sm"><button>AI 助手能力介绍</button></div>
+              </nav></div>
+            </section>
+          </aside>
         </div>
       </section>
       <section className="nyYjTG_root flex gap-3 rounded-xl bg-muted/30 p-4" aria-label="文件打开按钮样式预览">

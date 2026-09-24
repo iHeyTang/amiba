@@ -100,14 +100,15 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-[data-amiba-product-shell] [data-section-header="rail"] {
+[data-amiba-product-shell] [data-section-header="rail"],
+[data-amiba-product-shell] :is([data-session-row], [data-navigation-row])[data-active="true"] {
   border-radius: 8px;
   background: var(--amiba-content-fill);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 [data-amiba-product-shell] [data-section-header="rail"]:hover,
-[data-amiba-product-shell] :is([data-session-row], [data-navigation-row]):is([data-active="true"], :hover, :focus-within) {
+[data-amiba-product-shell] :is([data-session-row], [data-navigation-row]):hover {
   background: var(--amiba-content-hover);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
