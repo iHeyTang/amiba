@@ -126,8 +126,13 @@
   -webkit-backdrop-filter: blur(var(--amiba-message-blur));
 }
 [data-amiba-product-shell] [data-home-greeting] {
-  color: hsl(var(--foreground));
-  text-shadow: 0 1px 3px hsl(var(--background)), 0 0 10px hsl(var(--background));
+  color: hsl(var(--muted-foreground));
+  text-shadow: 0 1px 2px hsl(var(--background) / 0.65), 0 0 6px hsl(var(--background) / 0.45);
+}
+/* A theme-matched halo keeps statistics legible over wallpaper without
+   increasing their visual weight or affecting the portalled detail popover. */
+[data-amiba-product-shell] [data-composer-stats] > button {
+  text-shadow: 0 1px 2px hsl(var(--background) / 0.65), 0 0 6px hsl(var(--background) / 0.45);
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   [data-amiba-product-shell] {

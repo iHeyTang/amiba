@@ -1,3 +1,4 @@
+import "../../../../packages/ui/src/styles/surfaces.css";
 import { installAmibaMessageCatalog } from "../client/messages";
 import { JobsAction } from "../client/official-features/jobs";
 import { WorkflowRun } from "../client/official-features/workflow";
@@ -144,6 +145,14 @@ function Preview() {
           切换明暗
         </Button>
       </header>
+      <section data-amiba-product-shell className="space-y-4 rounded-2xl p-6" style={{ background: "linear-gradient(125deg, #c7b5b9, #716d80 45%, #e1cac0)" }}>
+        <p data-home-greeting className="text-center text-sm">今天想一起做点什么？</p>
+        <div data-composer-card className="rounded-2xl p-4 text-sm text-muted-foreground">向 Amiba 提问…</div>
+        <div data-composer-stats className="flex justify-center gap-4">
+          <button className="text-xs text-muted-foreground">13,673 tok · 缓存命中 93.42%</button>
+          <button className="text-xs text-muted-foreground">1 轮 1 步</button>
+        </div>
+      </section>
       <section className="space-y-2 rounded-2xl bg-background/65 p-4">
         <div className="flex justify-end"><JobsAction {...{ sessionId: "root", useSessions: (select: any) => select(sessions), t: translate("job") } as any} /></div>
         <WorkflowRun {...{ sessionId: "root", useSessions: (select: any) => select(sessions), openSession: () => {}, t: translate("workflowRun"), node: { key: "preview-run", data: { name: "检查工作区兼容性", status: "running", phases: [{ key: "audit", phase: "并行检查", members: [{ seq: 1, label: "检查插件插槽", childId: "child", status: "running" }, { seq: 2, label: "验证消息流布局", childId: "done", status: "completed" }] }] } } } as any} />
