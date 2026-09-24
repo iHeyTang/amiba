@@ -60,3 +60,16 @@ it("retains a claimed home prompt while slow session loading hides the conversat
   await waitFor(() => expect(receive).toHaveBeenCalledWith(payload));
   expect(receive).toHaveBeenCalledTimes(1);
 });
+
+it("delivers a destructively claimed prompt after the session slot remounts its recipient", async () => {
+  const payload = { sessionId: "prepared", text: "retained first message" };
+  const drain = vi.fn().mockResolvedValueOnce(payload).mockResolvedValue(null);
+  const receive = vi.fn(async () => {}), open = vi.fn(async () => {}), onError = vi.fn();
+  const first = renderHook(() => usePendingPromptHandoff({ activeId: "", drain, tick: 0, open, receive, onError }));
+  await waitFor(() => expect(open).toHaveBeenCalledWith("prepared"));
+  first.unmount();
+  renderHook(() => usePendingPromptHandoff({ activeId: "prepared", drain, tick: 0, open, receive, onError }));
+  await waitFor(() => expect(receive).toHaveBeenCalledWith(payload));
+  expect(receive).toHaveBeenCalledTimes(1);
+  expect(onError).not.toHaveBeenCalled();
+});
