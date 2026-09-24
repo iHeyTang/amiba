@@ -1,3 +1,5 @@
+@import "./glass.css";
+
 /* Amiba product tokens. Extension templates receive an independent snapshot. */
 /*
  * Amiba shadcn HSL token palette + base layer + Radix ScrollArea fixes.

@@ -240,7 +240,7 @@ export function SettingsView({
   ) : undefined;
 
   return (
-    <div className="flex h-full min-h-0 w-full overflow-hidden bg-background text-foreground">
+    <div data-settings-view className="flex h-full min-h-0 w-full overflow-hidden bg-background text-foreground">
       <aside
         data-testid="settings-sidebar"
         className="flex min-h-0 shrink-0 flex-col bg-muted/30"

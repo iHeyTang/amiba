@@ -20,6 +20,10 @@
 
 收录范围：当前目标版本的官方槽、后续对照版本仍存在的新增槽，以及 Amiba 仍支持的扩展。已停止支持且无后续对照价值的旧槽不再列出；退役迁移见 [SDK 说明](packages/extension-sdk/README.md)，完整历史查 Git。
 
+目标 UI 统一（2026-09-24）：目标栏复用 `ComposerDockSheet` 吐司机容器；目标工具调用使用 Amiba 工具行，按实际动作显示标题，结果展示目标、阶段与受阻原因。执行与版本校验继续由官方目标服务负责。
+
+会话统计补齐（2026-09-24）：`ui-chat` 内部 `conversation.composer.dock / stats` 注册现在由 Amiba `SessionStats` 展示层承接，保留官方 `chat` locale 与会话作用域，读取官方 `tokenUsage`、`sessionStats` 持久投影。输入框下方展示累计 Token、缓存命中、轮次／步数，弹层展示分项及耗时；无投影时隐藏，不从分页消息推算全会话累计值。
+
 维护原则：rc.2 仍有效的槽继续维护，即使 alpha 分支已经移除；仅在后续版本新增的槽，等目标内核升级后重新评估。
 
 <a id="actions"></a>
@@ -30,7 +34,7 @@
 |---|---|---|---|
 | P1 | 输入区域、队列和附件 | 对下方目标版本表中“待专项验收”的真实插件补齐发送失败保留、普通文件、后台输入、Host 队列证据 | 修复确切缺口并逐行升级状态，不以入口数量关闭待办 |
 | P1 | 条件支持项 | 在实际支持的桌面／独立 Web 条件下验证目录、工作台、文档、工具、授权与卸载 | 每行记录已测宿主；不支持的宿主列明回退 |
-| P1 | 官方会话导航意图 | rc.2 `dsh-api-session-controller` 的公开打开方法未带桥接所用的旧意图标记；补齐无活动会话时的子会话打开及清空导航兼容 | 使用 rc.2 发布实现通过桥接测试；不能用测试替身的意图字段代替真实接口验收 |
+| P1 | 官方会话导航意图 | rc.2 `dsh-api-session-controller` 的公开打开方法未带桥接所用的旧意图标记；补齐普通会话从首页打开及清空导航兼容（子会话地址打开已在 V9 修复） | 使用 rc.2 发布实现通过桥接测试；不能用测试替身的意图字段代替真实接口验收 |
 | P2 | 新增替换入口 | 补第三方整组件的会话切换、卸载、异常恢复及服务依赖验收 | 明确到插件／宿主／提交的证据，不宣称任意私有 API 通用兼容 |
 | 暂缓 | 26 个后续版本新增名 | 保留存在性记录，不向 rc.2 引入实现 | 只有目标内核升级且新目标仍有效时，才转为接入任务 |
 
@@ -71,9 +75,22 @@
 | `conversation.hero.agentPreset` | 不晚于 0.0.1-rc.3 | single/root | 读取获选 AgentPresetSeatInjected 的插件自有状态；忙碌／删除／卸载保护、提交版本消费。未公开的私有状态不能推断。V1、V2 升级注意：0.1.7-alpha.2 改为 single/session-maybe。 [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
 | `conversation.hero.brand.mark` | 0.1.0-rc.8 | single/root | 默认优先级 1；普通插件默认 0 可接管。V1；私有依赖另验。 [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.1.0-rc.8/lib/client.js) |
 | `conversation.hero.workspace` | 不晚于 0.0.1-rc.3 | single/root | 真实按钮锚点与 WorkspaceId → 路径；关闭、删除、原生异步返回保护。V2 [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
-| `conversation.hero.workspace.directoryFlow` | 不晚于 0.0.1-rc.3 | single/root | 依赖目录服务；桌面与独立 Web 的取消、不可用及回退需分别验收。 [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
+| `conversation.hero.workspace.directoryFlow` | 不晚于 0.0.1-rc.3 | single/root | Amiba 根独占声明并在原生界面分派，保留官方目录流 owner 契约。挂载 rc.2 工作区服务但停用其默认界面；第三方目录插件照常接入。保留原生回退、起始路径和调用方写入权限。V8；独立 Web 的真实选择器交互另验。 [源码](plugins/dsh-plugin-ui-shell/src/client/shell-children.ts) |
 
 </details>
+
+### 内置功能的默认启用方式（2026-09-24）
+
+四项此前没有默认界面的能力现由 ui-shell 调用 **rc.2 发布包的 `apply`**，保留官方控制器、会话隔离、远端操作和卸载逻辑。组合文件中的自动加载行仍关闭，避免第二份实例；这不再表示功能关闭。
+
+| 功能 | 复用与适配 | 验证边界 |
+| --- | --- | --- |
+| `ui-plan` | 直接复用官方 PlanChip；仅映射 Amiba 主题颜色 | 官方退出命令与会话参数测试；界面样例验证 |
+| `ui-message-feedback` | 官方每会话反馈/草稿控制器、CAS 与 `/feedback` 装饰；Amiba 按钮和弹窗 | 实际发布包提交路径、失败保留、撤回冲突、卸载保护测试 |
+| `ui-goal` | 官方投影、激活订阅、最新版本号操作；Amiba 目标条与命令回显 | 目标版本变化、激活版本匹配、暂停/编辑交互测试；默认不切换整块聊天区 |
+| `ui-subagent` | 官方目录订阅/刷新/会话地址和只读选择器；Amiba 菜单与只读提示 | 展开/关闭订阅、失败重试、一次性只读、真实 rc.2 打开方法从首页桥接测试 |
+
+V9：[适配入口](plugins/dsh-plugin-ui-shell/src/client/official-features/mount.tsx)、[发布包组合测试](plugins/dsh-plugin-ui-shell/src/client/published-shell-startup.test.tsx)、[界面交互测试](plugins/dsh-plugin-ui-shell/src/client/official-features/features.test.tsx)、[导航桥接测试](plugins/dsh-plugin-ui-shell/src/client/sessions-bridge.test.ts)。浏览器样例验证使用确定性数据；不据此声称真实模型、多层子代理生成或反馈服务的线上端到端验收完成。
 
 ### 输入器与附件（10 项）
 
@@ -83,11 +100,11 @@
 | `conversation.composer.bar`<br>输入器主体 | 有 | 有 | 有 | 已接入·专项验证 | 保留 |
 | `conversation.composer.dock`<br>输入器下方附加区 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；补输入验收 |
 | `conversation.input.attachments`<br>附件呈现与拖放区域 | 有 | 有 | 有 | 已接入·专项验证 | 保留 |
-| `conversation.input.dock`<br>输入框上方附加区 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；补输入验收 |
+| `conversation.input.dock`<br>输入框上方附加区 | 有 | 有 | 有 | 已接入·专项验证 | 保留；官方目标控制器和 Amiba 目标条见 V9；其他插件另验 |
 | `conversation.input.left`<br>输入工具栏左侧 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；补输入验收 |
 | `conversation.input.model`<br>首页空会话及当前会话模型选择 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；首页准备并复用真实空会话，选择直接写入会话；补桌面端专项验收 |
 | `conversation.input.overlay`<br>触发菜单与弹层 | 有 | 有 | 有 | 已接入·宿主限制 | 保留；补键盘验收 |
-| `conversation.input.plan`<br>计划模式控件 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；补 rc.2 验收 |
+| `conversation.input.plan`<br>计划模式控件 | 有 | 有 | 有 | 已接入·专项验证 | 保留；默认挂载官方 PlanChip，见 V9 |
 | `conversation.input.right`<br>输入工具栏右侧 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；补输入验收 |
 
 <details>
@@ -136,7 +153,7 @@
 
 | 插槽 | 首次核验 | rc.2 kind/scope | 边界与证据 |
 | --- | --- | --- | --- |
-| `conversation.approval.detail` | 0.1.2-alpha.2 | single/session | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.1.2-alpha.2/lib/client.js) |
+| `conversation.approval.detail` | 0.1.2-alpha.2 | single/session | Amiba 根独占声明，由原生 ApprovalBanner 分派，保留官方 callId owner 契约。停用官方默认审批 UI；Amiba 宿主审批控制器、四种决定及详情扩展继续工作。V8；真实审批交互仍按宿主专项验收。 [源码](plugins/dsh-plugin-ui-shell/src/client/shell-children.ts) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.1.2-alpha.2/lib/client.js) |
 | `conversation.chat.assistant-actions` | 不晚于 0.0.1-rc.3 | list/session | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
 | `conversation.chat.commandview` | 不晚于 0.0.1-rc.3 | keyed/session | [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
 | `conversation.chat.node` | 不晚于 0.0.1-rc.3 | keyed/session | 有节点贡献时使用 rc.2 ChatView；共享 viewport、阅读位置及会话隔离；排版不同不保证文字行相同。V1、V3 [源码](plugins/dsh-plugin-ui-shell/src/client/official-chat-presentation.ts) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
@@ -248,7 +265,7 @@
 | `sidebar.right.tab.menu.item` | 0.1.5-alpha.1 | list/session | 依赖 Amiba 工作台及 sidebarRight/resources/tabInfo 适配服务；独立 Web、跨会话和卸载需分别验收。 [源码](plugins/dsh-plugin-ui-shell/src/client/sidebar-right/native-seat.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.1.5-alpha.1/lib/client.js) |
 | `sidebar.settings` | 不晚于 0.0.1-rc.3 | single/root | 默认优先级 1；普通插件默认 0 可接管。V1；私有依赖另验。 [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
 | `sidebar.workspaces` | 不晚于 0.0.1-rc.3 | single/root | 默认优先级 1；普通插件默认 0 可接管。V1；私有依赖另验。 [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
-| `sidebar.workspaces.directoryFlow` | 不晚于 0.0.1-rc.3 | single/root | 依赖目录服务；桌面与独立 Web 的取消、不可用及回退需分别验收。 [源码](plugins/dsh-plugin-ui-shell/src/client/product-shell.tsx) · [首次发布包](https://unpkg.com/@deepseek-ai/dsh-cordis-client-runner@0.0.1-rc.3/lib/client.js) |
+| `sidebar.workspaces.directoryFlow` | 不晚于 0.0.1-rc.3 | single/root | Amiba 根独占声明并在原生界面分派，保留官方目录流 owner 契约。挂载 rc.2 工作区服务但停用其默认界面；第三方目录插件照常接入。保留原生回退、起始路径和调用方写入权限。V8；独立 Web 的真实选择器交互另验。 [源码](plugins/dsh-plugin-ui-shell/src/client/shell-children.ts) |
 
 </details>
 
@@ -441,6 +458,7 @@
 | V5 | `pnpm runtime:prepare`、`pnpm runtime:verify`、`pnpm runtime:smoke` | 4d2edf82 对应代码的最终构建、完整性和运行时集成通过，DSH rc.2 / Node 22.22.0；不是三平台安装包或全部第三方浏览器验收 |
 | V6 | [工具展示](plugins/dsh-plugin-ui-shell/src/client/official-toolviews.test.tsx)、[官方工具行入口](packages/ui/src/chat/__tests__/ToolCallToolviewSeat.test.tsx)、[消息渲染](packages/ui/src/chat/__tests__/MessageChrome.test.tsx)、[会话](packages/ui/src/chat/__tests__/FullScreenChatView.test.tsx)、[后台任务](plugins/dsh-plugin-background-jobs/src/client/activity.test.tsx) | `5aca2b07` 退役后相关 189 项通过；SDK 类型及 UI Shell 生产 TypeScript 通过。运行 Node 22.17.0，有低于仓库要求的 engine 警告；未重跑运行时打包或外部插件端到端 |
 | V7 | [侧栏](packages/ui/src/chat/__tests__/Sidebar.test.tsx)、[会话](packages/ui/src/chat/__tests__/FullScreenChatView.test.tsx)、[设置](packages/ui/src/settings/__tests__/SettingsView.test.tsx)、[槽契约](plugins/dsh-plugin-ui-shell/src/slots.test.ts)、[官方替换](plugins/dsh-plugin-ui-shell/src/client/official-replacements.test.tsx) | `58da9b44`：91 项通过；SDK 与 UI Shell 生产类型检查通过。Node 22.17.0 有 engine 警告；全量架构检查修改前后均因 bundle 插件清单不一致失败，未声称通过 |
+| V8 | [发布版插件启动组合](plugins/dsh-plugin-ui-shell/src/client/published-shell-startup.test.tsx)、[目录流生命周期](plugins/dsh-plugin-ui-shell/src/client/directory-flow.test.ts)、[原生目录回退](packages/ui/src/directory-chooser.test.tsx)、[原生审批](packages/ui/src/chat/__tests__/ApprovalBanner.test.tsx) | rc.2 真实 renderer/registry、工作区服务及目录插件：两种启动顺序、根卸载与重载、第三方注册及默认 UI 停用策略；另含目录流生命周期、原生审批与替换渲染验证。服务数据及原生选择器返回值为测试替身；不能替代完整宿主交互验收。 |
 
 实现基线 `4d2edf82` 的相关 UI 58 项、renderer／SlotCore／数据源 31 项，共 89 项通过；生产 TypeScript、V4、V5 通过。已有全量 UI-shell／架构检查基线失败并未标为全绿。入口覆盖、专项测试、完整插件、安装包、发布是不同证据层级。
 

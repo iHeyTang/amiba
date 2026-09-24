@@ -107,11 +107,14 @@ import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
 const parentURL = pathToFileURL(${JSON.stringify(base.entrypoint)}).href;
 registerHooks({ resolve(specifier, context, nextResolve) {
+  // Node's nextResolve mutates the shared context, even when it throws.
+  // Capture the caller before trying the host's singleton dependency tree.
+  const originalContext = { ...context };
   if (specifier.startsWith('@deepseek-ai/')) {
     try { return nextResolve(specifier, { ...context, parentURL }); }
     catch (error) { if (!['MODULE_NOT_FOUND', 'ERR_MODULE_NOT_FOUND', 'ERR_PACKAGE_PATH_NOT_EXPORTED'].includes(error.code)) throw error; }
   }
-  return nextResolve(specifier, context);
+  return nextResolve(specifier, originalContext);
 } });
 `)
     return { paths, overlay, preload, projects, dispose }

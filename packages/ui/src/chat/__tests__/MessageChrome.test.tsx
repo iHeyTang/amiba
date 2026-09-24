@@ -2213,3 +2213,29 @@ it("shows only output tokens once regardless of missing cache counters", () => {
   rerender(<MessageTurns messages={[{ ...message, tokenUsage: undefined }]} />);
   expect(screen.queryByRole("button", { name: "sidepanel.tokens.details" })).toBeNull();
 });
+
+it("keeps user command echoes outside the preceding assistant bubble", () => {
+  render(<MessageTurns messages={[
+    { uiId: "u1", role: "user", content: "first", runtimeSeq: 1 },
+    { uiId: "a1", role: "assistant", content: "earlier answer", runtimeSeq: 2 },
+    { uiId: "a2", role: "assistant", content: "goal response", runtimeSeq: 4 },
+  ]} timelineRows={[{ id: "goal", seq: 3, placement: "user", content: <div data-testid="goal-echo">/goal Ship it</div> }]} />);
+  const echo = screen.getByTestId("goal-echo");
+  expect(echo.closest('[data-assistant-reply-group]')).toBeNull();
+  expect(echo.closest('[data-conversation-user-turn]')?.getAttribute('data-conversation-user-turn')).toBe('extension-row:goal');
+  expect(echo.closest('[data-conversation-user-turn]')?.textContent).toContain('goal response');
+  expect(echo.closest('[data-conversation-user-turn]')?.textContent).not.toContain('earlier answer');
+});
+
+it("orders assistant copy, feedback, output tokens and timestamp together", () => {
+  const { container } = render(<MessageTurns messages={[{
+    uiId: "ordered", assistantMessageId: "m1", role: "assistant", content: "Answer",
+    sentAt: 1700000000000, tokenUsage: { outputTokens: 355 },
+  }]} assistantActions={() => <><button>like</button><button>dislike</button></>} />);
+  const bar = container.querySelector('[data-background-surface="message-actions"]')!;
+  const elements = [...bar.querySelectorAll('button,time')];
+  expect(elements.map(element => element.tagName)).toEqual(['BUTTON', 'BUTTON', 'BUTTON', 'BUTTON', 'TIME']);
+  expect(elements[1]?.textContent).toBe('like');
+  expect(elements[2]?.textContent).toBe('dislike');
+  expect(elements[3]?.textContent).toContain('355');
+});

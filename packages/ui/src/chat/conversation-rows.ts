@@ -10,6 +10,8 @@ export interface ConversationTimelineRow {
   seq: number;
   content: ReactNode;
   replaceMessageId?: string;
+  /** A user command echo starts its own visual turn outside assistant chrome. */
+  placement?: "user";
 }
 
 /** A closed turn that has a host-rendered tail to append after it. */

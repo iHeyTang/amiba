@@ -77,7 +77,8 @@ export interface DshPluginManagementAdapter {
   update(packageName: string): Promise<unknown>;
 }
 
-type PluginFilter = "all" | "internal" | "external" | "failed";
+type PluginFilter = "running" | "disabled" | "failed";
+type PluginSourceFilter = "all" | "internal" | "external";
 
 function copy(language: PluginLanguage) {
   return language === "zh-CN"
@@ -103,6 +104,8 @@ function copy(language: PluginLanguage) {
         external: "外部",
         development: "开发连接",
         provider: "提供方",
+        source: "来源",
+        running: "运行中",
         providers: {
           all: "全部提供方",
           dsh: "DSH 官方",
@@ -155,6 +158,8 @@ function copy(language: PluginLanguage) {
         external: "External",
         development: "Development",
         provider: "Provider",
+        source: "Source",
+        running: "Running",
         providers: {
           all: "All providers",
           dsh: "DSH official",
@@ -236,7 +241,8 @@ export function DshPluginInventoryView({
   const [registrySpec, setRegistrySpec] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [providerFilter, setProviderFilter] = useState("all");
-  const [filter, setFilter] = useState<PluginFilter>("all");
+  const [sourceFilter, setSourceFilter] = useState<PluginSourceFilter>("all");
+  const [filter, setFilter] = useState<PluginFilter>("running");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mutationError] = useState<string | null>(() =>
@@ -342,26 +348,12 @@ export function DshPluginInventoryView({
         ) ?? null,
     }));
   }, [entries, packages]);
-  const counts = useMemo(
-    () => ({
-      all: rows.length,
-      internal: rows.filter((row) => row.source === "internal").length,
-      external: rows.filter((row) => row.source === "external").length,
-      failed: rows.filter((row) => row.fiberPhase === "failed").length,
-    }),
-    [rows],
-  );
-
-  const filtered = useMemo(() => {
+  // Scope both the list and status counts by the same source/provider/search.
+  const scopedRows = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     return rows.filter((entry) => {
-      const inFilter =
-        filter === "all" ||
-        (filter === "internal" && entry.source === "internal") ||
-        (filter === "external" && entry.source === "external") ||
-        (filter === "failed" && entry.enabled && entry.fiberPhase === "failed");
       if (
-        !inFilter ||
+        (sourceFilter !== "all" && entry.source !== sourceFilter) ||
         (providerFilter !== "all" && entry.provider !== providerFilter)
       )
         return false;
@@ -372,12 +364,22 @@ export function DshPluginInventoryView({
           .includes(needle)
       );
     });
-  }, [rows, filter, query, providerFilter]);
+  }, [rows, sourceFilter, query, providerFilter]);
+  // Disabled packages have no enabled entries. Pending/loading modules remain
+  // in the enabled runtime group, while a failed enabled module takes priority.
+  const statusOf = (entry: (typeof rows)[number]): PluginFilter =>
+    !entry.enabled
+      ? "disabled"
+      : entry.fiberPhase === "failed"
+        ? "failed"
+        : "running";
+  const counts = { running: 0, disabled: 0, failed: 0 };
+  for (const entry of scopedRows) counts[statusOf(entry)]++;
+  const filtered = scopedRows.filter((entry) => statusOf(entry) === filter);
 
   const filters: Array<{ id: PluginFilter; label: string }> = [
-    { id: "all", label: labels.all },
-    { id: "internal", label: labels.internal },
-    { id: "external", label: labels.external },
+    { id: "running", label: labels.running },
+    { id: "disabled", label: labels.disabled },
     { id: "failed", label: labels.failed },
   ];
 
@@ -518,6 +520,26 @@ export function DshPluginInventoryView({
               {Object.entries(labels.providers).map(([value, label]) => (
                 <SelectItem className="text-xs" key={value} value={value}>
                   {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={sourceFilter}
+            onValueChange={(value) =>
+              setSourceFilter(value as PluginSourceFilter)
+            }
+          >
+            <SelectTrigger
+              aria-label={labels.source}
+              className="h-8 w-24 text-xs"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(["all", "internal", "external"] as const).map((value) => (
+                <SelectItem className="text-xs" key={value} value={value}>
+                  {labels[value]}
                 </SelectItem>
               ))}
             </SelectContent>

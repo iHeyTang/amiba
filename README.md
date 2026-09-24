@@ -43,7 +43,7 @@ is everything around it, shipped as independent `dsh-plugin-*` projects.
 | Integrations | MCP, web tools | **+ first-class connectors**: Lark, DingTalk, WeChat, Webhook, with an external inbox and persisted sessions |
 | Memory | Per-session context | **+ cross-session long-term memory** (memos) |
 | Observability | — | **+ usage analytics**: token/turn counts, activity heatmap, per-model breakdown |
-| Assistant abilities | — | **+ vision** (assignable for text-only agents), **media generation** routing, **steward**, **scheduled tasks**, **desktop pet** |
+| Assistant abilities | — | **+ vision** (assignable for text-only agents), **media generation** routing, **scheduled tasks**, **desktop pet** |
 | UI | Official Web Shell slots | **+ a full desktop UI** (`@amiba/ui` + `dsh-plugin-ui-shell`) that adopts official slots but ships its own pixels |
 | Authoring | Host/Client plugin API | **+ Extension SDK** (`@amiba/extension-sdk`) and `amiba plugin create` |
 

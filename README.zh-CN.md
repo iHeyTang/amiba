@@ -40,7 +40,7 @@ Amiba **不是** DSH 内核的分叉——智能体运行时被原样使用。�
 | 集成 | MCP、Web 工具 | **+ 一等连接器**：飞书、钉钉、微信、Webhook，带外部收件箱与会话持久化 |
 | 记忆 | 会话内上下文 | **+ 跨会话长期记忆**（memos） |
 | 可观测性 | — | **+ 用量分析**：Token/轮次统计、活跃度热力图、按模型拆分 |
-| 助手能力 | — | **+ 视觉**（可为纯文本 Agent 指派）、**媒体生成**路由、**管家**、**定时任务**、**桌面宠物** |
+| 助手能力 | — | **+ 视觉**（可为纯文本 Agent 指派）、**媒体生成**路由、**定时任务**、**桌面宠物** |
 | 界面 | 官方 Web Shell slot | **+ 完整桌面 UI**（`@amiba/ui` + `dsh-plugin-ui-shell`），采纳官方 slot 但自带像素 |
 | 扩展开发 | Host/Client 插件 API | **+ Extension SDK**（`@amiba/extension-sdk`）与 `amiba plugin create` |
 

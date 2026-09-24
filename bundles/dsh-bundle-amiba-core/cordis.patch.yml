@@ -125,11 +125,6 @@
       config:
         root: !!js dshHomePath('amiba-conversations')
 
-    - id: amiba-steward
-      name: "@amiba/dsh-plugin-steward"
-      config:
-        root: !!js dshHomePath('amiba-steward')
-
     - id: amiba-session-storage
       name: "@amiba/dsh-plugin-session-storage"
 

@@ -86,8 +86,8 @@ const flushMicrotasks = () =>
   new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("sessions selection bridge", () => {
-  it("forwards the actual pinned openSubagent method from Home and restores intent on failure", () => {
-    const source = readFileSync(createRequire(import.meta.url).resolve("@deepseek-ai/dsh-client-runtime/client"), "utf8");
+  it("forwards the rc.2 public openSubagent method from Home without invented intent markers", () => {
+    const source = readFileSync(createRequire(import.meta.url).resolve("@deepseek-ai/dsh-api-session-controller/client"), "utf8");
     const body = source.match(/\n\t{3}openSubagent\(address\) \{([\s\S]*?)\n\t{3}\}/)?.[1];
     expect(body).toBeDefined();
     const openSubagent = new Function("address", body!);

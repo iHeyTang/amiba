@@ -17,7 +17,7 @@ export const Slider = React.forwardRef<
     </SliderPrimitive.Track>
     {(props.value ?? props.defaultValue ?? [0]).map((_, index) => (
       <SliderPrimitive.Thumb key={index} aria-label={label}
-        className="block h-4 w-4 rounded-full border border-primary/50 bg-background shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none" />
+        className="block h-4 w-4 rounded-full border border-primary/50 bg-background/100 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none" />
     ))}
   </SliderPrimitive.Root>
 ));

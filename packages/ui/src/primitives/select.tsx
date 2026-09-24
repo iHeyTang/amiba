@@ -18,6 +18,7 @@ const SelectTrigger = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
 >(({ className, children, ...props }, ref) => (
   <SelectPrimitive.Trigger
+      data-glass-control="field"
     ref={ref}
     className={cn(
       "flex h-9 items-center justify-between gap-2 px-3 py-1.5",
@@ -77,6 +78,7 @@ const SelectContent = React.forwardRef<
 >(({ className, children, position = "popper", ...props }, ref) => (
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
+      data-ui-overlay="select"
       ref={ref}
       className={cn(
         "relative z-[var(--z-popover)] max-h-96 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-popover",

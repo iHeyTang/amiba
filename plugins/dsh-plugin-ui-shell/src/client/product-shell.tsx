@@ -211,6 +211,7 @@ export type AmibaShellSlot =
   | "conversation.input.dock"
   | "conversation.composer.dock"
   | "conversation.chat.commandview"
+  | "amiba.conversation.workflow"
   | "conversation.input.attachments"
   | "conversation.input.left"
   | "conversation.input.right"
@@ -604,9 +605,14 @@ function ProductShellInner({
       }),
     [renderSlot],
   );
+  const renderWorkflowRow = useCallback(
+    (node: Parameters<NonNullable<Parameters<typeof createConversationRowsSource>[3]>>[0]) =>
+      renderSlot("amiba.conversation.workflow", { node }, { fallback: null }),
+    [renderSlot],
+  );
   const conversationRows = useMemo(
-    () => createConversationRowsSource(activeConversationSource, commandRowKeys, renderCommandRow),
-    [activeConversationSource, commandRowKeys, renderCommandRow],
+    () => createConversationRowsSource(activeConversationSource, commandRowKeys, renderCommandRow, renderWorkflowRow),
+    [activeConversationSource, commandRowKeys, renderCommandRow, renderWorkflowRow],
   );
   // Host-side session changes (a plugin creating a task session, a blank
   // session getting its first turn) reach the official list live; re-read

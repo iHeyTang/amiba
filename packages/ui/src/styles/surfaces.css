@@ -3,15 +3,18 @@
   --amiba-pane-color: var(--background);
   --amiba-agent-color: var(--background);
   --amiba-user-color: var(--background);
-  --amiba-header-fill: hsl(var(--background) / 0.6);
-  --amiba-glass-opacity: 0.64;
-  --amiba-reading-opacity: 0.72;
-  --amiba-input-opacity: 0.9;
+  --amiba-header-fill: hsl(var(--background) / 0.4);
+  --amiba-header-edge: inset 0 0 0 1px hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 0.4));
+  --amiba-glass-opacity: 0.46;
+  --amiba-workspace-opacity: 0.24;
+  --amiba-workspace-hover-opacity: 0.38;
+  --amiba-reading-opacity: 0.56;
+  --amiba-input-opacity: 0.40;
   --amiba-glass-blur: 18px;
   --amiba-reading-blur: 8px;
-  --amiba-agent-opacity: 0.68;
+  --amiba-agent-opacity: 0.52;
   --amiba-agent-blur: 16px;
-  --amiba-message-opacity: 0.82;
+  --amiba-message-opacity: 0.68;
   --amiba-message-blur: 64px;
   --amiba-content-opacity: 0.16;
   --amiba-content-hover-opacity: 0.3;
@@ -97,14 +100,15 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-[data-amiba-product-shell] [data-section-header="rail"] {
+[data-amiba-product-shell] [data-section-header="rail"],
+[data-amiba-product-shell] :is([data-session-row], [data-navigation-row])[data-active="true"] {
   border-radius: 8px;
   background: var(--amiba-content-fill);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 [data-amiba-product-shell] [data-section-header="rail"]:hover,
-[data-amiba-product-shell] :is([data-session-row], [data-navigation-row]):is([data-active="true"], :hover, :focus-within) {
+[data-amiba-product-shell] :is([data-session-row], [data-navigation-row]):hover {
   background: var(--amiba-content-hover);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -112,11 +116,21 @@
 [data-amiba-product-shell] [data-section-header="rail"] > button {
   background: transparent;
 }
+/* Both composers share glass; keep the outer context rail's original
+   translucent treatment and frost only its compact workspace control. */
 [data-amiba-product-shell] [data-composer-card] {
   background: hsl(var(--background) / var(--amiba-input-opacity));
-  backdrop-filter: blur(var(--amiba-glass-blur));
-  -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
-  border-color: hsl(var(--border) / 0.6);
+  backdrop-filter: blur(var(--amiba-glass-blur)) saturate(1.08);
+  -webkit-backdrop-filter: blur(var(--amiba-glass-blur)) saturate(1.08);
+  border-color: hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 0.6));
+}
+[data-amiba-product-shell] [data-workspace-chip] {
+  background: hsl(var(--background) / var(--amiba-workspace-opacity));
+  backdrop-filter: blur(calc(var(--amiba-glass-blur) / 4)) saturate(1.08);
+  -webkit-backdrop-filter: blur(calc(var(--amiba-glass-blur) / 4)) saturate(1.08);
+}
+[data-amiba-product-shell] [data-workspace-chip]:is(:hover, :focus-visible) {
+  background: hsl(var(--background) / var(--amiba-workspace-hover-opacity));
 }
 [data-amiba-product-shell] [data-background-surface="sticky-message"] {
   border-radius: 12px;
@@ -126,12 +140,19 @@
   -webkit-backdrop-filter: blur(var(--amiba-message-blur));
 }
 [data-amiba-product-shell] [data-home-greeting] {
-  color: hsl(var(--foreground));
-  text-shadow: 0 1px 3px hsl(var(--background)), 0 0 10px hsl(var(--background));
+  color: hsl(var(--muted-foreground));
+  text-shadow: 0 1px 2px hsl(var(--background) / 0.65), 0 0 6px hsl(var(--background) / 0.45);
+}
+/* A theme-matched halo keeps statistics legible over wallpaper without
+   increasing their visual weight or affecting the portalled detail popover. */
+[data-amiba-product-shell] [data-composer-stats] > button {
+  text-shadow: 0 1px 2px hsl(var(--background) / 0.65), 0 0 6px hsl(var(--background) / 0.45);
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   [data-amiba-product-shell] {
     --amiba-glass-opacity: 1;
+    --amiba-workspace-opacity: 1;
+    --amiba-workspace-hover-opacity: 1;
     --amiba-reading-opacity: 1;
     --amiba-input-opacity: 1;
     --amiba-agent-opacity: 1;
@@ -143,6 +164,8 @@
 @media (prefers-reduced-transparency: reduce) {
   [data-amiba-product-shell] {
     --amiba-glass-opacity: 1;
+    --amiba-workspace-opacity: 1;
+    --amiba-workspace-hover-opacity: 1;
     --amiba-reading-opacity: 1;
     --amiba-input-opacity: 1;
     --amiba-agent-opacity: 1;
@@ -242,7 +265,7 @@
   background: var(--amiba-header-fill);
   backdrop-filter: blur(var(--amiba-glass-blur));
   -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
-  box-shadow: inset 0 0 0 1px hsl(var(--border) / 0.4);
+  box-shadow: var(--amiba-header-edge);
 }
 [data-amiba-product-shell] :is([data-content-header-leading][data-header-glass], [data-content-header-actions], [data-workspace-edge-toggle]) :is(button, [role="button"]) {
   color: hsl(var(--foreground) / 0.9);
@@ -440,6 +463,8 @@
   --amiba-agent-color: var(--muted);
   --amiba-user-color: var(--secondary);
   --amiba-glass-opacity: 1;
+  --amiba-workspace-opacity: 1;
+  --amiba-workspace-hover-opacity: 1;
   --amiba-agent-opacity: 0;
   --amiba-message-opacity: 1;
   --amiba-input-opacity: 1;
@@ -447,6 +472,7 @@
   --amiba-content-fill: hsl(var(--foreground) / 0.035);
   --amiba-content-hover: hsl(var(--foreground) / 0.08);
   --amiba-header-fill: hsl(var(--muted));
+  --amiba-header-edge: none;
   --amiba-glass-blur: 0px;
   --amiba-reading-blur: 0px;
   --amiba-agent-blur: 0px;
@@ -457,12 +483,19 @@
   display: none;
 }
 .amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-composer-card] {
-  border-color: hsl(var(--border));
+  border-color: hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 1));
   box-shadow: 0 2px 12px hsl(var(--foreground) / 0.06);
 }
 .amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-background-surface="workbench"] {
-  box-shadow: inset 1px 0 0 hsl(var(--border));
+  box-shadow: inset 1px 0 0 hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 1));
 }
 .amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-background-surface="model-notice"] {
   background: hsl(var(--muted));
+}
+
+/* Filled cards already separate themselves on the flat canvas. Keep form
+   control boundaries and focus rings; remove only decorative card chrome. */
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] .amiba-card-surface:not(:focus-visible) {
+  border-color: transparent;
+  box-shadow: none;
 }

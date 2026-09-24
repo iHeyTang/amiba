@@ -111,6 +111,7 @@ const DialogContent = React.forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         data-ui-overlay="dialog"
+        data-glass-surface={appearance}
         className={cn(
           DIALOG_CENTERED_POSITION_CLASS,
           DIALOG_CONTENT_MOTION_CLASS,

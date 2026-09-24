@@ -105,7 +105,6 @@ const bundleSpecs = [
       "@amiba/dsh-plugin-session-features",
       "@amiba/dsh-plugin-session-storage",
       "@amiba/dsh-plugin-background-jobs",
-      "@amiba/dsh-plugin-steward",
       "@amiba/dsh-plugin-usage",
     ],
   },

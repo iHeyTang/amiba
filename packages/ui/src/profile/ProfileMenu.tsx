@@ -125,6 +125,8 @@ export function ProfileMenu({
             ref={menuTrigger}
             type="button"
             data-testid="sidebar-item-personal"
+            data-navigation-row
+            data-active={open || undefined}
             aria-label={t("options.personal.menu")}
             aria-haspopup="menu"
             title={name}

@@ -42,3 +42,23 @@ jobs:
       - name: Validate committed runtime distribution locks
         run: node --test packages/app-runtime/scripts/dsh-runtime/distribution-manifests.test.mjs
       - run: git diff --check HEAD^ HEAD
+
+  shell-startup:
+    name: Published UI shell composition
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Validate published plugin slot ownership and fallback rendering
+        run: pnpm --dir plugins/dsh-plugin-ui-shell exec vitest run src/client/published-shell-startup.test.tsx src/client/directory-flow.test.ts src/client/official-replacements.test.tsx src/slots.test.ts
+      - name: Validate native directory and approval fallbacks
+        run: pnpm --dir packages/ui exec vitest run src/directory-chooser.test.tsx src/chat/__tests__/ApprovalBanner.test.tsx

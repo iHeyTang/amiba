@@ -10,6 +10,7 @@ import * as Cordis from "@deepseek-ai/cordis";
 import type { Context } from "@deepseek-ai/cordis";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import { createShellChildren } from "./shell-children.js";
 import { OFFICIAL_REPLACEMENTS, OfficialReplacement, NativeOfficialPresentation, NATIVE_REPLACEMENT_PRIORITY } from "./official-replacements.js";
 
 afterEach(cleanup);
@@ -29,7 +30,13 @@ new Function("window", readFileSync(require.resolve("@deepseek-ai/dsh-client-ui-
 });
 const source = <T,>(value: T) => ({ getSnapshot: () => value, subscribe: () => () => {} });
 
-it.each(Object.keys(OFFICIAL_REPLACEMENTS) as (keyof typeof OFFICIAL_REPLACEMENTS)[])("%s supports native fallback, plugin takeover, empty output, crash and unload with rc.2 renderer", async name => {
+const childSeats = {
+  "conversation.approval.detail": { callId: "call-a" },
+  "conversation.hero.workspace.directoryFlow": { open: true, busy: false, onPicked: vi.fn(), onCancel: vi.fn(), onError: vi.fn() },
+  "sidebar.workspaces.directoryFlow": { open: true, busy: false, onPicked: vi.fn(), onCancel: vi.fn(), onError: vi.fn() },
+};
+const renderSeats = { ...OFFICIAL_REPLACEMENTS, ...childSeats };
+it.each(Object.keys(renderSeats) as (keyof typeof renderSeats)[])("%s supports native fallback, plugin takeover, empty output, crash isolation and unload with rc.2 renderer", async name => {
   const core = new Slots.SlotCore();
   const ctx = {} as Context;
   const binding: Slots.ScopedStandardSourceBinding = { key: "session-a", ctx, hooks: {}, keyedHooks: {}, props: { sessionId: "session-a" } };
@@ -43,12 +50,12 @@ it.each(Object.keys(OFFICIAL_REPLACEMENTS) as (keyof typeof OFFICIAL_REPLACEMENT
       renderArea: (_binding: unknown, props: { children?: React.ReactNode }) => props.children,
     }),
   };
-  const owner = { size: 24, wide: true, width: 240, collapsed: false };
-  core.register({ name: "root", children: OFFICIAL_REPLACEMENTS }, ({ renderSlot }: Slots.PropsRenderSlots<keyof typeof OFFICIAL_REPLACEMENTS>) => {
+  const owner = name in childSeats ? childSeats[name as keyof typeof childSeats] : { size: 24, wide: true, width: 240, collapsed: false };
+  core.register({ name: "root", children: createShellChildren(() => {}) }, ({ renderSlot }: Slots.PropsRenderSlots<keyof typeof renderSeats>) => {
     const fallback = <span>native</span>;
     return <OfficialReplacement fallback={fallback}>{renderSlot(name, owner as never, { fallback })}</OfficialReplacement>;
   });
-  core.register({ name, priority: NATIVE_REPLACEMENT_PRIORITY }, NativeOfficialPresentation);
+  if (!(name in childSeats)) core.register({ name: name as keyof typeof OFFICIAL_REPLACEMENTS, priority: NATIVE_REPLACEMENT_PRIORITY }, NativeOfficialPresentation);
   const view = render(renderer.renderRoot(host, {}));
   expect(screen.getByText("native")).toBeTruthy();
   let off!: () => void;
@@ -66,8 +73,10 @@ it.each(Object.keys(OFFICIAL_REPLACEMENTS) as (keyof typeof OFFICIAL_REPLACEMENT
   try {
     await act(async () => { off = core.register({ name }, () => { throw new Error("plugin crash"); }); });
     expect(report).toHaveBeenCalled();
-    expect(screen.getByText("native")).toBeTruthy();
+    if (name in childSeats) expect(view.container.querySelector(`[data-slot-error="${name}"]`)).not.toBeNull();
+    else expect(screen.getByText("native")).toBeTruthy();
     await act(async () => off());
+    expect(screen.getByText("native")).toBeTruthy();
   } finally { quiet.mockRestore(); }
 });
 

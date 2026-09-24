@@ -11,17 +11,17 @@ module.exports = {
           DEFAULT: "var(--amiba-content-fill, hsl(var(--muted) / 0.16))",
           hover: "var(--amiba-content-hover, hsl(var(--muted) / 0.3))",
         },
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
+        border: ({ opacityValue = 1 }) => `hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * ${opacityValue}))`,
+        input: ({ opacityValue = 1 }) => `hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * ${opacityValue}))`,
         ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
+        background: "hsl(var(--background) / var(--amiba-surface-opacity, 1))",
         foreground: "hsl(var(--foreground))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
         },
         secondary: {
-          DEFAULT: "hsl(var(--secondary))",
+          DEFAULT: "hsl(var(--secondary) / var(--amiba-control-opacity, 1))",
           foreground: "hsl(var(--secondary-foreground))",
         },
         destructive: {
@@ -29,19 +29,19 @@ module.exports = {
           foreground: "hsl(var(--destructive-foreground))",
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
+          DEFAULT: "hsl(var(--muted) / var(--amiba-control-opacity, 1))",
           foreground: "hsl(var(--muted-foreground))",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
+          DEFAULT: "hsl(var(--accent) / var(--amiba-control-hover-opacity, 1))",
           foreground: "hsl(var(--accent-foreground))",
         },
         card: {
-          DEFAULT: "hsl(var(--card))",
+          DEFAULT: "hsl(var(--card) / var(--amiba-card-opacity, 1))",
           foreground: "hsl(var(--card-foreground))",
         },
         popover: {
-          DEFAULT: "hsl(var(--popover))",
+          DEFAULT: "hsl(var(--popover) / var(--amiba-overlay-opacity, 1))",
           foreground: "hsl(var(--popover-foreground))",
         },
         success: "hsl(var(--success))",
@@ -72,9 +72,9 @@ module.exports = {
       },
       boxShadow: {
         popover:
-          "0 1px 2px -1px rgb(0 0 0 / 0.04), 0 4px 12px -2px rgb(0 0 0 / 0.10)",
+          "var(--amiba-floating-shadow)",
         overlay:
-          "0 4px 8px -2px rgb(0 0 0 / 0.06), 0 16px 36px -8px rgb(0 0 0 / 0.16)",
+          "var(--amiba-floating-shadow)",
       },
     },
   },
