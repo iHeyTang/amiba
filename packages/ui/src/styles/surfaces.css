@@ -522,3 +522,23 @@
 .amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-file-change-card] {
   background: hsl(var(--muted));
 }
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] .amiba-blocked-image {
+  background: hsl(var(--muted));
+}
+
+/* rehype-harden blocked placeholders: Streamdown's default harden plugin
+ * emits these classes (configured in @amiba/markdown) for images/links the
+ * pipeline refused — a quiet, theme-matched chip instead of raw bracket text. */
+.amiba-blocked-image {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: hsl(var(--muted) / 0.55);
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  line-height: 1.6;
+}
+.amiba-blocked-link {
+  color: hsl(var(--muted-foreground));
+  text-decoration: line-through;
+}
