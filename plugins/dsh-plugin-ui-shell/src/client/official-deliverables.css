@@ -25,9 +25,22 @@
 }
 :root body .nyYjTG_split {
   border-radius: 6px;
-  background: var(--deliverable-fill);
+  background: var(--dsw-alias-button-floating-fill);
   border-color: hsl(var(--border) / 0.45);
 }
 :root body .nyYjTG_open {
   font-size: 12px;
+}
+
+/* One interaction surface for both halves of the official split control.
+ * Do not stack an opaque child hover on top of the glass button group. */
+:root body .nyYjTG_split:is(:hover, :focus-within) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+:root body .nyYjTG_split :is(.nyYjTG_open, .nyYjTG_chevron):is(:hover, :focus-visible) {
+  background: transparent;
+}
+:root body .nyYjTG_split :is(.nyYjTG_open, .nyYjTG_chevron):focus-visible {
+  outline: 2px solid hsl(var(--ring) / 0.6);
+  outline-offset: -2px;
 }
