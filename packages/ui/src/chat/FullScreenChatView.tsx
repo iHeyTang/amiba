@@ -1108,8 +1108,8 @@ function FullScreenChatViewInner({
                 canvas={!sessions.activeId && !displayedLoad}
                 title={displayedLoad ? (sessions.sessions.find(item => item.id === displayedLoad?.sessionId)?.title ?? "") : chatTopBarPlaceholder}
                 icon={<Folder className="h-4 w-4" />}
-                actions={displayedLoad ? undefined : slots?.headerActions}
-                lineage={displayedLoad ? undefined : slots?.headerLineage}
+                actions={sessions.activeId && !displayedLoad ? slots?.headerActions : undefined}
+                lineage={sessions.activeId && !displayedLoad ? slots?.headerLineage : undefined}
                 onOpenTitle={headerSession && !displayedLoad ? () => { if (headerSession.id !== sessions.activeId) void onOpenSession(headerSession.id); } : undefined}
                 onRenameTitle={
                   canRenameActiveChatTitle && !displayedLoad ? renameActiveChatTitle : undefined
