@@ -18,6 +18,11 @@
   /* Inner cards share the pane blur, like the file-change review card. */
   --amiba-content-fill: hsl(var(--muted) / var(--amiba-content-opacity));
   --amiba-content-hover: hsl(var(--muted) / var(--amiba-content-hover-opacity));
+  /* Sticky rail headers frost their own backdrop so scrolling rows cannot
+   * read through the pinned strip. */
+  --amiba-rail-opacity: 0.4;
+  --amiba-rail-hover-opacity: 0.55;
+  --amiba-rail-blur: 16px;
 }
 .amiba-background-frame [data-amiba-product-shell],
 [data-amiba-product-shell] [data-background-surface="layout"] {
@@ -99,11 +104,13 @@
 }
 [data-amiba-product-shell] [data-section-header="rail"] {
   border-radius: 8px;
-  background: var(--amiba-content-fill);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  background: hsl(var(--muted) / var(--amiba-rail-opacity));
+  backdrop-filter: blur(var(--amiba-rail-blur)) saturate(1.08);
+  -webkit-backdrop-filter: blur(var(--amiba-rail-blur)) saturate(1.08);
 }
-[data-amiba-product-shell] [data-section-header="rail"]:hover,
+[data-amiba-product-shell] [data-section-header="rail"]:hover {
+  background: hsl(var(--muted) / var(--amiba-rail-hover-opacity));
+}
 [data-amiba-product-shell] :is([data-session-row], [data-navigation-row]):is([data-active="true"], :hover, :focus-within) {
   background: var(--amiba-content-hover);
   backdrop-filter: none;
@@ -138,6 +145,8 @@
     --amiba-message-opacity: 1;
     --amiba-content-opacity: 1;
     --amiba-content-hover-opacity: 1;
+    --amiba-rail-opacity: 1;
+    --amiba-rail-hover-opacity: 1;
   }
 }
 @media (prefers-reduced-transparency: reduce) {
@@ -153,6 +162,9 @@
     --amiba-reading-blur: 0px;
     --amiba-message-blur: 0px;
     --amiba-agent-blur: 0px;
+    --amiba-rail-opacity: 1;
+    --amiba-rail-hover-opacity: 1;
+    --amiba-rail-blur: 0px;
   }
 }
 
@@ -451,6 +463,9 @@
   --amiba-reading-blur: 0px;
   --amiba-agent-blur: 0px;
   --amiba-message-blur: 0px;
+  --amiba-rail-opacity: 0.85;
+  --amiba-rail-hover-opacity: 0.92;
+  --amiba-rail-blur: 0px;
 }
 .amiba-background-frame:not([data-background-active="true"]) [data-sidebar-glass]::before,
 .amiba-background-frame:not([data-background-active="true"]) [data-sidebar-glass]::after {
