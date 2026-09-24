@@ -10,6 +10,7 @@
   --amiba-overlay-opacity: 0.36;
   --amiba-modal-opacity: 0.48;
   --amiba-overlay-blur: 18px;
+  --amiba-modal-backdrop-blur: 10px;
   --amiba-modal-blur: 24px;
   --amiba-glass-highlight: rgb(255 255 255 / 0.24);
   --amiba-floating-shadow: inset 0 1px 0 var(--amiba-glass-highlight), 0 2px 8px rgb(0 0 0 / 0.07);
@@ -49,12 +50,15 @@
   -webkit-backdrop-filter: blur(var(--amiba-modal-blur)) saturate(1.1);
 }
 [data-ui-overlay][data-ui-overlay="dialog-overlay"]:not([data-dialog-overlay="transparent"]) {
-  background: rgb(0 0 0 / 0.32);
+  background: transparent;
+  backdrop-filter: blur(var(--amiba-modal-backdrop-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-modal-backdrop-blur));
 }
 [data-glass-surface="surface"] :is([data-settings-view], [data-settings-page]) {
   background: transparent;
 }
 @media (prefers-reduced-transparency: reduce) {
+  :root { --amiba-modal-backdrop-blur: 0px; }
   [data-ui-overlay]:is([data-ui-overlay][data-ui-overlay="popover"], [data-ui-overlay][data-ui-overlay="select"], [data-ui-overlay][data-ui-overlay="tooltip"], [data-glass-surface="surface"]) {
     background: hsl(var(--popover));
     backdrop-filter: none;

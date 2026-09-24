@@ -15,3 +15,5 @@ Explicit opacity utilities remain available for deliberate nested hierarchy. Avo
 Visual fixture: `plugins/dsh-plugin-ui-shell/src/dev/official-features.html` includes high-contrast backgrounds, menu/dialog controls, and light/dark switching. Verify actual desktop surfaces as well when changing layout or content structure.
 
 Neutral borders use `--amiba-edge-opacity` through the shared Tailwind preset and official-theme bridge. Headers inside glass dialogs reuse the parent backing. `Card` and `MODEL_SETTINGS_SURFACE_CLASS` own one tint (`amiba-card-surface`); structural neutral rows/lists remain transparent so helper text and footer actions share the same continuous surface. Controls and semantic status fills remain distinct.
+
+Modal backdrops are colorless and blur only the page behind them (10px). The dialog retains its own readable tint; transparent-overlay hosts opt out. Reduced-transparency uses opaque dialog backing and disables the backdrop blur. Dismissal, focus and pointer interception remain owned by the existing modal primitives.
