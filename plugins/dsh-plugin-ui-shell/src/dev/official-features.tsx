@@ -1,3 +1,4 @@
+import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
 import { MessageTurns } from "@amiba/ui";
 import { commandTimelineRows } from "../client/command-rows";
 /** Local visual fixture: the production adapters with deterministic state; no Host writes. */
@@ -20,6 +21,7 @@ import {
 } from "../client/official-features/subagent";
 import { Button } from "@amiba/ui/primitives";
 import "./surfaces.css";
+setPlatform({ storage: { get: async () => ({}), set: async () => {}, remove: async () => {}, watch: () => () => {} } } as unknown as PlatformAdapter);
 const dictionaries: Record<string, Record<string, string>> = {};
 let Plan!: ComponentType<Record<string, unknown>>;
 const common = { close: "关闭", submit: "提交", submitting: "正在提交" };
