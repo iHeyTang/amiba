@@ -194,6 +194,21 @@
   }
 }
 
+/* Collapsed rail sections are single header rows: strip the per-header top
+ * margin and merge their corners so the frosted headers read as one compact
+ * block instead of separated chips (expanded sections keep their rhythm). */
+[data-sidebar-section="rail"]:not(:has(> [data-section-content])) > [data-section-header="rail"] {
+  margin-top: 0;
+}
+[data-sidebar-section="rail"]:not(:has(> [data-section-content])):has(+ [data-sidebar-section="rail"]:not(:has(> [data-section-content]))) > [data-section-header="rail"] {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+[data-sidebar-section="rail"]:not(:has(> [data-section-content])) + [data-sidebar-section="rail"]:not(:has(> [data-section-content])) > [data-section-header="rail"] {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
 /* A narrow glass edge, with a slow moving reflection rather than a divider. */
 [data-sidebar-glass]::before,
 [data-sidebar-glass]::after {
