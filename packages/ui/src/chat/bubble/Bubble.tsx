@@ -2048,8 +2048,27 @@ function UserStickyBubbleUnmemoized({
           <div data-message-glass-body className="relative">
             <div
               data-background-surface="sticky-message"
+              onClick={
+                isClipping
+                  ? (event) => {
+                      // Tap anywhere on the clipped bubble expands it; let
+                      // interactive children (links, buttons, inputs) keep
+                      // their own behaviour.
+                      const target = event.target as HTMLElement;
+                      if (
+                        target.closest(
+                          "a,button,input,textarea,[contenteditable='true'],[role='button']",
+                        )
+                      ) {
+                        return;
+                      }
+                      setExpanded(true);
+                    }
+                  : undefined
+              }
               className={cn(
                 "rounded-xl",
+                isClipping && "cursor-pointer",
                 expanded
                   ? `${EXPANDED_MAX_HEIGHT_CLASS} overflow-y-auto`
                   : `${CAPPED_HEIGHT_CLASS} overflow-hidden`,
