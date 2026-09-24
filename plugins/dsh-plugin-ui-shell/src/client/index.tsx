@@ -1,3 +1,5 @@
+import { apply as applyOfficialJobs } from "@deepseek-ai/dsh-client-ui-jobs/client";
+import { apply as applyOfficialWorkflow } from "@deepseek-ai/dsh-client-ui-workflow-run/client";
 import { mountOfficialFeature } from "./official-features/mount.js";
 import { apply as applyOfficialPlan } from "@deepseek-ai/dsh-client-ui-plan/client";
 import { apply as applyOfficialFeedback } from "@deepseek-ai/dsh-client-ui-message-feedback/client";
@@ -1004,6 +1006,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
       mountOfficialChatPresentation(scope, applyOfficialChat);
     });
     const featureFibers = [
+      ctx.inject(["locale", "sessions"], scope => mountOfficialFeature(scope, "jobs", applyOfficialJobs)),
+      ctx.inject(["locale", "sessions", "uiConversation"], scope => mountOfficialFeature(scope, "workflow", applyOfficialWorkflow)),
       ctx.inject(["locale", "remote", "remote.commands"], scope => mountOfficialFeature(scope, "plan", applyOfficialPlan)),
       ctx.inject(["locale", "remote", "remote.messageFeedback", "remote.sessionFeedback"], scope => mountOfficialFeature(scope, "feedback", applyOfficialFeedback)),
       ctx.inject(["locale", "sessions", "remote", "remote.goals", "uiConversation"], scope => mountOfficialFeature(scope, "goal", applyOfficialGoal)),

@@ -1,3 +1,7 @@
+import { JobsAction } from "../client/official-features/jobs";
+import { WorkflowRun } from "../client/official-features/workflow";
+import { apply as jobs } from "@deepseek-ai/dsh-client-ui-jobs/client";
+import { apply as workflow } from "@deepseek-ai/dsh-client-ui-workflow-run/client";
 import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
 import { MessageTurns } from "@amiba/ui";
 import { commandTimelineRows } from "../client/command-rows";
@@ -35,6 +39,8 @@ const translate =
         key,
     );
 for (const [feature, apply] of [
+  ["jobs", jobs],
+  ["workflow", workflow],
   ["plan", plan],
   ["feedback", feedback],
   ["goal", goal],
@@ -86,6 +92,8 @@ function Preview() {
   });
   const [rating, setRating] = useState<string>();
   const sessions = {
+    ids: ["root", "child"],
+    jobsBySession: { root: [{ id: "build", label: "验证工作区构建", kind: "process", status: "running", startedAt: Date.now() - 12000 }, { id: "old", label: "检查依赖", kind: "process", status: "failed", startedAt: 0, finishedAt: 4200, detail: "依赖版本不匹配，请查看执行记录。" }] },
     byId: { root: { id: "root" } },
     subagentsByParent: {
       root: {
@@ -134,6 +142,10 @@ function Preview() {
           切换明暗
         </Button>
       </header>
+      <section className="space-y-2 rounded-2xl bg-background/65 p-4">
+        <div className="flex justify-end"><JobsAction {...{ sessionId: "root", useSessions: (select: any) => select(sessions), t: translate("job") } as any} /></div>
+        <WorkflowRun {...{ sessionId: "root", useSessions: (select: any) => select(sessions), openSession: () => {}, t: translate("workflowRun"), node: { key: "preview-run", data: { name: "检查工作区兼容性", status: "running", phases: [{ key: "audit", phase: "并行检查", members: [{ seq: 1, label: "检查插件插槽", childId: "child", status: "running" }, { seq: 2, label: "验证消息流布局", childId: "done", status: "completed" }] }] } } } as any} />
+      </section>
       <section className="space-y-3 rounded-2xl border border-border p-5">
         <div className="flex items-center justify-between">
           <span>工作区体验优化</span>

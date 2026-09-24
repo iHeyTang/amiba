@@ -103,6 +103,7 @@ export function createShellChildren(openWorkspace: (viewId: string) => void) {
     "conversation.composer": { kind: "chain", scope: "session" },
     "conversation.composer.dock": { kind: "list", scope: "session" },
     "conversation.chat.commandview": { kind: "keyed", scope: "session" },
+    "amiba.conversation.workflow": { kind: "single", scope: "session" },
     "conversation.input.left": { kind: "list", scope: "session" },
     "conversation.input.right": { kind: "list", scope: "session" },
     // Official vocabulary: the KEYED per-tool call row, from

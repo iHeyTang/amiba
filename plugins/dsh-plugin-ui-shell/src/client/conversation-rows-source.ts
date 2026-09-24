@@ -32,6 +32,7 @@ export function createConversationRowsSource(
   source: ObservableSnapshot<ConversationSnapshot | undefined> | undefined,
   commandRowKeys: ObservableSnapshot<readonly string[]>,
   renderCommandRow: (owner: CommandRowOwner) => ReactNode,
+  renderWorkflow?: (node: import("@deepseek-ai/dsh-client-ui-chat/client").ChatConversationViewNode) => ReactNode,
 ): ConversationRowsSource {
   let cachedFor: ConversationSnapshot | undefined | typeof MISS = MISS;
   let cachedKeys: readonly string[] | typeof MISS = MISS;
@@ -46,7 +47,11 @@ export function createConversationRowsSource(
     cachedFor = snapshot;
     cachedKeys = keys;
     cached = {
-      timelineRows: commandTimelineRows(snapshot, keys, renderCommandRow),
+      timelineRows: [...commandTimelineRows(snapshot, keys, renderCommandRow), ...(snapshot && renderWorkflow ? snapshot.chat.order.flatMap(key => {
+        const node = snapshot.chat.nodes.get(key);
+        return node?.kind === "workflow-run" && node.visibility === "visible"
+          ? [{ id: node.key, seq: node.anchorSeq, content: renderWorkflow(node) }] : [];
+      }) : [])],
       turnTailAnchors: turnTailAnchorsOf(snapshot),
     };
     return cached;

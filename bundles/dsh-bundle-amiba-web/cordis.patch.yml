@@ -56,6 +56,7 @@
 # Keep ui-cordis enabled: it owns dynamic plugin approval, lifecycle cards,
 # the footer inventory panel and package-owned business views.
 
+# Internally mounted by ui-shell: official durable projection, Amiba node UI.
 - id: ui-workflow-run
   disabled: true
 
@@ -129,11 +130,12 @@
 - id: ui-skill
   disabled: true
 
-# These four published plugins are mounted by ui-shell in scoped adapters.
+# These published plugins are mounted by ui-shell in scoped adapters.
 # Keep automatic copies off: official services/hooks + Amiba presentation.
 - id: ui-subagent
   disabled: true
 
+# Internally mounted by ui-shell: official session job mirror, Amiba popover.
 - id: ui-jobs
   disabled: true
 

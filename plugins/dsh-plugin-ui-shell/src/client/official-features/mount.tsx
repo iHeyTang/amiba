@@ -1,3 +1,5 @@
+import { JobsAction } from "./jobs.js";
+import { WorkflowRun } from "./workflow.js";
 import { createElement, type ComponentType, type CSSProperties } from "react";
 import type { Context } from "@deepseek-ai/cordis";
 import { FeedbackActions, FeedbackDialog } from "./feedback.js";
@@ -7,8 +9,10 @@ import { SubagentLineage, SubagentReadOnly } from "./subagent.js";
 /** Only these bundled default nodes are already projected by Amiba. External
  * registrations still opt into the full official transcript as before. */
 export const OFFICIAL_FEATURE_REGISTRANT = "amiba:rc2-feature-defaults";
-type Feature = "plan" | "feedback" | "goal" | "subagent";
+type Feature = "plan" | "feedback" | "goal" | "subagent" | "jobs" | "workflow";
 const replacements = {
+  jobs: { "conversation.session.header.actions": JobsAction },
+  workflow: { "conversation.chat.node": WorkflowRun },
   feedback: {
     "conversation.chat.assistant-actions": FeedbackActions,
     "conversation.input.overlay": FeedbackDialog,
@@ -61,7 +65,8 @@ export function mountOfficialFeature(
                   </span>
                 )
               : Component;
-          return target.register(
+          const offNative = feature === "workflow" ? target.register({ name: "amiba.conversation.workflow", registrant: OFFICIAL_FEATURE_REGISTRANT, locale: options.locale, inject: options.inject } as never, WorkflowRun as never) : () => {};
+          const offOfficial = target.register(
             {
               ...options,
               registrant: OFFICIAL_FEATURE_REGISTRANT,
@@ -71,6 +76,7 @@ export function mountOfficialFeature(
             } as never,
             presentation as never,
           );
+          return () => { offOfficial(); offNative(); };
         };
       const value = Reflect.get(target, key, target);
       return typeof value === "function" ? value.bind(target) : value;

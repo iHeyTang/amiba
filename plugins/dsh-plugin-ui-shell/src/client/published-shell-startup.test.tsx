@@ -115,8 +115,8 @@ it("keeps third-party registrations outside the workspace facade", () => {
   expect(ctx.slots.entriesOfSlot("sidebar.workspaces.directoryFlow")).toHaveLength(0);
 });
 
-const featurePlugins = Object.fromEntries([['plan', 'plan'], ['feedback', 'message-feedback'], ['goal', 'goal'], ['subagent', 'subagent']].map(([key, name]) => [key, published(`@deepseek-ai/dsh-client-ui-${name}`)]));
-it("mounts all four published feature applies without replacing Amiba's transcript or extension seats", async () => {
+const featurePlugins = Object.fromEntries([['plan', 'plan'], ['feedback', 'message-feedback'], ['goal', 'goal'], ['subagent', 'subagent'], ['jobs', 'jobs'], ['workflow', 'workflow-run']].map(([key, name]) => [key, published(`@deepseek-ai/dsh-client-ui-${name}`)]));
+it("mounts all six published feature applies without replacing Amiba's transcript or extension seats", async () => {
   const ctx = fixture();
   const goal = Store.createSnapshotStore({ goal: { id: 'g1', revision: 1 } });
   const pause = vi.fn(async () => ({ ok: true, value: undefined }));
@@ -133,7 +133,7 @@ it("mounts all four published feature applies without replacing Amiba's transcri
   const fibers = Object.entries(featurePlugins).map(([name, plugin]) => ctx.plugin(scope => mountOfficialFeature(scope, name as Parameters<typeof mountOfficialFeature>[1], plugin.apply)));
   await new Promise(resolve => setTimeout(resolve, 0));
   expect(officialChatRequested(ctx.slots).getSnapshot()).toBe(false);
-  for (const name of ['conversation.input.plan', 'conversation.input.dock', 'conversation.input.overlay', 'conversation.chat.assistant-actions', 'conversation.session.header.lineage', 'conversation.composer'] as const) {
+  for (const name of ['conversation.input.plan', 'conversation.input.dock', 'conversation.input.overlay', 'conversation.chat.assistant-actions', 'conversation.session.header.lineage', 'conversation.composer', 'conversation.session.header.actions', 'amiba.conversation.workflow'] as const) {
     expect(ctx.slots.entriesOfSlot(name).some(entry => entry.registrant === OFFICIAL_FEATURE_REGISTRANT)).toBe(true);
   }
   const dock = ctx.slots.entriesOfSlot('conversation.input.dock')[0]!;
