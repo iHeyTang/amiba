@@ -1,6 +1,6 @@
 {
   "name": "@amiba/desktop",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "private": true,
   "description": "DSH-native desktop agent app (Electron + Vite + React).",
   "author": "iHeyTang",
