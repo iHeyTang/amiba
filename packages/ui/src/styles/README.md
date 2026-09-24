@@ -13,3 +13,5 @@ Use the existing Button, Input, Textarea, Select, Card, Popover, Tooltip and Dia
 Explicit opacity utilities remain available for deliberate nested hierarchy. Avoid hardcoded white or opaque neutral surfaces in new product UI. Preserve semantic colors, focus rings, selected states and disabled states.
 
 Visual fixture: `plugins/dsh-plugin-ui-shell/src/dev/official-features.html` includes high-contrast backgrounds, menu/dialog controls, and light/dark switching. Verify actual desktop surfaces as well when changing layout or content structure.
+
+Neutral borders use `--amiba-edge-opacity` through the shared Tailwind preset and official-theme bridge. Headers inside glass dialogs reuse the parent backing. `Card` and `MODEL_SETTINGS_SURFACE_CLASS` own one tint (`amiba-card-surface`); structural neutral rows/lists remain transparent so helper text and footer actions share the same continuous surface. Controls and semantic status fills remain distinct.

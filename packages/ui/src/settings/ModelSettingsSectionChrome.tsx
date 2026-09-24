@@ -10,7 +10,7 @@ import type { ReactNode } from "react";
 export const MODEL_SETTINGS_SECTION_CLASS = "space-y-4" as const;
 
 export const MODEL_SETTINGS_SURFACE_CLASS =
-  "overflow-hidden rounded-xl border border-border/70 bg-background" as const;
+  "amiba-card-surface overflow-hidden rounded-xl border border-border/70 bg-background" as const;
 
 export function ModelSettingsSectionHeader({
   accessory,

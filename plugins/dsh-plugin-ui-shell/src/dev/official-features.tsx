@@ -7,7 +7,7 @@ import { WorkflowRun } from "../client/official-features/workflow";
 import { apply as jobs } from "@deepseek-ai/dsh-client-ui-jobs/client";
 import { apply as workflow } from "@deepseek-ai/dsh-client-ui-workflow-run/client";
 import { setPlatform, type PlatformAdapter } from "@amiba/app-runtime/platform";
-import { MessageTurns } from "@amiba/ui";
+import { MessageTurns, PaneHeaderBar } from "@amiba/ui";
 import { commandTimelineRows } from "../client/command-rows";
 /** Local visual fixture: the production adapters with deterministic state; no Host writes. */
 import { useState, type ComponentType } from "react";
@@ -154,7 +154,7 @@ function Preview() {
             <PopoverContent align="start"><div className="space-y-3 p-2"><strong>我的空间</strong><p className="text-sm text-muted-foreground">编辑个人资料</p><hr /><button className="block w-full rounded-lg p-2 text-left hover:bg-muted/70">设置</button><p className="p-2 text-sm">GitHub</p><hr /><p className="text-sm text-muted-foreground">当前版本 v0.1.12</p></div></PopoverContent>
           </Popover>
           <Dialog><DialogTrigger asChild><Button variant="outline">预览设置窗口玻璃</Button></DialogTrigger>
-            <DialogContent size="lg"><DialogTitle>设置</DialogTitle><DialogDescription>检查背景复杂时的文字可读性</DialogDescription><div data-settings-view className="flex min-h-64 gap-6 rounded-lg bg-background"><aside className="w-28 rounded-lg bg-muted/30 p-3 text-sm">个人<br /><br />外观<br /><br />插件</aside><div data-settings-page className="flex-1 space-y-4 bg-background py-3"><h3>插件清单</h3><p className="text-sm text-muted-foreground">查看所有插件包的来源、运行状态和可用操作。</p><div className="rounded-lg border p-4 text-sm">dsh-app-boot <span className="float-right text-muted-foreground">运行中</span></div></div></div></DialogContent>
+            <DialogContent size="lg"><PaneHeaderBar leading={<DialogTitle>设置</DialogTitle>} /><DialogDescription>检查背景复杂时的文字可读性</DialogDescription><div data-settings-view className="flex min-h-64 gap-6 rounded-lg bg-background"><aside className="w-28 rounded-lg bg-muted/30 p-3 text-sm">个人<br /><br />外观<br /><br />插件</aside><div data-settings-page className="flex-1 space-y-4 bg-background py-3"><h3>插件清单</h3><p className="text-sm text-muted-foreground">查看所有插件包的来源、运行状态和可用操作。</p><div className="amiba-card-surface overflow-hidden rounded-xl border border-border/70 bg-background text-sm"><div className="bg-background p-4">默认模型 <span className="float-right">DeepSeek</span></div><div className="border-t border-border/60 bg-background px-4 pb-3 pt-3">视觉识别</div><p className="px-4 pb-3 text-xs text-muted-foreground">主模型看不到图片时，由视觉模型识别。</p><div className="border-t border-border/60 px-4 py-3 text-right text-xs">刷新能力</div></div></div></div></DialogContent>
           </Dialog>
         </div>
       </section>

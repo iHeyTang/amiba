@@ -10,7 +10,7 @@
   border-radius: 10px;
   height: 64px;
   padding: 10px;
-  border-color: hsl(var(--border) / 0.45);
+  border-color: hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 0.45));
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -26,7 +26,7 @@
 :root body .nyYjTG_split {
   border-radius: 6px;
   background: var(--dsw-alias-button-floating-fill);
-  border-color: hsl(var(--border) / 0.45);
+  border-color: hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 0.45));
 }
 :root body .nyYjTG_open {
   font-size: 12px;
