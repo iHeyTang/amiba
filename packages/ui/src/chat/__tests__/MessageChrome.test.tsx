@@ -2226,3 +2226,16 @@ it("keeps user command echoes outside the preceding assistant bubble", () => {
   expect(echo.closest('[data-conversation-user-turn]')?.textContent).toContain('goal response');
   expect(echo.closest('[data-conversation-user-turn]')?.textContent).not.toContain('earlier answer');
 });
+
+it("orders assistant copy, feedback, output tokens and timestamp together", () => {
+  const { container } = render(<MessageTurns messages={[{
+    uiId: "ordered", assistantMessageId: "m1", role: "assistant", content: "Answer",
+    sentAt: 1700000000000, tokenUsage: { outputTokens: 355 },
+  }]} assistantActions={() => <><button>like</button><button>dislike</button></>} />);
+  const bar = container.querySelector('[data-background-surface="message-actions"]')!;
+  const elements = [...bar.querySelectorAll('button,time')];
+  expect(elements.map(element => element.tagName)).toEqual(['BUTTON', 'BUTTON', 'BUTTON', 'BUTTON', 'TIME']);
+  expect(elements[1]?.textContent).toBe('like');
+  expect(elements[2]?.textContent).toBe('dislike');
+  expect(elements[3]?.textContent).toContain('355');
+});

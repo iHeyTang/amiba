@@ -211,3 +211,5 @@ export {
 } from "./conversation-rows";
 
 export { ComposerDockSheet } from "./ComposerDockSheet";
+
+export { MessageActionButton } from "./bubble/message-action-button";

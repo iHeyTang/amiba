@@ -182,7 +182,7 @@ function Preview() {
         />
       </section>
       <section className="space-y-3 rounded-2xl border border-border p-4">
-        <MessageTurns messages={[{ uiId: "preview-answer", role: "assistant", content: "上一轮回复已结束。", runtimeSeq: 1 }]} timelineRows={commandTimelineRows({ chat: { order: ["preview-goal"], nodes: new Map([["preview-goal", { key: "preview-goal", kind: "command-input", visibility: "visible", anchorSeq: 2, data: { text: "/goal 完成工作区体验优化" } }]]) } } as never, [], () => null)} />
+        <MessageTurns assistantActions={() => <FeedbackActions {...({ messageId: "preview-answer", ensure: async () => ({ ok: true }), current: () => undefined, retract: async () => ({ ok: true }), openDialog: () => {}, useFeedback: (select: (state: unknown) => unknown) => select({ items: new Map(), status: "ready" }), t: translate("feedback") } as unknown as Parameters<typeof FeedbackActions>[0])} />} messages={[{ uiId: "preview-answer", role: "assistant", content: "上一轮回复已结束。", runtimeSeq: 1, assistantMessageId: "preview-answer", sentAt: 1700000000000, tokenUsage: { outputTokens: 355 } }]} timelineRows={commandTimelineRows({ chat: { order: ["preview-goal"], nodes: new Map([["preview-goal", { key: "preview-goal", kind: "command-input", visibility: "visible", anchorSeq: 2, data: { text: "/goal 完成工作区体验优化" } }]]) } } as never, [], () => null)} />
         <GoalDock
           {...({
             useProjection: () => ({

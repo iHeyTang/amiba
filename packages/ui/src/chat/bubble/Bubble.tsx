@@ -1,3 +1,4 @@
+import { MessageActionButton as UserActionButton } from "./message-action-button";
 import { useConversationTurnWindow } from "../use-conversation-turn-window";
 import type { AssistantTimelineItem, MessageAttachment } from "@amiba/app-runtime/protocol";
 import { toolCallTreeContains } from "./nested-tool-calls";
@@ -1966,9 +1967,9 @@ function AssistantReplyChrome({ messages, copyText, children, actions, timeForma
         <UserActionButton label={t(copied ? "common.copied" : "common.copy")} icon={copied ? <Check /> : <Copy />} onClick={() => {
           if (navigator.clipboard) void navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => undefined);
         }} />
-        {time && <time dateTime={time.dateTime} className="whitespace-nowrap text-[10px] tabular-nums text-muted-foreground">{time.label}</time>}
-        <ReplyTokenUsage messages={messages} />
         {last?.assistantMessageId ? actions?.(last.assistantMessageId) : null}
+        <ReplyTokenUsage messages={messages} />
+        {time && <time dateTime={time.dateTime} className="whitespace-nowrap text-[10px] tabular-nums text-muted-foreground">{time.label}</time>}
       </div>
     </TooltipProvider>}
   </div>;
@@ -2605,33 +2606,6 @@ function WorkspaceChangesCard({
   );
 }
 
-function UserActionButton({
-  label,
-  icon,
-  onClick,
-}: {
-  label: string;
-  icon: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          onClick={onClick}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent/70 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 [&_svg]:h-3.5 [&_svg]:w-3.5"
-        >
-          {icon}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="text-[11px]">
-        {label}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
 
 function MessageImages({ images, render, compact = false }: {
   images: NonNullable<UiMessage["images"]>;

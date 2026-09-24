@@ -1,3 +1,4 @@
+import { MessageActionButton } from "@amiba/ui";
 import { useEffect, useRef, useState } from "react";
 import { ThumbsDown, ThumbsUp } from "lucide-react";
 import {
@@ -9,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
   Textarea,
+  TooltipProvider,
 } from "@amiba/ui/primitives";
 import type {
   FeedbackDialogProps,
@@ -74,6 +76,7 @@ export function FeedbackActions({
     void ensure().catch(() => {});
   };
   return (
+    <TooltipProvider delayDuration={180} skipDelayDuration={80}>
     <span
       className="inline-flex items-center gap-1"
       onPointerEnter={seed}
@@ -92,19 +95,14 @@ export function FeedbackActions({
         );
         const Icon = rating === "positive" ? ThumbsUp : ThumbsDown;
         return (
-          <Button
+          <MessageActionButton
             key={rating}
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 rounded-full text-muted-foreground aria-pressed:text-foreground"
-            title={label}
-            aria-label={label}
-            aria-pressed={active}
+            label={label}
+            pressed={active}
             disabled={pending}
             onClick={() => void choose(rating)}
-          >
-            <Icon className="h-3.5 w-3.5" />
-          </Button>
+            icon={<Icon />}
+          />
         );
       })}
       {(failure || loadFailed) && (
@@ -113,6 +111,7 @@ export function FeedbackActions({
         </span>
       )}
     </span>
+    </TooltipProvider>
   );
 }
 
