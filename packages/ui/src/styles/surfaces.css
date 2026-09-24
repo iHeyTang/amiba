@@ -22,12 +22,11 @@
   /* Inner cards share the pane blur, like the file-change review card. */
   --amiba-content-fill: hsl(var(--muted) / var(--amiba-content-opacity));
   --amiba-content-hover: hsl(var(--muted) / var(--amiba-content-hover-opacity));
-  /* Pinned rail headers frost their own backdrop so scrolling rows cannot
-   * read through the strip, while the frosted wallpaper still shows. Nested
-   * backdrop-filter inside the navigation pane is safe in Chromium. */
-  --amiba-rail-opacity: 0.2;
-  --amiba-rail-hover-opacity: 0.35;
-  --amiba-rail-blur: 16px;
+  /* Pinned rail headers borrow the selected session row's quiet fill and
+   * add a strong frost so wallpaper colors wash through the strip instead
+   * of reading as a solid band. Nested backdrop-filter is safe in
+   * Chromium. */
+  --amiba-rail-blur: 48px;
 }
 .amiba-background-frame [data-amiba-product-shell],
 [data-amiba-product-shell] [data-background-surface="layout"] {
@@ -119,12 +118,12 @@
 }
 [data-amiba-product-shell] [data-section-header="rail"] {
   border-radius: 8px;
-  background: hsl(var(--muted) / var(--amiba-rail-opacity));
+  background: var(--amiba-content-fill);
   backdrop-filter: blur(var(--amiba-rail-blur)) saturate(1.08);
   -webkit-backdrop-filter: blur(var(--amiba-rail-blur)) saturate(1.08);
 }
 [data-amiba-product-shell] [data-section-header="rail"]:hover {
-  background: hsl(var(--muted) / var(--amiba-rail-hover-opacity));
+  background: var(--amiba-content-hover);
 }
 [data-amiba-product-shell] :is([data-session-row], [data-navigation-row]):is([data-active="true"], :hover, :focus-within) {
   background: var(--amiba-content-hover);
@@ -160,8 +159,6 @@
     --amiba-message-opacity: 1;
     --amiba-content-opacity: 1;
     --amiba-content-hover-opacity: 1;
-    --amiba-rail-opacity: 1;
-    --amiba-rail-hover-opacity: 1;
     --amiba-composer-opacity: 1;
   }
 }
@@ -178,8 +175,6 @@
     --amiba-reading-blur: 0px;
     --amiba-message-blur: 0px;
     --amiba-agent-blur: 0px;
-    --amiba-rail-opacity: 1;
-    --amiba-rail-hover-opacity: 1;
     --amiba-composer-opacity: 1;
     --amiba-composer-blur: 0px;
     --amiba-rail-blur: 0px;
@@ -499,8 +494,6 @@
   --amiba-reading-blur: 0px;
   --amiba-agent-blur: 0px;
   --amiba-message-blur: 0px;
-  --amiba-rail-opacity: 0.85;
-  --amiba-rail-hover-opacity: 0.92;
   --amiba-composer-opacity: 1;
   --amiba-composer-blur: 0px;
   --amiba-rail-blur: 0px;
