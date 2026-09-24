@@ -1,3 +1,8 @@
+import { mountOfficialFeature } from "./official-features/mount.js";
+import { apply as applyOfficialPlan } from "@deepseek-ai/dsh-client-ui-plan/client";
+import { apply as applyOfficialFeedback } from "@deepseek-ai/dsh-client-ui-message-feedback/client";
+import { apply as applyOfficialGoal } from "@deepseek-ai/dsh-client-ui-goal/client";
+import { apply as applyOfficialSubagent } from "@deepseek-ai/dsh-client-ui-subagent/client";
 import { createShellChildren } from "./shell-children.js";
 import { mountOfficialWorkspaceServices } from "./official-workspace-services.js";
 import { apply as applyOfficialWorkspace } from "@deepseek-ai/dsh-client-ui-workspace/client";
@@ -998,6 +1003,12 @@ export async function apply(ctx: ClientContext): Promise<void> {
     const officialChatFiber = ctx.inject(["uiConversation", "locale", "settingsScope", "remote", "sidebarRight"], scope => {
       mountOfficialChatPresentation(scope, applyOfficialChat);
     });
+    const featureFibers = [
+      ctx.inject(["locale", "remote", "remote.commands"], scope => mountOfficialFeature(scope, "plan", applyOfficialPlan)),
+      ctx.inject(["locale", "remote", "remote.messageFeedback", "remote.sessionFeedback"], scope => mountOfficialFeature(scope, "feedback", applyOfficialFeedback)),
+      ctx.inject(["locale", "sessions", "remote", "remote.goals", "uiConversation"], scope => mountOfficialFeature(scope, "goal", applyOfficialGoal)),
+      ctx.inject(["locale", "sessions"], scope => mountOfficialFeature(scope, "subagent", applyOfficialSubagent)),
+    ];
     const workspaceFiber = ctx.inject(["sessions", "workspaces", "locale", "remote", "remote.directoryPicker", "layout"], scope => {
       mountOfficialWorkspaceServices(scope, applyOfficialWorkspace);
     });
@@ -1024,6 +1035,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     return () => {
       for (const dispose of disposeReplacements) dispose();
       for (const dispose of disposeOfficialToolviews) dispose();
+      for (const fiber of featureFibers) void fiber.dispose();
       void workspaceFiber.dispose();
       void officialChatFiber.dispose();
       void sidebarRightFiber.dispose();

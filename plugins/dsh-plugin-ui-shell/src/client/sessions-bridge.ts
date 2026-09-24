@@ -30,16 +30,16 @@
  * from the available targets again, or whose open throws, returns to deferral instead of
  * being dropped silently.
  *
- * official → amiba (``onExternalOpen``): the pinned runtime marks public
- * open requests separately from initial workspace selection. Explicit opens
- * are forwarded even from Home; restored/startup selection is not. On older
- * runtimes without intent metadata, forwarding happens only when Amiba already
+ * official → amiba (``onExternalOpen``): catalog-addressed child selections
+ * are forwarded even from Home; restored ordinary startup selection is not.
+ * Optional open intent metadata is honored when present. rc.2 public methods
+ * do not provide it; ordinary unmarked selection forwards when Amiba already
  * holds a session and the official side moved to a DIFFERENT one — the one
  * shape the runtime's own boot policies cannot produce (they select into an
  * empty window). That is the deliberate ecosystem open (a plugin calling
  * ``ctx.sessions.open``); it routes through the existing Amiba open-session
  * path (the ``amiba:open-session`` event → product-shell ``openSession``).
- * Public clear requests carrying pinned runtime intent metadata forward to
+ * Public clear requests carrying optional runtime intent metadata forward to
  * Amiba deselect. The bridge suppresses its own clear projection; unmarked
  * internal selection loss retains the existing Amiba-authoritative behavior.
  */
@@ -197,10 +197,14 @@ export function createSessionsBridge(
     if (current === lastSeenCurrent) return;
     lastSeenCurrent = current;
     if (current === lastPushed) return; // echo of our own projection
+    const address = sessions.subagentAddress?.(current);
     if (
       current !== "" &&
-      (explicitOpen || (lastPushed !== "" && !initialOpen))
+      (explicitOpen || address?.childSessionId === current || (lastPushed !== "" && !initialOpen))
     ) {
+      // rc.2 public openSubagent has no lastOpenRequest marker. A newly
+      // selected durable catalog address is still an explicit child route,
+      // including when Amiba currently shows its empty home.
       // A public open request is distinct from restored/startup selection.
       // Existing active-session navigation (including catalog children)
       // retains the fallback for paths without a public-open marker.
@@ -208,7 +212,6 @@ export function createSessionsBridge(
       // through setActive, which no-ops against the already-current id).
       selectionRevision++;
       pending = null;
-      const address = sessions.subagentAddress?.(current);
       if (address?.childSessionId === current) onExternalOpen(current, { ...address });
       else onExternalOpen(current);
       return;

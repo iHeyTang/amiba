@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { commandRowOwners } from "./command-rows.js";
+import { commandRowOwners, commandTimelineRows } from "./command-rows.js";
 
 it("preserves Host command identity and the explicitly projected compaction link", () => {
   const command = { kind: "command", name: "probe", args: "  原始😀", commandId: "c1", outcome: null };
@@ -16,4 +16,12 @@ it("preserves Host command identity and the explicitly projected compaction link
   expect(result[1].owner.node).toBe(compact);
   expect(result[1].owner.compaction).toBe(compaction);
   expect(commandRowOwners(undefined)).toEqual([]);
+});
+
+it("keeps the official goal command echo in the Amiba timeline without an extension renderer", () => {
+  const node = { key: 'goal-input', kind: 'command-input', anchorSeq: 3.9, visibility: 'visible', data: { text: '/goal Ship it' } };
+  const snapshot = { chat: { order: [node.key], nodes: new Map([[node.key, node]]) } };
+  const rows = commandTimelineRows(snapshot as never, [], () => null);
+  expect(rows.map(row => [row.id, row.seq])).toEqual([['goal-input', 3.9]]);
+  expect(rows[0]!.content).toBeTruthy();
 });

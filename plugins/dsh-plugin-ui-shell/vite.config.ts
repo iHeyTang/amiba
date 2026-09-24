@@ -30,6 +30,11 @@ export default defineConfig({
   plugins: [officialClientCore(import.meta.url, {
     "@deepseek-ai/dsh-client-ui-conversation/client": ["UiConversation", "ConversationController"],
     "@deepseek-ai/dsh-client-ui-workspace/client": ["apply"],
+    "@deepseek-ai/dsh-client-ui-plan/client": ["apply"],
+    "@deepseek-ai/dsh-client-ui-message-feedback/client": ["apply"],
+    "@deepseek-ai/dsh-client-ui-goal/client": ["apply"],
+    "@deepseek-ai/dsh-client-ui-subagent/client": ["apply"],
+
     "@deepseek-ai/dsh-client-ui-chat/client": ["EMPTY_CHAT_SNAPSHOT", "registerConversationNodes", "apply"],
   }), clientInputs()],
   build: {

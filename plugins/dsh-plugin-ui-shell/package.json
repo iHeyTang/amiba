@@ -137,7 +137,11 @@
     "@deepseek-ai/dsh-client-ui-approval": "0.1.5-rc.2",
     "@deepseek-ai/dsh-client-ui-workspace": "0.1.5-rc.2",
     "immer": "10.1.1",
-    "zustand": "4.4.7"
+    "zustand": "4.4.7",
+    "@deepseek-ai/dsh-client-ui-plan": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-message-feedback": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-goal": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-subagent": "0.1.5-rc.2"
   },
   "author": "Amiba",
   "repository": {

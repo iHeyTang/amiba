@@ -1,3 +1,4 @@
+import { OFFICIAL_FEATURE_REGISTRANT } from "./official-features/mount.js";
 import { TranscriptScrollPositionContext } from "@amiba/ui";
 import { createContext, createElement, useContext, useState, type ComponentType, type ReactNode } from "react";
 import type { Context } from '@deepseek-ai/cordis';
@@ -61,7 +62,7 @@ export function mountOfficialChatPresentation(ctx: Context, apply: (ctx: Context
 /** A registration switches just the transcript to the complete official projection. */
 export function officialChatRequested(slots: Context['slots']): ObservableSnapshot<boolean> {
   return {
-    getSnapshot: () => slots.entriesOfSlot('conversation.chat.node').some(entry => entry.registrant !== OFFICIAL_CHAT_REGISTRANT),
+    getSnapshot: () => slots.entriesOfSlot('conversation.chat.node').some(entry => entry.registrant !== OFFICIAL_CHAT_REGISTRANT && entry.registrant !== OFFICIAL_FEATURE_REGISTRANT),
     subscribe: listener => slots.subscribe('conversation.chat.node', listener),
   };
 }

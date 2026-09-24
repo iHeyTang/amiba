@@ -129,6 +129,8 @@
 - id: ui-skill
   disabled: true
 
+# These four published plugins are mounted by ui-shell in scoped adapters.
+# Keep automatic copies off: official services/hooks + Amiba presentation.
 - id: ui-subagent
   disabled: true
 
@@ -153,6 +155,7 @@
 - id: ui-settings-plugins
   disabled: true
 
+# Published PlanChip is mounted once by ui-shell with Amiba theme tokens.
 - id: ui-plan
   disabled: true
 

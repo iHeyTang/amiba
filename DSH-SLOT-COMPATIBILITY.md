@@ -30,7 +30,7 @@
 |---|---|---|---|
 | P1 | 输入区域、队列和附件 | 对下方目标版本表中“待专项验收”的真实插件补齐发送失败保留、普通文件、后台输入、Host 队列证据 | 修复确切缺口并逐行升级状态，不以入口数量关闭待办 |
 | P1 | 条件支持项 | 在实际支持的桌面／独立 Web 条件下验证目录、工作台、文档、工具、授权与卸载 | 每行记录已测宿主；不支持的宿主列明回退 |
-| P1 | 官方会话导航意图 | rc.2 `dsh-api-session-controller` 的公开打开方法未带桥接所用的旧意图标记；补齐无活动会话时的子会话打开及清空导航兼容 | 使用 rc.2 发布实现通过桥接测试；不能用测试替身的意图字段代替真实接口验收 |
+| P1 | 官方会话导航意图 | rc.2 `dsh-api-session-controller` 的公开打开方法未带桥接所用的旧意图标记；补齐普通会话从首页打开及清空导航兼容（子会话地址打开已在 V9 修复） | 使用 rc.2 发布实现通过桥接测试；不能用测试替身的意图字段代替真实接口验收 |
 | P2 | 新增替换入口 | 补第三方整组件的会话切换、卸载、异常恢复及服务依赖验收 | 明确到插件／宿主／提交的证据，不宣称任意私有 API 通用兼容 |
 | 暂缓 | 26 个后续版本新增名 | 保留存在性记录，不向 rc.2 引入实现 | 只有目标内核升级且新目标仍有效时，才转为接入任务 |
 
@@ -75,6 +75,19 @@
 
 </details>
 
+### 内置功能的默认启用方式（2026-09-24）
+
+四项此前没有默认界面的能力现由 ui-shell 调用 **rc.2 发布包的 `apply`**，保留官方控制器、会话隔离、远端操作和卸载逻辑。组合文件中的自动加载行仍关闭，避免第二份实例；这不再表示功能关闭。
+
+| 功能 | 复用与适配 | 验证边界 |
+| --- | --- | --- |
+| `ui-plan` | 直接复用官方 PlanChip；仅映射 Amiba 主题颜色 | 官方退出命令与会话参数测试；界面样例验证 |
+| `ui-message-feedback` | 官方每会话反馈/草稿控制器、CAS 与 `/feedback` 装饰；Amiba 按钮和弹窗 | 实际发布包提交路径、失败保留、撤回冲突、卸载保护测试 |
+| `ui-goal` | 官方投影、激活订阅、最新版本号操作；Amiba 目标条与命令回显 | 目标版本变化、激活版本匹配、暂停/编辑交互测试；默认不切换整块聊天区 |
+| `ui-subagent` | 官方目录订阅/刷新/会话地址和只读选择器；Amiba 菜单与只读提示 | 展开/关闭订阅、失败重试、一次性只读、真实 rc.2 打开方法从首页桥接测试 |
+
+V9：[适配入口](plugins/dsh-plugin-ui-shell/src/client/official-features/mount.tsx)、[发布包组合测试](plugins/dsh-plugin-ui-shell/src/client/published-shell-startup.test.tsx)、[界面交互测试](plugins/dsh-plugin-ui-shell/src/client/official-features/features.test.tsx)、[导航桥接测试](plugins/dsh-plugin-ui-shell/src/client/sessions-bridge.test.ts)。浏览器样例验证使用确定性数据；不据此声称真实模型、多层子代理生成或反馈服务的线上端到端验收完成。
+
 ### 输入器与附件（10 项）
 
 | 插槽／用途 | 0.1.5-rc.2 | 0.1.5-rc.3 | 0.1.7-alpha.2 | Amiba 支持程度 | 维护建议 |
@@ -83,11 +96,11 @@
 | `conversation.composer.bar`<br>输入器主体 | 有 | 有 | 有 | 已接入·专项验证 | 保留 |
 | `conversation.composer.dock`<br>输入器下方附加区 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；补输入验收 |
 | `conversation.input.attachments`<br>附件呈现与拖放区域 | 有 | 有 | 有 | 已接入·专项验证 | 保留 |
-| `conversation.input.dock`<br>输入框上方附加区 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；补输入验收 |
+| `conversation.input.dock`<br>输入框上方附加区 | 有 | 有 | 有 | 已接入·专项验证 | 保留；官方目标控制器和 Amiba 目标条见 V9；其他插件另验 |
 | `conversation.input.left`<br>输入工具栏左侧 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；补输入验收 |
 | `conversation.input.model`<br>首页空会话及当前会话模型选择 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；首页准备并复用真实空会话，选择直接写入会话；补桌面端专项验收 |
 | `conversation.input.overlay`<br>触发菜单与弹层 | 有 | 有 | 有 | 已接入·宿主限制 | 保留；补键盘验收 |
-| `conversation.input.plan`<br>计划模式控件 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；补 rc.2 验收 |
+| `conversation.input.plan`<br>计划模式控件 | 有 | 有 | 有 | 已接入·专项验证 | 保留；默认挂载官方 PlanChip，见 V9 |
 | `conversation.input.right`<br>输入工具栏右侧 | 有 | 有 | 有 | 已接入·待专项验收 | 保留；补输入验收 |
 
 <details>
