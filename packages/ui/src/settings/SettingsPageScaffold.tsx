@@ -63,7 +63,7 @@ function ScaffoldBody({
   const { t } = useT();
   const { setActionsHost, override } = useSettingsPageChrome();
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+    <div data-settings-page className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <PaneHeaderBar
         heightPx={headerHeightPx}
         className={headerClassName}

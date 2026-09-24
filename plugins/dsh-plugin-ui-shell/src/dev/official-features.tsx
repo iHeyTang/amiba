@@ -25,7 +25,7 @@ import {
   SubagentLineage,
   SubagentReadOnly,
 } from "../client/official-features/subagent";
-import { Button } from "@amiba/ui/primitives";
+import { Button, Popover, PopoverTrigger, PopoverContent, Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription } from "@amiba/ui/primitives";
 import "./surfaces.css";
 installAmibaMessageCatalog();
 setPlatform({ storage: { get: async () => ({}), set: async () => {}, remove: async () => {}, watch: () => () => {} } } as unknown as PlatformAdapter);
@@ -145,6 +145,17 @@ function Preview() {
           切换明暗
         </Button>
       </header>
+      <section className="relative rounded-2xl p-6" style={{ background: "repeating-linear-gradient(125deg, #c7b5b9 0px, #716d80 45px, #e1cac0 100px)" }}>
+        <p className="mb-4 text-sm">背景内容可读性测试：查看飞书界面内容 · 工作空间 · 对话记录</p>
+        <div className="flex gap-3">
+          <Popover><PopoverTrigger asChild><Button variant="outline">预览个人菜单玻璃</Button></PopoverTrigger>
+            <PopoverContent align="start"><div className="space-y-3 p-2"><strong>我的空间</strong><p className="text-sm text-muted-foreground">编辑个人资料</p><hr /><button className="block w-full rounded-lg p-2 text-left hover:bg-muted/70">设置</button><p className="p-2 text-sm">GitHub</p><hr /><p className="text-sm text-muted-foreground">当前版本 v0.1.12</p></div></PopoverContent>
+          </Popover>
+          <Dialog><DialogTrigger asChild><Button variant="outline">预览设置窗口玻璃</Button></DialogTrigger>
+            <DialogContent size="lg"><DialogTitle>设置</DialogTitle><DialogDescription>检查背景复杂时的文字可读性</DialogDescription><div data-settings-view className="flex min-h-64 gap-6 rounded-lg bg-background"><aside className="w-28 rounded-lg bg-muted/30 p-3 text-sm">个人<br /><br />外观<br /><br />插件</aside><div data-settings-page className="flex-1 space-y-4 bg-background py-3"><h3>插件清单</h3><p className="text-sm text-muted-foreground">查看所有插件包的来源、运行状态和可用操作。</p><div className="rounded-lg border p-4 text-sm">dsh-app-boot <span className="float-right text-muted-foreground">运行中</span></div></div></div></DialogContent>
+          </Dialog>
+        </div>
+      </section>
       <section data-amiba-product-shell className="space-y-4 rounded-2xl p-6" style={{ background: "repeating-linear-gradient(125deg, #c7b5b9 0px, #716d80 45px, #e1cac0 100px)" }}>
         <p data-home-greeting className="text-center text-sm">今天想一起做点什么？</p>
         <div>

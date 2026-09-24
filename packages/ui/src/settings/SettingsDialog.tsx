@@ -132,6 +132,7 @@ export function SettingsDialog({
         )}
         data-state={state}
         data-ui-overlay="dialog"
+        data-glass-surface="surface"
         ref={panel}
         role={open ? "dialog" : undefined}
         tabIndex={-1}
