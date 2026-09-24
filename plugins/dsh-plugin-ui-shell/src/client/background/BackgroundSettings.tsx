@@ -103,14 +103,29 @@ export function BackgroundSettings({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Label>{zh ? "主界面背景" : "Application background"}</Label>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy || !state.ready}
-          onClick={() => fileInput.current?.click()}
-        >
-          {zh ? "选择图片或视频" : "Choose image or video"}
-        </Button>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          {dirty && <>
+            <Button size="sm" disabled={busy || !state.ready || (draft.enabled && !draft.assetId)} onClick={() => void apply()}>
+              {zh ? "应用" : "Apply"}
+            </Button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => {
+              setDraft(state.snapshot.config);
+              setDirty(false);
+              setError("");
+            }}>{zh ? "取消" : "Cancel"}</Button>
+          </>}
+          {state.snapshot.config.enabled && <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={busy || !state.ready} onClick={() => void apply({ ...DEFAULT_BACKGROUND })}>
+            {zh ? "恢复默认" : "Restore defaults"}
+          </Button>}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy || !state.ready}
+            onClick={() => fileInput.current?.click()}
+          >
+            {zh ? "选择图片或视频" : "Choose image or video"}
+          </Button>
+        </div>
         <input
           ref={fileInput}
           hidden
@@ -119,11 +134,9 @@ export function BackgroundSettings({
           onChange={(event) => void upload(event)}
         />
       </div>
-      <p className="text-xs text-muted-foreground" role="status">
-        {busy ? (zh ? "正在处理…" : "Working…") + (progress > 0 && progress < 100 ? ` ${progress}%` : "")
-          : !draft.assetId ? (zh ? "支持图片与循环视频，最大 64 MiB" : "Images and looping videos, up to 64 MiB")
-          : dirty ? (zh ? "预览 · 尚未应用" : "Preview · Not applied") : (zh ? "当前背景" : "Current background")}
-      </p>
+      {busy && <p className="text-xs text-muted-foreground" role="status">
+        {(zh ? "正在处理…" : "Working…") + (progress > 0 && progress < 100 ? ` ${progress}%` : "")}
+      </p>}
       {draft.assetId && (
         <div className="relative h-32 overflow-hidden rounded-lg border border-border/60 bg-muted">
           {preview?.id === draft.assetId && (isVideo(draft.assetId)
@@ -148,11 +161,6 @@ export function BackgroundSettings({
                   change({ motion: value as BackgroundConfig["motion"] })
                 }
               />
-              <p className="text-xs text-muted-foreground">
-                {zh
-                  ? "窗口隐藏或系统要求减少动态效果时自动暂停。"
-                  : "Automatically pauses in hidden windows and when reduced motion is enabled."}
-              </p>
             </>
           )}
           <label className="flex items-center justify-between gap-4 text-sm">
@@ -189,21 +197,6 @@ export function BackgroundSettings({
           </label>
         </>
       )}
-      {(dirty || state.snapshot.config.enabled) && <div className="flex flex-wrap items-center gap-2">
-        {dirty && <>
-          <Button size="sm" disabled={busy || !state.ready || (draft.enabled && !draft.assetId)} onClick={() => void apply()}>
-            {zh ? "应用" : "Apply"}
-          </Button>
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => {
-            setDraft(state.snapshot.config);
-            setDirty(false);
-            setError("");
-          }}>{zh ? "取消" : "Cancel"}</Button>
-        </>}
-        {state.snapshot.config.enabled && <Button size="sm" variant="ghost" className="ml-auto text-muted-foreground" disabled={busy || !state.ready} onClick={() => void apply({ ...DEFAULT_BACKGROUND })}>
-          {zh ? "恢复默认" : "Restore defaults"}
-        </Button>}
-      </div>}
       {(error || state.error) && (
         <p role="alert" className="text-xs text-destructive">
           {error || state.error}
