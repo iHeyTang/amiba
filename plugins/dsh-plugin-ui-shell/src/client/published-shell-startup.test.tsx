@@ -105,7 +105,7 @@ it("disables only conflicting default UI while retaining picker plugins", () => 
 
 it("keeps third-party registrations outside the workspace facade", () => {
   const ctx = fixture();
-  ctx.slots.register({ name: "root", children: createShellChildren(() => {}) }, () => null);
+  ctx.slots.register({ name: "root", children: createShellChildren(() => {}) }, ({ renderSlot }: Slots.PropsRenderSlots<keyof ReturnType<typeof createShellChildren>>) => { void renderSlot; return null; });
   mountOfficialWorkspaceServices(ctx, workspace.apply);
   const off = ctx.slots.register({ name: "sidebar.workspaces.directoryFlow" }, () => null);
   expect(ctx.slots.entriesOfSlot("sidebar.workspaces.directoryFlow")).toHaveLength(1);
