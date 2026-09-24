@@ -7,6 +7,10 @@
   --amiba-glass-opacity: 0.64;
   --amiba-reading-opacity: 0.72;
   --amiba-input-opacity: 0.9;
+  /* Composer toaster: glassy but frosted enough that the wallpaper never
+   * reads through the input (dev's 40% translucent card read as see-through). */
+  --amiba-composer-opacity: 0.6;
+  --amiba-composer-blur: 24px;
   --amiba-glass-blur: 18px;
   --amiba-reading-blur: 8px;
   --amiba-agent-opacity: 0.68;
@@ -119,9 +123,9 @@
   background: transparent;
 }
 [data-amiba-product-shell] [data-composer-card] {
-  background: hsl(var(--background) / var(--amiba-input-opacity));
-  backdrop-filter: blur(var(--amiba-glass-blur));
-  -webkit-backdrop-filter: blur(var(--amiba-glass-blur));
+  background: hsl(var(--background) / var(--amiba-composer-opacity));
+  backdrop-filter: blur(var(--amiba-composer-blur)) saturate(1.08);
+  -webkit-backdrop-filter: blur(var(--amiba-composer-blur)) saturate(1.08);
   border-color: hsl(var(--border) / 0.6);
 }
 [data-amiba-product-shell] [data-background-surface="sticky-message"] {
@@ -146,6 +150,7 @@
     --amiba-content-hover-opacity: 1;
     --amiba-rail-opacity: 1;
     --amiba-rail-hover-opacity: 1;
+    --amiba-composer-opacity: 1;
   }
 }
 @media (prefers-reduced-transparency: reduce) {
@@ -163,6 +168,8 @@
     --amiba-agent-blur: 0px;
     --amiba-rail-opacity: 1;
     --amiba-rail-hover-opacity: 1;
+    --amiba-composer-opacity: 1;
+    --amiba-composer-blur: 0px;
   }
 }
 
@@ -481,6 +488,8 @@
   --amiba-message-blur: 0px;
   --amiba-rail-opacity: 0.85;
   --amiba-rail-hover-opacity: 0.92;
+  --amiba-composer-opacity: 1;
+  --amiba-composer-blur: 0px;
 }
 .amiba-background-frame:not([data-background-active="true"]) [data-sidebar-glass]::before,
 .amiba-background-frame:not([data-background-active="true"]) [data-sidebar-glass]::after {
