@@ -209,3 +209,5 @@ export {
   type ConversationTimelineRow,
   type ConversationTurnTailAnchor,
 } from "./conversation-rows";
+
+export { ComposerDockSheet } from "./ComposerDockSheet";

@@ -333,3 +333,17 @@ it("renders the official tool semantics inline for an execution summary", () => 
   expect(screen.queryByText("sidepanel.trace.actions.useTool")).toBeNull();
   expect(container.querySelectorAll("button")).toHaveLength(1);
 });
+
+it("renders goal actions and structured goal evidence with Amiba tool chrome", () => {
+  const value = owner("update_goal", { action: "blocked", blocked_reason: "Waiting for access" });
+  (value.block as any).content = [{ type: "text", text: JSON.stringify({ goal: { objective: "Verify the release", phase: "blocked", blockedReason: { message: "Waiting for access" } } }) }];
+  render(<>{renderOfficialToolFallback(value, null)}</>);
+  fireEvent.click(screen.getByRole("button", { name: /shell.goal.blocked/ }));
+  expect(screen.getByText("Verify the release")).toBeTruthy();
+  expect(screen.getByText("shell.goal.phase.blocked")).toBeTruthy();
+});
+it("names a failed goal update by its actual action and keeps its error readable", () => {
+  render(<>{renderOfficialToolFallback(owner("update_goal", { action: "pause" }, true), null)}</>);
+  fireEvent.click(screen.getByRole("button", { name: /shell.goal.pause/ }));
+  expect(screen.getByText("permission denied")).toBeTruthy();
+});

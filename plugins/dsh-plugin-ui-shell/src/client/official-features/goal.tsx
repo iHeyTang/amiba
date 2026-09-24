@@ -1,3 +1,4 @@
+import { ComposerDockSheet } from "@amiba/ui";
 import { useEffect, useRef, useState } from "react";
 import { Check, Pause, Pencil, Play, Target, X } from "lucide-react";
 import { Button, Input } from "@amiba/ui/primitives";
@@ -122,75 +123,77 @@ function GoalStrip({
     </Button>
   );
   return (
-    <div className="rounded-xl bg-muted/40 px-3 py-2 text-xs" data-amiba-goal>
-      <div className="flex min-w-0 items-center gap-2">
-        <Target className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        {editing ? (
-          <form
-            className="flex min-w-0 flex-1 items-center gap-1"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (draft.trim())
-                void run(
-                  () => onEdit(draft.trim()),
-                  () => setEditing(false),
-                );
-            }}
-          >
-            <Input
-              autoFocus
-              aria-label={t("objective.aria")}
-              value={draft}
-              disabled={pending}
-              className="h-8"
-              onChange={(event) => setDraft(event.target.value)}
-            />
-            {iconButton(
-              "save",
-              Check,
-              () => {
+    <ComposerDockSheet>
+      <div className="px-4 pt-2.5 text-xs" data-amiba-goal>
+        <div className="flex min-w-0 items-center gap-2">
+          <Target className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          {editing ? (
+            <form
+              className="flex min-w-0 flex-1 items-center gap-1"
+              onSubmit={(event) => {
+                event.preventDefault();
                 if (draft.trim())
                   void run(
                     () => onEdit(draft.trim()),
                     () => setEditing(false),
                   );
-              },
-              pending || !draft.trim(),
-            )}
-            {iconButton("cancel", X, () => setEditing(false))}
-          </form>
-        ) : (
-          <>
-            <span className="shrink-0 text-muted-foreground">{label}</span>
-            <span
-              className="min-w-0 flex-1 truncate"
-              title={goal.blockedReason?.message ?? goal.objective}
+              }}
             >
-              {goal.objective}
-            </span>
-            {goal.phase === "active" &&
-              activation === "armed" &&
-              iconButton("pause", Pause, () => void run(onPause))}
-            {(goal.phase === "paused" ||
-              (goal.phase === "active" && activation === "disarmed")) &&
-              iconButton("resume", Play, () => void run(onResume))}
-            {iconButton("edit", Pencil, () => {
-              setDraft(goal.objective);
-              setEditing(true);
-            })}
-            {iconButton(
-              "clear",
-              X,
-              () => void run(onClear, () => setCleared(true)),
-            )}
-          </>
+              <Input
+                autoFocus
+                aria-label={t("objective.aria")}
+                value={draft}
+                disabled={pending}
+                className="h-8"
+                onChange={(event) => setDraft(event.target.value)}
+              />
+              {iconButton(
+                "save",
+                Check,
+                () => {
+                  if (draft.trim())
+                    void run(
+                      () => onEdit(draft.trim()),
+                      () => setEditing(false),
+                    );
+                },
+                pending || !draft.trim(),
+              )}
+              {iconButton("cancel", X, () => setEditing(false))}
+            </form>
+          ) : (
+            <>
+              <span className="shrink-0 text-muted-foreground">{label}</span>
+              <span
+                className="min-w-0 flex-1 truncate"
+                title={goal.blockedReason?.message ?? goal.objective}
+              >
+                {goal.objective}
+              </span>
+              {goal.phase === "active" &&
+                activation === "armed" &&
+                iconButton("pause", Pause, () => void run(onPause))}
+              {(goal.phase === "paused" ||
+                (goal.phase === "active" && activation === "disarmed")) &&
+                iconButton("resume", Play, () => void run(onResume))}
+              {iconButton("edit", Pencil, () => {
+                setDraft(goal.objective);
+                setEditing(true);
+              })}
+              {iconButton(
+                "clear",
+                X,
+                () => void run(onClear, () => setCleared(true)),
+              )}
+            </>
+          )}
+        </div>
+        {failure && (
+          <p role="alert" className="mt-1 text-destructive">
+            {failure}
+          </p>
         )}
       </div>
-      {failure && (
-        <p role="alert" className="mt-1 text-destructive">
-          {failure}
-        </p>
-      )}
-    </div>
+    </ComposerDockSheet>
   );
 }

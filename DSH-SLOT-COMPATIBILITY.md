@@ -20,6 +20,8 @@
 
 收录范围：当前目标版本的官方槽、后续对照版本仍存在的新增槽，以及 Amiba 仍支持的扩展。已停止支持且无后续对照价值的旧槽不再列出；退役迁移见 [SDK 说明](packages/extension-sdk/README.md)，完整历史查 Git。
 
+目标 UI 统一（2026-09-24）：目标栏复用 `ComposerDockSheet` 吐司机容器；目标工具调用使用 Amiba 工具行，按实际动作显示标题，结果展示目标、阶段与受阻原因。执行与版本校验继续由官方目标服务负责。
+
 会话统计补齐（2026-09-24）：`ui-chat` 内部 `conversation.composer.dock / stats` 注册现在由 Amiba `SessionStats` 展示层承接，保留官方 `chat` locale 与会话作用域，读取官方 `tokenUsage`、`sessionStats` 持久投影。输入框下方展示累计 Token、缓存命中、轮次／步数，弹层展示分项及耗时；无投影时隐藏，不从分页消息推算全会话累计值。
 
 维护原则：rc.2 仍有效的槽继续维护，即使 alpha 分支已经移除；仅在后续版本新增的槽，等目标内核升级后重新评估。

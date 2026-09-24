@@ -128,6 +128,7 @@ it("matches goal activation by revision, edits trimmed text, and preserves a fai
     t,
   } as unknown as Parameters<typeof OfficialGoalDock>[0];
   const view = render(<GoalDock {...props} />);
+  expect(view.container.querySelector(".amiba-dock-sheet [data-amiba-goal]")).toBeTruthy();
   expect(screen.queryByLabelText("action.pause")).toBeNull();
   activation = { ...activation, revision: 2 };
   view.rerender(<GoalDock {...props} />);

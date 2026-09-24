@@ -1,3 +1,4 @@
+import { GoalEvidence, goalAction } from "./official-features/goal-evidence";
 import { RuntimeInspectEvidence } from "./runtime-inspect-evidence";
 import type { ToolCallOwnerProps } from "@amiba/extension-sdk";
 import { useT, type TranslateFn } from "@amiba/i18n";
@@ -158,20 +159,31 @@ const SPECS: Record<string, SemanticToolSpec<Parameters<TranslateFn>[0]>> = {
   },
   create_goal: {
     icon: Target,
-    action: "shell.tool.manageGoal",
-    target: (args) => oneline(stringValue(args, "name", "title", "goal")),
-    evidence: codeText,
+    action: "shell.goal.create",
+    target: (args) =>
+      oneline(stringValue(args, "objective", "name", "title", "goal")),
+    evidence: (ctx) => <GoalEvidence {...ctx} />,
   },
   get_goal: {
     icon: Target,
-    action: "shell.tool.manageGoal",
-    evidence: codeText,
+    action: "shell.goal.read",
+    evidence: (ctx) => <GoalEvidence {...ctx} />,
   },
   update_goal: {
     icon: Target,
-    action: "shell.tool.manageGoal",
-    target: (args) => oneline(stringValue(args, "name", "title", "goal")),
-    evidence: codeText,
+    action: goalAction,
+    target: (args) =>
+      oneline(
+        stringValue(
+          args,
+          "objective",
+          "blocked_reason",
+          "name",
+          "title",
+          "goal",
+        ),
+      ),
+    evidence: (ctx) => <GoalEvidence {...ctx} />,
   },
   subagent: {
     icon: Users,
