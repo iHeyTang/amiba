@@ -72,7 +72,7 @@ export function SessionStats({ useProjection, t }: Props) {
   return (
     <div
       data-composer-stats
-      className="flex flex-wrap items-center gap-x-1 px-1 pt-1 tabular-nums"
+      className="flex w-full flex-wrap items-center justify-center gap-x-1 px-1 pt-1 tabular-nums"
     >
       {usage &&
         total > 0 &&
