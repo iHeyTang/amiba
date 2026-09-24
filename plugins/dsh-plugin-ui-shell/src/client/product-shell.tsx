@@ -11,8 +11,6 @@ import { useTrajectoryInspection } from "./trajectory-inspection.js";
 import { createConversationRowsSource } from "./conversation-rows-source.js";
 import { InputRegion } from "./input-region.js";
 import { TurnTail, TurnText } from "./turn-tail.js";
-import { DirectoryChooserContext, type DirectoryChooser } from "@amiba/ui";
-import type { DirectoryFlow } from "./directory-flow.js";
 import type { ConversationViewEntry } from "./conversation-view-source.js";
 import { SurfaceProvider } from "./surface-provider.js";
 import type { SurfaceSelections } from "./surface-selections.js";
@@ -189,8 +187,6 @@ export type AmibaShellSlot =
   | "sidebar.panellist"
   | Exclude<AmibaRootSlot, "amiba.agentPreset.section">
   | "settings.section"
-  | "conversation.hero.workspace.directoryFlow"
-  | "sidebar.workspaces.directoryFlow"
   | "sidebar.footer.action"
   | "settings.trigger"
   | "settings.header"
@@ -217,7 +213,6 @@ export type AmibaShellSlot =
   | "conversation.view"
   | "conversation.chat.turnTail"
   | "conversation.message.images"
-  | "conversation.approval.detail"
   | "conversation.chat.assistant-actions"
   | "tool.call.toolview"
   | "tool.call.images";
@@ -413,7 +408,6 @@ interface ProductShellProps {
   commandRowKeys: import("@amiba/extension-sdk").ObservableSnapshot<readonly string[]>;
   conversationSource: (sessionId: string) => import("./conversation-snapshot.js").ConversationSource | undefined;
     fileMentions: import("@deepseek-ai/dsh-client-ui-chat/client").ChatFileMentions["forClosing"];
-  directoryFlows: { home: DirectoryFlow; workspace: DirectoryFlow };
   conversationViews: ContributionsSource<ConversationViewEntry>;
   surfaces: SurfaceSelections;
   dshClient: DshApiClient;
@@ -476,7 +470,6 @@ function ProductShellInner({
   toolImagesAvailable,
   conversationSource,
   fileMentions,
-  directoryFlows,
   conversationViews,
   dshClient,
   openSettingsSection,
@@ -576,14 +569,6 @@ function ProductShellInner({
   const client = useMemo(() => createChatClient(dshClient, (id) => childAddressSource.current(id),
     (id) => activitySource.current(id), triggerRuntime?.uploadCommandFile), [dshClient, triggerRuntime]);
   const capabilities = useMemo(productCapabilities, []);
-  const homeDirectory = useSyncExternalStore(directoryFlows.home.subscribe, directoryFlows.home.getSnapshot, directoryFlows.home.getSnapshot);
-  const workspaceDirectory = useSyncExternalStore(directoryFlows.workspace.subscribe, directoryFlows.workspace.getSnapshot, directoryFlows.workspace.getSnapshot);
-  const directoryChoosers = useMemo(() => {
-    const bind = (flow: DirectoryFlow, available: boolean): DirectoryChooser | undefined => available
-      ? (defaultPath, adopt) => flow.choose(defaultPath, platform.workspaces?.chooseDirectory, adopt)
-      : undefined;
-    return { home: bind(directoryFlows.home, homeDirectory.available), workspace: bind(directoryFlows.workspace, workspaceDirectory.available) };
-  }, [directoryFlows, homeDirectory.available, workspaceDirectory.available, platform]);
   const viewEntries = useSyncExternalStore(conversationViews.subscribe, conversationViews.getSnapshot, conversationViews.getSnapshot);
   const trajectory = useTrajectoryInspection(sessions.activeId, viewEntries);
   const officialChatActive = useSyncExternalStore(officialChat.subscribe, officialChat.getSnapshot, officialChat.getSnapshot);
@@ -872,15 +857,12 @@ function ProductShellInner({
 
   return (
     <PresentationRoot>
-      <DirectoryChooserContext.Provider value={directoryChoosers}>
       <div hidden aria-hidden="true">{renderSlot("amiba.session.observer", { readStates: sessions.sessions.filter(s => s.readAt !== undefined).map(s => ({sessionId: s.id, readAt: s.readAt!})) })}</div>
       <SurfaceProvider surfaces={surfaces} renderSlot={renderSlot}>
         <div
           data-amiba-product-shell
           className="relative h-screen w-full overflow-hidden bg-background text-foreground"
         >
-          {homeDirectory.owner.open && <DirectoryFlowSeat key={`home:${homeDirectory.requestId}`} content={renderSlot("conversation.hero.workspace.directoryFlow", homeDirectory.owner)} />}
-          {workspaceDirectory.owner.open && <DirectoryFlowSeat key={`workspace:${workspaceDirectory.requestId}`} content={renderSlot("sidebar.workspaces.directoryFlow", workspaceDirectory.owner)} />}
           {standaloneTitleBar && (
             <div
               data-testid="native-window-titlebar"
@@ -988,7 +970,6 @@ function ProductShellInner({
                 conversationRows,
                 turnTail: (runtimeTurn, openFile) => <TurnTail source={conversationSource(sessions.activeId)} runtimeTurn={runtimeTurn} openFile={openFile} render={owner => renderSlotChain("conversation.chat.turnTail", owner)} />,
                 messageImages: renderMessageImages,
-                approvalDetail: (callId) => renderSlot("conversation.approval.detail", { callId }),
                 assistantActions: (messageId) => renderSlot("conversation.chat.assistant-actions", { messageId: messageId as import("@amiba/extension-sdk").AssistantActionOwnerProps["messageId"] }),
                 toolView: renderToolViewSeat,
                 questionSeat: renderQuestionSeat,
@@ -1168,9 +1149,6 @@ function ProductShellInner({
           </span>
         </div>
       </SurfaceProvider>
-      </DirectoryChooserContext.Provider>
     </PresentationRoot>
   );
 }
-
-function DirectoryFlowSeat({ content }: { content: ReactNode }) { return <>{content}</>; }

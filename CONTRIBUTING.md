@@ -1,6 +1,6 @@
 # Contributing
 
-All code, configuration, generated assets, and documentation changes use a separate worktree and a pull request. Direct edits/commits on main and direct pushes to main are prohibited, including for administrators and release automation.
+Implement all code, configuration, generated assets, and documentation changes in a separate feature worktree and submit a pull request. Every feature and fix must also be merged into local `dev` and validated there before delivery. Direct edits/commits on main and direct pushes to main are prohibited, including for administrators and release automation.
 
 ```sh
 git fetch origin
@@ -15,6 +15,8 @@ git commit -m "Describe the change"
 git push -u origin feat/topic
 gh pr create --base main
 ```
+
+After opening the PR, inspect the existing local `dev` checkout for unrelated changes, merge the feature branch into it, and run the relevant local tests and application validation there. Preserve existing work and resolve integration conflicts without resetting `dev` or replacing it with `main`. Keep implementation commits on the feature branch and do not push `dev` unless requested. Report the local integration result separately from PR CI.
 
 Wait for required PR checks and merge through GitHub when authorized. Update a clean main checkout with `git pull --ff-only`. Never overwrite existing main-worktree changes or copy feature files into main.
 
