@@ -159,12 +159,7 @@ export function FeedbackDialog({
         <DialogContent size="compact">
           <DialogHeader>
             <DialogTitle>{amibaT("shell.feedback.title")}</DialogTitle>
-            <DialogDescription className="space-y-2" asChild>
-              <div>
-                <p>{amibaT("shell.feedback.destination")}</p>
-                <p>{amibaT("shell.feedback.privacy")}</p>
-              </div>
-            </DialogDescription>
+
           </DialogHeader>
           <div
             role="group"
@@ -214,6 +209,9 @@ export function FeedbackDialog({
               {state.submitting ? t("submitting") : amibaT("shell.feedback.submit")}
             </Button>
           </DialogFooter>
+          <DialogDescription className="text-[11px] leading-relaxed text-muted-foreground">
+            {amibaT("shell.feedback.destination")}
+          </DialogDescription>
         </DialogContent>
       </Dialog>
     </>

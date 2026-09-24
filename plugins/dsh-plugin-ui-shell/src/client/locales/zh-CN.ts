@@ -3,9 +3,8 @@ import type { ShellMessages } from "./en.js";
 /** Simplified Chinese counterpart of `./en.ts`, key-for-key. */
 export const zhCN: ShellMessages = {
   "shell.feedback.title": "向 DeepSeek 提交反馈",
-  "shell.feedback.destination": "此入口用于通过 DSH 官方反馈服务向 DeepSeek 提交反馈，提交内容包含当前对话日志。",
-  "shell.feedback.privacy": "Amiba 仅提供界面适配，不接收此反馈，也不会将反馈及对话日志收集到 Amiba 服务器。",
-  "shell.feedback.placeholder": "请描述您要反馈给 DeepSeek 的问题或建议。",
+  "shell.feedback.destination": "反馈及当前对话日志将提交给 DeepSeek 官方，Amiba 不接收或收集这些数据。",
+  "shell.feedback.placeholder": "请描述问题或建议…",
   "shell.feedback.submit": "提交给 DeepSeek",
   "app.initializing": "正在唤醒本地智能体",
   "shell.ask.action": "征询确认",

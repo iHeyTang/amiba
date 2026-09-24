@@ -104,8 +104,7 @@ it("keeps feedback draft visible on failure and forwards category/text edits", (
   });
   expect(edit).toHaveBeenCalledWith({ text: "new note" });
   expect(screen.getByRole("alert").textContent).toBe("error.noteTooLarge");
-  expect(screen.getByText(/Amiba only adapts|Amiba 仅提供界面适配/)).toBeTruthy();
-  expect(screen.getByText(/Submitted content includes logs|提交内容包含当前对话日志/)).toBeTruthy();
+  expect(screen.getByText(/Amiba does not receive or collect|Amiba 不接收或收集/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: /Submit to DeepSeek|提交给 DeepSeek/ }));
   expect(submit).toHaveBeenCalledOnce();
 });
