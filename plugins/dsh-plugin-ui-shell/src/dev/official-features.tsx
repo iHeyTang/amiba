@@ -145,9 +145,12 @@ function Preview() {
           切换明暗
         </Button>
       </header>
-      <section data-amiba-product-shell className="space-y-4 rounded-2xl p-6" style={{ background: "linear-gradient(125deg, #c7b5b9, #716d80 45%, #e1cac0)" }}>
+      <section data-amiba-product-shell className="space-y-4 rounded-2xl p-6" style={{ background: "repeating-linear-gradient(125deg, #c7b5b9 0px, #716d80 45px, #e1cac0 100px)" }}>
         <p data-home-greeting className="text-center text-sm">今天想一起做点什么？</p>
-        <div data-composer-card className="rounded-2xl p-4 text-sm text-muted-foreground">向 Amiba 提问…</div>
+        <div>
+          <div data-composer-context-rail className="mx-4 -mb-2 rounded-t-2xl border border-b-0 px-4 pb-4 pt-2 text-sm">workspace</div>
+          <div data-composer-card className="relative rounded-2xl border p-4 text-sm text-muted-foreground">向 Amiba 提问…</div>
+        </div>
         <div data-composer-stats className="flex justify-center gap-4">
           <button className="text-xs text-muted-foreground">13,673 tok · 缓存命中 93.42%</button>
           <button className="text-xs text-muted-foreground">1 轮 1 步</button>
