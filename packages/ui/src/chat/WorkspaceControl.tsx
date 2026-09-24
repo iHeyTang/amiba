@@ -54,6 +54,7 @@ export function WorkspaceControl({
       {onChoose ? (
         <button
           type="button"
+          data-workspace-chip
           ref={buttonRef}
           aria-haspopup={expanded === undefined ? undefined : "menu"}
           aria-expanded={expanded}
@@ -81,8 +82,9 @@ export function WorkspaceControl({
         </button>
       ) : (
         <div
+          data-workspace-chip
           title={path || undefined}
-          className="flex h-6 min-w-0 items-center gap-1.5 px-1.5 font-medium text-foreground/80"
+          className="flex h-6 min-w-0 items-center gap-1.5 rounded-md px-1.5 font-medium text-foreground/80"
         >
           <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="max-w-48 truncate">{parts?.name}</span>
