@@ -38,3 +38,25 @@ it("serializes destructive drains while navigation changes", async () => {
   await act(async () => { finish(); });
   await waitFor(() => expect(drain).toHaveBeenCalledTimes(2));
 });
+
+it("retains a claimed home prompt while slow session loading hides the conversation", async () => {
+  const { render, screen } = await import("@testing-library/react");
+  const { SessionLoadingBoundary } = await import("../SessionLoadingBoundary");
+  const payload = { sessionId: "prepared", text: "first message" };
+  const drain = vi.fn().mockResolvedValueOnce(payload).mockResolvedValue(null);
+  const receive = vi.fn(async () => {});
+  const open = vi.fn(async () => {});
+  function Conversation({ activeId }: { activeId: string }) {
+    usePendingPromptHandoff({ activeId, drain, tick: 0, open, receive, onError: vi.fn() });
+    return <div>conversation</div>;
+  }
+  const page = (activeId: string, loading: boolean) => <SessionLoadingBoundary loading={loading} fallback={<div>loading</div>}><Conversation activeId={activeId} /></SessionLoadingBoundary>;
+  const view = render(page("", false));
+  await waitFor(() => expect(open).toHaveBeenCalledWith("prepared"));
+  view.rerender(page("", true));
+  expect(screen.getByText("conversation").parentElement?.hidden).toBe(true);
+  expect(receive).not.toHaveBeenCalled();
+  view.rerender(page("prepared", false));
+  await waitFor(() => expect(receive).toHaveBeenCalledWith(payload));
+  expect(receive).toHaveBeenCalledTimes(1);
+});

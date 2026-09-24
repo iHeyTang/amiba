@@ -1,3 +1,4 @@
+import { SessionLoadingBoundary } from "./SessionLoadingBoundary";
 import { RightbarRegion, type RightbarGeometry } from "./RightbarRegion";
 import { ReplacementBoundary } from "./ReplacementBoundary";
 import { NewChatWorkspaceContext, type NewChatWorkspaceRequest } from "./new-chat-workspace";
@@ -1133,7 +1134,7 @@ function FullScreenChatViewInner({
                 )}
               />
               </ReplacementBoundary>
-              {displayedLoad ? (
+              <SessionLoadingBoundary loading={Boolean(displayedLoad)} fallback={displayedLoad ? (
                 <SessionLoadPanel
                   language={language}
                   retrying={sessions.sessionLoad?.status === "loading"}
@@ -1141,7 +1142,8 @@ function FullScreenChatViewInner({
                   onRetry={() => void onOpenSession(sessions.sessionLoad?.sessionId ?? displayedLoad!.sessionId)}
                   onHome={() => void onNewChatAndShow()}
                 />
-              ) : <ReplacementBoundary render={sessions.activeId ? slots?.sessionBody : undefined}><ConversationViewRegion headerViewIds={slots?.conversationHeaderViewIds} selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
+              ) : null}>
+              <ReplacementBoundary render={sessions.activeId ? slots?.sessionBody : undefined}><ConversationViewRegion headerViewIds={slots?.conversationHeaderViewIds} selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
                 <NewChatWorkspaceContext.Provider value={newChatWorkspace}>
                   <ChatSurface
                     messagesMaxWidth={messagesWidth}
@@ -1155,7 +1157,8 @@ function FullScreenChatViewInner({
                     messageSourceLabel={messageSourceLabel}
                   />
                 </NewChatWorkspaceContext.Provider>
-              </ConversationViewRegion></ReplacementBoundary>}
+              </ConversationViewRegion></ReplacementBoundary>
+              </SessionLoadingBoundary>
               </ReplacementBoundary>
             </PrimaryWorkspaceView>
             {slots?.mainPanel && (
