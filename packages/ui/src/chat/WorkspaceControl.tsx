@@ -65,7 +65,7 @@ export function WorkspaceControl({
             path ? t("workspace.changeFolder") : t("workspace.openFolder")
           }
           className={cn(
-            "flex h-6 min-w-0 items-center gap-1.5 rounded-md px-1.5 font-medium",
+            "flex h-6 min-w-0 items-center gap-1.5 rounded-full px-2.5 font-medium",
             "text-foreground/90 transition-colors hover:bg-background/70 hover:text-foreground",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
             "disabled:pointer-events-none disabled:opacity-50",
@@ -84,7 +84,7 @@ export function WorkspaceControl({
         <div
           data-workspace-chip
           title={path || undefined}
-          className="flex h-6 min-w-0 items-center gap-1.5 rounded-md px-1.5 font-medium text-foreground/80"
+          className="flex h-6 min-w-0 items-center gap-1.5 rounded-full px-2.5 font-medium text-foreground/80"
         >
           <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="max-w-48 truncate">{parts?.name}</span>

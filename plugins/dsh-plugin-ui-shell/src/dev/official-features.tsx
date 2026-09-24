@@ -148,7 +148,7 @@ function Preview() {
       <section data-amiba-product-shell className="space-y-4 rounded-2xl p-6" style={{ background: "repeating-linear-gradient(125deg, #c7b5b9 0px, #716d80 45px, #e1cac0 100px)" }}>
         <p data-home-greeting className="text-center text-sm">今天想一起做点什么？</p>
         <div>
-          <div data-composer-context-rail className="mx-4 -mb-2 rounded-t-2xl border border-b-0 bg-muted/45 px-4 pb-4 pt-2 text-sm"><button data-workspace-chip className="rounded-md px-1.5 py-1 text-xs">workspace</button></div>
+          <div data-composer-context-rail className="mx-4 -mb-2 rounded-t-2xl border border-b-0 bg-muted/45 px-4 pb-4 pt-2 text-sm"><button data-workspace-chip className="rounded-full px-2.5 py-1 text-xs">workspace</button></div>
           <div data-composer-card className="relative rounded-2xl border p-4 text-sm text-muted-foreground">向 Amiba 提问…</div>
         </div>
         <div data-composer-stats className="flex justify-center gap-4">

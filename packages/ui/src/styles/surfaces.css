@@ -5,6 +5,8 @@
   --amiba-user-color: var(--background);
   --amiba-header-fill: hsl(var(--background) / 0.6);
   --amiba-glass-opacity: 0.64;
+  --amiba-workspace-opacity: 0.24;
+  --amiba-workspace-hover-opacity: 0.38;
   --amiba-reading-opacity: 0.72;
   --amiba-input-opacity: 0.72;
   --amiba-glass-blur: 18px;
@@ -121,12 +123,12 @@
   border-color: hsl(var(--border) / 0.6);
 }
 [data-amiba-product-shell] [data-workspace-chip] {
-  background: hsl(var(--background) / var(--amiba-glass-opacity));
-  backdrop-filter: blur(var(--amiba-glass-blur)) saturate(1.08);
-  -webkit-backdrop-filter: blur(var(--amiba-glass-blur)) saturate(1.08);
+  background: hsl(var(--background) / var(--amiba-workspace-opacity));
+  backdrop-filter: blur(calc(var(--amiba-glass-blur) / 4)) saturate(1.08);
+  -webkit-backdrop-filter: blur(calc(var(--amiba-glass-blur) / 4)) saturate(1.08);
 }
 [data-amiba-product-shell] [data-workspace-chip]:is(:hover, :focus-visible) {
-  background: hsl(var(--background) / var(--amiba-input-opacity));
+  background: hsl(var(--background) / var(--amiba-workspace-hover-opacity));
 }
 [data-amiba-product-shell] [data-background-surface="sticky-message"] {
   border-radius: 12px;
@@ -147,6 +149,8 @@
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   [data-amiba-product-shell] {
     --amiba-glass-opacity: 1;
+    --amiba-workspace-opacity: 1;
+    --amiba-workspace-hover-opacity: 1;
     --amiba-reading-opacity: 1;
     --amiba-input-opacity: 1;
     --amiba-agent-opacity: 1;
@@ -158,6 +162,8 @@
 @media (prefers-reduced-transparency: reduce) {
   [data-amiba-product-shell] {
     --amiba-glass-opacity: 1;
+    --amiba-workspace-opacity: 1;
+    --amiba-workspace-hover-opacity: 1;
     --amiba-reading-opacity: 1;
     --amiba-input-opacity: 1;
     --amiba-agent-opacity: 1;
@@ -455,6 +461,8 @@
   --amiba-agent-color: var(--muted);
   --amiba-user-color: var(--secondary);
   --amiba-glass-opacity: 1;
+  --amiba-workspace-opacity: 1;
+  --amiba-workspace-hover-opacity: 1;
   --amiba-agent-opacity: 0;
   --amiba-message-opacity: 1;
   --amiba-input-opacity: 1;
