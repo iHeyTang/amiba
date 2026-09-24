@@ -1,21 +1,21 @@
 /* Shared Amiba material system. Imported by the global theme entry so desktop,
    plugins, portals and previews use the same roles without business overrides. */
 :root {
-  --amiba-surface-opacity: 0.46;
-  --amiba-card-opacity: 0.42;
-  --amiba-control-opacity: 0.36;
-  --amiba-control-hover-opacity: 0.56;
-  --amiba-field-opacity: 0.24;
-  --amiba-overlay-opacity: 0.58;
-  --amiba-modal-opacity: 0.68;
-  --amiba-overlay-blur: 28px;
-  --amiba-modal-blur: 36px;
+  --amiba-surface-opacity: 0.30;
+  --amiba-card-opacity: 0.26;
+  --amiba-control-opacity: 0.22;
+  --amiba-control-hover-opacity: 0.38;
+  --amiba-field-opacity: 0.16;
+  --amiba-overlay-opacity: 0.36;
+  --amiba-modal-opacity: 0.48;
+  --amiba-overlay-blur: 18px;
+  --amiba-modal-blur: 24px;
   --amiba-glass-highlight: rgb(255 255 255 / 0.24);
   --amiba-floating-shadow: inset 0 1px 0 var(--amiba-glass-highlight), 0 2px 8px rgb(0 0 0 / 0.07);
 }
 .dark {
-  --amiba-overlay-opacity: 0.72;
-  --amiba-modal-opacity: 0.76;
+  --amiba-overlay-opacity: 0.48;
+  --amiba-modal-opacity: 0.56;
   --amiba-glass-highlight: rgb(255 255 255 / 0.09);
   --amiba-floating-shadow: inset 0 1px 0 var(--amiba-glass-highlight), 0 2px 8px rgb(0 0 0 / 0.14);
 }

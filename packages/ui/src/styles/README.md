@@ -5,9 +5,9 @@
 Use the existing Button, Input, Textarea, Select, Card, Popover, Tooltip and Dialog primitives. Do not add per-feature glass backgrounds or shadows. Transparent media dialogs use the existing `appearance="bare"` opt-out. Settings framing shares the dialog material; inner settings layout scaffolds remain transparent.
 
 - Controls and cards tint their parent without another blur filter.
-- Popovers blur 28px behind a readable tint; dialogs use 36px and a denser tint.
+- Popovers blur 18px behind a readable tint; dialogs use 24px and a denser tint.
 - Floating shadows use one subtle edge shadow token, shared by the Tailwind preset.
-- Wallpaper composers use the reading surface contract in `surfaces.css`, with a lighter 58% backing and 18px blur.
+- Wallpaper composers use the reading surface contract in `surfaces.css`, with a lighter 40% backing and 18px blur.
 - Reduced-transparency and unsupported-filter environments use opaque backing.
 
 Explicit opacity utilities remain available for deliberate nested hierarchy. Avoid hardcoded white or opaque neutral surfaces in new product UI. Preserve semantic colors, focus rings, selected states and disabled states.
