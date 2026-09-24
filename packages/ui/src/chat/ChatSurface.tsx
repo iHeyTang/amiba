@@ -354,7 +354,7 @@ export interface ChatSurfaceProps {
     assistantActions?: (messageId: string) => ReactNode;
     turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
     messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
-    timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[];
+    timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string; placement?: "user" }[];
     turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
     /**
      * Live source for the host-owned timeline rows. Read here, in the pane,

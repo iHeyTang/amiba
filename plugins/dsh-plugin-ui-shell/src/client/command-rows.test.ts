@@ -24,4 +24,5 @@ it("keeps the official goal command echo in the Amiba timeline without an extens
   const rows = commandTimelineRows(snapshot as never, [], () => null);
   expect(rows.map(row => [row.id, row.seq])).toEqual([['goal-input', 3.9]]);
   expect(rows[0]!.content).toBeTruthy();
+  expect(rows[0]!.placement).toBe("user");
 });

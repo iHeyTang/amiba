@@ -266,7 +266,7 @@ export interface FullScreenChatViewProps {
     assistantActions?: (messageId: string) => ReactNode;
     turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
     messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
-    timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[];
+    timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string; placement?: "user" }[];
     turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
     /**
      * Host-owned timeline rows as a live source, consumed by the

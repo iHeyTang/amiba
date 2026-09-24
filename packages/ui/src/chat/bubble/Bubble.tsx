@@ -2204,7 +2204,7 @@ export function MessageTurns({
   messageImages?: BubbleProps["messageImages"];
   assistantActions?: (messageId: string) => ReactNode;
   turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
-  timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[];
+  timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string; placement?: "user" }[];
   turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
   openTurnFile?: (path: string) => void;
   messages: UiMessage[];
@@ -2259,7 +2259,7 @@ export function MessageTurns({
       extensionRows.set(id, row.content);
       const next = anchoredMessages.findIndex(message => message.runtimeSeq !== undefined && message.runtimeSeq > row.seq);
       anchoredMessages.splice(next < 0 ? anchoredMessages.length : next, 0, {
-        uiId: id, role: "assistant", content: "", runtimeSeq: row.seq,
+        uiId: id, role: row.placement === "user" ? "user" : "assistant", content: "", runtimeSeq: row.seq,
       });
     }
     const lastMessageForTurn = new Map<number, string>();
@@ -2288,7 +2288,7 @@ export function MessageTurns({
       // Plugin notices use the wire's user role, but do not start a user turn.
       if (m.role === "user" && !m.notice) {
         cur = { user: m, replies: [], userOrdinal };
-        userOrdinal += 1;
+        if (!extensionRows.has(m.uiId)) userOrdinal += 1;
         turns.push(cur);
       } else if (cur) {
         cur.replies.push(m);
@@ -2398,7 +2398,7 @@ export function MessageTurns({
             // as soon as its container enters the viewport.
             style={{ contentVisibility: "auto", containIntrinsicSize: "auto 160px" }}
           >
-            {turn.user && (
+            {turn.user && (extensionRows.has(turn.user.uiId) ? extensionRows.get(turn.user.uiId) :
               <UserStickyBubble
                 messageImages={messageImages}
                 m={turn.user}

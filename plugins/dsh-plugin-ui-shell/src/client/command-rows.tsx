@@ -32,13 +32,13 @@ export function commandTimelineRows(
   snapshot: Pick<ConversationSnapshot, "chat"> | undefined,
   registered: readonly string[],
   render: (owner: CommandRowOwner) => ReactNode,
-): { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[] {
+): { id: string; seq: number; content: ReactNode; replaceMessageId?: string; placement?: "user" }[] {
   const inputs = snapshot ? snapshot.chat.order.flatMap(key => {
     const node = snapshot.chat.nodes.get(key);
     if (node?.kind !== "command-input" || node.visibility !== "visible") return [];
     const data = node.data as { text?: unknown };
     if (typeof data.text !== "string") return [];
-    return [{ id: node.key, seq: node.anchorSeq, content: <div className="flex justify-end"><div className="max-w-[82%] whitespace-pre-wrap break-words rounded-2xl bg-muted px-4 py-2 text-sm">{data.text}</div></div> }];
+    return [{ id: node.key, seq: node.anchorSeq, placement: "user" as const, content: <div data-command-input className="flex justify-end px-3 py-2"><div className="max-w-[82%] whitespace-pre-wrap break-words rounded-2xl bg-muted/60 px-4 py-2 text-sm">{data.text}</div></div> }];
   }) : [];
   return [...inputs, ...commandRowOwners(snapshot)
     .filter(row => registered.includes(row.owner.node.name ?? ""))

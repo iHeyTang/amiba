@@ -1,3 +1,5 @@
+import { MessageTurns } from "@amiba/ui";
+import { commandTimelineRows } from "../client/command-rows";
 /** Local visual fixture: the production adapters with deterministic state; no Host writes. */
 import { useState, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
@@ -178,6 +180,7 @@ function Preview() {
         />
       </section>
       <section className="space-y-3 rounded-2xl border border-border p-4">
+        <MessageTurns messages={[{ uiId: "preview-answer", role: "assistant", content: "上一轮回复已结束。", runtimeSeq: 1 }]} timelineRows={commandTimelineRows({ chat: { order: ["preview-goal"], nodes: new Map([["preview-goal", { key: "preview-goal", kind: "command-input", visibility: "visible", anchorSeq: 2, data: { text: "/goal 完成工作区体验优化" } }]]) } } as never, [], () => null)} />
         <GoalDock
           {...({
             useProjection: () => ({
