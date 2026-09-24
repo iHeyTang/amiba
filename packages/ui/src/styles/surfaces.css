@@ -25,8 +25,8 @@
   /* Pinned rail headers frost their own backdrop so scrolling rows cannot
    * read through the strip, while the frosted wallpaper still shows. Nested
    * backdrop-filter inside the navigation pane is safe in Chromium. */
-  --amiba-rail-opacity: 0.4;
-  --amiba-rail-hover-opacity: 0.55;
+  --amiba-rail-opacity: 0.2;
+  --amiba-rail-hover-opacity: 0.35;
   --amiba-rail-blur: 16px;
 }
 .amiba-background-frame [data-amiba-product-shell],
