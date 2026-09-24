@@ -152,7 +152,7 @@ export function VisionSettings({
     <div aria-label={t("vision.settings")}>
       <div
         data-model-assignment="vision"
-        className="grid items-center gap-3 border-t border-border/60 bg-background px-4 py-3 sm:grid-cols-[8.5rem_minmax(0,1fr)]"
+        className="grid items-center gap-3 bg-background px-4 py-3 sm:grid-cols-[8.5rem_minmax(0,1fr)]"
       >
         <span id="vision-assignment-label" className="text-xs font-medium text-foreground">
           {t("vision.label")}
@@ -213,7 +213,7 @@ export function VisionSettings({
           if (!busy) void select(JSON.stringify({ provider, model }));
         }}
       />
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3">
         <div className="min-w-0 flex-1 text-xs text-muted-foreground">
           {error ? (
             <p role="alert" className="text-destructive">

@@ -86,7 +86,7 @@ export function MediaSettings({ api, onModelsChange }: { api: Api } & Partial<Pr
     {(['image.generate','video.generate','speech.synthesize','audio.generate'] as const).map(operation => {
       const saved = catalog?.defaults[operation];
       const selected = choicesFor(operation).find(choice => choice.provider === saved?.provider && choice.model === saved?.model && choice.protocol === saved?.protocol);
-      return <div key={operation} data-model-assignment={operation} className="grid items-center gap-3 border-t border-border/60 bg-background px-4 py-3 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
+      return <div key={operation} data-model-assignment={operation} className="grid items-center gap-3 bg-background px-4 py-3 sm:grid-cols-[8.5rem_minmax(0,1fr)]">
         <span id={`media-${operation}-label`} className="text-xs font-medium text-foreground">{t(`media.${operation}`)}</span>
         <button type="button" aria-labelledby={`media-${operation}-label media-${operation}-value`}
           disabled={busy || !catalog} onClick={() => setActive(operation)}
@@ -117,7 +117,7 @@ export function MediaSettings({ api, onModelsChange }: { api: Api } & Partial<Pr
         if (active && choice && !busy) void select(active, JSON.stringify({provider: choice.provider, model: choice.model, protocol: choice.protocol}));
       }}
     />
-    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-2">
+    <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3">
       <div className="min-w-0 flex-1 text-xs text-muted-foreground">
         {error ? <p role="alert" className="text-destructive">{t('media.error')}</p>
           : !catalog ? <p role="status">{t('media.loading')}</p>
