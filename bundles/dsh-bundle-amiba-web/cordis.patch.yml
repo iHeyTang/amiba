@@ -56,14 +56,27 @@
 # Keep ui-cordis enabled: it owns dynamic plugin approval, lifecycle cards,
 # the footer inventory panel and package-owned business views.
 
+# Internally mounted by ui-shell: official durable projection, Amiba node UI.
 - id: ui-workflow-run
   disabled: true
 
 # ui-deliverables stays enabled: UI Shell supplies the official turn data and
 # turn-tail chain while preserving the native conversation presentation.
 
-# Keep the official workspace service for directory-picker flows. Amiba owns
-# the surrounding layout; the official visual entries only mount in their slots.
+# Amiba owns the default UI and the official child-slot declarations. The shell
+# mounts published ui-workspace services without its two default visual entries.
+# Native/browse directory-picker plugins still contribute to the official slots.
+- id: ui-workspace
+  disabled: true
+
+# Amiba's approval controller and ApprovalBanner own the interaction and detail
+# slot. Mounting the official composer too duplicates that child declaration.
+- id: ui-approval
+  disabled: true
+
+# Preserve Amiba branding; third-party slot contributions remain enabled.
+- id: ui-brand-official
+  disabled: true
 
 # ENABLED in Phase 4.3 (completion). Full record:
 # docs/2026-08-15-dsh-native-architecture.md §4.1.
@@ -117,9 +130,12 @@
 - id: ui-skill
   disabled: true
 
+# These published plugins are mounted by ui-shell in scoped adapters.
+# Keep automatic copies off: official services/hooks + Amiba presentation.
 - id: ui-subagent
   disabled: true
 
+# Internally mounted by ui-shell: official session job mirror, Amiba popover.
 - id: ui-jobs
   disabled: true
 
@@ -141,6 +157,7 @@
 - id: ui-settings-plugins
   disabled: true
 
+# Published PlanChip is mounted once by ui-shell with Amiba theme tokens.
 - id: ui-plan
   disabled: true
 

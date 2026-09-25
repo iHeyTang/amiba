@@ -57,10 +57,16 @@ describe("DshPluginInventoryView", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("dsh-schedule")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /内部/ }));
+    await userEvent.click(screen.getByRole("combobox", { name: "来源" }));
+    await userEvent.click(
+      await screen.findByRole("option", { name: "内部", exact: true }),
+    );
     expect(screen.getByText("dsh-plugin-memory-memos")).toBeInTheDocument();
     expect(screen.getByText("dsh-schedule")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /外部/ }));
+    await userEvent.click(screen.getByRole("combobox", { name: "来源" }));
+    await userEvent.click(
+      await screen.findByRole("option", { name: "外部", exact: true }),
+    );
     expect(screen.queryByText("dsh-schedule")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "刷新插件清单" }));
@@ -204,20 +210,25 @@ it("merges package entries and distinguishes bundled browser from an external de
     />,
   );
   expect(
-    await screen.findByRole("button", { name: "全部 2" }),
+    await screen.findByRole("button", { name: "运行中 1" }),
   ).toBeInTheDocument();
-  expect(screen.getAllByText(computer)).toHaveLength(1);
-  expect(screen.getByText("开发连接")).toBeInTheDocument();
+  expect(screen.queryByText(computer)).not.toBeInTheDocument();
+
   expect(
     screen.queryByRole("button", { name: `移除 ${browser}` }),
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: `移除 ${computer}` }),
   ).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: "外部 1" }));
+  await userEvent.click(screen.getByRole("combobox", { name: "来源" }));
+  await userEvent.click(
+    await screen.findByRole("option", { name: "外部", exact: true }),
+  );
+  await userEvent.click(screen.getByRole("button", { name: "异常 1" }));
   expect(screen.queryByText(browser)).not.toBeInTheDocument();
   expect(screen.getByText(computer)).toBeInTheDocument();
   expect(screen.getByText("失败")).toBeInTheDocument();
+  expect(screen.getByText("开发连接")).toBeInTheDocument();
 });
 
 it("filters provider independently from internal/external origin", async () => {
@@ -271,7 +282,10 @@ it("filters provider independently from internal/external origin", async () => {
   );
   expect(screen.queryByText("@amiba/browser")).not.toBeInTheDocument();
   expect(screen.getAllByText("第三方 · Alice")).toHaveLength(2);
-  await userEvent.click(screen.getByRole("button", { name: "内部 2" }));
+  await userEvent.click(screen.getByRole("combobox", { name: "来源" }));
+  await userEvent.click(
+    await screen.findByRole("option", { name: "内部", exact: true }),
+  );
   expect(screen.getByText("@vendor/builtin")).toBeInTheDocument();
   expect(screen.queryByText("@vendor/installed")).not.toBeInTheDocument();
 });
@@ -296,7 +310,7 @@ it("shows one package row and reveals the distinct module states on expansion", 
     ],
   });
   render(<DshPluginInventoryView adapter={{ list }} />);
-  await screen.findByRole("button", { name: "全部 1" });
+  await screen.findByRole("button", { name: "运行中 1" });
   expect(screen.getByText("2 个模块")).toBeInTheDocument();
   expect(screen.queryByText(`${packageName}/startup`)).not.toBeInTheDocument();
   await userEvent.click(
@@ -304,7 +318,7 @@ it("shows one package row and reveals the distinct module states on expansion", 
   );
   expect(screen.getByText(`${packageName}/startup`)).toBeInTheDocument();
   expect(screen.getByText(`${packageName}/settings`)).toBeInTheDocument();
-  expect(screen.getByText("已停用")).toBeInTheDocument();
+  expect(screen.getAllByText("已停用")).toHaveLength(2);
   await userEvent.click(
     screen.getByRole("button", { name: `收起模块 ${packageName}` }),
   );
@@ -314,4 +328,59 @@ it("shows one package row and reveals the distinct module states on expansion", 
     "startup",
   );
   expect(screen.getByText("dsh-web-app")).toBeInTheDocument();
+});
+
+it("separates running, disabled and failed packages and scopes counts with search", async () => {
+  document.documentElement.lang = "zh-CN";
+  render(
+    <DshPluginInventoryView
+      adapter={{
+        list: async () => ({
+          entries: [
+            {
+              entryId: "active",
+              moduleName: "@test/active",
+              enabled: true,
+              fiberPhase: "active",
+            },
+            {
+              entryId: "waiting",
+              moduleName: "@test/waiting",
+              enabled: true,
+              fiberPhase: "pending",
+            },
+            {
+              entryId: "off",
+              moduleName: "@test/off",
+              enabled: false,
+              fiberPhase: "failed",
+            },
+            {
+              entryId: "broken",
+              moduleName: "@test/broken",
+              enabled: true,
+              fiberPhase: "failed",
+            },
+          ],
+        }),
+      }}
+    />,
+  );
+  expect(
+    await screen.findByRole("button", { name: "运行中 2" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByText("@test/waiting")).toBeInTheDocument();
+  expect(screen.queryByText("@test/off")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "已停用 1" }));
+  expect(screen.getByText("@test/off")).toBeInTheDocument();
+  expect(screen.queryByText("@test/active")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "异常 1" }));
+  expect(screen.getByText("@test/broken")).toBeInTheDocument();
+  await userEvent.type(
+    screen.getByRole("textbox", { name: "搜索模块或 Loader entry" }),
+    "broken",
+  );
+  expect(screen.getByRole("button", { name: "运行中 0" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "已停用 0" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "异常 1" })).toBeInTheDocument();
 });

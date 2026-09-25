@@ -2,9 +2,9 @@
  * Keep Amiba as the theme owner: aliases reference its live HSL tokens instead
  * of mounting ui-theme or copying the official light/dark boot palette. */
 :root {
-  --dsw-alias-button-ghost-active-border: hsl(var(--border));
+  --dsw-alias-button-ghost-active-border: hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 1));
   --dsw-alias-button-tool-bar-fill: hsl(var(--muted));
-  --dsw-alias-button-tool-bar-hover: hsl(var(--accent));
+  --dsw-alias-button-tool-bar-hover: hsl(var(--accent) / var(--amiba-control-hover-opacity, 0.56));
   --dsw-alias-tooltip-bg: hsl(var(--popover));
   --dsw-hovercard-bg: hsl(var(--popover));
   --dsw-font-markdown-code-font-family: var(--ds-font-family-code);
@@ -33,19 +33,19 @@
   --dsw-alias-label-tertiary: hsl(var(--muted-foreground));
   --dsw-alias-label-caption: hsl(var(--muted-foreground) / 0.75);
   --dsw-alias-label-dimmed: hsl(var(--muted-foreground) / 0.5);
-  --dsw-alias-border-l1: hsl(var(--border) / 0.5);
-  --dsw-alias-border-l2: hsl(var(--border) / 0.75);
-  --dsw-alias-border-l3: hsl(var(--border));
+  --dsw-alias-border-l1: hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 0.5));
+  --dsw-alias-border-l2: hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 0.75));
+  --dsw-alias-border-l3: hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 1));
   --dsw-alias-brand-primary: hsl(var(--primary));
   --dsw-alias-link: hsl(var(--primary));
-  --dsw-alias-interactive-bg-hover: hsl(var(--accent));
-  --dsw-alias-interactive-bg-active: hsl(var(--accent));
+  --dsw-alias-interactive-bg-hover: hsl(var(--accent) / var(--amiba-control-hover-opacity, 0.56));
+  --dsw-alias-interactive-bg-active: hsl(var(--accent) / var(--amiba-control-hover-opacity, 0.56));
   --dsw-alias-interactive-bg-hover-danger: hsl(var(--destructive) / 0.1);
   --dsw-alias-state-error-primary: hsl(var(--destructive));
-  --dsw-alias-button-floating-fill: hsl(var(--popover));
+  --dsw-alias-button-floating-fill: hsl(var(--background) / var(--amiba-control-opacity, 0.36));
   --dsw-alias-button-info-fill: hsl(var(--primary));
   --dsw-specific-menu: hsl(var(--popover));
-  --dsw-elevation-prominent: 0 0 0 1px hsl(var(--border)),
+  --dsw-elevation-prominent: 0 0 0 1px hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 1)),
     0 4px 16px rgb(0 0 0 / 0.14);
   --dsw-alias-scrollbar-bg-l1: hsl(var(--muted-foreground) / 0.25);
   --dsw-alias-scrollbar-hover-l1: hsl(var(--muted-foreground) / 0.45);
@@ -60,12 +60,12 @@
   --dsw-alias-bg-overlay: rgb(0 0 0 / 0.4);
   --dsw-alias-bg-skeleton: hsl(var(--muted));
   --dsw-alias-border-inverted: hsl(var(--primary-foreground) / 0.3);
-  --dsw-alias-border-l2-darkmode-thin: hsl(var(--border) / 0.75);
-  --dsw-alias-border-l4: hsl(var(--border));
+  --dsw-alias-border-l2-darkmode-thin: hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 0.75));
+  --dsw-alias-border-l4: hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 1));
   --dsw-alias-button-contrast-fill: hsl(var(--foreground));
-  --dsw-alias-button-elevated-fill: hsl(var(--popover));
-  --dsw-alias-button-floating-hover: hsl(var(--accent));
-  --dsw-alias-button-ghost-active-fill: hsl(var(--accent));
+  --dsw-alias-button-elevated-fill: hsl(var(--background) / var(--amiba-control-opacity, 0.36));
+  --dsw-alias-button-floating-hover: hsl(var(--accent) / var(--amiba-control-hover-opacity, 0.56));
+  --dsw-alias-button-ghost-active-fill: hsl(var(--accent) / var(--amiba-control-hover-opacity, 0.56));
   --dsw-alias-button-info-hover: hsl(var(--primary) / 0.9);
   --dsw-alias-button-primary-fill: hsl(var(--primary));
   --dsw-alias-button-primary-hover: hsl(var(--primary) / 0.9);
@@ -82,7 +82,7 @@
   --dsw-alias-markdown-code-block: hsl(var(--muted));
   --dsw-alias-markdown-code-block-banner: hsl(var(--muted));
   --dsw-alias-markdown-citation: hsl(var(--primary));
-  --dsw-alias-separator-primary: hsl(var(--border));
+  --dsw-alias-separator-primary: hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 1));
   --dsw-alias-state-warn-primary: hsl(var(--warning));
   --dsw-alias-state-warn-secondary: hsl(var(--warning) / 0.7);
   --dsw-alias-state-warn-label: hsl(var(--warning));
@@ -108,7 +108,7 @@
   --dsw-font-markdown-code-block-small: 400 11px/18px var(--ds-font-family-code);
   --dsw-elevation-panel: var(--dsw-elevation-prominent);
   --dsw-elevation-soft: 0 1px 4px rgb(0 0 0 / 0.08);
-  --dsw-elevation-stroke: 0 0 0 1px hsl(var(--border));
+  --dsw-elevation-stroke: 0 0 0 1px hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 1));
   --dsw-mask-blur: 4px;
   --dsw-specific-bubble: hsl(var(--muted));
   --dsw-specific-input-major: hsl(var(--background));

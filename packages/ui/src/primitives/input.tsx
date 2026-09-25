@@ -11,6 +11,7 @@ const Input = React.forwardRef<
 >(({ className, type, ...props }, ref) => {
   return (
     <input
+      data-glass-control="field"
       type={type}
       className={cn(
         "flex h-9 px-3 py-1.5",

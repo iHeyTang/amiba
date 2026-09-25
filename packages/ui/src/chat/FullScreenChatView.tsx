@@ -1,3 +1,4 @@
+import { SessionLoadingBoundary } from "./SessionLoadingBoundary";
 import { RightbarRegion, type RightbarGeometry } from "./RightbarRegion";
 import { ReplacementBoundary } from "./ReplacementBoundary";
 import { NewChatWorkspaceContext, type NewChatWorkspaceRequest } from "./new-chat-workspace";
@@ -29,7 +30,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type TransitionEvent as ReactTransitionEvent,
 } from "react";
@@ -43,7 +43,7 @@ import {
   type StorageChangeMap,
 } from "@amiba/app-runtime/platform";
 import { useResolvedTheme } from "../theme";
-import { cn } from "../primitives";
+import { cn, Button, Input, Popover, PopoverTrigger, PopoverContent } from "../primitives";
 import { PaneHeaderBar } from "../navigation/PaneHeaderBar";
 import { SidebarExpandControl } from "../navigation/SidebarExpandControl";
 import type { ChatSurfaceCapabilities } from "./internal/capabilities";
@@ -266,7 +266,7 @@ export interface FullScreenChatViewProps {
     assistantActions?: (messageId: string) => ReactNode;
     turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
     messageText?: (runtimeTurn:number|undefined,children:ReactNode,openFile:(path:string)=>void,timeline?: readonly import("@amiba/app-runtime/protocol").AssistantTimelineItem[])=>ReactNode;
-    timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[];
+    timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string; placement?: "user" }[];
     turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
     /**
      * Host-owned timeline rows as a live source, consumed by the
@@ -636,37 +636,29 @@ function FullScreenChatViewInner({
     [sessions.activeId, sessions.sessions],
   );
 
-  // Active chat-session title — one of the top-bar placeholder sources.
-  const activeChatTitle = useMemo<string>(
-    () => activeSession?.title?.trim() || "",
-    [activeSession],
-  );
-
-  // External title override pushed via ``useSetSessionTitle`` from anywhere in
-  // the subtree. Highest-priority slot in the placeholder chain.
+  // Delegated sessions retain their own lineage label; the leading title
+  // belongs to the top-level conversation, including nested subagents.
+  const headerSession = useMemo(() => {
+    let current = activeSession;
+    const visited = new Set<string>();
+    while (current?.origin === "subagent" && current.parentSessionId && !visited.has(current.id)) {
+      visited.add(current.id);
+      const parent = sessions.sessions.find(item => item.id === current!.parentSessionId);
+      if (!parent || visited.has(parent.id)) break;
+      current = parent;
+    }
+    return current;
+  }, [activeSession, sessions.sessions]);
+  const activeChatTitle = headerSession?.title?.trim() || "";
   const externalTitleOverride = useSessionTitle();
-
-  const chatTopBarPlaceholder = externalTitleOverride || activeChatTitle;
-  // A session ID explicitly claimed by its plugin is runtime-owned (the steward's
-  // own conversation is the first case): its title is pinned host-side, so
-  // the top bar renders it as plain text rather than an editable control.
-  const isActiveSessionRuntimeOwned = isRuntimeOwnedSession(
-    activeSession,
-    hiddenSessionIds,
-  );
+  const chatTopBarPlaceholder = headerSession !== activeSession ? activeChatTitle : externalTitleOverride || activeChatTitle;
   const canRenameActiveChatTitle = Boolean(
-    sessions.activeId &&
-      activeChatTitle &&
-      !externalTitleOverride &&
-      !isActiveSessionRuntimeOwned,
+    headerSession?.id && activeChatTitle && !externalTitleOverride &&
+    !isRuntimeOwnedSession(headerSession, hiddenSessionIds),
   );
-  const renameActiveChatTitle = useCallback(
-    (title: string) => {
-      if (!sessions.activeId) return;
-      void sessions.rename(sessions.activeId, title);
-    },
-    [sessions.activeId, sessions.rename],
-  );
+  const renameActiveChatTitle = useCallback((title: string) => {
+    if (headerSession) void sessions.rename(headerSession.id, title);
+  }, [headerSession, sessions.rename]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1116,8 +1108,9 @@ function FullScreenChatViewInner({
                 canvas={!sessions.activeId && !displayedLoad}
                 title={displayedLoad ? (sessions.sessions.find(item => item.id === displayedLoad?.sessionId)?.title ?? "") : chatTopBarPlaceholder}
                 icon={<Folder className="h-4 w-4" />}
-                actions={displayedLoad ? undefined : slots?.headerActions}
-                lineage={displayedLoad ? undefined : slots?.headerLineage}
+                actions={sessions.activeId && !displayedLoad ? slots?.headerActions : undefined}
+                lineage={sessions.activeId && !displayedLoad ? slots?.headerLineage : undefined}
+                onOpenTitle={headerSession && !displayedLoad ? () => { if (headerSession.id !== sessions.activeId) void onOpenSession(headerSession.id); } : undefined}
                 onRenameTitle={
                   canRenameActiveChatTitle && !displayedLoad ? renameActiveChatTitle : undefined
                 }
@@ -1133,7 +1126,7 @@ function FullScreenChatViewInner({
                 )}
               />
               </ReplacementBoundary>
-              {displayedLoad ? (
+              <SessionLoadingBoundary loading={Boolean(displayedLoad)} fallback={displayedLoad ? (
                 <SessionLoadPanel
                   language={language}
                   retrying={sessions.sessionLoad?.status === "loading"}
@@ -1141,7 +1134,8 @@ function FullScreenChatViewInner({
                   onRetry={() => void onOpenSession(sessions.sessionLoad?.sessionId ?? displayedLoad!.sessionId)}
                   onHome={() => void onNewChatAndShow()}
                 />
-              ) : <ReplacementBoundary render={sessions.activeId ? slots?.sessionBody : undefined}><ConversationViewRegion headerViewIds={slots?.conversationHeaderViewIds} selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
+              ) : null}>
+              <ReplacementBoundary render={sessions.activeId ? slots?.sessionBody : undefined}><ConversationViewRegion headerViewIds={slots?.conversationHeaderViewIds} selection={slots?.conversationViewSelection} onSelect={slots?.onConversationViewSelect} sessionId={sessions.activeId} entries={slots?.conversationViews ?? []} renderView={slots?.conversationView} chatLabel={language === "zh-CN" ? "对话" : "Chat"}>
                 <NewChatWorkspaceContext.Provider value={newChatWorkspace}>
                   <ChatSurface
                     messagesMaxWidth={messagesWidth}
@@ -1155,7 +1149,8 @@ function FullScreenChatViewInner({
                     messageSourceLabel={messageSourceLabel}
                   />
                 </NewChatWorkspaceContext.Provider>
-              </ConversationViewRegion></ReplacementBoundary>}
+              </ConversationViewRegion></ReplacementBoundary>
+              </SessionLoadingBoundary>
               </ReplacementBoundary>
             </PrimaryWorkspaceView>
             {slots?.mainPanel && (
@@ -1362,6 +1357,7 @@ interface ContentHeaderProps {
   actions?: ReactNode;
   lineage?: ReactNode;
   onRenameTitle?: (title: string) => void;
+  onOpenTitle?: () => void;
   sidebarCollapsed: boolean;
   showExpandControl?: boolean;
   iconBoxVisible?: boolean;
@@ -1378,6 +1374,7 @@ function ContentHeader({
   actions,
   lineage,
   onRenameTitle,
+  onOpenTitle,
   sidebarCollapsed,
   showExpandControl = sidebarCollapsed,
   iconBoxVisible = true,
@@ -1387,7 +1384,6 @@ function ContentHeader({
   className,
   canvas = false,
 }: ContentHeaderProps) {
-  const [titleEditing, setTitleEditing] = useState(false);
 
   return (
     <PaneHeaderBar
@@ -1400,19 +1396,7 @@ function ContentHeader({
         paddingRight: `var(--amiba-header-actions-right, ${HEADER_RIGHT_PADDING_PX}px)`,
         "--amiba-header-height": `${heightPx}px`,
       } as CSSProperties}
-      className={cn(titleEditing && "app-no-drag", className)}
-      onPointerDown={(event) => {
-        if (!titleEditing) return;
-        if (
-          event.target instanceof Element &&
-          event.target.closest("[data-content-header-title-editor]")
-        ) {
-          return;
-        }
-        if (document.activeElement instanceof HTMLElement) {
-          document.activeElement.blur();
-        }
-      }}
+      className={className}
       leading={
         <div
           data-content-header-leading
@@ -1429,36 +1413,15 @@ function ContentHeader({
               onExpand={onExpandSidebar}
               visible={showExpandControl}
             />
-            {title ? (
-              <span
-                className={cn(
-                  // `inline-flex items-center justify-center` on an explicit
-                  // h-4/w-4 box (matching the icon's own size) is load-bearing:
-                  // a plain inline `span` around an SVG establishes a text line
-                  // box sized by the ambient line-height, and the SVG's default
-                  // `vertical-align: baseline` then plants it off that line's
-                  // baseline rather than its center — a few px off from the
-                  // title text next to it. Flex sizes the box to exactly the
-                  // icon's own height, so the surrounding `items-center`
-                  // containers center the icon and the title on the same line.
-                  // The 1px downward nudge is optical: a 13px CJK title's
-                  // ideographic glyphs sit visibly lower than the geometric
-                  // middle of their line box (PingFang/Inter metrics), so a
-                  // mathematically centered 16px glyph reads as sitting high.
-                  "pointer-events-none inline-flex h-4 w-4 shrink-0 translate-y-px items-center justify-center text-muted-foreground",
-                  sidebarCollapsed && "ml-2",
-                )}
-              >
-                {icon}
-              </span>
-            ) : null}
+            {title ? <HeaderTitleRename title={title} icon={icon} onRename={onRenameTitle} /> : null}
           </HeaderIconBox>
           {title && (
-            <EditableContentHeaderTitle
-              title={title}
-              onRename={onRenameTitle}
-              onEditingChange={setTitleEditing}
-            />
+            <div data-content-header-title className="min-w-0 text-foreground/75">
+              <button type="button" onClick={onOpenTitle}
+                className="app-no-drag block max-w-full truncate rounded-md px-1.5 py-1 text-left text-[13px] font-medium tracking-tight hover:bg-foreground/[0.045] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40">
+                {title}
+              </button>
+            </div>
           )}
           {lineage ? (
             <div
@@ -1485,95 +1448,34 @@ function ContentHeader({
   );
 }
 
-function EditableContentHeaderTitle({
-  title,
-  onRename,
-  onEditingChange,
-}: {
+function HeaderTitleRename({ title, icon, onRename }: {
   title: string;
+  icon: ReactNode;
   onRename?: (title: string) => void;
-  onEditingChange?: (editing: boolean) => void;
 }) {
   const { t } = useT();
-  const [editing, setEditing] = useState(false);
+  const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(title);
-  const editorRef = useRef<HTMLInputElement>(null);
-
-  useLayoutEffect(() => {
-    if (!editing) return;
-    editorRef.current?.focus();
-    editorRef.current?.select();
-  }, [editing]);
-
-  useEffect(() => {
-    if (!editing) setDraft(title);
-  }, [editing, title]);
-
-  useEffect(() => {
-    if (!onRename) {
-      setEditing(false);
-      onEditingChange?.(false);
-    }
-  }, [onEditingChange, onRename]);
-
-  const commit = useCallback(() => {
-    const next = draft.trim();
-    if (next && next !== title.trim()) onRename?.(next);
-    setEditing(false);
-    onEditingChange?.(false);
-  }, [draft, onEditingChange, onRename, title]);
-
-  const cancel = useCallback(() => {
-    setDraft(title);
-    setEditing(false);
-    onEditingChange?.(false);
-  }, [onEditingChange, title]);
-
-  const onEditorKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLInputElement>) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        commit();
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        cancel();
-      }
-    },
-    [cancel, commit],
-  );
-
+  if (!onRename) return <span className="ml-2 inline-flex h-6 w-6 items-center justify-center text-muted-foreground">{icon}</span>;
   return (
-    <div data-content-header-title className="min-w-0 text-foreground/75">
-      {editing ? (
-        <input
-          ref={editorRef}
-          data-content-header-title-editor
-          aria-label={t("chat.rename")}
-          className="app-no-drag -my-1 -ml-1 min-w-0 max-w-[min(32rem,50vw,100%)] rounded-md bg-foreground/[0.045] px-1 py-1 text-[13px] font-medium tracking-tight text-foreground outline-none [field-sizing:content] selection:bg-primary/20 focus-visible:ring-1 focus-visible:ring-ring/40"
-          value={draft}
-          onBlur={commit}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={onEditorKeyDown}
-        />
-      ) : onRename ? (
-        <button
-          type="button"
-          aria-label={t("chat.rename")}
-          title={t("chat.rename")}
-          className="app-no-drag -my-1 block min-w-0 max-w-full cursor-default truncate rounded-xl px-1.5 py-1 text-left text-[13px] font-medium tracking-tight transition-colors hover:bg-foreground/[0.045] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
-          onClick={() => {
-            setDraft(title);
-            setEditing(true);
-            onEditingChange?.(true);
-          }}
-        >
-          {title}
+    <Popover open={open} onOpenChange={value => { setOpen(value); if (value) setDraft(title); }}>
+      <PopoverTrigger asChild>
+        <button type="button" aria-label={t("chat.rename")} title={t("chat.rename")}
+          className="app-no-drag ml-2 inline-flex h-6 w-6 shrink-0 cursor-default items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/[0.045] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/40">
+          {icon}
         </button>
-      ) : (
-        <span className="pointer-events-none block truncate text-[13px] font-medium tracking-tight">
-          {title}
-        </span>
-      )}
-    </div>
+      </PopoverTrigger>
+      <PopoverContent align="start" size="sm">
+        <form className="space-y-3" onSubmit={event => {
+          event.preventDefault();
+          const next = draft.trim();
+          if (next && next !== title.trim()) onRename(next);
+          setOpen(false);
+        }}>
+          <Input aria-label={t("chat.rename")} value={draft} onChange={event => setDraft(event.target.value)} autoFocus onFocus={event => event.target.select()} />
+          <Button type="submit" size="sm" disabled={!draft.trim()}>{t("chat.rename")}</Button>
+        </form>
+      </PopoverContent>
+    </Popover>
   );
 }

@@ -93,7 +93,7 @@ export function TopSection({
         <span
           className={cn(
             "absolute z-10 h-6 items-center gap-0.5",
-            rail && !actionReplacesChevron ? "right-7" : "right-1",
+            rail && !actionReplacesChevron ? "right-10" : "right-1",
             actionReplacesChevron || actionsAlwaysVisible
               ? "flex"
               : "hidden group-hover/topsection:flex group-focus-within/topsection:flex",

@@ -30,7 +30,6 @@
     "@amiba/dsh-plugin-resources": "workspace:*",
     "@amiba/dsh-plugin-schedule-adapter": "workspace:*",
     "@amiba/dsh-plugin-skills": "workspace:*",
-    "@amiba/dsh-plugin-steward": "workspace:*",
     "@amiba/dsh-plugin-usage": "workspace:*",
     "@amiba/dsh-plugin-session-features": "workspace:*",
     "@amiba/dsh-plugin-background-jobs": "workspace:*",

@@ -1,3 +1,5 @@
+import { useMessageGlass } from "./useMessageGlass";
+import { MessageActionButton as UserActionButton } from "./message-action-button";
 import { useConversationTurnWindow } from "../use-conversation-turn-window";
 import type { AssistantTimelineItem, MessageAttachment } from "@amiba/app-runtime/protocol";
 import { toolCallTreeContains } from "./nested-tool-calls";
@@ -1872,41 +1874,6 @@ function InterleavedAssistantFlow({
  */
 export const Bubble = memo(BubbleUnmemoized);
 
-function useMessageGlass(complete: boolean, align: "left" | "right") {
-  const chromeRef = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const chrome = chromeRef.current;
-    const body = chrome?.querySelector<HTMLElement>("[data-message-glass-body]");
-    const tab = chrome?.querySelector<HTMLElement>('[data-background-surface="message-actions"]');
-    if (!chrome || !body) return;
-    const measure = () => {
-      const w = chrome.clientWidth, h = body.offsetHeight;
-      if (!w || !h) return;
-      const th = tab?.offsetHeight ?? 0;
-      const tw = Math.min(tab?.offsetWidth ?? 0, w - 20);
-      // Alpha-mask the final filtered pixels, not just the layer geometry.
-      const path = `M12 0 H${w-12} Q${w} 0 ${w} 12 V${h-12} Q${w} ${h} ${w-12} ${h} H${tw+8} Q${tw} ${h} ${tw} ${h+8} V${h+th-12} Q${tw} ${h+th} ${tw-12} ${h+th} H12 Q0 ${h+th} 0 ${h+th-12} V12 Q0 0 12 0 Z`;
-      const closedPath = `M12 0 H${w-12} Q${w} 0 ${w} 12 V${h-12} Q${w} ${h} ${w-12} ${h} H${tw+8} Q${tw} ${h} ${tw} ${h} V${h} Q${tw} ${h} ${tw} ${h} H12 Q0 ${h} 0 ${h-12} V12 Q0 0 12 0 Z`;
-      const mirror = align === "right" ? `translate(${w} 0) scale(-1 1)` : "";
-      const mask = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h+th}" viewBox="0 0 ${w} ${h+th}">${th ? `<path d="${path}" transform="${mirror}" fill="white"/>` : `<rect width="${w}" height="${h}" rx="12" fill="white"/>`}</svg>`;
-      chrome.style.setProperty("--assistant-glass-mask", `url("data:image/svg+xml,${encodeURIComponent(mask)}")`);
-      const closedMask = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h+th}" viewBox="0 0 ${w} ${h+th}"><rect width="${w}" height="${h}" rx="12" fill="white"/></svg>`;
-      chrome.style.setProperty("--assistant-glass-mask-closed", `url("data:image/svg+xml,${encodeURIComponent(closedMask)}")`);
-      chrome.style.setProperty("--assistant-glass-closed", th ? `path('${closedPath}')` : "inset(0 round 12px)");
-      chrome.style.setProperty("--assistant-glass-outline", th ? `path('${path}')` : "inset(0 round 12px)");
-      chrome.style.setProperty("--message-glass-height", `${h+th}px`);
-      chrome.setAttribute("data-unified-glass", "");
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(chrome);
-    observer.observe(body);
-    if (tab) observer.observe(tab);
-    return () => observer.disconnect();
-  }, [complete, align]);
-  return chromeRef;
-
-}
 
 function ReplyTokenUsage({ messages }: { messages: UiMessage[] }) {
   const { t } = useT();
@@ -1966,9 +1933,9 @@ function AssistantReplyChrome({ messages, copyText, children, actions, timeForma
         <UserActionButton label={t(copied ? "common.copied" : "common.copy")} icon={copied ? <Check /> : <Copy />} onClick={() => {
           if (navigator.clipboard) void navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => undefined);
         }} />
-        {time && <time dateTime={time.dateTime} className="whitespace-nowrap text-[10px] tabular-nums text-muted-foreground">{time.label}</time>}
-        <ReplyTokenUsage messages={messages} />
         {last?.assistantMessageId ? actions?.(last.assistantMessageId) : null}
+        <ReplyTokenUsage messages={messages} />
+        {time && <time dateTime={time.dateTime} className="whitespace-nowrap text-[10px] tabular-nums text-muted-foreground">{time.label}</time>}
       </div>
     </TooltipProvider>}
   </div>;
@@ -2223,7 +2190,7 @@ export function MessageTurns({
   messageImages?: BubbleProps["messageImages"];
   assistantActions?: (messageId: string) => ReactNode;
   turnTail?: (runtimeTurn: number, openFile: (path: string) => void) => ReactNode;
-  timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string }[];
+  timelineRows?: readonly { id: string; seq: number; content: ReactNode; replaceMessageId?: string; placement?: "user" }[];
   turnTailAnchors?: readonly { runtimeTurn: number; endSeq: number }[];
   openTurnFile?: (path: string) => void;
   messages: UiMessage[];
@@ -2278,7 +2245,7 @@ export function MessageTurns({
       extensionRows.set(id, row.content);
       const next = anchoredMessages.findIndex(message => message.runtimeSeq !== undefined && message.runtimeSeq > row.seq);
       anchoredMessages.splice(next < 0 ? anchoredMessages.length : next, 0, {
-        uiId: id, role: "assistant", content: "", runtimeSeq: row.seq,
+        uiId: id, role: row.placement === "user" ? "user" : "assistant", content: "", runtimeSeq: row.seq,
       });
     }
     const lastMessageForTurn = new Map<number, string>();
@@ -2307,7 +2274,7 @@ export function MessageTurns({
       // Plugin notices use the wire's user role, but do not start a user turn.
       if (m.role === "user" && !m.notice) {
         cur = { user: m, replies: [], userOrdinal };
-        userOrdinal += 1;
+        if (!extensionRows.has(m.uiId)) userOrdinal += 1;
         turns.push(cur);
       } else if (cur) {
         cur.replies.push(m);
@@ -2417,7 +2384,7 @@ export function MessageTurns({
             // as soon as its container enters the viewport.
             style={{ contentVisibility: "auto", containIntrinsicSize: "auto 160px" }}
           >
-            {turn.user && (
+            {turn.user && (extensionRows.has(turn.user.uiId) ? extensionRows.get(turn.user.uiId) :
               <UserStickyBubble
                 messageImages={messageImages}
                 m={turn.user}
@@ -2626,33 +2593,6 @@ function WorkspaceChangesCard({
   );
 }
 
-function UserActionButton({
-  label,
-  icon,
-  onClick,
-}: {
-  label: string;
-  icon: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          onClick={onClick}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent/70 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 [&_svg]:h-3.5 [&_svg]:w-3.5"
-        >
-          {icon}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="text-[11px]">
-        {label}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
 
 function MessageImages({ images, render, compact = false }: {
   images: NonNullable<UiMessage["images"]>;

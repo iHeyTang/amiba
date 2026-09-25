@@ -1,3 +1,5 @@
+import { SessionStats } from "./official-features/stats.js";
+import { OFFICIAL_FEATURE_REGISTRANT } from "./official-features/mount.js";
 import { TranscriptScrollPositionContext } from "@amiba/ui";
 import { createContext, createElement, useContext, useState, type ComponentType, type ReactNode } from "react";
 import type { Context } from '@deepseek-ai/cordis';
@@ -12,6 +14,9 @@ export const OFFICIAL_CHAT_REGISTRANT = 'amiba:rc2-chat-defaults';
 export function mountOfficialChatPresentation(ctx: Context, apply: (ctx: Context) => void) {
   const slots = new Proxy(ctx.slots, { get(target, key) {
     if (key === 'register') return (options: Record<string, unknown>, component: unknown) => {
+      if (options.name === 'conversation.composer.dock' && options.id === 'stats') {
+        return target.register({ ...options, registrant: OFFICIAL_CHAT_REGISTRANT } as never, SessionStats as never);
+      }
       if (options.name !== 'conversation.chat.node' && options.name !== 'conversation.view') return () => {};
       const children = options.children as Record<string, unknown> | undefined;
       const borrowed = new Set(Object.keys(children ?? {}).filter(name => name !== 'conversation.chat.node'));
@@ -61,7 +66,7 @@ export function mountOfficialChatPresentation(ctx: Context, apply: (ctx: Context
 /** A registration switches just the transcript to the complete official projection. */
 export function officialChatRequested(slots: Context['slots']): ObservableSnapshot<boolean> {
   return {
-    getSnapshot: () => slots.entriesOfSlot('conversation.chat.node').some(entry => entry.registrant !== OFFICIAL_CHAT_REGISTRANT),
+    getSnapshot: () => slots.entriesOfSlot('conversation.chat.node').some(entry => entry.registrant !== OFFICIAL_CHAT_REGISTRANT && entry.registrant !== OFFICIAL_FEATURE_REGISTRANT),
     subscribe: listener => slots.subscribe('conversation.chat.node', listener),
   };
 }

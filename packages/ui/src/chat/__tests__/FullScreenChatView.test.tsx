@@ -509,7 +509,7 @@ describe("FullScreenChatView new-chat home", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("edits the active conversation title directly in the content header", async () => {
+  it("edits the conversation title from the folder popover", async () => {
     const sessions = makeSessions();
     mocks.useSessions.mockReturnValue(sessions);
 
@@ -552,22 +552,26 @@ describe("FullScreenChatView new-chat home", () => {
     );
     expect(sessions.rename).toHaveBeenCalledTimes(1);
 
+    await userEvent.click(screen.getByRole("button", { name: "Existing conversation", exact: true }));
+    expect(sessions.deselect).not.toHaveBeenCalled();
+
+  });
+
+  it("keeps the root title and returns from nested subagents without renaming the child", async () => {
+    const sessions = makeSessions();
+    const parent = sessions.sessions[0];
+    const child = { ...parent, id: "child", title: "Child task", origin: "subagent" as const, parentSessionId: parent.id };
+    const nested = { ...child, id: "nested", title: "Nested task", parentSessionId: child.id };
+    sessions.sessions = [parent, child, nested];
+    sessions.activeId = nested.id;
+    mocks.useSessions.mockReturnValue(sessions);
+    render(<FullScreenChatView client={makeClient() as never} openSettings={() => {}} openAgentDestination={() => {}} restoreSidebarViewOnMount={false} />);
+    await userEvent.click(screen.getByRole("button", { name: "Existing conversation", exact: true }));
+    expect(sessions.openTab).toHaveBeenCalledWith(parent.id);
     await userEvent.click(screen.getByRole("button", { name: "chat.rename" }));
     await userEvent.clear(screen.getByRole("textbox", { name: "chat.rename" }));
-    await userEvent.type(
-      screen.getByRole("textbox", { name: "chat.rename" }),
-      "Saved on blur",
-    );
-    const header = screen
-      .getByRole("textbox", { name: "chat.rename" })
-      .closest("header");
-    expect(header).toHaveClass("app-no-drag");
-    fireEvent.pointerDown(header!);
-    expect(sessions.rename).toHaveBeenLastCalledWith(
-      "session-1",
-      "Saved on blur",
-    );
-    expect(header).not.toHaveClass("app-no-drag");
+    await userEvent.type(screen.getByRole("textbox", { name: "chat.rename" }), "Root renamed{Enter}");
+    expect(sessions.rename).toHaveBeenCalledWith(parent.id, "Root renamed");
   });
 
   it("renders a runtime-owned session's title as plain text, not an editable control", async () => {

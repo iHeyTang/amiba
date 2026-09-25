@@ -1,5 +1,8 @@
 import { mkdtemp, mkdir, writeFile, readFile, realpath, symlink, rm } from "node:fs/promises"
 import { createRequire } from "node:module"
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
+import { pathToFileURL } from "node:url"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { expect, it } from "vitest"
@@ -31,6 +34,21 @@ it("keeps profile dependencies with private manifests and resolves installation 
     expect(await realpath(path.join(development.paths.profileDir, "node_modules/dsh-plugin-private"))).toBe(local)
     expect(await realpath(path.join(development.paths.profileDir, "node_modules/dsh-plugin-fallback"))).toBe(fallback)
     expect(JSON.parse(await readFile(base.profileManifest, "utf8"))).toEqual(original)
+    // Real ESM resolution: nextResolve mutates its context after a failed
+    // host lookup. A nested DSH dependency must still resolve at its caller.
+    const caller = path.join(root, "linked-plugin/index.mjs")
+    const nested = path.join(root, "linked-plugin/node_modules/@deepseek-ai/nested-only")
+    const hostShared = path.join(runtimeModules, "@deepseek-ai/shared")
+    const localShared = path.join(root, "linked-plugin/node_modules/@deepseek-ai/shared")
+    for (const directory of [nested, hostShared, localShared]) {
+      await write(path.join(directory, "package.json"), { type: "module", exports: "./index.js" })
+      await writeFile(path.join(directory, "index.js"), "export default true")
+    }
+    const { stdout } = await promisify(execFile)(process.execPath, [
+      "--import", development.preload, "--experimental-import-meta-resolve", "--input-type=module", "--eval",
+      `console.log(JSON.stringify([import.meta.resolve('@deepseek-ai/nested-only', ${JSON.stringify(pathToFileURL(caller).href)}), import.meta.resolve('@deepseek-ai/shared', ${JSON.stringify(pathToFileURL(caller).href)})]))`,
+    ])
+    expect(JSON.parse(stdout)).toEqual([pathToFileURL(path.join(nested, "index.js")).href, pathToFileURL(path.join(hostShared, "index.js")).href])
   } finally {
     await development?.dispose()
     await rm(root, { recursive: true, force: true })

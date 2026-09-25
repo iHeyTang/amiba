@@ -11,6 +11,7 @@ const Textarea = React.forwardRef<
 >(({ className, ...props }, ref) => {
   return (
     <textarea
+      data-glass-control="field"
       className={cn(
         "flex min-h-[60px] px-3 py-2",
         FORM_CONTROL_SURFACE_CLASS,
