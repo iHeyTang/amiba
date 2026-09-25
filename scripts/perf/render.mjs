@@ -73,7 +73,7 @@ const TURNS = ${TURNS};
 const messages = [];
 for (let i = 0; i < TURNS; i++) {
   messages.push({ uiId: \`u\${i}\`, role: "user", content: \`Question number \${i} with some body text\` });
-  messages.push({ uiId: \`a\${i}\`, role: "assistant", content: \`Answer number \${i} — longer markdown body with **bold**, \` + "\`code\`".repeat(4), assistantMessageId: \`a\${i}-msg\` });
+  messages.push({ uiId: \`a\${i}\`, role: "assistant", content: \`Answer number \${i} — longer markdown body with **bold** and \` + "\`code\`".repeat(60) + " ".repeat(0) + " para two: " + "words ".repeat(180), assistantMessageId: \`a\${i}-msg\` });
 }
 const props = { sessionId: "bench", messages, viewStateScope: {} };
 // Streaming-frame equivalent: a NEW messages array where only the last
