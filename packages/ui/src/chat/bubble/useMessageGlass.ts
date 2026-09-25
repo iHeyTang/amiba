@@ -4,6 +4,12 @@ export function useMessageGlass(complete: boolean, align: "left" | "right") {
   const chromeRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const chrome = chromeRef.current;
+    // While the group is still streaming its body grows on every flush;
+    // measuring here would force layout and rebuild the mask SVG per frame.
+    // Defer the glass to the moment the reply settles (this effect re-runs
+    // when `complete` flips): a flat surface is an acceptable trade for not
+    // paying a layout + Image.decode() cycle on every streamed frame.
+    if (!chrome || !complete) return;
     const body = chrome?.querySelector<HTMLElement>("[data-message-glass-body]");
     const tab = chrome?.querySelector<HTMLElement>('[data-background-surface="message-actions"]');
     if (!chrome || !body) return;

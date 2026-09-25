@@ -39,6 +39,14 @@ export function createSurfaceInteraction() {
         listeners.delete(listener);
       };
     },
+    /**
+     * True while at least one consumer is subscribed. The pointer-move
+     * handler only computes the region-relative coordinates when something
+     * can actually read them — during a normal conversation the only
+     * consumer (the empty-state visual) is not mounted, so a mouse sweep
+     * over the region must not force layout reads while a reply streams.
+     */
+    isObserved: () => listeners.size > 0,
     pointer: (x: number, y: number) =>
       update({ ...snapshot, pointer: { x, y } }),
     leave: () => update({ ...snapshot, pointer: null }),
@@ -148,6 +156,12 @@ export function InteractionRegion({
             ref={setElement}
             onPointerMoveCapture={(e) => {
               props.onPointerMoveCapture?.(e);
+              // Only pay for the layout read (getBoundingClientRect) when a
+              // consumer is subscribed. With none, the coordinates would be
+              // computed and thrown away on every mousemove — and during a
+              // streamed reply, forcing layout under the mouse every move
+              // steals time from the frame the bubble growth is painting.
+              if (!store.isObserved()) return;
               const r = e.currentTarget.getBoundingClientRect();
               if (r.width && r.height)
                 store.pointer(

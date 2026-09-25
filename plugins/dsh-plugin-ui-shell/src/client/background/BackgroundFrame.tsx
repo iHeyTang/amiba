@@ -140,6 +140,7 @@ export function BackgroundFrame({
               key={media.id}
               src={media.url}
               alt=""
+              decoding="async"
               style={{ objectFit: "cover" }}
               onLoad={() => setReadyId(media.id)}
               onError={failed}

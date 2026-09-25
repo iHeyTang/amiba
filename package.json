@@ -1,6 +1,6 @@
 {
   "name": "amiba",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "private": true,
   "description": "DSH-native desktop agent workspace with plugin-owned host capabilities.",
   "author": "iHeyTang",
@@ -19,6 +19,8 @@
     "runtime:verify": "pnpm --dir packages/app-runtime runtime:verify",
     "runtime:smoke": "pnpm --dir packages/app-runtime runtime:smoke",
     "verify:architecture": "node --test scripts/tool-dispatch-contract.test.mjs && node scripts/verify-dsh-architecture.mjs",
+    "perf": "node --experimental-strip-types scripts/perf/run.mjs",
+    "perf:compare": "node --experimental-strip-types scripts/perf/run.mjs --compare",
     "verify:pluginization": "node scripts/verify-pluginization.mjs",
     "build:desktop": "pnpm --dir apps/desktop build",
     "package:desktop": "pnpm --dir apps/desktop package",

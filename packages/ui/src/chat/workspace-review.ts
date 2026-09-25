@@ -95,6 +95,36 @@ export function workspaceFileTargets(event: ToolProgress): string[] {
   return targets;
 }
 
+/**
+ * Per-event review derivations, cached by the immutable ToolProgress object.
+ * ToolProgress instances are replaced (never mutated) when a tool updates,
+ * so a WeakMap keyed by the event object is self-invalidating.
+ *
+ * Why this matters: MessageTurns derives the workspace review for EVERY
+ * settled turn on EVERY streamed frame. `workspaceMutationDiff` scans the
+ * event's result (frequently tens of KB of patch text — trim() alone copies
+ * the whole string) across several keys. Without the cache a session with
+ * edit tools scans megabytes of result text per frame while a reply streams.
+ */
+const reviewDerivationsCache = new WeakMap<
+  ToolProgress,
+  { diff: string; paths: string[] }
+>();
+
+function reviewDerivationsFor(event: ToolProgress): {
+  diff: string;
+  paths: string[];
+} {
+  const cached = reviewDerivationsCache.get(event);
+  if (cached) return cached;
+  const derived = {
+    diff: workspaceMutationDiff(event),
+    paths: workspaceFileTargets(event),
+  };
+  reviewDerivationsCache.set(event, derived);
+  return derived;
+}
+
 export function workspaceReviewResourceFromEvents(
   events: ToolProgress[],
   reviewId: string,
@@ -111,8 +141,7 @@ export function workspaceReviewResourceFromEvents(
     )
     .map((event) => ({
       toolCallId: event.toolCallId,
-      diff: workspaceMutationDiff(event),
-      paths: workspaceFileTargets(event),
+      ...reviewDerivationsFor(event),
     }))
     .filter((entry) => entry.diff.length > 0 || entry.paths.length > 0);
 
