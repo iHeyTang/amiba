@@ -16,7 +16,7 @@
 | 2 确认问题 | 用数据/代码证据确认每个候选项（基准数字、调用路径、频率）；**没有证据的候选不进入修复** | 确认问题清单 + 每项证据 |
 | 3 明确指标 | 为每个问题定义可测量指标（见「指标表」）与目标值/阈值；约定实测方法（Tier A/B） | 指标定义（含 before 基线） |
 | 4 修复优化 | 在 feature worktree 实现；**视觉不变优先**（本次全局约束：任何改动不得改变当前视觉体验，除非用户明确豁免） | 代码 + 变更说明 |
-| 5 本地实测 | 运行 `scripts/perf/run.mjs`、相关 vitest 套件、必要时桌面构建后 DevTools 实测（Tier B） | after 数字 + 测试结果 |
+| 5 本地实测 | 运行 `scripts/perf/run.mjs`、相关 vitest 套件；**并跑 dev 构建同款全量 tsc**（`pnpm --dir plugins/dsh-plugin-ui-shell exec tsc -p tsconfig.build.json --noEmit` 与 `pnpm --dir packages/app-runtime exec tsc -p tsconfig.dsh-runtime.json --noEmit`——PR CI 不编译这两条路径，类型回归只在 dev 的 runtime:prepare 暴露，见 2026-09-25 的 TS2339 教训）；必要时桌面构建后 DevTools 实测（Tier B） | after 数字 + 测试结果 |
 | 6 确认指标对比 | before/after 对比（`run.mjs --compare <before.json> --out <after.json>` 自动输出 Δ% 表；`--fail-over 50` 使超过 ±50% 的劣化以非零退出码失败）；达标（达成目标或解释后接受）才进入下一步 | 对比表（写入 `scripts/perf/results/`） |
 | 7 完成优化 | 提交 feature 分支 → PR（CI + 必要检查）→ 合入本地 dev 并验证；更新待办/基线 | PR + dev 验证 |
 | 8 继续扫描 | 从其它模块/层重新开始第 1 步；把未动但记录的候选项列入「待办池」 | 更新后的待办池 |
