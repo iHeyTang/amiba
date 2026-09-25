@@ -1,5 +1,6 @@
 import { useT } from "@amiba/i18n";
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -82,7 +83,7 @@ function scrollCoordinateOf(
   );
 }
 
-export function ConversationTurnRail({
+function ConversationTurnRailUnmemoized({
   turns,
   viewportRef,
   contentRef,
@@ -350,3 +351,8 @@ export function ConversationTurnRail({
     </nav>
   );
 }
+
+// The rail's props (windowed turns + stable refs) do not change while a reply
+// streams, so memoizing it stops ChatSurface's per-flush re-renders from
+// re-reconciling the rail markers on every frame.
+export const ConversationTurnRail = memo(ConversationTurnRailUnmemoized);

@@ -86,6 +86,20 @@ import {
 } from "../workspace-file-links";
 
 /**
+ * While a reply is still streaming, render its text body as plain pre-wrap
+ * text instead of incrementally re-parsed markdown. Streamdown lexes the
+ * WHOLE accumulated text on every commit and diffs the resulting block tree,
+ * so a long streaming reply spends its frames re-parsing prose instead of
+ * painting it — the same reason plain-line CLIs (Codex, Claude Code) stay
+ * smooth on long outputs. Formatting (tables, code highlight, workspace
+ * links) snaps in the moment the reply settles, usually a second later.
+ *
+ * Flip to false to restore live markdown while streaming (still coalesced
+ * and frame-gated by the stream buffer, so merely "markdown at 30 fps").
+ */
+export const STREAMING_PLAIN_TEXT = true;
+
+/**
  * Resolves the plugin id on a message's `origin` to a name to show the user.
  * Returning `undefined` (nothing registered that id) falls back to rendering
  * a localized generic name, keeping internal identifiers out of the conversation.
@@ -559,6 +573,14 @@ function BubbleUnmemoized({
           </div>
         )}
         {hasBody && (
+          m.streaming && STREAMING_PLAIN_TEXT ? (
+            <div
+              data-streaming-plain-text
+              className="chat-md chat-md--plain whitespace-pre-wrap break-words"
+            >
+              {trace.bodyText}
+            </div>
+          ) : (
           <WorkspaceMarkdown
             sources={sliceTextSources(thinkingBodySource(joinTextSources(messageTextTimeline(m).filter(item=>item.kind==="text").map(timelineTextSource),"")),trace.bodyText)}
             components={chatMarkdownComponents}
@@ -570,6 +592,7 @@ function BubbleUnmemoized({
           >
             {trace.bodyText}
           </WorkspaceMarkdown>
+          )
         )}
         {showRunning && <TurnRunningIndicator />}
         {!m.streaming && m.agentFinalUrl && onOpenAgentDestination && (
@@ -895,7 +918,7 @@ type TurnTraceDetail =
  * in a bounded scroll area, pinned to the newest line unless the reader has
  * scrolled back up to study something.
  */
-function LiveReasoningPane({ text }: { text: string }) {
+function LiveReasoningPane({ text, streaming }: { text: string; streaming: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
 
@@ -916,6 +939,14 @@ function LiveReasoningPane({ text }: { text: string }) {
       }}
       className="ml-[7px] max-h-40 overflow-y-auto border-l border-border/60 py-1 pl-3 pr-1"
     >
+      {streaming && STREAMING_PLAIN_TEXT ? (
+        <div
+          data-streaming-plain-text
+          className="chat-md chat-md--plain whitespace-pre-wrap break-words px-1.5 text-xs text-muted-foreground/85"
+        >
+          {text}
+        </div>
+      ) : (
       <Streamdown
         components={chatMarkdownComponents}
         mode="static"
@@ -924,6 +955,7 @@ function LiveReasoningPane({ text }: { text: string }) {
       >
         {text}
       </Streamdown>
+      )}
     </div>
   );
 }
@@ -980,7 +1012,7 @@ function LiveReasoningRow({
         }
         {...(durationMs === undefined ? {} : { durationMs })}
         running={streaming}
-        detail={<LiveReasoningPane text={text} />}
+        detail={<LiveReasoningPane text={text} streaming={streaming} />}
         expanded={open}
         onExpandedChange={setOpen}
         expandTitle={t("sidepanel.trace.expandDetails")}
@@ -1784,6 +1816,14 @@ function InterleavedAssistantFlow({
                   key={segment.id}
                   data-live-tail={index === flow.length - 1 ? "" : undefined}
                 >
+                  {resultStreaming && STREAMING_PLAIN_TEXT ? (
+                    <div
+                      data-streaming-plain-text
+                      className="chat-md chat-md--plain whitespace-pre-wrap break-words"
+                    >
+                      {segment.text}
+                    </div>
+                  ) : (
                   <WorkspaceMarkdown
                     sources={segment.sources}
                     components={chatMarkdownComponents}
@@ -1797,6 +1837,7 @@ function InterleavedAssistantFlow({
                   >
                     {segment.text}
                   </WorkspaceMarkdown>
+                  )}
                 </div>
               ) : (
                 <ExecutionDisclosure
@@ -1825,6 +1866,14 @@ function InterleavedAssistantFlow({
             )}
             {resultText.length > 0 && (
               <div data-turn-result>
+                {resultStreaming && STREAMING_PLAIN_TEXT ? (
+                  <div
+                    data-streaming-plain-text
+                    className="chat-md chat-md--plain whitespace-pre-wrap break-words"
+                  >
+                    {resultText}
+                  </div>
+                ) : (
                 <WorkspaceMarkdown
                   sources={sliceTextSources(resultSource,resultText)}
                   components={chatMarkdownComponents}
@@ -1836,6 +1885,7 @@ function InterleavedAssistantFlow({
                 >
                   {resultText}
                 </WorkspaceMarkdown>
+                )}
               </div>
             )}
           </>
