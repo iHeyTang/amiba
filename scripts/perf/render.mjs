@@ -34,6 +34,7 @@ const flag = (name, fallback) => {
 };
 const TURNS = flag("--turns", 200);
 const SAMPLES = flag("--samples", 30);
+const GIANT_KB = flag("--giant", 0);
 
 // --- Bundle the real MessageTurns tree with esbuild (no fake imports) -----
 const esbuildDir = fs
@@ -70,6 +71,29 @@ setPlatform({
 import { MessageTurns } from "./src/chat/bubble/Bubble";
 
 const TURNS = ${TURNS};
+if (${GIANT_KB} > 0) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const rootG = createRoot(container);
+  const giantProps = (size) => ({
+    sessionId: "giant",
+    viewStateScope: {},
+    messages: [
+      { uiId: "u", role: "user", content: "write it all" },
+      { uiId: "a", role: "assistant", content: "head\\n" + "w".repeat(size), assistantMessageId: "a-msg", streaming: true },
+    ],
+  });
+  act(() => { rootG.render(createElement(MessageTurns, giantProps(10 * 1024))); });
+  const sizes = [20000, 50000, 100000, 200000, 300000];
+  const out = [];
+  for (const sz of sizes) {
+    const t0 = performance.now();
+    act(() => { rootG.render(createElement(MessageTurns, giantProps(sz))); });
+    out.push(sz + ":" + (performance.now() - t0).toFixed(3));
+  }
+  console.log(JSON.stringify({ giantLiveReply: true, frameMsPerSize: out }));
+  process.exitCode = 0;
+}
 const BIG = 8;
 const messages = [];
 for (let i = 0; i < TURNS; i++) {
