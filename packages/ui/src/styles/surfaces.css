@@ -22,11 +22,10 @@
   /* Inner cards share the pane blur, like the file-change review card. */
   --amiba-content-fill: hsl(var(--muted) / var(--amiba-content-opacity));
   --amiba-content-hover: hsl(var(--muted) / var(--amiba-content-hover-opacity));
-  /* Pinned rail headers borrow the selected session row's quiet fill and
-   * add a strong frost so wallpaper colors wash through the strip instead
-   * of reading as a solid band. Nested backdrop-filter is safe in
-   * Chromium. */
-  --amiba-rail-blur: 24px;
+  /* Pinned rail headers: a light 12% veil over a 12px lens — wallpaper
+   * colors stay vivid through the strip (通透) while scrolling rows are
+   * still blurred away. */
+  --amiba-rail-blur: 12px;
 }
 .amiba-background-frame [data-amiba-product-shell],
 [data-amiba-product-shell] [data-background-surface="layout"] {
@@ -121,15 +120,18 @@
 }
 [data-amiba-product-shell] [data-section-header="rail"] {
   border-radius: 8px;
-  background: var(--amiba-content-fill);
-  backdrop-filter: blur(var(--amiba-rail-blur)) saturate(1.08);
-  -webkit-backdrop-filter: blur(var(--amiba-rail-blur)) saturate(1.08);
+  /* Nearly-clear glass: a 12% veil keeps the wallpaper vivid through the
+   * strip; the 12px lens still blurs scrolling rows, and the hairline ring
+   * carries the chip definition. */
+  background: hsl(var(--background) / 0.12);
+  backdrop-filter: blur(var(--amiba-rail-blur)) saturate(1.12);
+  -webkit-backdrop-filter: blur(var(--amiba-rail-blur)) saturate(1.12);
   box-shadow:
-    inset 0 0 0 1px hsl(var(--foreground) / 0.06),
+    inset 0 0 0 1px hsl(var(--foreground) / 0.07),
     0 1px 2px hsl(var(--foreground) / 0.04);
 }
 [data-amiba-product-shell] [data-section-header="rail"]:hover {
-  background: var(--amiba-content-hover);
+  background: hsl(var(--background) / 0.22);
 }
 [data-amiba-product-shell] :is([data-session-row], [data-navigation-row]):is([data-active="true"], :hover, :focus-within) {
   background: var(--amiba-content-hover);
@@ -523,6 +525,10 @@
 }
 .amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] .amiba-blocked-image {
   background: hsl(var(--muted));
+}
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-section-header="rail"] {
+  /* Flat canvas: a 12% white veil would vanish; keep the strip visible. */
+  background: hsl(var(--muted) / 0.6);
 }
 
 /* rehype-harden blocked placeholders: Streamdown's default harden plugin
