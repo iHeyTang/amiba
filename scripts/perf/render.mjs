@@ -73,7 +73,7 @@ const TURNS = ${TURNS};
 const messages = [];
 for (let i = 0; i < TURNS; i++) {
   messages.push({ uiId: \`u\${i}\`, role: "user", content: \`Question number \${i} with some body text\` });
-  messages.push({ uiId: \`a\${i}\`, role: "assistant", content: \`Answer number \${i} — longer markdown body with **bold** and \` + "\`code\`".repeat(60) + " ".repeat(0) + " para two: " + "words ".repeat(180), assistantMessageId: \`a\${i}-msg\` });
+    messages.push({ uiId: \`a\${i}\`, role: "assistant", content: \`Answer number \${i} — longer markdown body with **bold** and \` + "\`code\`".repeat(60) + " para two: " + "words ".repeat(180) + " " + '\`\`\`typescript' + "\\n" + '  const fn0 = (x: number) => x * 0;' + "\\n" + '  const fn1 = (x: number) => x * 1;' + "\\n" + '  const fn2 = (x: number) => x * 2;' + "\\n" + '  const fn3 = (x: number) => x * 3;' + "\\n" + '  const fn4 = (x: number) => x * 4;' + "\\n" + '  const fn5 = (x: number) => x * 5;' + "\\n" + '  const fn6 = (x: number) => x * 6;' + "\\n" + '  const fn7 = (x: number) => x * 7;' + "\\n" + '  const fn8 = (x: number) => x * 8;' + "\\n" + '  const fn9 = (x: number) => x * 9;' + "\\n" + '  const fn10 = (x: number) => x * 10;' + "\\n" + '  const fn11 = (x: number) => x * 11;' + "\\n" + '  const fn12 = (x: number) => x * 12;' + "\\n" + '  const fn13 = (x: number) => x * 13;' + "\\n" + '  const fn14 = (x: number) => x * 14;' + "\\n" + '  const fn15 = (x: number) => x * 15;' + "\\n" + '  const fn16 = (x: number) => x * 16;' + "\\n" + '  const fn17 = (x: number) => x * 17;' + "\\n" + '  const fn18 = (x: number) => x * 18;' + "\\n" + '  const fn19 = (x: number) => x * 19;' + "\\n" + '  const fn20 = (x: number) => x * 20;' + "\\n" + '  const fn21 = (x: number) => x * 21;' + "\\n" + '  const fn22 = (x: number) => x * 22;' + "\\n" + '  const fn23 = (x: number) => x * 23;' + "\\n" + '  const fn24 = (x: number) => x * 24;' + "\\n" + '  const fn25 = (x: number) => x * 25;' + "\\n" + '  const fn26 = (x: number) => x * 26;' + "\\n" + '  const fn27 = (x: number) => x * 27;' + "\\n" + '  const fn28 = (x: number) => x * 28;' + "\\n" + '  const fn29 = (x: number) => x * 29;' + "\\n" + '\`\`\`' + " " + " ", assistantMessageId: \`a\${i}-msg\` });
 }
 const props = { sessionId: "bench", messages, viewStateScope: {} };
 // Streaming-frame equivalent: a NEW messages array where only the last
@@ -92,7 +92,9 @@ const root = createRoot(container);
 
 function median(ns) { const s=[...ns].sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; }
 
+let mountT0 = performance.now();
 act(() => { root.render(createElement(MessageTurns, props)); });
+const mountMs = performance.now() - mountT0;
 const mounts = [];
 for (let i = 0; i < ${SAMPLES}; i++) {
   const t0 = performance.now();
@@ -107,7 +109,7 @@ for (let i = 0; i < ${SAMPLES}; i++) {
   act(() => { root.render(createElement(MessageTurns, streamingProps)); });
   streams.push(performance.now() - t0);
 }
-console.log(JSON.stringify({ bundled: true, turns: TURNS, samples: ${SAMPLES}, mounted,
+console.log(JSON.stringify({ bundled: true, turns: TURNS, samples: ${SAMPLES}, mountMs, mounted,
   keystrokeMedianMs: median(mounts), keystrokeMaxMs: Math.max(...mounts),
   streamingMedianMs: median(streams), streamingMaxMs: Math.max(...streams) }));
 `;
