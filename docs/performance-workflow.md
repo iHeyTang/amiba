@@ -28,6 +28,7 @@
   ```
   node --experimental-strip-types scripts/perf/run.mjs [--sessions-dir DIR] [--top N] [--out FILE]
   node --experimental-strip-types scripts/perf/run.mjs --compare results/before.json --out results/after.json [--fail-over 50]
+  # 或 pnpm perf / pnpm perf:compare <before.json> --out <after.json>
   ```
 - **Tier A'（vitest 回归）**：`packages/ui/src/chat/__tests__/perf-regression.test.ts` —— 针对纯函数（2000 消息分组、2000 轮次窗口化+消息上限、40KB markdown 解析）的宽松上限回归（≈实测 100×，专防复杂度级回退）。另有语义级守卫（冲刷单提交、窗口守卫、缓存正确性）分散在相关套件。
 - **Tier B（桌面构建后）**：重新构建/安装应用后，用 DevTools Performance 面板录制：流式 30s 长回复的 Main 线程任务时长占比、每帧渲染耗时、rail 重渲染次数、内存（DOM 节点数）。Tier B 步骤在每次桌面构建后作为验证轮执行。
