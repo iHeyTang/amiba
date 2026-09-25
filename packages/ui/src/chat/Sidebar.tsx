@@ -378,7 +378,6 @@ export function Sidebar({
             onToggleSelected={toggleSelectedSession}
             showSectionHeaders={false}
             groupKeyFor={() => HISTORY_ALL_GROUP}
-            rowIconFor={() => <MessageSquare />}
             itemMenuItems={itemMenuItems}
             emptyLabel={t("sidepanel.sessions.tasks.empty")}
           />
