@@ -17,13 +17,18 @@
 | 3 明确指标 | 为每个问题定义可测量指标（见「指标表」）与目标值/阈值；约定实测方法（Tier A/B） | 指标定义（含 before 基线） |
 | 4 修复优化 | 在 feature worktree 实现；**视觉不变优先**（本次全局约束：任何改动不得改变当前视觉体验，除非用户明确豁免） | 代码 + 变更说明 |
 | 5 本地实测 | 运行 `scripts/perf/run.mjs`、相关 vitest 套件、必要时桌面构建后 DevTools 实测（Tier B） | after 数字 + 测试结果 |
-| 6 确认指标对比 | before/after 对比；达标（达成目标或解释后接受）才进入下一步 | 对比表（写入 `scripts/perf/results/`） |
+| 6 确认指标对比 | before/after 对比（`run.mjs --compare <before.json> --out <after.json>` 自动输出 Δ% 表；`--fail-over 50` 使超过 ±50% 的劣化以非零退出码失败）；达标（达成目标或解释后接受）才进入下一步 | 对比表（写入 `scripts/perf/results/`） |
 | 7 完成优化 | 提交 feature 分支 → PR（CI + 必要检查）→ 合入本地 dev 并验证；更新待办/基线 | PR + dev 验证 |
 | 8 继续扫描 | 从其它模块/层重新开始第 1 步；把未动但记录的候选项列入「待办池」 | 更新后的待办池 |
 
 ## 度量分级
 
-- **Tier A（任何环境可跑）**：`scripts/perf/run.mjs` — 对真实会话日志（zstd JSONL）解码并测量：会话体积/行数/最大消息、窗口化前后挂载行数、每帧分组耗时、Streamdown 解析耗时（10KB/40KB）、冲刷频率算术。纯 Node，无 GUI 依赖，出入 `scripts/perf/results/*.json`。
+- **Tier A（任何环境可跑）**：`scripts/perf/run.mjs` — 对真实会话日志（zstd JSONL）解码并测量：会话体积/行数/最大消息、窗口化前后挂载行数、每帧分组耗时、Streamdown 解析耗时（10KB/40KB）、冲刷频率算术、review 扫描冷/热、冷开解码。纯 Node，无 GUI 依赖，出入 `scripts/perf/results/*.json`（目录 gitignore）。用法：
+
+  ```
+  node --experimental-strip-types scripts/perf/run.mjs [--sessions-dir DIR] [--top N] [--out FILE]
+  node --experimental-strip-types scripts/perf/run.mjs --compare results/before.json --out results/after.json [--fail-over 50]
+  ```
 - **Tier A'（vitest 回归）**：`packages/ui/src/chat/__tests__/perf-regression.test.ts` —— 针对纯函数（2000 消息分组、2000 轮次窗口化+消息上限、40KB markdown 解析）的宽松上限回归（≈实测 100×，专防复杂度级回退）。另有语义级守卫（冲刷单提交、窗口守卫、缓存正确性）分散在相关套件。
 - **Tier B（桌面构建后）**：重新构建/安装应用后，用 DevTools Performance 面板录制：流式 30s 长回复的 Main 线程任务时长占比、每帧渲染耗时、rail 重渲染次数、内存（DOM 节点数）。Tier B 步骤在每次桌面构建后作为验证轮执行。
 
