@@ -30,11 +30,14 @@ function sameDocument(a: ComposerDraftDocument, b: ComposerDraftDocument): boole
   for (let i = 0; i < pa.length; i++) {
     const p = pa[i]!, q = pb[i]!;
     if (p === q) continue;
-    if (p.kind !== q.kind) return false;
-    if (p.kind === "text") { if (p.text !== q.text) return false; continue; }
+    if (p.kind === "text") {
+      if (q.kind !== "text" || p.text !== q.text) return false;
+      continue;
+    }
+    if (p.kind !== "mention" || q.kind !== "mention") return false;
     if (p.raw !== q.raw) return false;
-    if (p.mention?.type !== q.mention?.type || p.mention?.display !== q.mention?.display) return false;
-    const ps = p.mention?.payload, qs = q.mention?.payload;
+    if (p.mention.type !== q.mention.type || p.mention.display !== q.mention.display) return false;
+    const ps = p.mention.payload, qs = q.mention.payload;
     if ((ps?.source ?? null) !== (qs?.source ?? null) || (ps?.ref ?? null) !== (qs?.ref ?? null)) return false;
   }
   return true;
