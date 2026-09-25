@@ -1999,7 +1999,7 @@ function ReplyTokenUsage({ messages }: { messages: UiMessage[] }) {
   </Tooltip>;
 }
 
-function AssistantReplyChrome({ messages, copyText, children, actions, timeFormat, timeLocale }: {
+const AssistantReplyChrome = memo(function AssistantReplyChromeInner({ messages, copyText, children, actions, timeFormat, timeLocale }: {
   messages: UiMessage[];
   copyText: string;
   children: ReactNode;
@@ -2034,7 +2034,7 @@ function AssistantReplyChrome({ messages, copyText, children, actions, timeForma
       </div>
     </TooltipProvider>}
   </div>;
-}
+});
 
 /**
  * Sticky user-question strip with a static height cap.
@@ -2263,7 +2263,7 @@ export interface ConversationTurnsWindow {
  * reader scrolls through a long assistant reply, the originating question
  * stays visible — Cursor-style.
  */
-export function MessageTurns({
+function MessageTurnsInner({
   messageText,
   turnTail,
   timelineRows,
@@ -2599,6 +2599,8 @@ export function MessageTurns({
     </>
   );
 }
+
+export const MessageTurns = memo(MessageTurnsInner);
 
 function WorkspaceChangesCard({
   resource,

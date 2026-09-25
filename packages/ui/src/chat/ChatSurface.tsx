@@ -2217,6 +2217,17 @@ export default function ChatSurface({
   // any of those flows now means editing one file, not three.
 
   const messages = sessions.activeMessages as UiMessage[];
+  // Stable identity for MessageTurns' memo boundary: each keystroke re-renders
+  // ChatSurface, and an inline turn-file opener would defeat the memo and
+  // rebuild the entire conversation tree on every key press in long sessions.
+  const openTurnFile = useCallback((path: string) => {
+    if (path === ".") {
+      if (!workspacePane.files || !sessions.activeId)
+        throw new Error("Workspace folder access is unavailable.");
+      return workspacePane.files.openExternal(sessions.activeId, path);
+    }
+    return openWorkspaceFile({ path });
+  }, [workspacePane.enabled, workspacePane.files, sessions.activeId, openWorkspaceFile]);
   const restorableTurnOrdinals = useMemo(
     () =>
       new Set(
@@ -2569,13 +2580,7 @@ export default function ChatSurface({
                             turnTail={slots?.turnTail}
                             timelineRows={timelineRows}
                             turnTailAnchors={turnTailAnchors}
-                            openTurnFile={path => {
-                              if (path === ".") {
-                                if (!workspacePane.files || !sessions.activeId) throw new Error("Workspace folder access is unavailable.");
-                                return workspacePane.files.openExternal(sessions.activeId, path);
-                              }
-                              return openWorkspaceFile({ path });
-                            }}
+                            openTurnFile={openTurnFile}
                             sessionId={sessions.activeId ?? undefined}
                             messages={messages}
                             onReviewWorkspaceChanges={
