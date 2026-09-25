@@ -1,7 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { act, render } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { parseMarkdownIntoBlocks } from "streamdown";
 
+import { createElement } from "react";
+
+import { MessageTurns } from "../bubble/Bubble";
 import { MESSAGE_TURN_WINDOW, windowTurns } from "../turn-window";
+
+vi.mock("@amiba/i18n", () => ({ useT: () => ({ t: (key: string) => key }) }));
 
 /**
  * Tier A' — deterministic-ish regression ceilings for the hot pure paths.
@@ -71,5 +77,59 @@ describe("performance regression ceilings", () => {
     // measured ~1-2 ms; a per-frame full-parse regression at 60fps would be
     // > 16 ms and this ceiling catches the wall-time blowup
     expect(elapsed).toBeLessThan(250);
+  });
+});
+describe("conversation render pipeline (Tier A' end-to-end)", () => {
+  it("mounts a 160-row window (with a live streaming row) well under the ceiling", () => {
+    // 20 settled turns (~150 rows) + one live streaming turn with a long
+    // raw-text reply, mirroring the post-windowing steady state.
+    const messages = [];
+    let seq = 0;
+    for (let t = 0; t < 20; t++) {
+      messages.push({
+        uiId: `u${t}`,
+        role: "user",
+        content: `问题 ${t}`,
+        runtimeTurn: t,
+        runtimeSeq: seq++,
+      });
+      messages.push({
+        uiId: `a${t}`,
+        role: "assistant",
+        content: `## 回答 ${t}\n\n正文 **加粗** 与 \`code\`。\n\n\`\`\`ts\nconst x = ${t};\n\`\`\``,
+        runtimeTurn: t,
+        runtimeSeq: seq++,
+        streaming: false,
+      });
+    }
+    messages.push({
+      uiId: "u-live",
+      role: "user",
+      content: "继续",
+      runtimeTurn: 20,
+      runtimeSeq: seq++,
+    });
+    messages.push({
+      uiId: "a-live",
+      role: "assistant",
+      content: "正在流式输出的原始文本…".repeat(200),
+      runtimeTurn: 20,
+      runtimeSeq: seq++,
+      streaming: true,
+    });
+    const t0 = performance.now();
+    let container: HTMLElement | undefined;
+    act(() => {
+      container = render(createElement(MessageTurns, { messages })).container;
+    });
+    const elapsed = performance.now() - t0;
+    console.log(`[perf] 160-row window render: ${elapsed.toFixed(0)} ms`);
+    // jsdom + streamdown is far slower than a real browser; the ceiling only
+    // guards against a pathological pipeline regression (e.g. full-history
+    // mount returning).
+    expect(elapsed).toBeLessThan(4000);
+    expect(
+      container.querySelectorAll("[data-conversation-user-turn]").length,
+    ).toBeGreaterThan(0);
   });
 });

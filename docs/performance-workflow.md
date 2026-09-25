@@ -43,6 +43,8 @@
 | glass-measure-per-frame | 流式期间玻璃测量/强制布局/Image.decode | B | — | 0（仅落定） |
 | window-change-report-sec | onTurnsWindowChange 每秒触发 | B | — | ≈0（仅在变化） |
 | session-open-decode-ms | 冷启动解码（缓存未命中，zstd→JSONL） | A | 18MB 会话 82ms / 11MB 会话 38ms | 记录对比 |
+| window-render-ms (jsdom) | 160 行窗口端到端挂载（20 个已落定 markdown + 流式行） | A' | 121ms（jsdom；真实浏览器 ≈ 1/10） | 记录对比 |
+| index-stringify-ms | 326 条会话索引 JSON.stringify | A | 0.046ms | 噪音，关闭 |
 
 ## 扫描检查清单（第 1 步用）
 
