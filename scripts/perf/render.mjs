@@ -76,6 +76,15 @@ for (let i = 0; i < TURNS; i++) {
   messages.push({ uiId: \`a\${i}\`, role: "assistant", content: \`Answer number \${i} — longer markdown body with **bold**, \` + "\`code\`".repeat(4), assistantMessageId: \`a\${i}-msg\` });
 }
 const props = { sessionId: "bench", messages, viewStateScope: {} };
+// Streaming-frame equivalent: a NEW messages array where only the last
+// assistant message's content grew by a token (the live reply).
+const growth = "MORE".repeat(${TURNS > 80 ? 20 : 8});
+const streamingMessages = messages.map((m, i) => (i === messages.length - 1 && !m.streaming)
+  ? { ...m, content: m.content + growth, streaming: true }
+  : i === messages.length - 2 && m.role === "assistant"
+    ? { ...m, streaming: true }
+    : m);
+const streamingProps = { ...props, messages: streamingMessages };
 
 const container = document.createElement("div");
 document.body.appendChild(container);
@@ -91,7 +100,16 @@ for (let i = 0; i < ${SAMPLES}; i++) {
   mounts.push(performance.now() - t0);
 }
 const mounted = container.querySelectorAll("[data-conversation-user-turn]").length;
-console.log(JSON.stringify({ bundled: true, turns: TURNS, samples: ${SAMPLES}, mounted, keystrokeMedianMs: median(mounts), keystrokeMaxMs: Math.max(...mounts) }));
+act(() => { root.render(createElement(MessageTurns, streamingProps)); });
+const streams = [];
+for (let i = 0; i < ${SAMPLES}; i++) {
+  const t0 = performance.now();
+  act(() => { root.render(createElement(MessageTurns, streamingProps)); });
+  streams.push(performance.now() - t0);
+}
+console.log(JSON.stringify({ bundled: true, turns: TURNS, samples: ${SAMPLES}, mounted,
+  keystrokeMedianMs: median(mounts), keystrokeMaxMs: Math.max(...mounts),
+  streamingMedianMs: median(streams), streamingMaxMs: Math.max(...streams) }));
 `;
 
 const result = esbuild.buildSync({
