@@ -26,7 +26,7 @@
    * add a strong frost so wallpaper colors wash through the strip instead
    * of reading as a solid band. Nested backdrop-filter is safe in
    * Chromium. */
-  --amiba-rail-blur: 48px;
+  --amiba-rail-blur: 24px;
 }
 .amiba-background-frame [data-amiba-product-shell],
 [data-amiba-product-shell] [data-background-surface="layout"] {
