@@ -355,6 +355,15 @@
   -webkit-backdrop-filter: none;
   border-radius: 0;
 }
+/* While a reply is still streaming the chrome defers its glass mask (see
+   useMessageGlass) so a growing bubble never forces layout and re-blurs the
+   backdrop every frame. Give the body a flat, near-solid card instead, so
+   the streamed text never floats naked over the wallpaper; the glass card
+   takes over the moment the reply settles. */
+[data-amiba-product-shell] [data-assistant-message-chrome]:not([data-unified-glass]) [data-message-glass-body] {
+  background: hsl(var(--amiba-agent-color) / 0.92);
+  border-radius: 12px;
+}
 [data-assistant-reply-group] > [data-execution-summary] {
   padding: 12px 16px;
 }
