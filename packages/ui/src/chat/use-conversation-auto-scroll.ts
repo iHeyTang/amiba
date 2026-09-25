@@ -51,8 +51,13 @@ export function useConversationAutoScroll(
       }
       // Hidden panels have no layout. Wait for visibility/content to return.
       if (!viewport.clientHeight) return;
-      if (following.current) viewport.scrollTop = viewport.scrollHeight;
-      else if (restoringAnchor && anchor) {
+      if (following.current) {
+        // Writing the same scrollTop is a no-op layout-wise, but the value
+        // read itself can still dirty the scroll position on engines that
+        // clamp; only write when the position actually drifted off the tail.
+        const target = viewport.scrollHeight;
+        if (viewport.scrollTop !== target) viewport.scrollTop = target;
+      } else if (restoringAnchor && anchor) {
         const turn = [...viewport.querySelectorAll<HTMLElement>("[data-conversation-user-turn]")]
           .find(node => node.dataset.conversationUserTurn === anchor!.id);
         if (turn) {

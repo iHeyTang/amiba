@@ -64,6 +64,7 @@ function WallpaperImage({ wallpaper }: { wallpaper: Wallpaper }) {
       src={wallpaper.url}
       alt=""
       aria-hidden
+      decoding="async"
       onLoad={() => setLoaded(true)}
       className={cn(
         "absolute inset-0 -z-10 h-full w-full object-cover",

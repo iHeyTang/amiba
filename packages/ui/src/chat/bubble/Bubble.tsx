@@ -2330,6 +2330,7 @@ export function MessageTurns({
   // fire on every render of a streaming conversation.
   const [turnWindow, expandTurnWindow, messageCap] = useConversationTurnWindow(sessionId, viewStateScope, turns.length);
   const windowSentinelRef = useRef<HTMLDivElement>(null);
+  const lastTurnWindowKeyRef = useRef<string>("");
   const { visible: visibleTurns, hidden: hiddenTurns } = useMemo(
     // The turn-count window alone does not bound tool-heavy sessions (DSH
     // emits one assistant message per step, so one turn can hold dozens of
@@ -2346,6 +2347,14 @@ export function MessageTurns({
     [turns, turnWindow, messageCap],
   );
   useEffect(() => {
+    // The window slice is memoized, but its ARRAY identity still churns on
+    // every streamed frame (the turn grouping rebuilds with the new
+    // messages array). Only the rail consumes this — it must not re-render
+    // 30×/s while a reply grows, so report the window only when its actual
+    // contents change (first visible turn edge + size + hidden count).
+    const key = `${hiddenTurns}:${visibleTurns.length}:${visibleTurns[0]?.user?.uiId ?? ""}:${visibleTurns.at(-1)?.user?.uiId ?? ""}`;
+    if (key === lastTurnWindowKeyRef.current) return;
+    lastTurnWindowKeyRef.current = key;
     onTurnsWindowChange?.({ visible: visibleTurns, hidden: hiddenTurns });
   }, [onTurnsWindowChange, visibleTurns, hiddenTurns]);
   useEffect(() => {
