@@ -83,7 +83,25 @@
 | DSH 侧整段解码 loadMessages | 属 DSH 投影层，非本仓库 UI 范围 | 若会话开关 >500ms（Tier B 测） |
 | 启用背景时的 backdrop-filter 合成 | 当前未启用背景（flat 模式 blur=0）；启用后 64px 模糊按帧重合成 | 用户启用动态背景后做 GPU 层提升/降采样 |
 
-## 项目集成
+## 优化记录（2026-09-25 首轮全量执行）
+
+| # | 优化 | 手段 | 实测证据 |
+|---|---|---|---|
+| 1 | 流式冲刷合并+限流 | 单提交/帧，帧门控 ~30fps | 解析 CPU 215→54 ms/s @40KB（120→30 提交/s） |
+| 2 | 会话窗口消息上限 | `MESSAGE_DOM_CAP=160` 折叠旧轮 | 840 行会话初始挂载 ≤160；上滑逐屏展开 |
+| 3 | 流式正文纯文本 | `STREAMING_PLAIN_TEXT`，落定转 markdown | 流式期间 0 次 markdown 重解析 |
+| 4 | 玻璃流式延迟 | `useMessageGlass` 落定才测量；平面卡兜底 | 流式期间 0 次强制布局+SVG+Image.decode |
+| 5 | rail 逐帧空转守卫 | 窗口内容签名，变化才上报 | rail 30/s → ≈0（仅窗口变化） |
+| 6 | copy 文案缓存/跳过 | 流式组跳过；WeakMap 按消息对象缓存 | 已落定组 O(1)/帧（原每帧重导） |
+| 7 | 文件变更扫描缓存 | ToolProgress 对象 WeakMap | review 冷 0.015ms → 热 0.0035ms/帧 |
+| 8 | 自动滚动去重写 | scrollTop 值相同不写 | 无谓滚动写清零 |
+| 9 | 指针移动布局守卫 | `isObserved()` 无订阅者跳过 rect 读取 | 流式期间鼠标移动不再强制布局 |
+| 10 | 壁纸异步解码 | `decoding="async"` | 4K 背景不阻塞首屏 |
+| — | 工作流工具 | `run.mjs` + `--compare/--fail-over` + `perf-regression.test.ts` + `pnpm perf` | 跨轮漂移复测无 ≥50% 劣化 |
+
+验证口径：chat+primitives 644 通过 / ui-shell 33 通过（仅 2 个改动前同款环境性失败）；PR #103（12 commits,+1521/−125）MERGEABLE，PR checks/UI shell SUCCESS。
+
+## 项目集成## 项目集成
 
 - 所有修复走 feature worktree → PR → 本地 dev 合并验证（见 AGENTS.md）。
 - 指标与对比表随 PR 提交，存放在 `scripts/perf/results/`。
