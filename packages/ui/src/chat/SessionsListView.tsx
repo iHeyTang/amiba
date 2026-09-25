@@ -18,6 +18,7 @@ import {
   Pencil,
 } from "lucide-react";
 import {
+  memo,
   useEffect,
   useMemo,
   useState,
@@ -383,30 +384,57 @@ export function SessionRowsList({
       : visibleLimit;
   const visible = sessions.slice(0, effectiveLimit);
   const hiddenCount = sessions.length - visible.length;
+  // Rows otherwise re-create every inline handler on every parent render,
+  // which defeats row memoization — a single session update (title, unread,
+  // messageCount at turn end) would re-render all 300+ rows. Build one
+  // stabilized descriptor per row here so `memo(SessionRow)` bails for every
+  // row whose session reference (and selection/running state) did not change.
+  const rows = useMemo(
+    () =>
+      visible.map((s) => ({
+        key: s.id,
+        session: s,
+        running: runningSessionIds?.has(s.id) ?? false,
+        failed: failedSessionIds?.has(s.id) ?? false,
+        active: s.id === activeId,
+        onOpen: () => onOpen(s.id),
+        onRename: (title: string) => onRename(s.id, title),
+        onArchive: onArchive ? () => onArchive(s.id) : undefined,
+        onBranch: onBranch ? () => onBranch(s.id) : undefined,
+        onExport: onExport ? () => onExport(s.id) : undefined,
+        selecting,
+        selected: selectedIds?.has(s.id) ?? false,
+        onToggleSelected: () => onToggleSelected?.(s.id),
+        icon: rowIconFor?.(s),
+        nested: indentRows,
+        allowActions: allowActionsFor?.(s) ?? true,
+        itemMenuItems,
+      })),
+    [
+      visible,
+      runningSessionIds,
+      failedSessionIds,
+      activeId,
+      onOpen,
+      onRename,
+      onArchive,
+      onBranch,
+      onExport,
+      selecting,
+      selectedIds,
+      onToggleSelected,
+      rowIconFor,
+      indentRows,
+      allowActionsFor,
+      itemMenuItems,
+    ],
+  );
 
   return (
     <>
       <nav data-session-rows className="flex flex-col">
-        {visible.map((s) => (
-          <SessionRow
-            key={s.id}
-            session={s}
-            running={runningSessionIds?.has(s.id) ?? false}
-            failed={failedSessionIds?.has(s.id) ?? false}
-            active={s.id === activeId}
-            onOpen={() => onOpen(s.id)}
-            onRename={(title) => onRename(s.id, title)}
-            onArchive={onArchive ? () => onArchive(s.id) : undefined}
-            onBranch={onBranch ? () => onBranch(s.id) : undefined}
-            onExport={onExport ? () => onExport(s.id) : undefined}
-            selecting={selecting}
-            selected={selectedIds?.has(s.id) ?? false}
-            onToggleSelected={() => onToggleSelected?.(s.id)}
-            icon={rowIconFor?.(s)}
-            nested={indentRows}
-            allowActions={allowActionsFor?.(s) ?? true}
-            itemMenuItems={itemMenuItems}
-          />
+        {rows.map(({ key, ...row }) => (
+          <SessionRow key={key} {...row} />
         ))}
       </nav>
       {hiddenCount > 0 ? (
@@ -447,7 +475,7 @@ interface SessionRowProps {
   itemMenuItems?: readonly SessionListMenuItem[];
 }
 
-function SessionRow({
+function SessionRowUnmemoized({
   session,
   running,
   failed,
@@ -675,6 +703,11 @@ function SessionRow({
     </div>
   );
 }
+
+// Only the session reference plus selection/running/active state reach the
+// row — the per-row inline handlers live in the stabilized descriptors above,
+// so an index update re-renders just the touched row(s).
+const SessionRow = memo(SessionRowUnmemoized);
 
 function SelectionIndicator({ selected }: { selected: boolean }) {
   return (
