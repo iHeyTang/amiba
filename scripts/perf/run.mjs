@@ -47,6 +47,62 @@ const top = Number(flag("--top", "3"));
 const outFile =
   flag("--out", null) ??
   path.join(REPO_ROOT, "scripts/perf/results/latest.json");
+const compareAgainst = flag("--compare", null);
+const failOverPct = Number(flag("--fail-over", "0"));
+
+// --- Comparison (workflow step 6 automation) --------------------------------
+function diffMetric(after, before) {
+  if (!before) return null;
+  const b = typeof before === "number" ? before : before?.medianMs;
+  const a = typeof after === "number" ? after : after?.medianMs;
+  if (typeof a !== "number" || typeof b !== "number" || b === 0) return null;
+  return { before: b, after: a, deltaPct: ((a - b) / b) * 100 };
+}
+
+function reportComparison(beforeReport, afterReport) {
+  const rows = [];
+  const add = (label, after, before) => {
+    const d = diffMetric(after, before);
+    if (d) rows.push({ label, ...d });
+  };
+  for (const [key, after] of Object.entries(afterReport.benchmarks ?? {})) {
+    const before = beforeReport.benchmarks?.[key];
+    if (after && typeof after === "object" && "medianMs" in after && before && typeof before === "object") {
+      add(`benchmarks.${key}`, after.medianMs, before.medianMs);
+    } else if (after && typeof after === "object" && before && typeof before === "object") {
+      for (const [sub, v] of Object.entries(after)) {
+        if (v && typeof v === "object" && "medianMs" in v) {
+          add(`benchmarks.${key}.${sub}`, v.medianMs, before[sub]?.medianMs);
+        } else if (typeof v === "number" && typeof before[sub] === "number") {
+          add(`benchmarks.${key}.${sub}`, v, before[sub]);
+        }
+      }
+    } else if (typeof after === "number" && typeof before === "number") {
+      add(`benchmarks.${key}`, after, before);
+    }
+  }
+  const beforeFirst = beforeReport.sessions?.[0];
+  const afterFirst = afterReport.sessions?.[0];
+  if (beforeFirst && afterFirst) {
+    add("sessions.windowNew.mounted", afterFirst.windowNew?.mounted, beforeFirst.windowNew?.mounted);
+    add("sessions.totalDecodeMs", afterReport.totalDecodeMs, beforeReport.totalDecodeMs);
+  }
+  console.log("\nMetric comparison (after vs before):");
+  console.log("  " + ["metric", "before", "after", "Δ%" ].join("  "));
+  let worst = 0;
+  for (const r of rows) {
+    const flag = Math.abs(r.deltaPct) >= 50 ? "  ⚠" : "";
+    console.log(
+      `  ${r.label.padEnd(38)} ${r.before.toFixed(4).padStart(10)} ${r.after.toFixed(4).padStart(10)} ${r.deltaPct.toFixed(1).padStart(8)}%${flag}`,
+    );
+    if (r.deltaPct > worst) worst = r.deltaPct;
+  }
+  if (failOverPct > 0 && worst > failOverPct) {
+    console.error(`[perf] FAIL: worst regression ${worst.toFixed(1)}% > ${failOverPct}%`);
+    process.exit(1);
+  }
+  return rows;
+}
 
 // --- Real-code imports ------------------------------------------------------
 // windowTurns comes straight from packages/ui (the real implementation). The
@@ -304,6 +360,15 @@ const report = {
 
 fs.mkdirSync(path.dirname(outFile), { recursive: true });
 fs.writeFileSync(outFile, JSON.stringify(report, null, 2));
+
+if (compareAgainst && fs.existsSync(compareAgainst)) {
+  reportComparison(
+    JSON.parse(fs.readFileSync(compareAgainst, "utf8")),
+    report,
+  );
+} else if (compareAgainst) {
+  console.warn(`[perf] --compare file not found: ${compareAgainst}`);
+};
 
 // --- Human table ------------------------------------------------------------
 
