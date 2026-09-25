@@ -24,7 +24,7 @@
 ## 度量分级
 
 - **Tier A（任何环境可跑）**：`scripts/perf/run.mjs` — 对真实会话日志（zstd JSONL）解码并测量：会话体积/行数/最大消息、窗口化前后挂载行数、每帧分组耗时、Streamdown 解析耗时（10KB/40KB）、冲刷频率算术。纯 Node，无 GUI 依赖，出入 `scripts/perf/results/*.json`。
-- **Tier A'（vitest 回归）**：`packages/ui` 里针对纯函数（`windowTurns`、`useStreamBuffer` 冲刷合并、玻璃/窗口守卫等）的阈值化回归测试。阈值取宽松上限防 CI 抖动，主要防"回退到 O(N)/帧"类重引入。
+- **Tier A'（vitest 回归）**：`packages/ui/src/chat/__tests__/perf-regression.test.ts` —— 针对纯函数（2000 消息分组、2000 轮次窗口化+消息上限、40KB markdown 解析）的宽松上限回归（≈实测 100×，专防复杂度级回退）。另有语义级守卫（冲刷单提交、窗口守卫、缓存正确性）分散在相关套件。
 - **Tier B（桌面构建后）**：重新构建/安装应用后，用 DevTools Performance 面板录制：流式 30s 长回复的 Main 线程任务时长占比、每帧渲染耗时、rail 重渲染次数、内存（DOM 节点数）。Tier B 步骤在每次桌面构建后作为验证轮执行。
 
 ## 指标表（会话性能）
@@ -42,6 +42,7 @@
 | rail-rerenders-sec | rail 每秒重渲染（before=30/s） | B | — | ≈0（仅窗口变化） |
 | glass-measure-per-frame | 流式期间玻璃测量/强制布局/Image.decode | B | — | 0（仅落定） |
 | window-change-report-sec | onTurnsWindowChange 每秒触发 | B | — | ≈0（仅在变化） |
+| session-open-decode-ms | 冷启动解码（缓存未命中，zstd→JSONL） | A | 18MB 会话 82ms / 11MB 会话 38ms | 记录对比 |
 
 ## 扫描检查清单（第 1 步用）
 

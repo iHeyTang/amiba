@@ -196,10 +196,13 @@ for (const workspace of workspaceDirs) {
 }
 sessions.sort((a, b) => b.size - a.size);
 const decoded = sessions.slice(0, top).map((s) => {
+  const t0 = process.hrtime.bigint();
   const text = decodeSessionLog(s.log).toString("utf8");
+  const decodeMs = Number(process.hrtime.bigint() - t0) / 1e6;
   const model = buildTurnModel(text);
-  return { session: s.id, workspace: s.workspace, fileBytes: s.size, decodedBytes: text.length, ...model };
+  return { session: s.id, workspace: s.workspace, fileBytes: s.size, decodedBytes: text.length, decodeMs, ...model };
 });
+const totalDecodeMs = decoded.reduce((sum, s) => sum + s.decodeMs, 0);
 
 // Streaming micro-benchmarks (synthetic, representative of a long reply).
 const md10k = Array.from({ length: 60 }, (_, i) =>
@@ -266,11 +269,13 @@ const report = {
   generatedAt: new Date().toISOString(),
   tool: "node --experimental-strip-types scripts/perf/run.mjs",
   sessionsDir,
+  totalDecodeMs,
   messageModel: "rows ≈ user prompts + assistant messages + tool records",
   sessions: decoded.map((s) => ({
     id: s.session,
     workspace: s.workspace,
     fileBytes: s.fileBytes,
+    decodeMs: s.decodeMs,
     decodedBytes: s.decodedBytes,
     lines: s.rows,
     maxLineBytes: s.maxMsgBytes,
@@ -307,7 +312,7 @@ console.log("=".repeat(78));
 for (const s of report.sessions) {
   console.log(`\nSession ${s.id} (${s.workspace})`);
   console.log(
-    `  decoded ${(s.decodedBytes / 1e6).toFixed(2)} MB · ${s.lines} lines · max line ${(s.maxLineBytes / 1024).toFixed(1)} KB`,
+    `  decoded ${(s.decodedBytes / 1e6).toFixed(2)} MB · ${s.lines} lines · max line ${(s.maxLineBytes / 1024).toFixed(1)} KB · decode ${s.decodeMs.toFixed(0)} ms`,
   );
   const kinds = Object.entries(s.kinds)
     .sort((a, b) => b[1] - a[1])
@@ -319,6 +324,7 @@ for (const s of report.sessions) {
     `  window: OLD(turn-only) mounted=${s.windowOld.mounted} → NEW(cap ${MESSAGE_DOM_CAP}) mounted=${s.windowNew.mounted} (hidden ${s.windowNew.hiddenTurns}); +1 expansion=${s.windowNewExpand1.mounted}`,
   );
 }
+console.log(`\nDecode (zstd, cold, cache-miss open): total ${report.totalDecodeMs.toFixed(0)} ms for ${report.sessions.length} sessions`);
 console.log("\nMicro-benchmarks (median ms/run):");
 console.log(
   `  streamdown parse @10KB: ${report.benchmarks.streamdownParseMs10k.medianMs.toFixed(3)} ms`,
