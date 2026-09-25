@@ -37,16 +37,9 @@ export function TopSection({
     <div
       data-testid={headerTestId}
       data-section-header={rail ? "rail" : "drawer"}
-      style={
-        rail
-          ? {
-              top: "var(--session-group-sticky-top, 0px)",
-            }
-          : undefined
-      }
       className={
         rail
-          ? "group/topsection sticky z-20 mt-2 flex h-7 w-full shrink-0 items-center text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70 transition-colors hover:bg-accent/60 hover:text-foreground"
+          ? "group/topsection mt-2 flex h-7 w-full shrink-0 items-center text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70 transition-colors hover:bg-accent/60 hover:text-foreground"
           : "group/topsection relative flex w-full shrink-0 items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-accent/40"
       }
     >
