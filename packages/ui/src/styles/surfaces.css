@@ -34,8 +34,11 @@
 }
 [data-amiba-product-shell] [data-background-surface="navigation"] {
   background: hsl(var(--amiba-pane-color) / var(--amiba-glass-opacity));
-  backdrop-filter: blur(var(--amiba-reading-blur)) saturate(1.08);
-  -webkit-backdrop-filter: blur(var(--amiba-reading-blur)) saturate(1.08);
+  /* The pane stops blurring so the pinned rail strips below can show a
+   * REAL frost — an already-blurred pane leaves their 48px lens nothing
+   * to smear, which read as "no blur at all". */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 [data-amiba-product-shell] [data-background-surface="workbench"] {
   background: hsl(var(--amiba-pane-color) / var(--amiba-glass-opacity));
@@ -121,6 +124,9 @@
   background: var(--amiba-content-fill);
   backdrop-filter: blur(var(--amiba-rail-blur)) saturate(1.08);
   -webkit-backdrop-filter: blur(var(--amiba-rail-blur)) saturate(1.08);
+  box-shadow:
+    inset 0 0 0 1px hsl(var(--foreground) / 0.06),
+    0 1px 2px hsl(var(--foreground) / 0.04);
 }
 [data-amiba-product-shell] [data-section-header="rail"]:hover {
   background: var(--amiba-content-hover);
