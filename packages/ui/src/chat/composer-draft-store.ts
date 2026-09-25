@@ -21,13 +21,31 @@ export interface ComposerDraftSource {
 
 type NativeComposerDraftSource = ComposerDraftSource & Required<Pick<ComposerDraftSource, "commitSend" | "getHistoryVersion">> & { attach(storage: StorageAdapter, sessionId: string): void };
 
+/** Cheap exact document equality: text plus per-part comparison, avoiding
+ * a full JSON.stringify of the whole draft on every keystroke (O(n) text). */
+function sameDocument(a: ComposerDraftDocument, b: ComposerDraftDocument): boolean {
+  if (a.text !== b.text) return false;
+  const pa = a.parts, pb = b.parts;
+  if (pa.length !== pb.length) return false;
+  for (let i = 0; i < pa.length; i++) {
+    const p = pa[i]!, q = pb[i]!;
+    if (p === q) continue;
+    if (p.kind !== q.kind) return false;
+    if (p.kind === "text") { if (p.text !== q.text) return false; continue; }
+    if (p.raw !== q.raw) return false;
+    if (p.mention?.type !== q.mention?.type || p.mention?.display !== q.mention?.display) return false;
+    const ps = p.mention?.payload, qs = q.mention?.payload;
+    if ((ps?.source ?? null) !== (qs?.source ?? null) || (ps?.ref ?? null) !== (qs?.ref ?? null)) return false;
+  }
+  return true;
+}
+
 /** Shared native draft; the document preserves literal text and reference identity. */
 export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: string): NativeComposerDraftSource {
   let key = sessionId ? `amiba.composer.draft.${sessionId}` : undefined;
   let document = composerDraftDocument([]);
   const inputProjection = new ResidentInputProjection();
   let inputDraft = inputProjection.update(document);
-  let fingerprint = JSON.stringify(document);
   let revision = 0;
   let historyVersion = 0;
   let readGeneration = 0;
@@ -42,11 +60,9 @@ export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: 
       previous.has(part) && previous.get(part) !== index);
   };
   const publish = (next: ComposerDraftDocument): boolean => {
-    const key = JSON.stringify(next);
-    if (key === fingerprint && !retainedReferencesMoved(next)) return false;
+    if (sameDocument(next, document) && !retainedReferencesMoved(next)) return false;
     document = next;
     inputDraft = inputProjection.update(next);
-    fingerprint = key;
     for (const listener of listeners) listener();
     return true;
   };
@@ -107,7 +123,7 @@ export function createComposerDraftSource(storage?: StorageAdapter, sessionId?: 
       const next = composerDraftDocument(parts);
       // Serialized equality cannot hide a move of a known occurrence. Fresh
       // equivalent editor/storage echoes still retain the current document.
-      if (JSON.stringify(next) === fingerprint && !retainedReferencesMoved(next)) return;
+      if (sameDocument(next, document) && !retainedReferencesMoved(next)) return;
       revision++;
       publish(next);
       save(next);
