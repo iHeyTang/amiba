@@ -5,7 +5,13 @@ import { useConversationAutoScroll } from "./use-conversation-auto-scroll";
 import { ensureSessionWorkspace } from "@amiba/app-runtime/platform";
 import { nativeSubmissionAdmission } from "./internal/native-submission-admission";
 import { deleteUnretainedAttachments, withSendingAttachments } from "./internal/attachment-ownership";
-import { useSessionComposerDraft } from "./use-session-composer-draft";
+import {
+  homeComposerDraft,
+  sessionComposerDraft,
+  type ComposerDraftSource,
+} from "./composer-draft-store";
+import type { ComposerDraftDocument } from "./composer-draft-document";
+import { DraftBoundComposer } from "./draft-bound-composer";
 import { useConversationSubmitHandoff } from "./useConversationSubmitHandoff";
 import { createResidentTurnSender, waitForResidentReady, type ResidentTurnSenderDeps } from "./internal/resident-turn-sender";
 import { createResidentQueueDrainer, type ResidentQueueDrainerDeps } from "./internal/resident-queue-drainer";
@@ -111,7 +117,6 @@ import {
   type WorkspaceFileLink,
 } from "./workspace-file-links";
 import {
-  Composer,
   type ComposerDensity,
   type ComposerHandle,
   type ComposerModelPickerRenderer,
@@ -510,7 +515,22 @@ export default function ChatSurface({
     resolveChatSurfaceMode(sessions.activeId) === "conversation";
   const workspacePane = useWorkspacePane();
 
-  const [input, setInput, setSessionInput, composerDraftSource] = useSessionComposerDraft(sessions.activeId);
+const composerDraftSource: ComposerDraftSource = useMemo(
+    () => sessions.activeId
+      ? sessionComposerDraft(getPlatform().storage, sessions.activeId)
+      : homeComposerDraft(getPlatform().storage),
+    [sessions.activeId],
+  );
+  // Live draft access WITHOUT re-rendering ChatSurface on keystrokes: the
+  // composer (DraftBoundComposer) owns the reactive subscription; everything
+  // else reads/clears the store at call time through these stable helpers.
+  const readDraft = useCallback(() => composerDraftSource.getSnapshot(), [composerDraftSource]);
+  const setDraft = useCallback((text: string) => composerDraftSource.set(text), [composerDraftSource]);
+  const applySessionDraft = useCallback((sessionId: string, text: string, document?: ComposerDraftDocument) => {
+    const target = sessionComposerDraft(getPlatform().storage, sessionId);
+    if (document) target.setParts(document.parts);
+    else target.set(text);
+  }, []);
   const handledNewConversationRequestRef = useRef(newConversationRequestKey);
   const defaultProfileIdRef = useRef("default");
   const [draftAgent, setDraftAgent] = useState<AgentExecutionContext>({
@@ -560,8 +580,11 @@ export default function ChatSurface({
   // to stay expanded while there's a draft). No-op when the callback is
   // omitted, i.e. for every non-Quick-Ask surface.
   useEffect(() => {
-    onComposerEmptyChange?.(input.trim().length === 0);
-  }, [input, onComposerEmptyChange]);
+    if (!onComposerEmptyChange) return;
+    const report = () => onComposerEmptyChange(composerDraftSource.getSnapshot().trim().length === 0);
+    report();
+    return composerDraftSource.subscribe(report);
+  }, [composerDraftSource, onComposerEmptyChange]);
   // Bumped by the pendingPrompt subscription so the drain effect
   // re-fires on push notifications even when the session id hasn't
   // changed (e.g. the empty-state home composer submitting into an
@@ -878,12 +901,12 @@ export default function ChatSurface({
     readOnly,
     sessions,
     client,
-    input,
+    readDraft,
     draftSource: composerDraftSource,
     submitComposer: () => composerRef.current?.submit?.() ?? false,
     resolveQueuedDraft: (draft, signal) => composerRef.current?.resolveQueuedDraft?.(draft, signal)
       ?? Promise.reject(new Error("Input editor is not mounted")),
-    setInput,
+    setDraft,
     attachments,
     setAttachments,
     setAttachmentError,
@@ -984,7 +1007,7 @@ export default function ChatSurface({
       if (payload.modelSelection) {
         pendingModelSelectionRef.current = payload.modelSelection;
       }
-      if (text) setInput(text);
+      if (text) composerDraftSource.set(text);
       if (promotedAttachments.length > 0) {
         setAttachments((prev) => [...prev, ...promotedAttachments]);
       }
@@ -1022,11 +1045,16 @@ export default function ChatSurface({
       return;
     }
     if (!sessions.ready || busy) return;
-    if (!input.trim()) return;
-    setPendingAutosend(false);
-    const fn = sendRef.current;
-    if (fn) void fn();
-  }, [pendingAutosend, sessions.activeId, sessions.ready, busy, input]);
+    const fire = () => {
+      setPendingAutosend(false);
+      const fn = sendRef.current;
+      if (fn) void fn();
+    };
+    if (composerDraftSource.getSnapshot().trim()) { fire(); return; }
+    return composerDraftSource.subscribe(() => {
+      if (composerDraftSource.getSnapshot().trim()) fire();
+    });
+  }, [pendingAutosend, sessions.activeId, sessions.ready, busy, composerDraftSource]);
 
   // -------------------------------------------------------------------------
   // Chat engine subscription/snapshot/event handling.
@@ -1826,7 +1854,7 @@ export default function ChatSurface({
     const { text, attachments: attachmentsForTurn } = args;
     const restoreDraft = () => {
       if (args.draft) composerDraftSource.setParts(args.draft.parts);
-      else setInput(text);
+      else composerDraftSource.set(text);
     };
     if (readOnly) {
       restoreDraft();
@@ -1872,7 +1900,7 @@ export default function ChatSurface({
           // The send path has already consumed the composer values. Restore
           // them so the user can choose another directory and retry without
           // losing the prompt or its attachments.
-          setSessionInput(sessionId, text, args.draft);
+          applySessionDraft(sessionId, text, args.draft);
           setAttachments(attachmentsForTurn);
           return;
         }
@@ -1897,7 +1925,7 @@ export default function ChatSurface({
       } catch (e) {
         const message = String((e as Error)?.message || e);
         setWorkspaceError(message);
-        setSessionInput(sessionId, text, args.draft);
+        applySessionDraft(sessionId, text, args.draft);
         setAttachments(attachmentsForTurn);
         return;
       }
@@ -2171,7 +2199,7 @@ export default function ChatSurface({
     }
     markCurrentAssistantStopped();
     setError(null);
-    setInput("");
+    composerDraftSource.set("");
     setPendingAutosend(false);
     setPendingSourceApp(null);
     // The persisted queue still belongs to the outgoing session; only its
@@ -2291,26 +2319,17 @@ export default function ChatSurface({
   // while the first session is created or New chat returns to empty.
   const canSubmitDraft = (text: string) => !readOnly && text.trim().length > 0 && !attachmentUploading && !attachmentBusy;
   const nativeComposerNode = (
-    <Composer
+    <DraftBoundComposer
       ref={composerRef}
       disabled={readOnly}
-      value={input}
       draftSource={composerDraftSource}
-      onChange={setInput}
+      canSubmitDraft={canSubmitDraft}
       onSubmit={(text) => {
         void send(text);
       }}
       busy={busy}
       onAbort={stop}
       autoFocus={composerAutoFocus}
-      canSubmit={
-        // Text is required, with or without attachments: an attachment-only
-        // send has no user words to anchor the turn, and rather than the app
-        // inventing a stand-in downstream, sending is simply not enabled
-        // until something is typed.
-        canSubmitDraft(input)
-      }
-      canSubmitDraft={canSubmitDraft}
       contextRail={
         pendingSourceApp || pendingQueue.length > 0 ? (
           <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">

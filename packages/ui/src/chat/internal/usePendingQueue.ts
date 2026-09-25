@@ -68,12 +68,12 @@ export interface UsePendingQueueArgs {
   // ChatSurface these handles); the queue hook needs them to drain
   // composer drafts into queue items, commit edits, and clear the
   // composer after a fire.
-  input: string;
+  readDraft: () => string;
   draftSource?: ComposerDraftSource;
   /** Route an edited queue row through the same codec/command pipeline as Send. */
   submitComposer?: () => boolean;
   resolveQueuedDraft?: (draft: ComposerDraftDocument, signal: AbortSignal) => Promise<string>;
-  setInput: (v: string) => void;
+  setDraft: (v: string) => void;
   attachments: Attachment[];
   setAttachments: React.Dispatch<React.SetStateAction<Attachment[]>>;
   setAttachmentError: (v: string | null) => void;
@@ -136,11 +136,11 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   const {
     sessions,
     client,
-    input,
+    readDraft,
     draftSource,
     submitComposer,
     resolveQueuedDraft,
-    setInput,
+    setDraft,
     attachments,
     setAttachments,
     setAttachmentError,
@@ -289,14 +289,14 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
         onAccepted = draftSource && captureComposerHistory(draftSource);
         item = {
           queueId,
-          text: pickSendText(textArg, input),
+          text: pickSendText(textArg, readDraft()),
           ...(draftSource ? { draft: draftSource.getDocument() } : {}),
           attachments: attachments
             .filter((a) => a.attachmentId && !a.uploading)
             .map((a) => ({ ...a })),
         };
         setEditingQueueId(null);
-        setInput("");
+        setDraft("");
         setAttachments([]);
       } else {
         item = queue.find((q) => q.queueId === queueId);
@@ -358,7 +358,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       setQueue,
       setPaused,
       queue,
-      input,
+      readDraft,
       draftSource,
       submitComposer,
       attachments,
@@ -369,7 +369,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       markCurrentAssistantStopped,
       rejectPendingTurn,
       runChatTurn,
-      setInput,
+      setDraft,
       setAttachments,
     ],
   );
@@ -383,7 +383,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     // composer, attachment handling, queue bookkeeping) keeps operating on
     // the raw `input` exactly as before. Falls back to `input` for callers
     // that invoke `send()` without an expanded override.
-    const text = pickSendText(textArg, input);
+    const text = pickSendText(textArg, readDraft());
     // Allow send when the user has uploaded attachments but hasn't typed
     // anything (e.g. "here's a screenshot — what's wrong with it?"). We
     // still gate on having SOMETHING to send so an empty composer with
@@ -415,7 +415,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
           attachments: attachmentsForSend.map((a) => ({ ...a })),
         },
       ]);
-      setInput("");
+      setDraft("");
       setAttachments([]);
       // Page attachments are one-shot — clear so they don't
       // double-attach to a follow-up turn the user types while this
@@ -429,7 +429,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     }
 
     const onAccepted = draftSource && captureComposerHistory(draftSource);
-    setInput("");
+    setDraft("");
     setAttachments([]);
     setAttachmentError(null);
     // The "from <App>" chip belongs to a single hand-off turn — clear
@@ -448,7 +448,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       ...(onAccepted ? { onAccepted } : {}),
     });
   }, [
-    input,
+    readDraft,
     draftSource,
     attachments,
     attachmentUploading,
@@ -456,7 +456,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
     editingQueueId,
     busy,
     runChatTurn,
-    setInput,
+    setDraft,
     setAttachments,
     setAttachmentError,
     setPendingSourceApp,
@@ -502,11 +502,11 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       // vanished item.
       if (editingQueueId === queueId) {
         setEditingQueueId(null);
-        setInput("");
+        setDraft("");
         setAttachments([]);
       }
     },
-    [editingQueueId, attachments, setInput, setAttachments, cancelResolution, setQueue],
+    [editingQueueId, attachments, setDraft, setAttachments, cancelResolution, setQueue],
   );
 
   /**
@@ -522,7 +522,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       const item = queue.find((q) => q.queueId === queueId);
       if (!item) return;
       cancelResolution();
-      const draftText = input;
+      const draftText = readDraft();
       const draft = draftSource?.getDocument();
       const draftAttachments = attachments.filter(
         (a) => a.attachmentId && !a.uploading,
@@ -544,7 +544,7 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       });
       setEditingQueueId(queueId);
       if (item.draft && draftSource) draftSource.setParts(item.draft.parts);
-      else setInput(item.text);
+      else setDraft(item.text);
       setAttachments(item.attachments.map((a) => ({ ...a })));
       setPaused(true);
     },
@@ -552,11 +552,11 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
       queue,
       setQueue,
       setPaused,
-      input,
+      readDraft,
       draftSource,
       cancelResolution,
       attachments,
-      setInput,
+      setDraft,
       setAttachments,
     ],
   );
@@ -565,10 +565,10 @@ export function usePendingQueue(args: UsePendingQueueArgs): UsePendingQueueResul
   const cancelEdit = useCallback((): void => {
     if (editingQueueId == null) return;
     setEditingQueueId(null);
-    setInput("");
+    setDraft("");
     deleteUnretainedAttachments(attachments, queueRef.current.flatMap(q => q.attachments));
     setAttachments([]);
-  }, [editingQueueId, attachments, setInput, setAttachments]);
+  }, [editingQueueId, attachments, setDraft, setAttachments]);
 
   return {
     queue,
