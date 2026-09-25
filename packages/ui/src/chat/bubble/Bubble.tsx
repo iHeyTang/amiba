@@ -2542,9 +2542,15 @@ export function MessageTurns({
               const groupStreaming = groupMessages.some(message => message.streaming);
               // Copy the same prose that the reply renderer exposes, never the
               // persisted content that also contains execution narration.
+              // `flatMap` narrows the TurnReplyItem union inside the branch —
+              // a boolean `.filter` would not, which the ui-shell build's
+              // strict tsconfig catches on `item.message`.
               const copyText = groupStreaming ? "" : group.items
-                .filter(({ item }) => item.kind === "message" && item.message.role === "assistant")
-                .map(({ item }) => copyProseFor(item.message))
+                .flatMap(({ item }) =>
+                  item.kind === "message" && item.message.role === "assistant"
+                    ? [copyProseFor(item.message)]
+                    : [],
+                )
                 .map(stripManagedResourceContext)
                 .filter(value => value.trim())
                 .join("\n\n");
