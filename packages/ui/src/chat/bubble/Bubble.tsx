@@ -1474,16 +1474,21 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
   // timed rows or detached paragraphs.
   const midTurnTextIds = new Set<string>();
   {
-    const textIndexes = timeline
-      .map((item, index) => (item.kind === "text" ? index : -1))
-      .filter((index) => index >= 0);
-    const toolIndexes = timeline
-      .map((item, index) => (item.kind === "tool" ? index : -1))
-      .filter((index) => index >= 0);
-    for (const index of textIndexes) {
-      const preceded = toolIndexes.some((toolIndex) => toolIndex < index);
-      const followed = toolIndexes.some((toolIndex) => toolIndex > index);
-      if (preceded && followed) midTurnTextIds.add(timeline[index]!.id);
+    // A text item is MID-TURN narration when a tool call both precedes and
+    // follows it. The previous version scanned every text index against every
+    // tool index (quadratic); a long step series re-ran this per streaming
+    // frame. One pass with running tool counts is equivalent and linear.
+    let totalTools = 0;
+    for (const item of timeline) if (item.kind === "tool") totalTools += 1;
+    let toolsBefore = 0;
+    for (const item of timeline) {
+      if (item.kind === "tool") {
+        toolsBefore += 1;
+        continue;
+      }
+      if (item.kind === "text" && toolsBefore > 0 && toolsBefore < totalTools) {
+        midTurnTextIds.add(item.id);
+      }
     }
   }
 
@@ -2273,11 +2278,22 @@ export function MessageTurns({
   // memoized so its identity only changes when the window contents actually
   // change — `onTurnsWindowChange` (read by the ConversationTurnRail) must not
   // fire on every render of a streaming conversation.
-  const [turnWindow, expandTurnWindow] = useConversationTurnWindow(sessionId, viewStateScope, turns.length);
+  const [turnWindow, expandTurnWindow, messageCap] = useConversationTurnWindow(sessionId, viewStateScope, turns.length);
   const windowSentinelRef = useRef<HTMLDivElement>(null);
   const { visible: visibleTurns, hidden: hiddenTurns } = useMemo(
-    () => windowTurns(turns, turnWindow),
-    [turns, turnWindow],
+    // The turn-count window alone does not bound tool-heavy sessions (DSH
+    // emits one assistant message per step, so one turn can hold dozens of
+    // replies). Fold older turns until the mounted messages fit under the
+    // message budget — the streaming (newest) turn is always kept whole.
+    // `messageCap` grows alongside `turnWindow` (see
+    // `useConversationTurnWindow`), so scrolling past the sentinel reveals
+    // older history one slice at a time.
+    () =>
+      windowTurns(turns, turnWindow, {
+        maxMessages: messageCap,
+        countMessages: (turn) => (turn.user ? 1 : 0) + turn.replies.length,
+      }),
+    [turns, turnWindow, messageCap],
   );
   useEffect(() => {
     onTurnsWindowChange?.({ visible: visibleTurns, hidden: hiddenTurns });
