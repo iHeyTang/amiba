@@ -2493,16 +2493,13 @@ export default function ChatSurface({
               // parent.
               <div className="absolute inset-0">{slots.emptyState}</div>
             ) : (
-              // Built-in fallback: home-style centred composer with a
-              // greeting above, reusing the chat ``composerNode`` so
-              // submission creates a session via ``ensureActive`` and
-              // the conversation continues seamlessly.
+              // Built-in fallback: home-style centred composer, reusing
+              // the chat ``composerNode`` so submission creates a session
+              // via ``ensureActive`` and the conversation continues
+              // seamlessly.
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 overflow-y-auto px-6 py-8">
                 <div className="flex flex-col items-center gap-2 text-center">
                   <EmptyStateVisual scene="conversation"><AmibaLogo size={56} /></EmptyStateVisual>
-                  <p className="text-balance text-sm font-normal leading-6 text-muted-foreground">
-                    {t("newtab.subtitle")}
-                  </p>
                 </div>
                 <div className={cn("w-full", "max-w-2xl")}>{composerNode}</div>
                 {error && (

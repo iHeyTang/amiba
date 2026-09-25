@@ -652,21 +652,23 @@ function SessionRowUnmemoized({
           nested ? "pl-10" : "pl-4",
         )}
       >
-        {!nested && selecting ? (
+        {!nested ? (
           <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
-            <SelectionIndicator selected={selected} />
-          </span>
-        ) : !nested && statusLabel ? (
-          <span
-            aria-label={statusLabel}
-            title={statusLabel}
-            className="inline-flex h-4 w-4 shrink-0 items-center justify-center"
-          >
-            {statusGlyph}
-          </span>
-        ) : icon ? (
-          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground/70 [&_svg]:h-3.5 [&_svg]:w-3.5">
-            {icon}
+            {selecting ? (
+              <SelectionIndicator selected={selected} />
+            ) : statusLabel ? (
+              <span
+                aria-label={statusLabel}
+                title={statusLabel}
+                className="inline-flex h-4 w-4 shrink-0 items-center justify-center"
+              >
+                {statusGlyph}
+              </span>
+            ) : icon ? (
+              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground/70 [&_svg]:h-3.5 [&_svg]:w-3.5">
+                {icon}
+              </span>
+            ) : null}
           </span>
         ) : null}
         <span className="min-w-0 flex-1 truncate text-[13px] font-normal">

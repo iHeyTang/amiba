@@ -112,6 +112,9 @@ export function AttachmentGallery({
  * cropped thumbnail. The original image stays available in the lightbox.
  * Shared with the shell's default conversation.message.images seat occupant.
  */
+const IMAGE_LOAD_RETRY_START_MS = 500;
+const IMAGE_LOAD_RETRY_MAX_MS = 8000;
+
 export function AttachmentImageTile({
   item,
 }: {
@@ -125,18 +128,32 @@ export function AttachmentImageTile({
   );
   useEffect(() => {
     let alive = true;
+    let delay = IMAGE_LOAD_RETRY_START_MS;
+    let timer: number | undefined;
     const loader = item.loadImage;
     if (!loader) return;
-    void loader()
-      .then((url) => {
-        if (alive && typeof url === "string") setLoaded({ id: item.id, url });
-      })
-      .catch(() => {
-        // Authorization failure / revoked draft: clear the prior preview.
-        if (alive) setLoaded(null);
-      });
+    const attempt = () => {
+      if (!alive) return;
+      void loader()
+        .then((url) => {
+          if (alive && typeof url === "string")
+            setLoaded({ id: item.id, url });
+        })
+        .catch(() => {
+          // A fresh tile can mount before the session has committed the
+          // just-sent attachment, so a failed readAttachment must not
+          // dead-end the tile in a permanent icon-only state (the lightbox
+          // only opens once the URL is loaded). Back off and retry while
+          // mounted; revocations just keep failing and leave the icon up.
+          if (!alive) return;
+          timer = window.setTimeout(attempt, delay);
+          delay = Math.min(delay * 2, IMAGE_LOAD_RETRY_MAX_MS);
+        });
+    };
+    attempt();
     return () => {
       alive = false;
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [item.id, item.loadImage]);
 

@@ -3,13 +3,17 @@
   --amiba-pane-color: var(--background);
   --amiba-agent-color: var(--background);
   --amiba-user-color: var(--background);
-  --amiba-header-fill: hsl(var(--background) / 0.4);
+--amiba-header-fill: hsl(var(--background) / 0.4);
   --amiba-header-edge: inset 0 0 0 1px hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 0.4));
   --amiba-glass-opacity: 0.46;
   --amiba-workspace-opacity: 0.24;
   --amiba-workspace-hover-opacity: 0.38;
   --amiba-reading-opacity: 0.56;
   --amiba-input-opacity: 0.40;
+  /* Composer toaster: glassy but frosted enough that the wallpaper never
+   * reads through the input (dev's 40% translucent card read as see-through). */
+  --amiba-composer-opacity: 0.6;
+  --amiba-composer-blur: 24px;
   --amiba-glass-blur: 18px;
   --amiba-reading-blur: 8px;
   --amiba-agent-opacity: 0.52;
@@ -48,6 +52,16 @@
   backdrop-filter: blur(var(--amiba-agent-blur));
   -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
   border: 0;
+  border-radius: 12px;
+}
+/* The file-change review card keeps its own glass panel even when nested
+ * inside an assistant reply — the consecutive-record share/wipe rule must
+ * never flatten it to the bubble's material. */
+[data-amiba-product-shell] [data-file-change-card] {
+  background: hsl(var(--amiba-agent-color) / var(--amiba-agent-opacity));
+  backdrop-filter: blur(var(--amiba-agent-blur));
+  -webkit-backdrop-filter: blur(var(--amiba-agent-blur));
+  border-color: hsl(var(--border) / 0.55);
   border-radius: 12px;
 }
 /* Recovery copy must stay legible even over a high-contrast wallpaper. */
@@ -100,14 +114,14 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-[data-amiba-product-shell] [data-section-header="rail"],
+/* Rail section headers are plain rows: no fill, no blur, no ring — they
+   just scroll with the list. Hover keeps the TSX accent affordance. */
 [data-amiba-product-shell] :is([data-session-row], [data-navigation-row])[data-active="true"] {
   border-radius: 8px;
   background: var(--amiba-content-fill);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-[data-amiba-product-shell] [data-section-header="rail"]:hover,
 [data-amiba-product-shell] :is([data-session-row], [data-navigation-row]):hover {
   background: var(--amiba-content-hover);
   backdrop-filter: none;
@@ -119,9 +133,9 @@
 /* Both composers share glass; keep the outer context rail's original
    translucent treatment and frost only its compact workspace control. */
 [data-amiba-product-shell] [data-composer-card] {
-  background: hsl(var(--background) / var(--amiba-input-opacity));
-  backdrop-filter: blur(var(--amiba-glass-blur)) saturate(1.08);
-  -webkit-backdrop-filter: blur(var(--amiba-glass-blur)) saturate(1.08);
+  background: hsl(var(--background) / var(--amiba-composer-opacity));
+  backdrop-filter: blur(var(--amiba-composer-blur)) saturate(1.08);
+  -webkit-backdrop-filter: blur(var(--amiba-composer-blur)) saturate(1.08);
   border-color: hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 0.6));
 }
 [data-amiba-product-shell] [data-workspace-chip] {
@@ -159,6 +173,7 @@
     --amiba-message-opacity: 1;
     --amiba-content-opacity: 1;
     --amiba-content-hover-opacity: 1;
+    --amiba-composer-opacity: 1;
   }
 }
 @media (prefers-reduced-transparency: reduce) {
@@ -176,6 +191,8 @@
     --amiba-reading-blur: 0px;
     --amiba-message-blur: 0px;
     --amiba-agent-blur: 0px;
+    --amiba-composer-opacity: 1;
+    --amiba-composer-blur: 0px;
   }
 }
 
@@ -204,6 +221,10 @@
     border-top-right-radius: 0;
   }
 }
+
+/* Every rail section header keeps the same 8px top rhythm whether it is
+ * collapsed or expanded — only the content height changes position, so
+ * toggling a group never jumps the rows below it. */
 
 /* A narrow glass edge, with a slow moving reflection rather than a divider. */
 [data-sidebar-glass]::before,
@@ -486,6 +507,8 @@
   --amiba-reading-blur: 0px;
   --amiba-agent-blur: 0px;
   --amiba-message-blur: 0px;
+  --amiba-composer-opacity: 1;
+  --amiba-composer-blur: 0px;
 }
 .amiba-background-frame:not([data-background-active="true"]) [data-sidebar-glass]::before,
 .amiba-background-frame:not([data-background-active="true"]) [data-sidebar-glass]::after {
@@ -500,6 +523,29 @@
 }
 .amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-background-surface="model-notice"] {
   background: hsl(var(--muted));
+}
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-file-change-card] {
+  background: hsl(var(--muted));
+}
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] .amiba-blocked-image {
+  background: hsl(var(--muted));
+}
+
+/* rehype-harden blocked placeholders: Streamdown's default harden plugin
+ * emits these classes (configured in @amiba/markdown) for images/links the
+ * pipeline refused — a quiet, theme-matched chip instead of raw bracket text. */
+.amiba-blocked-image {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: hsl(var(--muted) / 0.55);
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  line-height: 1.6;
+}
+.amiba-blocked-link {
+  color: hsl(var(--muted-foreground));
+  text-decoration: line-through;
 }
 
 /* Filled cards already separate themselves on the flat canvas. Keep form

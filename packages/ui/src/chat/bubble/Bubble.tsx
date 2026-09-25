@@ -2110,8 +2110,27 @@ function UserStickyBubbleUnmemoized({
           <div data-message-glass-body className="relative">
             <div
               data-background-surface="sticky-message"
+              onClick={
+                isClipping
+                  ? (event) => {
+                      // Tap anywhere on the clipped bubble expands it; let
+                      // interactive children (links, buttons, inputs) keep
+                      // their own behaviour.
+                      const target = event.target as HTMLElement;
+                      if (
+                        target.closest(
+                          "a,button,input,textarea,[contenteditable='true'],[role='button']",
+                        )
+                      ) {
+                        return;
+                      }
+                      setExpanded(true);
+                    }
+                  : undefined
+              }
               className={cn(
                 "rounded-xl",
+                isClipping && "cursor-pointer",
                 expanded
                   ? `${EXPANDED_MAX_HEIGHT_CLASS} overflow-y-auto`
                   : `${CAPPED_HEIGHT_CLASS} overflow-hidden`,
@@ -2595,12 +2614,14 @@ function WorkspaceChangesCard({
   const visibleFiles = expanded ? review.files : review.files.slice(0, 3);
   const remaining = Math.max(0, review.files.length - visibleFiles.length);
 
-  // A quiet footnote under the turn, not a second card: one slim summary
-  // line with the review action, then the touched files — each a link into
-  // the workbench when the shell can open files.
+  // A quiet footnote under the turn with the review action, then the
+  // touched files — each a link into the workbench when the shell can open
+  // files. It is its OWN glass panel (`data-file-change-card`), even when
+  // nested inside an assistant reply, so the consecutive-record rule never
+  // wipes its material to transparent.
   return (
     <section
-      data-background-surface="assistant-message"
+      data-file-change-card
       aria-label={t("workspacePane.filesChanged", {
         count: review.files.length,
       })}
