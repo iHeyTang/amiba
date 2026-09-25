@@ -221,3 +221,30 @@ describe("workspace review parser", () => {
     expect(review).toMatchObject({ additions: 1, deletions: 0 });
   });
 });
+
+describe("workspace review derivation cache", () => {
+  const editEvent = (overrides = {}) => ({
+    toolCallId: "edit-1",
+    tool: "edit",
+    status: "completed",
+    result: { patch: "*** Begin Patch\n*** Update File: a.ts\n@@ -1 +1,2 @@\n keep\n+added" },
+    ...overrides,
+  });
+
+  it("reuses the same events across frames and returns identical reviews", () => {
+    const events = [editEvent()];
+    const first = workspaceReviewResourceFromEvents(events, "turn:1")!;
+    const second = workspaceReviewResourceFromEvents(events, "turn:1")!;
+    expect(second).toEqual(first);
+    expect(first.entries[0]!.diff).toContain("*** Begin Patch");
+  });
+
+  it("re-derives when a tool event is replaced (new object, e.g. a settle)", () => {
+    const running = [editEvent({ status: "running", result: undefined })];
+    expect(workspaceReviewResourceFromEvents(running, "turn:1")).toBeNull();
+    // A later snapshot replaces the event object with a completed one.
+    const completed = [editEvent({ status: "completed" })];
+    const review = workspaceReviewResourceFromEvents(completed, "turn:1")!;
+    expect(review.entries[0]!.diff).toContain("*** Begin Patch");
+  });
+});

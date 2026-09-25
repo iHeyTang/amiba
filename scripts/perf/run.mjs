@@ -77,6 +77,9 @@ const streamdownRoot = path.join(
 const { parseMarkdownIntoBlocks } = await import(
   `${streamdownRoot}/dist/index.js`
 );
+const workspaceReview = await import(
+  `${REPO_ROOT}/packages/ui/src/chat/workspace-review.ts`
+);
 
 // --- Utilities --------------------------------------------------------------
 
@@ -229,6 +232,36 @@ const groupBench = bench(() => {
   return turns;
 });
 
+function benchmarkWorkspaceReview() {
+  // Turn-level review derivation, as MessageTurns runs it per settled turn
+  // per frame. Real edit results carry tens of KB of patch text; the diff
+  // scan trims/copies the whole string per candidate key.
+  const patch = (i) =>
+    `*** Begin Patch\n*** Update File: src/file-${i}.ts\n@@ -1,2 +1,2 @@\n context\n+added line ${i}\n-removed ${i}\n${"content-line\n".repeat(900)}`;
+  const freshEvents = () =>
+    Array.from({ length: 16 }, (_, i) => ({
+      toolCallId: `edit-${i}`,
+      tool: i % 3 === 0 ? "write" : "edit",
+      status: "completed",
+      result: {
+        patch: patch(i),
+      },
+    }));
+  const cold = bench(() =>
+    workspaceReview.workspaceReviewResourceFromEvents(freshEvents(), "turn:bench"),
+  );
+  // Steady state AFTER the fix: settled messages reuse the SAME event refs
+  // each frame, so the per-event derivations are cached (WeakMap).
+  const settled = freshEvents();
+  const warm = bench(() =>
+    workspaceReview.workspaceReviewResourceFromEvents(settled, "turn:bench"),
+  );
+  return {
+    reviewScanColdMsPerFrame: { medianMs: cold, note: "pre-cache per-frame scan for ~16 edit/write events (fresh refs)" },
+    reviewScanWarmMsPerFrame: { medianMs: warm, note: "post-cache steady state, same event refs" },
+  };
+}
+
 const report = {
   generatedAt: new Date().toISOString(),
   tool: "node --experimental-strip-types scripts/perf/run.mjs",
@@ -260,6 +293,7 @@ const report = {
       afterCommitsPerSec: 30,
       afterParseMsPerSec40k: parse40k * 30,
     },
+    workspaceReview: benchmarkWorkspaceReview(),
   },
 };
 
@@ -298,5 +332,9 @@ console.log(
 const f = report.benchmarks.flushArithmetic;
 console.log(
   `  flush: before ${f.beforeCommitsPerSec}/s (${f.beforeParseMsPerSec40k.toFixed(0)} ms/s parsing @40KB) → after ${f.afterCommitsPerSec}/s (${f.afterParseMsPerSec40k.toFixed(0)} ms/s)`,
+);
+const rv = report.benchmarks.workspaceReview;
+console.log(
+  `  workspace review (16 edit/write events, ~44KB patches): cold ${rv.reviewScanColdMsPerFrame.medianMs.toFixed(3)} ms/frame → warm(cached) ${rv.reviewScanWarmMsPerFrame.medianMs.toFixed(4)} ms/frame`,
 );
 console.log(`\nWrote ${outFile}`);

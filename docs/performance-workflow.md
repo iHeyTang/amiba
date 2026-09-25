@@ -38,6 +38,7 @@
 | grouping-ms-per-run | 每帧 O(N) 消息分组耗时（中位数） | A | 0.025ms | 记录对比 |
 | flush-parse-ms-per-sec@40KB | 每秒纯解析 CPU（before 120/s vs after 30/s） | A | 215ms/s → 54ms/s | ≤ 60 |
 | copy-prose-derive-per-frame | 已落定组的 copy 文案推导（WeakMap 缓存后） | A | 首次 O(消息体)，之后 O(1)/帧 | O(1) |
+| workspace-review-scan/frame | 已落定轮次的文件变更扫描（16 个 ~44KB patch 事件） | A | 冷 0.015ms → 缓存后 0.0035ms（随结果规模/轮次线性放大） | ≤0.01ms |
 | rail-rerenders-sec | rail 每秒重渲染（before=30/s） | B | — | ≈0（仅窗口变化） |
 | glass-measure-per-frame | 流式期间玻璃测量/强制布局/Image.decode | B | — | 0（仅落定） |
 | window-change-report-sec | onTurnsWindowChange 每秒触发 | B | — | ≈0（仅在变化） |
