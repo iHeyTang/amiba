@@ -279,8 +279,7 @@ export function Sidebar({
             }} />
           ) : undefined}
         >
-          <div className="[--session-group-sticky-top:1.75rem]">
-            <SessionsListView
+          <SessionsListView
               sessions={workspaceSessions}
               runningSessionIds={runningSessionIds}
               failedSessionIds={failedSessionIds}
@@ -320,7 +319,6 @@ export function Sidebar({
               indentRows
               itemMenuItems={itemMenuItems}
             />
-          </div>
         </TopSection>
         {/*
           Plugin-group sections (`amiba.sessions.list.group`) — one
@@ -378,7 +376,7 @@ export function Sidebar({
             onToggleSelected={toggleSelectedSession}
             showSectionHeaders={false}
             groupKeyFor={() => HISTORY_ALL_GROUP}
-            rowIconFor={() => <MessageSquare />}
+            indentRows
             itemMenuItems={itemMenuItems}
             emptyLabel={t("sidepanel.sessions.tasks.empty")}
           />

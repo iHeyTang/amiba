@@ -458,50 +458,17 @@ function Home({
         )}
       >
         <section className="mx-auto w-full max-w-2xl shrink-0 space-y-2">
-          {/* Floating text picks its colour off the wallpaper's
-              average luminance — but ONLY once measurement has landed
-              (`wallpaper.mode !== null`). Before then, whatever is
-              actually visible behind the text is the theme's
-              `bg-background` (the wallpaper image is still loading
-              with `opacity-0`, or measurement permanently failed), so
-              `text-foreground` is the correct, theme-matched fallback.
-              The previous "always-white-when-wallpaper-enabled"
-              fallback failed on blank/light backgrounds in light
-              theme. */}
+          {/* The wallpaper-driven composition is gone: no floating greeting
+              above the composer anymore, only the brand mark / visual. */}
           {panelMode ? (
-            // Let the companion lead, with one quiet invitation above the composer.
+            // Let the companion lead above the composer.
             <div className="flex flex-col items-center gap-2 text-center">
               <ReplacementBoundary render={brandMark ? fallback => brandMark({ size: 56 }, fallback) : undefined}><EmptyStateVisual scene="home"><AmibaLogo size={56} /></EmptyStateVisual></ReplacementBoundary>
-              <p data-home-greeting className="text-balance text-sm font-normal leading-6 text-muted-foreground">
-                {t("newtab.subtitle")}
-              </p>
             </div>
           ) : (
-            (() => {
-              const ambient =
-                wallpaper.enabled &&
-                wallpaper.wallpaper &&
-                wallpaper.mode !== null;
-              const className = cn(
-                "space-y-0.5 px-0.5",
-                // No colour transition: the wallpaper-driven palette swap
-                // pairs with an instant logo-asset swap; a fading text
-                // beside an already-snapped logo reads as out-of-sync.
-                !ambient
-                  ? "text-foreground"
-                  : wallpaper.mode === "light"
-                    ? "text-neutral-900 [&_p]:drop-shadow-[0_1px_1px_rgba(255,255,255,0.4)]"
-                    : "text-white [&_p]:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]",
-              );
-              return (
-                <div className={className}>
-                  <EmptyStateVisual scene="home" />
-                  <p className="text-balance text-sm font-normal leading-6 opacity-80">
-                    {t("newtab.subtitle")}
-                  </p>
-                </div>
-              );
-            })()
+            <div className="space-y-0.5 px-0.5">
+              <EmptyStateVisual scene="home" />
+            </div>
           )}
           <Composer
             triggerRuntime={triggerRuntime}

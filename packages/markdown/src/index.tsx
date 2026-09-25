@@ -37,6 +37,38 @@ function identifyPipeline(plugins:NonNullable<StreamdownProps["remarkPlugins"]>,
 }
 
 export const MARKDOWN_SLOT = "amiba.markdown.extension";
+/**
+ * Streamdown's default rehype HARDENING plugin emits blocked-image/link
+ * placeholders carrying Tailwind utility classes that are only assembled at
+ * runtime — this build's compiler never sees them, so they render as bare
+ * "[Image blocked: …]" text. Reconfigure the same plugin to use
+ * Amiba-owned classes (`.amiba-blocked-image` / `.amiba-blocked-link`) that
+ * we actually style.
+ */
+const amibaDefaultRehypePlugins: typeof defaultRehypePlugins = (() => {
+  const entries = Object.entries(defaultRehypePlugins);
+  return Object.fromEntries(
+    entries.map(([name, hook]) => {
+      if (name !== "harden" || !Array.isArray(hook)) return [name, hook];
+      const [plugin, options] = hook as [
+        typeof hook[0],
+        Record<string, unknown>,
+      ];
+      return [
+        name,
+        [
+          plugin,
+          {
+            ...options,
+            blockedImageClass: "amiba-blocked-image",
+            blockedLinkClass: "amiba-blocked-link",
+          },
+        ],
+      ];
+    }),
+  ) as typeof defaultRehypePlugins;
+})();
+
 /** Rendering configuration is typed directly from Streamdown, without custom props. */
 export type MarkdownExtension = Pick<
   StreamdownProps,
@@ -254,7 +286,7 @@ export function ChatMarkdown(input: StreamdownProps) {
     ...(props.remarkPlugins ?? Object.values(defaultRemarkPlugins)), ...remark,
   ], revision, [options.plugins.math, options.plugins.cjk]);
   const rehypePipeline = identifyPipeline([
-    ...rehype, ...(props.rehypePlugins ?? Object.values(defaultRehypePlugins)),
+    ...rehype, ...(props.rehypePlugins ?? Object.values(amibaDefaultRehypePlugins)),
   ], revision, [options.plugins.math, options.plugins.cjk]);
   // Streamdown also memoizes rendered output; refresh it when a processor changes.
   const pipelineKey = JSON.stringify([remarkPipeline[0],rehypePipeline[0]]);
@@ -265,7 +297,7 @@ export function ChatMarkdown(input: StreamdownProps) {
       resetKey={props.children}
       fallback={<Streamdown {...props}
         remarkPlugins={identifyPipeline(props.remarkPlugins ?? Object.values(defaultRemarkPlugins), "fallback", [props.plugins?.math,props.plugins?.cjk])}
-        rehypePlugins={identifyPipeline(props.rehypePlugins ?? Object.values(defaultRehypePlugins), "fallback", [props.plugins?.math,props.plugins?.cjk])}
+        rehypePlugins={identifyPipeline(props.rehypePlugins ?? Object.values(amibaDefaultRehypePlugins), "fallback", [props.plugins?.math,props.plugins?.cjk])}
       />}
     >
       <Streamdown
