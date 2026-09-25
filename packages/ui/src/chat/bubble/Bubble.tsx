@@ -86,6 +86,60 @@ import {
 } from "../workspace-file-links";
 
 /**
+ * While a reply is still streaming, render its text body as plain pre-wrap
+ * text instead of incrementally re-parsed markdown. Streamdown lexes the
+ * WHOLE accumulated text on every commit and diffs the resulting block tree,
+ * so a long streaming reply spends its frames re-parsing prose instead of
+ * painting it — the same reason plain-line CLIs (Codex, Claude Code) stay
+ * smooth on long outputs. Formatting (tables, code highlight, workspace
+ * links) snaps in the moment the reply settles, usually a second later.
+ *
+ * Flip to false to restore live markdown while streaming (still coalesced
+ * and frame-gated by the stream buffer, so merely "markdown at 30 fps").
+ */
+export const STREAMING_PLAIN_TEXT = true;
+
+/**
+ * Memoized copy-prose per assistant message. UiMessage instances are
+ * immutable (a content change replaces the object via spread; the old
+ * reference is never mutated), so a WeakMap keyed by the message object is
+ * self-invalidating — it can never serve stale text after a settle.
+ *
+ * Without this cache, MessageTurns re-derives the copy prose for every
+ * settled group on every streamed frame even though its result is constant
+ * (the memoized Bubbles bail, but this parent-loop work does not).
+ */
+const copyProseCache = new WeakMap<UiMessage, string>();
+
+function copyProseFor(message: UiMessage): string {
+  const cached = copyProseCache.get(message);
+  if (cached !== undefined) return cached;
+  // Mirrors `buildTurnReplyItems` + the original copy derivation:
+  // interleaved messages are ALWAYS emitted as message items with
+  // suppressTrace=false (the first branch), so their copy prose is the
+  // flow-derived trailing text; every other assistant message contributes
+  // its plain body text.
+  const prose = hasInterleavedAssistantTimeline(message)
+    ? (() => {
+        const flow = buildAssistantFlow(message);
+        const visible = flow.some(
+          (segment) =>
+            segment.kind === "compaction" || segment.kind === "retry",
+        )
+          ? flow
+          : splitTrailingTextRun(flow).tail;
+        return visible
+          .flatMap((segment) =>
+            segment.kind === "text" ? [segment.text] : [],
+          )
+          .join("\n\n");
+      })()
+    : resolveAssistantTrace(message).bodyText;
+  copyProseCache.set(message, prose);
+  return prose;
+}
+
+/**
  * Resolves the plugin id on a message's `origin` to a name to show the user.
  * Returning `undefined` (nothing registered that id) falls back to rendering
  * a localized generic name, keeping internal identifiers out of the conversation.
@@ -559,6 +613,14 @@ function BubbleUnmemoized({
           </div>
         )}
         {hasBody && (
+          m.streaming && STREAMING_PLAIN_TEXT ? (
+            <div
+              data-streaming-plain-text
+              className="chat-md chat-md--plain whitespace-pre-wrap break-words"
+            >
+              {trace.bodyText}
+            </div>
+          ) : (
           <WorkspaceMarkdown
             sources={sliceTextSources(thinkingBodySource(joinTextSources(messageTextTimeline(m).filter(item=>item.kind==="text").map(timelineTextSource),"")),trace.bodyText)}
             components={chatMarkdownComponents}
@@ -570,6 +632,7 @@ function BubbleUnmemoized({
           >
             {trace.bodyText}
           </WorkspaceMarkdown>
+          )
         )}
         {showRunning && <TurnRunningIndicator />}
         {!m.streaming && m.agentFinalUrl && onOpenAgentDestination && (
@@ -895,7 +958,7 @@ type TurnTraceDetail =
  * in a bounded scroll area, pinned to the newest line unless the reader has
  * scrolled back up to study something.
  */
-function LiveReasoningPane({ text }: { text: string }) {
+function LiveReasoningPane({ text, streaming }: { text: string; streaming: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
 
@@ -916,6 +979,14 @@ function LiveReasoningPane({ text }: { text: string }) {
       }}
       className="ml-[7px] max-h-40 overflow-y-auto border-l border-border/60 py-1 pl-3 pr-1"
     >
+      {streaming && STREAMING_PLAIN_TEXT ? (
+        <div
+          data-streaming-plain-text
+          className="chat-md chat-md--plain whitespace-pre-wrap break-words px-1.5 text-xs text-muted-foreground/85"
+        >
+          {text}
+        </div>
+      ) : (
       <Streamdown
         components={chatMarkdownComponents}
         mode="static"
@@ -924,6 +995,7 @@ function LiveReasoningPane({ text }: { text: string }) {
       >
         {text}
       </Streamdown>
+      )}
     </div>
   );
 }
@@ -980,7 +1052,7 @@ function LiveReasoningRow({
         }
         {...(durationMs === undefined ? {} : { durationMs })}
         running={streaming}
-        detail={<LiveReasoningPane text={text} />}
+        detail={<LiveReasoningPane text={text} streaming={streaming} />}
         expanded={open}
         onExpandedChange={setOpen}
         expandTitle={t("sidepanel.trace.expandDetails")}
@@ -1474,16 +1546,21 @@ function buildAssistantFlow(message: UiMessage): AssistantFlowItem[] {
   // timed rows or detached paragraphs.
   const midTurnTextIds = new Set<string>();
   {
-    const textIndexes = timeline
-      .map((item, index) => (item.kind === "text" ? index : -1))
-      .filter((index) => index >= 0);
-    const toolIndexes = timeline
-      .map((item, index) => (item.kind === "tool" ? index : -1))
-      .filter((index) => index >= 0);
-    for (const index of textIndexes) {
-      const preceded = toolIndexes.some((toolIndex) => toolIndex < index);
-      const followed = toolIndexes.some((toolIndex) => toolIndex > index);
-      if (preceded && followed) midTurnTextIds.add(timeline[index]!.id);
+    // A text item is MID-TURN narration when a tool call both precedes and
+    // follows it. The previous version scanned every text index against every
+    // tool index (quadratic); a long step series re-ran this per streaming
+    // frame. One pass with running tool counts is equivalent and linear.
+    let totalTools = 0;
+    for (const item of timeline) if (item.kind === "tool") totalTools += 1;
+    let toolsBefore = 0;
+    for (const item of timeline) {
+      if (item.kind === "tool") {
+        toolsBefore += 1;
+        continue;
+      }
+      if (item.kind === "text" && toolsBefore > 0 && toolsBefore < totalTools) {
+        midTurnTextIds.add(item.id);
+      }
     }
   }
 
@@ -1779,6 +1856,14 @@ function InterleavedAssistantFlow({
                   key={segment.id}
                   data-live-tail={index === flow.length - 1 ? "" : undefined}
                 >
+                  {resultStreaming && STREAMING_PLAIN_TEXT ? (
+                    <div
+                      data-streaming-plain-text
+                      className="chat-md chat-md--plain whitespace-pre-wrap break-words"
+                    >
+                      {segment.text}
+                    </div>
+                  ) : (
                   <WorkspaceMarkdown
                     sources={segment.sources}
                     components={chatMarkdownComponents}
@@ -1792,6 +1877,7 @@ function InterleavedAssistantFlow({
                   >
                     {segment.text}
                   </WorkspaceMarkdown>
+                  )}
                 </div>
               ) : (
                 <ExecutionDisclosure
@@ -1820,6 +1906,14 @@ function InterleavedAssistantFlow({
             )}
             {resultText.length > 0 && (
               <div data-turn-result>
+                {resultStreaming && STREAMING_PLAIN_TEXT ? (
+                  <div
+                    data-streaming-plain-text
+                    className="chat-md chat-md--plain whitespace-pre-wrap break-words"
+                  >
+                    {resultText}
+                  </div>
+                ) : (
                 <WorkspaceMarkdown
                   sources={sliceTextSources(resultSource,resultText)}
                   components={chatMarkdownComponents}
@@ -1831,6 +1925,7 @@ function InterleavedAssistantFlow({
                 >
                   {resultText}
                 </WorkspaceMarkdown>
+                )}
               </div>
             )}
           </>
@@ -2292,13 +2387,33 @@ export function MessageTurns({
   // memoized so its identity only changes when the window contents actually
   // change — `onTurnsWindowChange` (read by the ConversationTurnRail) must not
   // fire on every render of a streaming conversation.
-  const [turnWindow, expandTurnWindow] = useConversationTurnWindow(sessionId, viewStateScope, turns.length);
+  const [turnWindow, expandTurnWindow, messageCap] = useConversationTurnWindow(sessionId, viewStateScope, turns.length);
   const windowSentinelRef = useRef<HTMLDivElement>(null);
+  const lastTurnWindowKeyRef = useRef<string>("");
   const { visible: visibleTurns, hidden: hiddenTurns } = useMemo(
-    () => windowTurns(turns, turnWindow),
-    [turns, turnWindow],
+    // The turn-count window alone does not bound tool-heavy sessions (DSH
+    // emits one assistant message per step, so one turn can hold dozens of
+    // replies). Fold older turns until the mounted messages fit under the
+    // message budget — the streaming (newest) turn is always kept whole.
+    // `messageCap` grows alongside `turnWindow` (see
+    // `useConversationTurnWindow`), so scrolling past the sentinel reveals
+    // older history one slice at a time.
+    () =>
+      windowTurns(turns, turnWindow, {
+        maxMessages: messageCap,
+        countMessages: (turn) => (turn.user ? 1 : 0) + turn.replies.length,
+      }),
+    [turns, turnWindow, messageCap],
   );
   useEffect(() => {
+    // The window slice is memoized, but its ARRAY identity still churns on
+    // every streamed frame (the turn grouping rebuilds with the new
+    // messages array). Only the rail consumes this — it must not re-render
+    // 30×/s while a reply grows, so report the window only when its actual
+    // contents change (first visible turn edge + size + hidden count).
+    const key = `${hiddenTurns}:${visibleTurns.length}:${visibleTurns[0]?.user?.uiId ?? ""}:${visibleTurns.at(-1)?.user?.uiId ?? ""}`;
+    if (key === lastTurnWindowKeyRef.current) return;
+    lastTurnWindowKeyRef.current = key;
     onTurnsWindowChange?.({ visible: visibleTurns, hidden: hiddenTurns });
   }, [onTurnsWindowChange, visibleTurns, hiddenTurns]);
   useEffect(() => {
@@ -2436,18 +2551,28 @@ export function MessageTurns({
               );
               });
               const groupMessages = group.items.flatMap(({ item }) => item.kind === "execution" ? item.messages : item.kind === "message" ? [item.message] : []);
+              // The copy action bar is only rendered for settled groups (see
+              // AssistantReplyChrome's `complete` gate), so deriving the copy
+              // prose for a streaming group is pure waste — it re-runs the
+              // whole flow build (buildAssistantFlow) on every streamed frame
+              // just to feed a hidden button. Settled groups hit the
+              // `copyProseFor` WeakMap cache (messages are immutable, so the
+              // cache is self-invalidating).
+              const groupStreaming = groupMessages.some(message => message.streaming);
               // Copy the same prose that the reply renderer exposes, never the
               // persisted content that also contains execution narration.
-              const copyText = group.items.flatMap(({ item }) => {
-                if (item.kind !== "message" || item.message.role !== "assistant") return [];
-                if (!item.suppressTrace && hasInterleavedAssistantTimeline(item.message)) {
-                  const flow = buildAssistantFlow(item.message);
-                  const visible = flow.some(segment => segment.kind === "compaction" || segment.kind === "retry")
-                    ? flow : splitTrailingTextRun(flow).tail;
-                  return visible.flatMap(segment => segment.kind === "text" ? [segment.text] : []);
-                }
-                return [resolveAssistantTrace(item.message).bodyText];
-              }).map(stripManagedResourceContext).filter(value => value.trim()).join("\n\n");
+              // `flatMap` narrows the TurnReplyItem union inside the branch —
+              // a boolean `.filter` would not, which the ui-shell build's
+              // strict tsconfig catches on `item.message`.
+              const copyText = groupStreaming ? "" : group.items
+                .flatMap(({ item }) =>
+                  item.kind === "message" && item.message.role === "assistant"
+                    ? [copyProseFor(item.message)]
+                    : [],
+                )
+                .map(stripManagedResourceContext)
+                .filter(value => value.trim())
+                .join("\n\n");
               const ownsReview = group === [...replyGroups].reverse().find(candidate => candidate.assistant);
               const body = group.assistant
                 ? <div data-assistant-reply-group data-background-surface="assistant-message">

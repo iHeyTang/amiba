@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -91,6 +92,10 @@ describe("region interaction", () => {
     let interaction!: SurfaceInteraction;
     function Probe() {
       interaction = useSurfaceInteraction()!;
+      // The region only computes pointer coordinates while a consumer is
+      // subscribed (see the pointer-move layout guard); mirror the real
+      // consumer's (empty-state visual) subscription contract.
+      useEffect(() => interaction.subscribe(() => {}), []);
       return null;
     }
     const { getByTestId } = render(
@@ -170,4 +175,58 @@ it("disables presentation leases on document hide and region unmount", () => {
   expect(lease.getSnapshot()).toBe(false);
   lease.release();
   visibility.mockRestore();
+});
+
+describe("pointer-move layout guard", () => {
+  const rect = {
+    width: 400,
+    height: 300,
+    left: 0,
+    top: 0,
+    right: 400,
+    bottom: 300,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  } as DOMRect;
+
+  it("skips the getBoundingClientRect read while no consumer subscribes", () => {
+    const spy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue(rect);
+    try {
+      const { container } = render(
+        <InteractionRegion>
+          <div />
+        </InteractionRegion>,
+      );
+      fireEvent.pointerMove(container.firstElementChild!);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("reads the region box once a consumer subscribes", () => {
+    const spy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue(rect);
+    function Subscriber() {
+      const s = useSurfaceInteraction()!;
+      useEffect(() => s.subscribe(() => {}), [s]);
+      return null;
+    }
+    try {
+      const { container } = render(
+        <InteractionRegion>
+          <Subscriber />
+          <div />
+        </InteractionRegion>,
+      );
+      fireEvent.pointerMove(container.firstElementChild!);
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });

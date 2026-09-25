@@ -28,7 +28,15 @@ import type { AssistantTimelineItem, UiMessage } from "./types";
  *     reasoning string, and tool-call list. Flushed into the message's
  *     `assistantTimeline`, `reasoning`, `streamVerbose`,
  *     `toolProgress` by `applyVerboseToAssistant`.
- *   - Two RAF handles so back-to-back schedules coalesce.
+ *   - **One RAF handle + frame gate.** Every event handler marks a dirty
+ *     flag and schedules a single coalesced flush. The flush drains the
+ *     chunk buffer AND the verbose timeline in ONE `setActiveMessages`
+ *     commit, and fires at most once every two animation frames (~30 fps).
+ *     Streamdown re-parses the whole accumulated text on every render, so
+ *     a 60 fps flush rate makes the markdown cost grow linearly with wall
+ *     time (a 100 KB reply re-parsed 60×/s pegs the main thread and
+ *     freezes the whole window) — halving the rate halves that cost while
+ *     keeping the live reply visually smooth.
  *
  * It does NOT own the wire subscription (`client.onStreamEvent` /
  * `client.onSnapshot`) — that stays in `ChatSurface` with the event
@@ -84,9 +92,9 @@ export interface UseStreamBufferResult {
   /** Append a `delta.content` chunk. Schedules a flush. */
   onChunk: (text: string, runtimeStep?: number) => void;
   onAssistantTextSource: (event: Extract<StreamEvent,{kind:"assistantTextSource"}>) => void;
-  /** Append a reasoning delta chunk. Schedules a verbose flush. */
+  /** Append a reasoning delta chunk. Schedules a coalesced flush. */
   onReasoning: (text: string) => void;
-  /** Overwrite the running tool-call list. Schedules a verbose flush. */
+  /** Overwrite the running tool-call list. Schedules a coalesced flush. */
   onToolCalls: (calls: ToolCall[]) => void;
   /** Record a runtime tool-progress event in stable order. */
   onToolProgress: (ev: ToolProgress) => void;
@@ -98,15 +106,15 @@ export interface UseStreamBufferResult {
   onApprovalToTimeline: (approvalId: string) => void;
 
   // --- Flush controls (for terminal handlers) ------------------------
-  /** Cancel any in-flight chunk-flush RAF without flushing. */
+  /** Cancel any in-flight streaming flush RAF without flushing. */
   cancelStreamChunkFlush: () => void;
-  /** Cancel any in-flight verbose-flush RAF without flushing. */
+  /** Cancel any in-flight streaming flush RAF without flushing. */
   cancelVerboseFlush: () => void;
   /** Immediate flush of any buffered chunks. */
   flushStreamChunksToMessages: () => void;
   /** Immediate apply of the verbose state to the assistant message. */
   applyVerboseToAssistant: () => void;
-  /** Schedule a verbose flush on the next animation frame. */
+  /** Schedule a coalesced flush on the next animation frame (throttled). */
   scheduleVerboseFlush: () => void;
 }
 
@@ -114,16 +122,27 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
   const { sessions } = args;
 
   const streamChunkBufRef = useRef<ChunkSlot | null>(null);
-  const streamFlushRafRef = useRef<number | null>(null);
   const verboseStateRef = useRef<VerboseSlot | null>(null);
-  const verboseFlushRafRef = useRef<number | null>(null);
+  const flushRafRef = useRef<number | null>(null);
+  /** Flush at most once per two animation frames. See {@link scheduleFlush}. */
+  const frameRef = useRef(0);
+  /** Set by every event handler; cleared by the coalesced flush. Lets the
+   * scheduler skip a frame when only one of the two schedulers fired. */
+  const dirtyRef = useRef(false);
 
-  const cancelStreamChunkFlush = useCallback((): void => {
-    if (streamFlushRafRef.current != null) {
-      cancelAnimationFrame(streamFlushRafRef.current);
-      streamFlushRafRef.current = null;
+  const markDirty = useCallback((): void => {
+    dirtyRef.current = true;
+  }, []);
+
+  const cancelFlush = useCallback((): void => {
+    if (flushRafRef.current != null) {
+      cancelAnimationFrame(flushRafRef.current);
+      flushRafRef.current = null;
     }
   }, []);
+
+  const cancelStreamChunkFlush = cancelFlush;
+  const cancelVerboseFlush = cancelFlush;
 
   const flushStreamChunksToMessages = useCallback((): void => {
     const slot = streamChunkBufRef.current;
@@ -141,23 +160,12 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     });
   }, [sessions]);
 
-  const scheduleStreamChunkFlush = useCallback((): void => {
-    if (streamFlushRafRef.current != null) return;
-    streamFlushRafRef.current = requestAnimationFrame(() => {
-      streamFlushRafRef.current = null;
-      flushStreamChunksToMessages();
-      if (streamChunkBufRef.current?.pending) {
-        scheduleStreamChunkFlush();
-      }
-    });
-  }, [flushStreamChunksToMessages]);
-
   // Always cancel any pending RAF on unmount.
   useEffect(() => {
     return () => {
-      cancelStreamChunkFlush();
+      cancelFlush();
     };
-  }, [cancelStreamChunkFlush]);
+  }, [cancelFlush]);
 
   const appendTextToVerboseTimeline = useCallback((delta: string, runtimeStep?: number): void => {
     const v = verboseStateRef.current;
@@ -191,16 +199,8 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     [],
   );
 
-  const cancelVerboseFlush = useCallback((): void => {
-    if (verboseFlushRafRef.current != null) {
-      cancelAnimationFrame(verboseFlushRafRef.current);
-      verboseFlushRafRef.current = null;
-    }
-  }, []);
-
-  const applyVerboseToAssistant = useCallback((): void => {
-    const v = verboseStateRef.current;
-    if (!v) return;
+  /** Derive the per-message fields a verbose snapshot contributes. */
+  const buildVerbosePatch = useCallback((v: VerboseSlot) => {
     // Reasoning rides on its own field so the bubble renderer can fold it
     // separately from the body text. ``streamVerbose`` carries only a
     // backward-compatible aggregate of tool arguments; the progress events
@@ -233,7 +233,6 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
     const timelineSnapshot = v.timeline.map((it) =>
       it.kind === "text" || it.kind === "reasoning" ? { ...it } : it,
     );
-    const assistantUiId = v.assistantUiId;
     const reasoningMs =
       v.reasoningStartAt !== null && v.reasoningEndAt !== null
         ? Math.max(0, v.reasoningEndAt - v.reasoningStartAt)
@@ -242,34 +241,83 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
       v.processFirstAt !== null && v.processLastAt !== null
         ? Math.max(0, v.processLastAt - v.processFirstAt)
         : undefined;
+    return {
+      streamVerbose: md,
+      reasoning: rs || undefined,
+      ...(rs && reasoningMs !== undefined ? { reasoningMs } : {}),
+      ...(processMs !== undefined ? { processMs } : {}),
+      toolProgress: progressWithDetails,
+      assistantTimeline: timelineSnapshot,
+    };
+  }, []);
+
+  /** Immediate apply of the verbose state to the assistant message. */
+  const applyVerboseToAssistant = useCallback((): void => {
+    const v = verboseStateRef.current;
+    if (!v) return;
+    const assistantUiId = v.assistantUiId;
+    const patch = buildVerbosePatch(v);
     sessions.setActiveMessages((prev) =>
       (prev as UiMessage[]).map((m) =>
-        m.uiId === assistantUiId
-          ? {
-              ...m,
-              streamVerbose: md,
-              reasoning: rs || undefined,
-              ...(rs && reasoningMs !== undefined ? { reasoningMs } : {}),
-              ...(processMs !== undefined ? { processMs } : {}),
-              toolProgress: progressWithDetails,
-              assistantTimeline: timelineSnapshot,
-            }
-          : m,
+        m.uiId === assistantUiId ? { ...m, ...patch } : m,
       ),
     );
-  }, [sessions]);
+  }, [buildVerbosePatch, sessions]);
 
-  const scheduleVerboseFlush = useCallback((): void => {
-    if (verboseFlushRafRef.current != null) return;
-    verboseFlushRafRef.current = requestAnimationFrame(() => {
-      verboseFlushRafRef.current = null;
-      applyVerboseToAssistant();
+  /** Drain chunk buffer AND verbose timeline in ONE commit (one re-render). */
+  const flushBuffers = useCallback((): void => {
+    if (!dirtyRef.current) return;
+    dirtyRef.current = false;
+    const slot = streamChunkBufRef.current;
+    const delta = slot?.pending ?? "";
+    if (slot) slot.pending = "";
+    const v = verboseStateRef.current;
+    if (delta.length === 0 && !v) return;
+    const uiId = slot?.assistantUiId ?? v?.assistantUiId;
+    if (!uiId) return;
+    const patch = v ? buildVerbosePatch(v) : null;
+    sessions.setActiveMessages((prev) => {
+      const next = (prev as UiMessage[]).slice();
+      const i = next.findIndex((m) => m.uiId === uiId);
+      if (i < 0) return prev;
+      next[i] = {
+        ...next[i],
+        ...(delta.length > 0 ? { content: next[i].content + delta } : {}),
+        ...(patch ?? {}),
+      };
+      return next;
     });
-  }, [applyVerboseToAssistant]);
+    // A chunk that lands between the dirty check and the drain (impossible
+    // on one thread, but terminal flushes run outside the RAF path) stays
+    // pending for the next scheduled flush.
+    if (streamChunkBufRef.current?.pending) markDirty();
+  }, [buildVerbosePatch, sessions, markDirty]);
+
+  /**
+   * Coalesced, throttled scheduler: at most one flush per animation frame
+   * and at most one flush per two frames (~30 fps), one commit per flush.
+   * The streaming bubble re-parses its whole accumulated markdown on every
+   * commit, so flushing every frame makes that cost grow with wall time; the
+   * frame gate halves it while keeping the live reply visually smooth.
+   */
+  const scheduleFlush = useCallback((): void => {
+    if (flushRafRef.current != null) return;
+    if (!dirtyRef.current) return;
+    flushRafRef.current = requestAnimationFrame(() => {
+      flushRafRef.current = null;
+      if (!dirtyRef.current) return;
+      frameRef.current += 1;
+      if (frameRef.current % 2 === 0) flushBuffers();
+      if (dirtyRef.current) scheduleFlush();
+    });
+  }, [flushBuffers]);
+
+  const scheduleVerboseFlush = scheduleFlush;
 
   const prime = useCallback((assistantUiId: string): void => {
-    cancelStreamChunkFlush();
-    cancelVerboseFlush();
+    cancelFlush();
+    dirtyRef.current = false;
+    frameRef.current = 0;
     streamChunkBufRef.current = {
       assistantUiId,
       pending: "",
@@ -286,7 +334,7 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
       toolsById: new Map(),
       timeline: [],
     };
-  }, [cancelStreamChunkFlush, cancelVerboseFlush]);
+  }, [cancelFlush]);
 
   const onBegin = useCallback((assistantUiId: string): void => {
     if (!streamChunkBufRef.current) {
@@ -312,11 +360,12 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
   }, []);
 
   const reset = useCallback((): void => {
-    cancelStreamChunkFlush();
-    cancelVerboseFlush();
+    cancelFlush();
+    dirtyRef.current = false;
+    frameRef.current = 0;
     streamChunkBufRef.current = null;
     verboseStateRef.current = null;
-  }, [cancelStreamChunkFlush, cancelVerboseFlush]);
+  }, [cancelFlush]);
 
   const hydrateFromSnapshot = useCallback((state: ChatRuntimeState): void => {
     if (!state.assistantUiId) return;
@@ -357,17 +406,18 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
       const slot = streamChunkBufRef.current;
       if (slot) slot.pending += text;
       appendTextToVerboseTimeline(text, runtimeStep);
-      scheduleStreamChunkFlush();
-      scheduleVerboseFlush();
+      markDirty();
+      scheduleFlush();
     },
-    [appendTextToVerboseTimeline, scheduleStreamChunkFlush, scheduleVerboseFlush],
+    [appendTextToVerboseTimeline, markDirty, scheduleFlush],
   );
 
   const onAssistantTextSource = useCallback((event: Extract<StreamEvent,{kind:"assistantTextSource"}>) => {
     const v = verboseStateRef.current;
     if (v) applyAssistantTextSource(v.timeline, event);
-    scheduleVerboseFlush();
-  }, [scheduleVerboseFlush]);
+    markDirty();
+    scheduleFlush();
+  }, [markDirty, scheduleFlush]);
 
   const onReasoning = useCallback(
     (text: string): void => {
@@ -387,18 +437,20 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
         if (v.processFirstAt === null) v.processFirstAt = now;
         v.processLastAt = now;
       }
-      scheduleVerboseFlush();
+      markDirty();
+      scheduleFlush();
     },
-    [scheduleVerboseFlush],
+    [markDirty, scheduleFlush],
   );
 
   const onToolCalls = useCallback(
     (calls: ToolCall[]): void => {
       const v = verboseStateRef.current;
       if (v) v.tools = calls.slice();
-      scheduleVerboseFlush();
+      markDirty();
+      scheduleFlush();
     },
-    [scheduleVerboseFlush],
+    [markDirty, scheduleFlush],
   );
 
   const onToolProgress = useCallback(
@@ -414,22 +466,25 @@ export function useStreamBuffer(args: UseStreamBufferArgs): UseStreamBufferResul
         }
         v.toolsById.set(ev.toolCallId, ev);
       }
-      scheduleVerboseFlush();
+      markDirty();
+      scheduleFlush();
     },
-    [appendToolToVerboseTimeline, scheduleVerboseFlush],
+    [appendToolToVerboseTimeline, markDirty, scheduleFlush],
   );
 
   const onRetry = useCallback((update: Extract<StreamEvent, {kind:"retry"}>["event"]): void => {
     const v = verboseStateRef.current;
     if (v) upsertRetryTimeline(v.timeline, update);
-    scheduleVerboseFlush();
-  }, [scheduleVerboseFlush]);
+    markDirty();
+    scheduleFlush();
+  }, [markDirty, scheduleFlush]);
 
   const onCompaction = useCallback((update: CompactionUpdate): void => {
     const v = verboseStateRef.current;
     if (v) upsertCompactionTimeline(v.timeline, update);
-    scheduleVerboseFlush();
-  }, [scheduleVerboseFlush]);
+    markDirty();
+    scheduleFlush();
+  }, [markDirty, scheduleFlush]);
 
   const finishCompactions = useCallback((): void => {
     const v = verboseStateRef.current;

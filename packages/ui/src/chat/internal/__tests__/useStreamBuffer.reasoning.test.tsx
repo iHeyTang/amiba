@@ -139,3 +139,110 @@ it("retains pending text, tool evidence and retry records when an error resets t
   expect(current()[0].toolProgress).toHaveLength(1);
   expect(current()[0].assistantTimeline?.at(-1)).toMatchObject({kind:"retry",retry:{attempt:1}});
 });
+
+describe("useStreamBuffer coalesced flush", () => {
+  // Deterministic RAF harness: the frame-gated scheduler flushes at most once
+  // per two scheduled animation frames, so tests drive callbacks directly.
+  function captureStreamScheduler() {
+    const callbacks: Array<() => void> = [];
+    const raf = vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation(
+      (cb: FrameRequestCallback) => {
+        callbacks.push(() => cb(0));
+        return callbacks.length;
+      },
+    );
+    const caf = vi
+      .spyOn(globalThis, "cancelAnimationFrame")
+      .mockImplementation(() => {});
+    return {
+      raf,
+      caf,
+      /** Run every scheduled frame until the queue drains. */
+      frames: () => {
+        let guard = 0;
+        while (callbacks.length && guard++ < 20) {
+          callbacks.splice(0).forEach((cb) => cb());
+        }
+        return guard;
+      },
+    };
+  }
+
+  it("commits chunk and verbose state in a single setActiveMessages call", () => {
+    const { stub, current } = makeSessionsStub();
+    const { result } = renderHook(() => useStreamBuffer({ sessions: stub }));
+    const scheduler = captureStreamScheduler();
+    try {
+      act(() => {
+        result.current.prime("a1");
+        result.current.onChunk("hello ");
+        result.current.onReasoning("thinking");
+      });
+      expect(stub.setActiveMessages).not.toHaveBeenCalled();
+      act(() => scheduler.frames());
+      // One commit for the chunk AND the reasoning, not two:
+      expect(stub.setActiveMessages).toHaveBeenCalledTimes(1);
+      expect(current()[0].content).toBe("hello ");
+      expect(current()[0].reasoning).toBe("thinking");
+    } finally {
+      scheduler.raf.mockRestore();
+      scheduler.caf.mockRestore();
+    }
+  });
+
+  it("throttles to one flush per two frames and never drops the tail", () => {
+    const { stub, current } = makeSessionsStub();
+    const { result } = renderHook(() => useStreamBuffer({ sessions: stub }));
+    const scheduler = captureStreamScheduler();
+    try {
+      act(() => {
+        result.current.prime("a1");
+        result.current.onChunk("a");
+        result.current.onChunk("b");
+      });
+      // Two chunks buffered before the first flush: the frame gate only
+      // commits on even frames, yet everything buffered lands in ONE commit.
+      act(() => scheduler.frames());
+      expect(stub.setActiveMessages).toHaveBeenCalledTimes(1);
+      expect(current()[0].content).toBe("ab");
+
+      // A later chunk needs two fresh frames before it is committed.
+      act(() => result.current.onChunk("c"));
+      act(() => scheduler.frames());
+      expect(current()[0].content).toBe("abc");
+      expect(stub.setActiveMessages).toHaveBeenCalledTimes(2);
+
+      // Terminal flush drains anything left outside the scheduler.
+      act(() => {
+        result.current.onChunk("d");
+        result.current.cancelStreamChunkFlush();
+        result.current.flushStreamChunksToMessages();
+      });
+      expect(current()[0].content).toBe("abcd");
+    } finally {
+      scheduler.raf.mockRestore();
+      scheduler.caf.mockRestore();
+    }
+  });
+
+  it("keeps the imperative terminal flushes independent of the scheduler", () => {
+    const { stub, current } = makeSessionsStub();
+    const { result } = renderHook(() => useStreamBuffer({ sessions: stub }));
+    const scheduler = captureStreamScheduler();
+    try {
+      act(() => {
+        result.current.prime("a1");
+        result.current.onChunk("x");
+        result.current.applyVerboseToAssistant();
+        result.current.cancelStreamChunkFlush();
+        result.current.cancelVerboseFlush();
+        result.current.flushStreamChunksToMessages();
+        result.current.reset();
+      });
+      expect(current()[0].content).toBe("x");
+    } finally {
+      scheduler.raf.mockRestore();
+      scheduler.caf.mockRestore();
+    }
+  });
+});

@@ -31,3 +31,6 @@ plugins/dsh-plugin-pets/src/mofli-capabilities.generated.ts
 
 # Atomic development compiler output.
 **/.amiba-build-*/
+
+# Perf baseline outputs (machine-specific paths)
+scripts/perf/results/

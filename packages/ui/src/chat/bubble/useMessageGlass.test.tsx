@@ -5,8 +5,8 @@ import { useMessageGlass } from "./useMessageGlass";
 let pending: { resolve: () => void; reject: () => void }[];
 let resize: () => void;
 let width: number;
-function Fixture() {
-  const ref = useMessageGlass(true, "left");
+function Fixture({ complete = true }: { complete?: boolean }) {
+  const ref = useMessageGlass(complete, "left");
   return <div ref={ref} data-testid="chrome"><div data-message-glass-body /><div data-background-surface="message-actions" /></div>;
 }
 beforeEach(() => {
@@ -50,6 +50,24 @@ describe("message glass readiness", () => {
     await settle(4, 5);
     expect(chrome.style.getPropertyValue("--assistant-glass-mask")).toContain("600");
   });
+  it("defers all measurement while the group is streaming", () => {
+    const { getByTestId } = render(<Fixture complete={false} />);
+    const chrome = getByTestId("chrome");
+    // No ResizeObserver wiring and no Image.decode() work while streaming:
+    expect(chrome).not.toHaveAttribute("data-unified-glass");
+    expect(pending).toHaveLength(0);
+  });
+
+  it("applies glass once the group settles (complete flips)", async () => {
+    const { getByTestId, rerender } = render(<Fixture complete={false} />);
+    const chrome = getByTestId("chrome");
+    expect(chrome).not.toHaveAttribute("data-unified-glass");
+    rerender(<Fixture complete={true} />);
+    expect(pending).toHaveLength(2);
+    await settle(0, 1);
+    expect(chrome).toHaveAttribute("data-unified-glass");
+  });
+
   it("falls back to the body on decode failure and ignores unmounted work", async () => {
     const { getByTestId, unmount } = render(<Fixture />);
     const chrome = getByTestId("chrome");
