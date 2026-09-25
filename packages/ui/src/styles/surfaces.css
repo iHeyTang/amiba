@@ -111,16 +111,8 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-[data-amiba-product-shell] [data-section-header="rail"] {
-  border-radius: 8px;
-  /* Plain translucent strip: no backdrop blur, no border ring — it just
-   * scrolls with the list. */
-  background: hsl(var(--background) / 0.12);
-  box-shadow: 0 1px 2px hsl(var(--foreground) / 0.04);
-}
-[data-amiba-product-shell] [data-section-header="rail"]:hover {
-  background: hsl(var(--background) / 0.22);
-}
+/* Rail section headers are plain rows: no fill, no blur, no ring — they
+   just scroll with the list. Hover keeps the TSX accent affordance. */
 [data-amiba-product-shell] :is([data-session-row], [data-navigation-row]):is([data-active="true"], :hover, :focus-within) {
   background: var(--amiba-content-hover);
   backdrop-filter: none;
@@ -511,10 +503,6 @@
 }
 .amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] .amiba-blocked-image {
   background: hsl(var(--muted));
-}
-.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-section-header="rail"] {
-  /* Flat canvas: a 12% white veil would vanish; keep the strip visible. */
-  background: hsl(var(--muted) / 0.6);
 }
 
 /* rehype-harden blocked placeholders: Streamdown's default harden plugin
