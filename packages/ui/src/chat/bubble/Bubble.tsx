@@ -100,6 +100,46 @@ import {
 export const STREAMING_PLAIN_TEXT = true;
 
 /**
+ * Memoized copy-prose per assistant message. UiMessage instances are
+ * immutable (a content change replaces the object via spread; the old
+ * reference is never mutated), so a WeakMap keyed by the message object is
+ * self-invalidating — it can never serve stale text after a settle.
+ *
+ * Without this cache, MessageTurns re-derives the copy prose for every
+ * settled group on every streamed frame even though its result is constant
+ * (the memoized Bubbles bail, but this parent-loop work does not).
+ */
+const copyProseCache = new WeakMap<UiMessage, string>();
+
+function copyProseFor(message: UiMessage): string {
+  const cached = copyProseCache.get(message);
+  if (cached !== undefined) return cached;
+  // Mirrors `buildTurnReplyItems` + the original copy derivation:
+  // interleaved messages are ALWAYS emitted as message items with
+  // suppressTrace=false (the first branch), so their copy prose is the
+  // flow-derived trailing text; every other assistant message contributes
+  // its plain body text.
+  const prose = hasInterleavedAssistantTimeline(message)
+    ? (() => {
+        const flow = buildAssistantFlow(message);
+        const visible = flow.some(
+          (segment) =>
+            segment.kind === "compaction" || segment.kind === "retry",
+        )
+          ? flow
+          : splitTrailingTextRun(flow).tail;
+        return visible
+          .flatMap((segment) =>
+            segment.kind === "text" ? [segment.text] : [],
+          )
+          .join("\n\n");
+      })()
+    : resolveAssistantTrace(message).bodyText;
+  copyProseCache.set(message, prose);
+  return prose;
+}
+
+/**
  * Resolves the plugin id on a message's `origin` to a name to show the user.
  * Returning `undefined` (nothing registered that id) falls back to rendering
  * a localized generic name, keeping internal identifiers out of the conversation.
@@ -2492,18 +2532,22 @@ export function MessageTurns({
               );
               });
               const groupMessages = group.items.flatMap(({ item }) => item.kind === "execution" ? item.messages : item.kind === "message" ? [item.message] : []);
+              // The copy action bar is only rendered for settled groups (see
+              // AssistantReplyChrome's `complete` gate), so deriving the copy
+              // prose for a streaming group is pure waste — it re-runs the
+              // whole flow build (buildAssistantFlow) on every streamed frame
+              // just to feed a hidden button. Settled groups hit the
+              // `copyProseFor` WeakMap cache (messages are immutable, so the
+              // cache is self-invalidating).
+              const groupStreaming = groupMessages.some(message => message.streaming);
               // Copy the same prose that the reply renderer exposes, never the
               // persisted content that also contains execution narration.
-              const copyText = group.items.flatMap(({ item }) => {
-                if (item.kind !== "message" || item.message.role !== "assistant") return [];
-                if (!item.suppressTrace && hasInterleavedAssistantTimeline(item.message)) {
-                  const flow = buildAssistantFlow(item.message);
-                  const visible = flow.some(segment => segment.kind === "compaction" || segment.kind === "retry")
-                    ? flow : splitTrailingTextRun(flow).tail;
-                  return visible.flatMap(segment => segment.kind === "text" ? [segment.text] : []);
-                }
-                return [resolveAssistantTrace(item.message).bodyText];
-              }).map(stripManagedResourceContext).filter(value => value.trim()).join("\n\n");
+              const copyText = groupStreaming ? "" : group.items
+                .filter(({ item }) => item.kind === "message" && item.message.role === "assistant")
+                .map(({ item }) => copyProseFor(item.message))
+                .map(stripManagedResourceContext)
+                .filter(value => value.trim())
+                .join("\n\n");
               const ownsReview = group === [...replyGroups].reverse().find(candidate => candidate.assistant);
               const body = group.assistant
                 ? <div data-assistant-reply-group data-background-surface="assistant-message">
