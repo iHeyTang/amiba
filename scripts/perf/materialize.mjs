@@ -17,19 +17,24 @@ const text=decodeSessionLog(target.log).toString("utf8");
 console.log("session:", path.basename(path.dirname(target.log)), "| lines:", text.split("\n").length, "| decoded MB:", (text.length/1e6).toFixed(1));
 function run(){
   const t0=process.hrtime.bigint();
-  const msgs=[];let cur=null;let parses=0;
+  const msgs=[];let cur=null;let parses=0;let totalContentBytes=0;
   for(const line of text.split("\n")){
     if(!line)continue;
     let e;try{e=JSON.parse(line);parses++;}catch{continue;}
-    const kind=e.type||"";
-    if(kind==="user/message"){cur={uiId:"u"+msgs.length,role:"user",content:e.content??"",runtimeSeq:msgs.length};msgs.push(cur);}
-    else if(kind==="assistant/message"){cur={uiId:"a"+msgs.length,role:"assistant",content:e.content??"",assistantMessageId:"a-"+msgs.length,runtimeSeq:msgs.length};msgs.push(cur);}
-    else if(cur&&(kind==="tool/call"||kind==="tool/result")){
+    const kind=e.type||"", d=e.data||{};
+    if(kind==="user/message"){
+      const c=Array.isArray(d.message&&d.message.content)?d.message.content.map(b=>b&&typeof b.text==="string"?b.text:"").join(""):(typeof e.content==="string"?e.content:"");
+      totalContentBytes+=c.length;cur={uiId:"u"+msgs.length,role:"user",content:c,runtimeSeq:msgs.length};msgs.push(cur);
+    } else if(kind==="assistant/message"){
+      const c=Array.isArray(d.message&&d.message.content)?d.message.content.map(b=>b&&typeof b.text==="string"?b.text:"").join(""):"";
+      totalContentBytes+=c.length;cur={uiId:"a"+msgs.length,role:"assistant",content:c,assistantMessageId:"a-"+msgs.length,runtimeSeq:msgs.length};msgs.push(cur);
+    } else if(cur&&(kind==="tool/call"||kind==="tool/result")){
       const arr=cur.toolProgress ??= [];
-      arr.push({tool:e.tool??"tool",toolCallId:e.toolCallId??("t"+arr.length),status:kind==="tool/call"?"running":"completed",args:e.args,result:e.result});
+      arr.push({tool:(d.tool||e.tool||"tool"),toolCallId:(d.toolCallId||e.toolCallId||("t"+arr.length)),
+        status:kind==="tool/call"?"running":"completed",args:e.args,result:e.result, wire:e});
     }
   }
-  return {msMs:Number(process.hrtime.bigint()-t0)/1e6, msgs:msgs.length, toolProgress:msgs.reduce((n,m)=>n+(m.toolProgress?.length??0),0), parses};
+  return {msMs:Number(process.hrtime.bigint()-t0)/1e6, msgs:msgs.length, toolProgress:msgs.reduce((n,m)=>n+(m.toolProgress?.length??0),0), parses, totalContentBytes};
 }
 const runs=Array.from({length:3},run);
 const med=median(runs.map(r=>r.msMs));
