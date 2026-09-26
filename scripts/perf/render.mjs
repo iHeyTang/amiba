@@ -35,6 +35,7 @@ const flag = (name, fallback) => {
 const TURNS = flag("--turns", 200);
 const SAMPLES = flag("--samples", 30);
 const GIANT_KB = flag("--giant", 0);
+const TOOLS = flag("--tools", 0);
 
 // --- Bundle the real MessageTurns tree with esbuild (no fake imports) -----
 const esbuildDir = fs
@@ -95,11 +96,21 @@ if (${GIANT_KB} > 0) {
   process.exitCode = 0;
 }
 const BIG = 8;
+const TOOLS = ${TOOLS};
+const toolProgressFor = (i) => TOOLS <= 0 ? undefined : Array.from({length: TOOLS}, (_, k) => ({
+  tool: k % 2 ? "web_search" : "read_file",
+  toolCallId: \`t-\${i}-\${k}\`,
+  status: "completed",
+  startedAt: 1, durationMs: 2000 + k * 10,
+  label: "tool call",
+  args: { query: "performance ".repeat(40), path: "/repo/src/" + i + "/file" + k + ".ts" },
+  result: { items: [{ title: "result " + k, url: "https://example.com/" + i + "/" + k, snippet: "snippet ".repeat(60) }] },
+}));
 const messages = [];
 for (let i = 0; i < TURNS; i++) {
   const bigReply = i >= TURNS - BIG;
   messages.push({ uiId: \`u\${i}\`, role: "user", content: \`Question number \${i} with some body text\` });
-    messages.push({ uiId: \`a\${i}\`, role: "assistant", content: \`Answer number \${i} — longer markdown body with **bold** and \` + "\`code\`".repeat(60) + " para two: " + "words ".repeat(180) + " " + '\`\`\`typescript' + "\\n" + '  const fn0 = (x: number) => x * 0;' + "\\n" + '  const fn1 = (x: number) => x * 1;' + "\\n" + '  const fn2 = (x: number) => x * 2;' + "\\n" + '  const fn3 = (x: number) => x * 3;' + "\\n" + '  const fn4 = (x: number) => x * 4;' + "\\n" + '  const fn5 = (x: number) => x * 5;' + "\\n" + '  const fn6 = (x: number) => x * 6;' + "\\n" + '  const fn7 = (x: number) => x * 7;' + "\\n" + '  const fn8 = (x: number) => x * 8;' + "\\n" + '  const fn9 = (x: number) => x * 9;' + "\\n" + '  const fn10 = (x: number) => x * 10;' + "\\n" + '  const fn11 = (x: number) => x * 11;' + "\\n" + '  const fn12 = (x: number) => x * 12;' + "\\n" + '  const fn13 = (x: number) => x * 13;' + "\\n" + '  const fn14 = (x: number) => x * 14;' + "\\n" + '  const fn15 = (x: number) => x * 15;' + "\\n" + '  const fn16 = (x: number) => x * 16;' + "\\n" + '  const fn17 = (x: number) => x * 17;' + "\\n" + '  const fn18 = (x: number) => x * 18;' + "\\n" + '  const fn19 = (x: number) => x * 19;' + "\\n" + '  const fn20 = (x: number) => x * 20;' + "\\n" + '  const fn21 = (x: number) => x * 21;' + "\\n" + '  const fn22 = (x: number) => x * 22;' + "\\n" + '  const fn23 = (x: number) => x * 23;' + "\\n" + '  const fn24 = (x: number) => x * 24;' + "\\n" + '  const fn25 = (x: number) => x * 25;' + "\\n" + '  const fn26 = (x: number) => x * 26;' + "\\n" + '  const fn27 = (x: number) => x * 27;' + "\\n" + '  const fn28 = (x: number) => x * 28;' + "\\n" + '  const fn29 = (x: number) => x * 29;' + "\\n" + '\`\`\`' + " " + " " + (bigReply ? " words ".repeat(7000) : ""), assistantMessageId: \`a\${i}-msg\` });
+    messages.push({ uiId: \`a\${i}\`, role: "assistant", content: \`Answer number \${i} — longer markdown body with **bold** and \` + "\`code\`".repeat(60) + " para two: " + "words ".repeat(180) + " " + '\`\`\`typescript' + "\\n" + '  const fn0 = (x: number) => x * 0;' + "\\n" + '  const fn1 = (x: number) => x * 1;' + "\\n" + '  const fn2 = (x: number) => x * 2;' + "\\n" + '  const fn3 = (x: number) => x * 3;' + "\\n" + '  const fn4 = (x: number) => x * 4;' + "\\n" + '  const fn5 = (x: number) => x * 5;' + "\\n" + '  const fn6 = (x: number) => x * 6;' + "\\n" + '  const fn7 = (x: number) => x * 7;' + "\\n" + '  const fn8 = (x: number) => x * 8;' + "\\n" + '  const fn9 = (x: number) => x * 9;' + "\\n" + '  const fn10 = (x: number) => x * 10;' + "\\n" + '  const fn11 = (x: number) => x * 11;' + "\\n" + '  const fn12 = (x: number) => x * 12;' + "\\n" + '  const fn13 = (x: number) => x * 13;' + "\\n" + '  const fn14 = (x: number) => x * 14;' + "\\n" + '  const fn15 = (x: number) => x * 15;' + "\\n" + '  const fn16 = (x: number) => x * 16;' + "\\n" + '  const fn17 = (x: number) => x * 17;' + "\\n" + '  const fn18 = (x: number) => x * 18;' + "\\n" + '  const fn19 = (x: number) => x * 19;' + "\\n" + '  const fn20 = (x: number) => x * 20;' + "\\n" + '  const fn21 = (x: number) => x * 21;' + "\\n" + '  const fn22 = (x: number) => x * 22;' + "\\n" + '  const fn23 = (x: number) => x * 23;' + "\\n" + '  const fn24 = (x: number) => x * 24;' + "\\n" + '  const fn25 = (x: number) => x * 25;' + "\\n" + '  const fn26 = (x: number) => x * 26;' + "\\n" + '  const fn27 = (x: number) => x * 27;' + "\\n" + '  const fn28 = (x: number) => x * 28;' + "\\n" + '  const fn29 = (x: number) => x * 29;' + "\\n" + '\`\`\`' + " " + " " + (bigReply ? " words ".repeat(7000) : ""), assistantMessageId: \`a\${i}-msg\`, toolProgress: toolProgressFor(i) });
 }
 const props = { sessionId: "bench", messages, viewStateScope: {} };
 // Streaming-frame equivalent: a NEW messages array where only the last
