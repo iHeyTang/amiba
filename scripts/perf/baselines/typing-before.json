@@ -1,0 +1,32 @@
+{
+  "context": {
+    "mountedTurns": 24,
+    "domNodes": 3389,
+    "visibility": "visible"
+  },
+  "samples": 50,
+  "keyDispatchRoundTripMs": {
+    "count": 50,
+    "p50": 183.239458,
+    "p95": 188.96762499999932,
+    "max": 198.18954199999996
+  },
+  "frameIntervalsMs": {
+    "count": 380,
+    "p50": 8.300000000017462,
+    "p95": 166.70000000001164,
+    "max": 175.89999999999418
+  },
+  "editorClones": 50,
+  "metrics": {
+    "LayoutCount": 150,
+    "RecalcStyleCount": 484,
+    "LayoutDuration": 3.76185,
+    "RecalcStyleDuration": 4.548771,
+    "DevToolsCommandDuration": 0.00006300000000000001,
+    "ScriptDuration": 0.262985,
+    "V8CompileDuration": 0,
+    "TaskDuration": 9.317502,
+    "TaskOtherDuration": 0.743833
+  }
+}

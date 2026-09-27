@@ -43,3 +43,50 @@ node scripts/perf/render.mjs --giant 1        # giant live reply scaling
 
 Each scan shipped the measuring capability that produced its numbers, so future
 regressions in any of these surfaces stay visible via `run.mjs` / `render.mjs`.
+## Real Electron typing (2026-09-27)
+
+`render.mjs`'s legacy "keystroke" measurement only repeats identical props on
+MessageTurns in jsdom. It does not mount or type in the composer, perform native
+layout/paint, or establish input latency. Its streaming loop also repeats an
+already-committed props object. Neither near-zero number rules out UI stalls.
+Do not extrapolate jsdom mount times into native-browser timings.
+
+To measure the current **visible** dev window with its actual long history:
+
+```sh
+REMOTE_DEBUGGING_PORT=19376 pnpm dev:desktop
+# Open the affected existing conversation. Do not type/switch sessions during sampling.
+node scripts/perf/typing-browser.mjs --run --port 19376 --out /tmp/typing.json
+```
+
+This opt-in probe appends 50 actual key events without submitting, restores the
+previous Lexical state, and reports DOM size, editor clones, native style/layout
+metrics, frame intervals, and CDP key-dispatch round trips. The latter includes
+protocol overhead; it is not a direct hardware-key-to-photon measurement. Hidden
+windows are rejected. JSON reports contain no draft or conversation contents.
+
+Measured in the user's original dev profile, 28 turns / 370 steps, 24 mounted
+turns, 3,389 DOM nodes, settled history (not generating). Before and candidate
+reports are in `baselines/typing-{before,candidate}.json`:
+
+| Metric (50 keys) | Before | Candidate: live paragraph geometry |
+|---|---:|---:|
+| Key dispatch median | 183.24 ms | 4.16 ms |
+| Key dispatch P95 | 188.97 ms | 6.23 ms |
+| Frame interval P95 | 166.70 ms | 9.20 ms |
+| Editor clones | 50 | 0 |
+| Layout total | 3,761.85 ms | 6.12 ms |
+| Style recalculation total | 4,548.77 ms | 24.50 ms |
+
+AutoGrowPlugin inserted/read/removed a full editor clone on every update. This
+forced style/layout work outside React's memo boundaries. CPU sampling located
+the hot path in the clone measurement. Disabling blur did not materially help
+in the initial isolated diagnostic; disabling auto-grow did. The formal numbers
+above use the original dev data, not the initial partial profile copy.
+
+The replacement reads the last normal-flow paragraph's bottom edge plus root
+padding and scroll offset. It preserves minimum height, capped scrolling, and
+the existing height transition. Browser comparisons with the old clone matched
+exactly for empty/short text, wrapping, Chinese text, 20 scrolled paragraphs,
+trailing empty paragraphs, and deletion back to one line. Selection-only updates
+skip measurement; width changes remeasure wrapping.

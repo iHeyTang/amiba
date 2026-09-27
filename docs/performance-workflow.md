@@ -106,3 +106,9 @@
 - 所有修复走 feature worktree → PR → 本地 dev 合并验证（见 AGENTS.md）。
 - 指标与对比表随 PR 提交，存放在 `scripts/perf/results/`。
 - 每轮结束更新本文件的「指标表」与「待办池」。
+## 2026-09-27：真实输入采样补充
+
+输入卡顿必须使用 `scripts/perf/typing-browser.mjs` 在实际 dev 数据目录、可见窗口、
+受影响的长历史会话中测量；保留草稿，不发送消息。`scripts/perf/BASELINES.md` 记录
+具体命令和原始数字。jsdom 相同 props 重渲染仅是 memo 回归检查，不能作为打字延迟
+或连续流式更新耗时。不要把 jsdom 时间按固定比例换算为浏览器时间。
