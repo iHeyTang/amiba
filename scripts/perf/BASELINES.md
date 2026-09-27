@@ -24,9 +24,9 @@ node scripts/perf/render.mjs --giant 1        # giant live reply scaling
 ### Tier B — conversation tree, 200 turns (windowed to 24 mounted), ~2.5KB bodies + code fences
 | metric | value |
 |---|---|
-| keystroke re-render (median/max) | 0.010 / 0.40 ms |
-| streaming-frame re-render (median/max) | 0.011 / 0.21 ms |
-| first full mount (jsdom) | ~165 ms (native ≈ 4-8x lower; windowed, history-independent) |
+| identical-props memo check (median/max; not typing) | 0.010 / 0.40 ms |
+| repeated streaming props (median/max; not changing frames) | 0.011 / 0.21 ms |
+| first full mount (jsdom) | ~165 ms (jsdom only; windowed) |
 | giant live reply 20KB..300KB | steady 0.8-1.5 ms/frame (no size scaling) |
 
 ## Scan ledger (deep-scan rounds)
@@ -90,3 +90,11 @@ the existing height transition. Browser comparisons with the old clone matched
 exactly for empty/short text, wrapping, Chinese text, 20 scrolled paragraphs,
 trailing empty paragraphs, and deletion back to one line. Selection-only updates
 skip measurement; width changes remeasure wrapping.
+
+Delivery validation: the implementation was merged into local `dev`; its plugin
+watcher rebuilt UI shell successfully. The same 31 focused tests and both runtime
+TypeScript checks passed there. All six PR checks passed on implementation commit
+`f1978796`. The final built-dev foreground sampling was correctly refused while
+the Mac was locked; the candidate comparison above must not be relabeled as that
+final built-dev run. Repeat the command after unlocking and opening the same
+conversation before claiming the final foreground verification is complete.
