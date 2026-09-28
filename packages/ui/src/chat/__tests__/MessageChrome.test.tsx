@@ -2287,3 +2287,77 @@ it("orders assistant copy, feedback, output tokens and timestamp together", () =
   expect(elements[2]?.textContent).toBe('dislike');
   expect(elements[3]?.textContent).toContain('355');
 });
+
+
+it("does not re-read completed history while the last reply streams", () => {
+  const historyReads = vi.fn();
+  const history: UiMessage = { uiId: "history", role: "assistant", get content() { historyReads(); return "Settled history"; } };
+  const messages: UiMessage[] = [
+    { uiId: "old-user", role: "user", content: "Old prompt" }, history,
+    { uiId: "new-user", role: "user", content: "New prompt" },
+    { uiId: "live", role: "assistant", content: "Live start", streaming: true },
+  ];
+  const view = render(<MessageTurns messages={messages} />);
+  historyReads.mockClear();
+  view.rerender(<MessageTurns messages={[...messages.slice(0, -1), { ...messages[3]!, content: "Live updated" }]} />);
+  expect(screen.getByText("Live updated")).toBeInTheDocument();
+  expect(screen.getByText("Settled history")).toBeInTheDocument();
+  expect(historyReads).not.toHaveBeenCalled();
+});
+
+it("updates and removes a notice attached to an unchanged historical execution", () => {
+  const messages: UiMessage[] = [
+    { uiId: "prompt", role: "user", content: "Read" },
+    { uiId: "work", role: "assistant", content: "", toolProgress: [{ tool: "read", toolCallId: "read-1", status: "completed", args: { path: "README.md" } }] },
+    { uiId: "next", role: "user", content: "Next" },
+    { uiId: "live", role: "assistant", content: "Working", streaming: true },
+  ];
+  const notice: UiMessage = { uiId: "notice", role: "user", content: "Finished", notice: { summary: "First notice", placement: { kind: "execution", sessionId: "s1", callId: "read-1" } } };
+  const view = render(<MessageTurns sessionId="s1" messages={messages} />);
+  expandProcess();
+  view.rerender(<MessageTurns sessionId="s1" messages={[...messages, notice]} />);
+  expect(screen.getByText("First notice")).toBeInTheDocument();
+  view.rerender(<MessageTurns sessionId="s1" messages={[...messages, { ...notice, notice: { ...notice.notice!, summary: "Updated notice" } }]} />);
+  expect(screen.queryByText("First notice")).not.toBeInTheDocument();
+  expect(screen.getByText("Updated notice")).toBeInTheDocument();
+  view.rerender(<MessageTurns sessionId="s1" messages={messages} />);
+  expect(screen.queryByText("Updated notice")).not.toBeInTheDocument();
+});
+
+
+it("refreshes historical actions and restore controls while another turn streams", () => {
+  const oldAction = vi.fn();
+  const newAction = vi.fn();
+  const restore = vi.fn();
+  const messages: UiMessage[] = [
+    { uiId: "old-user", role: "user", content: "Old prompt" },
+    { uiId: "old-reply", role: "assistant", content: "Old reply", assistantMessageId: "old-runtime" },
+    { uiId: "live-user", role: "user", content: "New prompt" },
+    { uiId: "live-reply", role: "assistant", content: "Live reply", streaming: true },
+  ];
+  const view = render(<MessageTurns messages={messages} assistantActions={() => <button onClick={oldAction}>Old action</button>} onRestoreBeforeTurn={restore} restorableTurnOrdinals={new Set()} />);
+  expect(screen.queryByRole("button", { name: "sidepanel.message.restoreWorkspace" })).not.toBeInTheDocument();
+  view.rerender(<MessageTurns messages={[...messages.slice(0, -1), { ...messages[3]!, content: "Live update" }]} assistantActions={() => <button onClick={newAction}>New action</button>} onRestoreBeforeTurn={restore} restorableTurnOrdinals={new Set([0])} />);
+  expect(screen.queryByRole("button", { name: "Old action" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "New action" }));
+  expect(newAction).toHaveBeenCalledOnce();
+  expect(oldAction).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "sidepanel.message.restoreWorkspace" }));
+  expect(restore).toHaveBeenCalledWith(messages[0], 0);
+});
+
+
+it("removes a historical turn tail when its runtime ownership moves to a later reply", () => {
+  const openTurnFile = vi.fn();
+  const turnTail = (turn: number) => <div>Tail {turn}</div>;
+  const messages: UiMessage[] = [
+    { uiId: "old-user", role: "user", content: "Old prompt" },
+    { uiId: "old-reply", role: "assistant", content: "Old reply", runtimeTurn: 7 },
+    { uiId: "live-user", role: "user", content: "New prompt" },
+    { uiId: "live-reply", role: "assistant", content: "Live reply", streaming: true },
+  ];
+  const view = render(<MessageTurns messages={messages} turnTail={turnTail} openTurnFile={openTurnFile} />);
+  expect(screen.getByText("Tail 7")).toBeInTheDocument();
+  view.rerender(<MessageTurns messages={[...messages.slice(0, -1), { ...messages[3]!, runtimeTurn: 7 }]} turnTail={turnTail} openTurnFile={openTurnFile} />);
+  expect(screen.queryByText("Tail 7")).not.toBeInTheDocument();
+});
