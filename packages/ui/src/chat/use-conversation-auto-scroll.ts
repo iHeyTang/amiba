@@ -79,6 +79,10 @@ export function useConversationAutoScroll(
         if (viewport.scrollHeight - viewport.clientHeight >= pendingTop) pendingTop = null;
       }
       lastTop.current = viewport.scrollTop;
+      // Prepending history can replace the first visible turn without a
+      // scroll event (scrollTop may remain zero). Save what is actually on
+      // screen, rather than the anchor from the previous, smaller window.
+      if (!following.current && !restoringAnchor && pendingTop === null) anchor = readAnchor();
       remember();
     };
     restore.current = reconcile;

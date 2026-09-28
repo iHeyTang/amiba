@@ -6,6 +6,7 @@ function setup(scope = {}, turnOffset?: number) {
   const viewport = document.createElement("div");
   let height = 1000;
   let top = 0;
+  let currentTurnOffset = turnOffset ?? 0;
   Object.defineProperties(viewport, {
     scrollHeight: { get: () => height },
     clientHeight: { get: () => 400 },
@@ -19,7 +20,7 @@ function setup(scope = {}, turnOffset?: number) {
   if (turnOffset !== undefined) {
     const turn = document.createElement("div");
     turn.dataset.conversationUserTurn = "saved-turn";
-    turn.getBoundingClientRect = () => ({ top: turnOffset - top, bottom: turnOffset - top + 600 }) as DOMRect;
+    turn.getBoundingClientRect = () => ({ top: currentTurnOffset - top, bottom: currentTurnOffset - top + 600 }) as DOMRect;
     viewport.append(turn);
   }
   const ref = { current: viewport };
@@ -30,6 +31,7 @@ function setup(scope = {}, turnOffset?: number) {
   );
   return {
     viewport,
+    moveTurn: (offset: number) => { currentTurnOffset = offset; },
     unmount: hook.unmount,
     rerender: hook.rerender,
     grow: () => {
@@ -141,6 +143,19 @@ it("restores the same message offset when content above it changes height", () =
   first.unmount();
   const reopened = setup(scope, 220);
   expect(reopened.viewport.scrollTop).toBe(300);
+});
+
+it("saves the actual visible anchor when history layout changes without a scroll event", () => {
+  const scope = {};
+  const first = setup(scope, 100);
+  first.viewport.scrollTop = 180;
+  fireEvent.scroll(first.viewport);
+  first.moveTurn(220);
+  first.rerender({sessionId:"first",content:1,clearance:60});
+  first.unmount();
+  const reopened = setup(scope, 220);
+  expect(reopened.viewport.scrollTop).toBe(180);
+  reopened.unmount();
 });
 
 it("owns anchoring only while restoring history and releases it for reader scrolling or cleanup", () => {
