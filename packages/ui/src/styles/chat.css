@@ -94,6 +94,8 @@
   border-top: 1px solid hsl(var(--border) / .3);
 }
 .amiba-composer-section { min-width: 0; padding-bottom: 10px; }
+/* Compact status rows need less breathing room than interactive forms. */
+.amiba-composer-section:is([data-composer-section="context"], [data-composer-section="queue"]) { padding-bottom: 6px; }
 .amiba-composer-section[data-tone="danger"] { background: hsl(var(--destructive) / .035); }
 .amiba-composer-section[data-tone="warn"] { background: hsl(var(--warning) / .035); }
 
