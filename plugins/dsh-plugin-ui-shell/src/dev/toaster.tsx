@@ -31,14 +31,19 @@ function Preview() {
     </nav>
     <p className="px-4 text-sm">本地界面样例，不发送模型请求。交互层关闭后，队列和草稿原样保留。</p>
     <div style={{ position: "fixed", bottom: 32, left: "50%", transform: "translateX(-50%)", width: width ? 360 : "min(760px, 95vw)" }}>
+      <section className="space-y-2">
+      <div aria-hidden="true" />
+      <div data-home-composer="">
       <ComposerToaster>
         {error && <ComposerDockError message="附件暂时无法读取，请重试或移除附件。" onDismiss={() => setError(false)} dismissLabel="关闭错误" />}
         {mode === "approval" && <ApprovalBanner approvals={[{ approvalId: "a", requestId: "r", tool: "terminal", command: "pnpm test", description: "运行工作区测试以验证修改。", raw: { timestamp: 0 } }]} inFlight={{}} error={null} onRespond={done} onDismissError={() => {}} />}
         {(mode === "question" || mode === "plan") && <ClarifyBanner key={mode} error={null} inFlight={false} onCancel={done} onRespond={done} request={{ requestId: mode, sessionId: "fixture", questions: mode === "plan" ? [{ id: "plan", question: "确认实施计划", detail: "## 实施计划\n\n1. 统一吐司机材质与内容分区。\n2. 交互层覆盖队列层，保留底层状态。\n3. 检查键盘访问、窄窗口和深色主题。", intent: { kind: "plan-review", approve: "确认计划" }, options: [{ label: "确认计划" }, { label: "调整计划" }] }] : [{ id: "q", question: "本轮先验证哪个场景？", options: [{ label: "长历史会话", description: "验证真实长历史下的输入与切换。" }, { label: "新会话", description: "验证初始状态和输入引导。" }] }] }} />}
-        <Composer value={draft} onChange={setDraft} onSubmit={() => {}} canSubmit={false} placeholder="向 Amiba 提问…"
+        <Composer frameVariant={mode === "workspace" ? "hero" : "default"} value={draft} onChange={setDraft} onSubmit={() => {}} canSubmit={false} placeholder="向 Amiba 提问…"
           inputDock={mode !== "workspace" && <GoalDock {...({ useProjection: () => ({ goal: { id: "goal", revision: 1, phase: "active", objective: "统一吐司机布局，验证长历史与插件交互体验。" } }), useGoalActivation: () => "disarmed", onEdit: ok, onPause: ok, onResume: ok, onClear: ok, t: (key: string) => ({ "phase.active.disarmed": "未运行的目标", "action.resume": "恢复目标", "action.edit": "编辑目标", "action.clear": "清除目标" }[key] ?? key) } as unknown as Parameters<typeof GoalDock>[0])} />}
           contextRail={mode === "workspace" ? <WorkspaceControl path="/workspace" onChoose={() => {}} /> : mode !== "goal" && queue.length ? <PendingQueueRail items={queue} editingQueueId={null} onEdit={id => setDraft(queue.find(q => q.queueId === id)?.preview ?? "")} onSendNow={() => {}} onRemove={id => setQueue(items => items.filter(q => q.queueId !== id))} /> : undefined} />
       </ComposerToaster>
+      </div>
+      </section>
     </div>
   </main>;
 }
