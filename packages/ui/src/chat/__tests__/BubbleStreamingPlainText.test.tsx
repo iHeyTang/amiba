@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@amiba/i18n", () => ({
@@ -73,5 +73,39 @@ describe("streaming body rendering", () => {
     const plain = container.querySelector("[data-streaming-plain-text]");
     expect(plain?.textContent).toContain("```ts");
     expect(container.querySelector(".amiba-markdown-code")).toBeNull();
+  });
+});
+
+describe("sticky user message overflow", () => {
+  it("shows expand after initial resize delivery and clears it when content shrinks", () => {
+    const callbacks = new Map<Element, () => void>();
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(private callback: () => void) {}
+      observe(target: Element) { callbacks.set(target, this.callback); }
+      disconnect() {}
+    });
+    let height = 400;
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get")
+      .mockImplementation(() => height);
+    const view = render(<MessageTurns messages={[
+      { uiId: "long-prompt", role: "user", content: "A long user question" },
+    ]} />);
+    try {
+      const body = view.container.querySelector('[data-background-surface="sticky-message"]')!;
+      const deliver = callbacks.get(body.firstElementChild!)!;
+      expect(deliver).toBeTypeOf("function");
+      expect(screen.queryByRole("button", { name: "sidepanel.message.expand" })).toBeNull();
+      act(() => deliver());
+      fireEvent.click(screen.getByRole("button", { name: "sidepanel.message.expand" }));
+      expect(screen.getByRole("button", { name: "sidepanel.message.collapse" })).toBeTruthy();
+      expect(body.className).toContain("overflow-y-auto");
+      act(() => { height = 40; deliver(); });
+      expect(screen.queryByRole("button", { name: "sidepanel.message.collapse" })).toBeNull();
+      expect(body.className).toContain("overflow-hidden");
+    } finally {
+      view.unmount();
+      scrollHeight.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 });

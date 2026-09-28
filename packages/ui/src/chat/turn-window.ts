@@ -17,7 +17,10 @@
  * whole, so a running reply is never hidden).
  */
 
-/** Turns rendered before the user asks for earlier history. */
+/** Small initial slice; the sentinel fills short viewports and loads older history. */
+export const INITIAL_MESSAGE_TURN_WINDOW = 6;
+
+/** Additional turns loaded when the reader approaches earlier history. */
 export const MESSAGE_TURN_WINDOW = 24;
 
 /**

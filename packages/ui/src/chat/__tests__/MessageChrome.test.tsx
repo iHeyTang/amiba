@@ -7,7 +7,7 @@ vi.mock("@amiba/i18n", () => ({
 }));
 
 import { Bubble, MessageTurns, type ConversationTurnsWindow } from "../bubble/Bubble";
-import { MESSAGE_TURN_WINDOW } from "../turn-window";
+import { INITIAL_MESSAGE_TURN_WINDOW } from "../turn-window";
 import type { UiMessage } from "../internal/types";
 import { WorkspaceControl } from "../WorkspaceControl";
 import { WorkspaceTextMentionsContext, WorkspaceFileOpenerContext } from "../workspace-file-links";
@@ -885,6 +885,23 @@ describe("chat message chrome", () => {
     fireEvent.click(container.querySelector("[data-execution-summary] button")!);
     expect(screen.getByText(before)).toBeVisible();
     expect(screen.getByText(after)).toBeVisible();
+  });
+
+  it("does not measure a historical reply for a completion animation", () => {
+    const bounds = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
+    try {
+      render(<Bubble m={{
+        uiId: "historical-flow", role: "assistant", streaming: false, content: "Checking.Done.",
+        toolProgress: [{ tool: "search_files", toolCallId: "search", status: "completed" }],
+        assistantTimeline: [
+          { kind: "text", id: "before", text: "Checking." },
+          { kind: "tool", id: "tool", toolCallId: "search" },
+          { kind: "text", id: "after", text: "Done." },
+        ],
+      }} />);
+      expect(screen.getByText("Done.")).toBeVisible();
+      expect(bounds).not.toHaveBeenCalled();
+    } finally { bounds.mockRestore(); }
   });
 
   it.each([false, true])("respects reduced motion (%s) when completing a live turn", (reducedMotion) => {
@@ -2078,6 +2095,37 @@ it("windows long conversations to the newest turns and reveals the rest on deman
   expect(container.querySelector('[data-conversation-user-turn="u58"]')).not.toBeNull();
 });
 
+it("loads every earlier turn as the history sentinel enters view", () => {
+  let loadEarlier: (() => void) | undefined;
+  vi.stubGlobal("IntersectionObserver", class {
+    constructor(private callback: (entries: { isIntersecting: boolean }[]) => void) {}
+    observe(node: Element) {
+      if (node.hasAttribute("data-turn-window-sentinel"))
+        loadEarlier = () => this.callback([{ isIntersecting: true }]);
+    }
+    disconnect() {}
+  });
+  const messages: UiMessage[] = Array.from({ length: 60 }, (_, i) => [
+    { uiId: `history-u${i}`, role: "user" as const, content: `q${i}` },
+    { uiId: `history-a${i}`, role: "assistant" as const, content: `answer${i}` },
+  ]).flat();
+  const view = render(<MessageTurns messages={messages} />);
+  try {
+    expect(view.container.querySelectorAll("[data-conversation-user-turn]")).toHaveLength(6);
+    for (const expected of [30, 54, 60]) {
+      expect(loadEarlier).toBeTypeOf("function");
+      act(() => loadEarlier!());
+      expect(view.container.querySelectorAll("[data-conversation-user-turn]")).toHaveLength(expected);
+    }
+    expect(view.container.querySelector("[data-turn-window-sentinel]")).toBeNull();
+    expect(screen.getByText("answer0")).toBeInTheDocument();
+    expect(screen.getByText("answer59")).toBeInTheDocument();
+  } finally {
+    view.unmount();
+    vi.unstubAllGlobals();
+  }
+});
+
 it("reports the rendered turn window so the conversation rail stays aligned with the DOM", () => {
   const messages: UiMessage[] = [];
   for (let turn = 0; turn < 30; turn += 1) {
@@ -2094,11 +2142,11 @@ it("reports the rendered turn window so the conversation rail stays aligned with
   );
   expect(seen.length).toBeGreaterThan(0);
   const latest = seen[seen.length - 1]!;
-  // Same rule as the DOM: the newest MESSAGE_TURN_WINDOW turns are rendered,
+  // Same rule as the DOM: the newest INITIAL_MESSAGE_TURN_WINDOW turns are rendered,
   // everything older is folded away.
-  expect(latest.hidden).toBe(messages.length / 2 - MESSAGE_TURN_WINDOW);
-  expect(latest.visible).toHaveLength(MESSAGE_TURN_WINDOW);
-  expect(latest.visible[0]?.user?.uiId).toBe("u6");
+  expect(latest.hidden).toBe(messages.length / 2 - INITIAL_MESSAGE_TURN_WINDOW);
+  expect(latest.visible).toHaveLength(INITIAL_MESSAGE_TURN_WINDOW);
+  expect(latest.visible[0]?.user?.uiId).toBe("u24");
   expect(latest.visible.at(-1)?.user?.uiId).toBe("u29");
 
   // A re-render that does not change the conversation must not fabricate a
