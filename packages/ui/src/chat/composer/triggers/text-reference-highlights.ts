@@ -41,6 +41,30 @@ interface HighlightWindow {
   Highlight?: new (...ranges: Range[]) => unknown;
 }
 let nextHighlight = 0;
+type HighlightStyle = { name: string; element: HTMLStyleElement; used: boolean };
+const highlightStyles = new WeakMap<Document, Map<string, HighlightStyle[]>>();
+
+// Keep rules for the document lifetime and reuse idle names. Adding/removing a
+// ::highlight rule invalidates styles across the conversation, even when the
+// editor is empty. The pool grows only with concurrent editors, not sessions.
+function acquireHighlightStyle(document: Document, prefix: string, style: string) {
+  let pools = highlightStyles.get(document);
+  if (!pools) { pools = new Map(); highlightStyles.set(document, pools); }
+  const key = `${prefix}:${style}`;
+  let pool = pools.get(key);
+  if (!pool) { pool = []; pools.set(key, pool); }
+  let slot = pool.find(candidate => !candidate.used);
+  if (!slot) {
+    const name = `${prefix}-${++nextHighlight}`;
+    const element = document.createElement("style");
+    element.textContent = `::highlight(${name}) { ${style} }`;
+    slot = { name, element, used: false };
+    pool.push(slot);
+  }
+  if (!slot.element.isConnected) document.head.append(slot.element);
+  slot.used = true;
+  return slot;
+}
 
 /**
  * Paint text ranges with the CSS Custom Highlight API. Paint only — never
@@ -53,7 +77,6 @@ function subscribeHighlight(
   computeRanges: (scan: DraftScan) => { start: number; end: number }[],
   style: string,
 ): { repaint: () => void; dispose: () => void } {
-  const name = `${namePrefix}-${++nextHighlight}`;
   let clearRoot = () => {};
   let repaint = () => {};
   const offRoot = editor.registerRootListener(root => {
@@ -66,9 +89,8 @@ function subscribeHighlight(
     const registry = view?.CSS?.highlights;
     const Highlight = view?.Highlight;
     if (!registry || !Highlight) return;
-    const styleEl = document.createElement("style");
-    styleEl.textContent = `::highlight(${name}) { ${style} }`;
-    document.head.append(styleEl);
+    const slot = acquireHighlightStyle(document, namePrefix, style);
+    const { name } = slot;
     repaint = () => editor.getEditorState().read(() => {
       const scan = $scanDraft();
       const ranges: Range[] = [];
@@ -95,7 +117,7 @@ function subscribeHighlight(
       }
       registry.set(name, new Highlight(...ranges));
     });
-    clearRoot = () => { registry.delete(name); styleEl.remove(); };
+    clearRoot = () => { registry.delete(name); slot.used = false; };
     repaint();
   });
   const offEditor = editor.registerUpdateListener(() => repaint());

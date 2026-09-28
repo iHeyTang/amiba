@@ -47,7 +47,6 @@ describe("official plain-text lexicon decorations", () => {
     off();
     expect(listeners.size).toBe(0);
     expect([...highlights.keys()]).toEqual(["another-editor"]);
-    expect(document.head.querySelector("style")?.textContent ?? "").not.toContain("amiba-text-reference-");
     offUpdates();
     editor.setRootElement(null);
   });
@@ -88,8 +87,67 @@ describe("slash-command claim token decoration", () => {
     expect([...highlights.values()].find(value => value !== unrelated)!.ranges).toEqual([]);
     off();
     expect([...highlights.keys()]).toEqual(["another-editor"]);
-    expect(document.head.querySelector("style")?.textContent ?? "").not.toContain("amiba-command-token-");
     offUpdates();
     editor.setRootElement(null);
+  });
+});
+
+describe("highlight style lifetime", () => {
+  it("reuses rules across session remounts without retaining ranges or mutating global styles", () => {
+    const highlights = new Map<string, { ranges: Range[] }>();
+    vi.stubGlobal("CSS", { highlights });
+    vi.stubGlobal("Highlight", class { constructor(public ranges: Range[] = []) {} });
+    const editor = createEditor({ namespace: "remount", onError: error => { throw error; } });
+    const root = document.createElement("div");
+    document.body.append(root);
+    editor.setRootElement(root);
+    const claims = new CommandClaimStore();
+    const firstOff = subscribeCommandTokenHighlight(editor, claims);
+    const firstName = [...highlights.keys()][0];
+    firstOff();
+    const observer = new MutationObserver(() => {});
+    observer.observe(document.head, { childList: true, subtree: true, characterData: true });
+    for (let i = 0; i < 50; i++) {
+      const off = subscribeCommandTokenHighlight(editor, claims);
+      expect([...highlights.keys()]).toEqual([firstName]);
+      // Lexical root teardown and recreation uses the same rule too.
+      editor.setRootElement(null);
+      expect(highlights.size).toBe(0);
+      editor.setRootElement(root);
+      expect([...highlights.keys()]).toEqual([firstName]);
+      off();
+      expect(highlights.size).toBe(0);
+    }
+    expect(observer.takeRecords()).toEqual([]);
+    observer.disconnect();
+    editor.setRootElement(null);
+  });
+
+  it("keeps concurrent editors isolated when an idle rule is reused", () => {
+    const highlights = new Map<string, { ranges: Range[] }>();
+    vi.stubGlobal("CSS", { highlights });
+    vi.stubGlobal("Highlight", class { ranges: Range[]; constructor(...ranges: Range[]) { this.ranges = ranges; } });
+    const mount = (text: string) => {
+      const editor = createEditor({ namespace: text, onError: error => { throw error; } });
+      const root = document.createElement("div");
+      document.body.append(root);
+      editor.setRootElement(root);
+      editor.update(() => { $getRoot().append($createParagraphNode().append($createTextNode(text))); }, { discrete: true });
+      const claims = new CommandClaimStore();
+      claims.begin({ token: text } as CommandClaim);
+      return { editor, off: subscribeCommandTokenHighlight(editor, claims) };
+    };
+    const a = mount("/goal"), b = mount("/status");
+    const names = [...highlights.keys()];
+    expect(names).toHaveLength(2);
+    a.off();
+    const remaining = highlights.get(names[1]);
+    expect(remaining!.ranges.map(range => range.toString())).toEqual(["/status"]);
+    const c = mount("/plan");
+    expect(highlights.get(names[1])).toBe(remaining);
+    expect(highlights.get(names[0])!.ranges.map(range => range.toString())).toEqual(["/plan"]);
+    b.off(); c.off();
+    expect(highlights.size).toBe(0);
+    for (const item of [a, b, c]) item.editor.setRootElement(null);
   });
 });
