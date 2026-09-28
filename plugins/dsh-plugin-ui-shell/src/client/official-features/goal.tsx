@@ -123,8 +123,8 @@ function GoalStrip({
     </Button>
   );
   return (
-    <ComposerDockSheet className="pb-3">
-      <div className="px-3 pt-1.5 text-xs" data-amiba-goal>
+    <ComposerDockSheet region="context">
+      <div className="px-4 pt-2.5 text-xs" data-amiba-goal>
         <div className="flex min-w-0 items-center gap-2">
           <Target className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           {editing ? (

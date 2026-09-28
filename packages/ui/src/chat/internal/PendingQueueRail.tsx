@@ -53,7 +53,7 @@ export function PendingQueueRail({
           <li
             key={item.queueId}
             className={cn(
-              "group flex h-6 w-full items-center rounded-md bg-chat-surface pl-1.5 pr-0.5 text-[11px]",
+              "group flex min-h-7 w-full items-center rounded-md text-xs",
               "transition-colors hover:bg-chat-surface-hover",
               isEditing && "text-muted-foreground",
             )}
@@ -81,18 +81,18 @@ export function PendingQueueRail({
               onClick={() => onSendNow(item.queueId)}
               title={t("sidepanel.queue.sendNow")}
               aria-label={t("sidepanel.queue.sendNow.aria")}
-              className="ml-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground/55 transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="ml-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground/55 transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             >
-              <Send className="h-3 w-3" />
+              <Send className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
               onClick={() => onRemove(item.queueId)}
               title={t("sidepanel.queue.delete")}
               aria-label={t("sidepanel.queue.delete")}
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground/40 transition-colors hover:bg-destructive/5 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground/40 transition-colors hover:bg-destructive/5 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             >
-              <X className="h-3 w-3" />
+              <X className="h-3.5 w-3.5" />
             </button>
           </li>
         );

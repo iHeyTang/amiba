@@ -90,7 +90,7 @@ import {
 // Sub-components + helpers + UI types live next to this file in chat-ui.
 import { ApprovalBanner } from "./bubble/approval";
 import { ClarifyBanner } from "./bubble/clarify";
-import { ComposerDockError } from "./ComposerDockSheet";
+import { ComposerDockError, ComposerToaster } from "./ComposerDockSheet";
 import { ErrorBlock } from "./bubble/chips";
 import {
   AwaitingUserInputContext,
@@ -2332,7 +2332,7 @@ const composerDraftSource: ComposerDraftSource = useMemo(
       autoFocus={composerAutoFocus}
       contextRail={
         pendingSourceApp || pendingQueue.length > 0 ? (
-          <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5 overflow-hidden">
             {pendingSourceApp && (
               <div
                 className="flex h-7 min-w-0 items-center gap-1.5 rounded-lg px-2 text-[11px] text-muted-foreground"
@@ -2665,15 +2665,14 @@ const composerDraftSource: ComposerDraftSource = useMemo(
           )}
         >
           {/* Everything docked above the composer — errors, approvals,
-          questions — shares the ComposerDockSheet toaster chrome; sheets
-          stack and each tucks under the next. Queue entries share the
-          composer's context rail with its immutable workspace tab. */}
+          questions and plugin seats — uses one ordered toaster host. */}
           <div
             className={cn(
               "relative flex w-full flex-col",
               att.dragOver && "rounded-lg ring-2 ring-primary/30",
             )}
           >
+            <ComposerToaster>
             {hasActive && attachmentError && (
               <ComposerDockError
                 dismissLabel={t("sidepanel.permission.dismissError")}
@@ -2720,6 +2719,7 @@ const composerDraftSource: ComposerDraftSource = useMemo(
               />
             )}
             {composerNode}
+            </ComposerToaster>
             {/* Drop overlay is rendered by Composer (via attachments
             prop) — no need to duplicate it here. */}
           </div>

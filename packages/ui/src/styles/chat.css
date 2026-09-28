@@ -51,6 +51,50 @@
   animation: amiba-dock-sheet-in 200ms ease-out;
 }
 
+.amiba-toaster-stack {
+  position: relative;
+  margin: 0 16px -10px;
+}
+.amiba-toaster-stack:not(:has([data-composer-section])) { display: none; }
+.amiba-composer-toaster {
+  position: relative;
+  z-index: 0;
+  margin: 0;
+  padding: 0 0 20px;
+  max-height: min(56vh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid hsl(var(--border) / .45);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  background: hsl(var(--popover) / .78);
+  backdrop-filter: blur(var(--amiba-composer-blur, 24px));
+  -webkit-backdrop-filter: blur(var(--amiba-composer-blur, 24px));
+  box-shadow: inset 0 1px 0 hsl(var(--foreground) / .05);
+}
+/* The rear layer stays mounted but contributes no height while covered.
+ * Only a quiet top edge peeks out; queue controls cannot leak through glass. */
+.amiba-toaster-stack[data-interacting] > [data-composer-toaster="persistent"] {
+  position: absolute;
+  inset: -6px 4px 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.amiba-toaster-stack[data-interacting] > [data-composer-toaster="persistent"] > * {
+  visibility: hidden;
+}
+[data-composer-toaster="interaction"] { z-index: 1; }
+/* Local to the small dock tree; the editor and transcript are outside this selector. */
+.amiba-composer-toaster:not(:has([data-composer-section])),
+[data-composer-toaster-region]:empty { display: none; }
+[data-composer-toaster-region]:not(:empty) ~ [data-composer-toaster-region]:not(:empty),
+.amiba-composer-section + .amiba-composer-section {
+  border-top: 1px solid hsl(var(--border) / .3);
+}
+.amiba-composer-section { min-width: 0; padding-bottom: 10px; }
+.amiba-composer-section[data-tone="danger"] { background: hsl(var(--destructive) / .035); }
+.amiba-composer-section[data-tone="warn"] { background: hsl(var(--warning) / .035); }
+
 @media (prefers-reduced-motion: reduce) {
   .amiba-dock-sheet {
     animation: none;
