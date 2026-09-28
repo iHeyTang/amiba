@@ -29,6 +29,14 @@ export function useConversationAutoScroll(
     let pendingTop = saved && !saved.following ? saved.top : null;
     let anchor = saved?.anchor;
     let restoringAnchor = !following.current && !!anchor;
+    const nativeOverflowAnchor = viewport.style.overflowAnchor;
+    const syncAnchorOwner = () => {
+      // Deferred historical content can change height while our saved anchor
+      // is being restored. Native anchoring would move scrollTop a second
+      // time, which looks like reader navigation to onScroll below.
+      viewport.style.overflowAnchor = enabledRef.current && restoringAnchor ? "none" : nativeOverflowAnchor;
+    };
+    syncAnchorOwner();
     const readAnchor = () => {
       const top = viewport.getBoundingClientRect().top;
       const turn = [...viewport.querySelectorAll<HTMLElement>("[data-conversation-user-turn]")]
@@ -39,12 +47,14 @@ export function useConversationAutoScroll(
       top: pendingTop ?? lastTop.current, following: following.current, anchor,
     });
     const reconcile = (resumed = false) => {
+      syncAnchorOwner();
       if (!enabledRef.current) return;
       if (resumed) {
         // The official transcript owned this viewport while we were disabled.
         // Continue from its position instead of replaying the old native one.
         pendingTop = null;
         restoringAnchor = false;
+        syncAnchorOwner();
         lastTop.current = viewport.scrollTop;
         following.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 24;
         anchor = readAnchor();
@@ -69,6 +79,10 @@ export function useConversationAutoScroll(
         if (viewport.scrollHeight - viewport.clientHeight >= pendingTop) pendingTop = null;
       }
       lastTop.current = viewport.scrollTop;
+      // Prepending history can replace the first visible turn without a
+      // scroll event (scrollTop may remain zero). Save what is actually on
+      // screen, rather than the anchor from the previous, smaller window.
+      if (!following.current && !restoringAnchor && pendingTop === null) anchor = readAnchor();
       remember();
     };
     restore.current = reconcile;
@@ -76,6 +90,7 @@ export function useConversationAutoScroll(
     const onWheel = (event: WheelEvent) => {
       pendingTop = null;
       restoringAnchor = false;
+      syncAnchorOwner();
       if (event.deltaY < 0) following.current = false;
       remember();
     };
@@ -89,6 +104,7 @@ export function useConversationAutoScroll(
       }
       if (top !== lastTop.current) {
         restoringAnchor = false;
+        syncAnchorOwner();
         anchor = readAnchor();
       }
       lastTop.current = top;
@@ -101,6 +117,7 @@ export function useConversationAutoScroll(
     if (viewport.firstElementChild) observer?.observe(viewport.firstElementChild);
     return () => {
       remember();
+      viewport.style.overflowAnchor = nativeOverflowAnchor;
       restore.current = null;
       observer?.disconnect();
       viewport.removeEventListener("wheel", onWheel);

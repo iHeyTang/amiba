@@ -1,3 +1,4 @@
+import { useDeferredTurn } from "./use-deferred-turn";
 import { useMessageGlass } from "./useMessageGlass";
 import { MessageActionButton as UserActionButton } from "./message-action-button";
 import { useConversationTurnWindow } from "../use-conversation-turn-window";
@@ -48,7 +49,7 @@ import {
   type ReactNode,
 } from "react";
 import { ChatMarkdown as Streamdown } from "@amiba/markdown";
-import { windowTurns } from "../turn-window";
+import { INITIAL_MESSAGE_TURN_WINDOW, windowTurns } from "../turn-window";
 import { useT } from "@amiba/i18n";
 
 import {
@@ -2448,6 +2449,8 @@ function MessageTurnsInner({
       )}
       {visibleTurns.map((turn, i) => <ConversationTurnView
         key={turn.user?.uiId ?? `turn-${i}`} turn={turn} i={i}
+        viewStateScope={viewStateScope}
+        deferred={visibleTurns.length > INITIAL_MESSAGE_TURN_WINDOW && i < visibleTurns.length - 1 && !turn.replies.some(message => message.streaming)}
         messageText={messageText} turnTail={turnTail} openTurnFile={openTurnFile} assistantActions={assistantActions} messageImages={messageImages} onOpenAgentDestination={onOpenAgentDestination} onReviewWorkspaceChanges={onReviewWorkspaceChanges} onBranchUserMessage={onBranchUserMessage} onRestoreBeforeTurn={onRestoreBeforeTurn} restorableTurnOrdinals={restorableTurnOrdinals} extensionRows={extensionRows} lastMessageForTurn={lastMessageForTurn} executionNotices={executionNotices} timeFormat={timeFormat} language={language}
       />)}
     </>
@@ -2458,6 +2461,8 @@ type ConversationTurnViewProps = Pick<Parameters<typeof MessageTurnsInner>[0],
   "messageText" | "turnTail" | "openTurnFile" | "assistantActions" | "messageImages" | "onOpenAgentDestination" | "onReviewWorkspaceChanges" | "onBranchUserMessage" | "onRestoreBeforeTurn" | "restorableTurnOrdinals"> & {
   turn: ConversationTurn;
   i: number;
+  viewStateScope?: object;
+  deferred: boolean;
   extensionRows: ReadonlyMap<string, ReactNode>;
   lastMessageForTurn: ReadonlyMap<number, string>;
   executionNotices: ReadonlyMap<string, UiMessage[]>;
@@ -2474,8 +2479,15 @@ function sameMessageReferences(a: readonly UiMessage[] | undefined, b: readonly 
 // and bodies can all bail out together. Notifications and presentation rows
 // remain reactive even when their owning message itself did not change.
 const ConversationTurnView = memo(function ConversationTurnView({
-  turn, i, messageText, turnTail, openTurnFile, assistantActions, messageImages, onOpenAgentDestination, onReviewWorkspaceChanges, onBranchUserMessage, onRestoreBeforeTurn, restorableTurnOrdinals, extensionRows, lastMessageForTurn, executionNotices, timeFormat, language
+  turn, i, viewStateScope, deferred, messageText, turnTail, openTurnFile, assistantActions, messageImages, onOpenAgentDestination, onReviewWorkspaceChanges, onBranchUserMessage, onRestoreBeforeTurn, restorableTurnOrdinals, extensionRows, lastMessageForTurn, executionNotices, timeFormat, language
 }: ConversationTurnViewProps) {
+        const deferredTurn = useDeferredTurn(viewStateScope, turn.user?.uiId ?? `turn-${i}`, deferred);
+        if (!deferredTurn.ready) return <div
+          ref={deferredTurn.ref}
+          data-conversation-user-turn={turn.user?.uiId}
+          data-conversation-turn-deferred=""
+          style={{ height: deferredTurn.height }}
+        />;
         const replyItems = buildTurnReplyItems(turn.replies);
         // Rendering can fold assistant rows into an execution disclosure or omit
         // an empty row. Locate the tail after the row's final rendered item,
@@ -2519,6 +2531,8 @@ const ConversationTurnView = memo(function ConversationTurnView({
         return (
           <div
             key={turn.user?.uiId ?? `turn-${i}`}
+            ref={deferredTurn.ref}
+            data-conversation-turn-ready=""
             data-conversation-user-turn={turn.user?.uiId}
             // The user action row already separates the prompt from the first reply.
             className={cn(
