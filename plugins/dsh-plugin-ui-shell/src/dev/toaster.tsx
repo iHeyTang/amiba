@@ -10,6 +10,7 @@ import { ApprovalBanner } from "../../../../packages/ui/src/chat/bubble/approval
 import { ClarifyBanner } from "../../../../packages/ui/src/chat/bubble/clarify";
 import { GoalDock } from "../client/official-features/goal";
 import "./surfaces.css";
+import "../../../../packages/ui/src/styles/surfaces.css";
 installAmibaMessageCatalog();
 setPlatform({ storage: { get: async () => ({}), set: async () => {}, remove: async () => {}, watch: () => () => {} } } as unknown as PlatformAdapter);
 function Preview() {

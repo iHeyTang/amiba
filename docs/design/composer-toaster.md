@@ -33,3 +33,5 @@ Goal + queue; multiple queue items; approvals + errors; plan review; ordinary qu
 Icon operations use `ComposerDockIconButton`: 24 px target, 14 px icon, 1.75 stroke, 6 px radius and one muted color. Adjacent operations have a 4 px gap; destructive hover is reserved for removal. Queue rows expose send, edit and remove in that order. Editing is disabled for the row already being edited. Goal operations, question navigation/collapse/dismiss and error dismissal use the same control. Wizard close adopts the same geometry only when docked.
 
 Labeled decisions use 28 px height, 12 px text and 6 px radius across approvals, questions, plans, docked wizards and media confirmation. Primary and destructive meanings retain distinct colors; choices and tabs retain their selection semantics.
+
+Toaster sheets and the input card share production surface rules for background, opacity, blur, saturation and border color, including wallpaper-free mode. A covered rear layer paints only its exposed 6 px edge so overlapping translucent fills do not whiten the front. The toaster fixture loads these production material rules.
