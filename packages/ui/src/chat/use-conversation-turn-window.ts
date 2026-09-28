@@ -1,5 +1,5 @@
 import { useMemo, useLayoutEffect, useSyncExternalStore } from "react";
-import { MESSAGE_TURN_WINDOW, MESSAGE_DOM_CAP } from "./turn-window";
+import { INITIAL_MESSAGE_TURN_WINDOW, MESSAGE_TURN_WINDOW, MESSAGE_DOM_CAP } from "./turn-window";
 
 /**
  * Per-session window state for the conversation view: how many turns render,
@@ -20,7 +20,7 @@ function createWindow(): {
   observe: (total: number) => void;
 } {
   let snapshot: WindowSnapshot = {
-    limit: MESSAGE_TURN_WINDOW,
+    limit: INITIAL_MESSAGE_TURN_WINDOW,
     cap: MESSAGE_DOM_CAP,
     total: 0,
   };
