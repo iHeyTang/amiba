@@ -2080,7 +2080,8 @@ function UserStickyBubbleUnmemoized({
     const measure = () => {
       setOverflowed(inner.scrollHeight > CAPPED_HEIGHT_PX + 1);
     };
-    measure();
+    // Initial ResizeObserver delivery runs after layout. Reading here forces
+    // the newly mounted transcript to lay out before the other effects settle.
     const ro = new ResizeObserver(measure);
     ro.observe(inner);
     return () => ro.disconnect();

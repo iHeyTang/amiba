@@ -3749,7 +3749,8 @@ export function WorkspacePane({
     if (!container) return;
     const row = container.closest("[data-workspace-main-row]") ?? container.parentElement;
     const measure = () => setAvailableWidth(row?.getBoundingClientRect().width || window.innerWidth);
-    measure();
+    // Let the initial observer delivery measure the settled row instead of
+    // forcing transcript style/layout work during a conversation switch.
     const observer = new ResizeObserver(measure);
     if (row) observer.observe(row);
     window.addEventListener("resize", measure);
