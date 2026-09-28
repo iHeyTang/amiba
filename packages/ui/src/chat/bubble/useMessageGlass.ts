@@ -15,7 +15,9 @@ export function useMessageGlass(complete: boolean, align: "left" | "right") {
     if (!chrome || !body) return;
     let generation = 0;
     let lastGeometry = "";
+    let visible = false;
     const measure = () => {
+      if (!visible) return;
       const w = chrome.clientWidth, h = body.offsetHeight;
       if (!w || !h) {
         generation++;
@@ -57,13 +59,36 @@ export function useMessageGlass(complete: boolean, align: "left" | "right") {
         chrome.removeAttribute("data-unified-glass");
       });
     };
-    measure();
     const observer = new ResizeObserver(measure);
-    observer.observe(chrome);
-    observer.observe(body);
-    if (tab) observer.observe(tab);
+    const watch = () => {
+      if (visible) return;
+      visible = true;
+      // The initial ResizeObserver delivery runs after layout. Measuring in
+      // every bubble's layout effect forces synchronous work during mounting.
+      observer.observe(chrome);
+      observer.observe(body);
+      if (tab) observer.observe(tab);
+    };
+    const intersection = typeof IntersectionObserver === "function"
+      ? new IntersectionObserver(entries => {
+          if (entries.some(entry => entry.isIntersecting)) watch();
+          else if (visible) {
+            visible = false;
+            generation++;
+            lastGeometry = "";
+            observer.disconnect();
+          }
+        }, { rootMargin: "400px 0px" })
+      : null;
+    // Long histories retain their ordinary body background offscreen. Prepare
+    // glass shortly before a bubble enters view instead of decoding all masks
+    // and reading every bubble's geometry on each conversation switch.
+    if (intersection) intersection.observe(chrome);
+    else watch();
     return () => {
+      visible = false;
       generation++;
+      intersection?.disconnect();
       observer.disconnect();
     };
   }, [complete, align]);
