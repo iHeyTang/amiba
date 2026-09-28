@@ -236,3 +236,21 @@ it("renders the selected one-shot read-only explanation without an input", () =>
   );
   expect(screen.queryByRole("textbox")).toBeNull();
 });
+
+it("expands selectable full goal text without running a goal action", () => {
+  const onEdit = vi.fn();
+  const objective = "Full goal\nSecond paragraph with requirements";
+  const view = render(<GoalDock {...({
+    useProjection: () => ({ goal: { id: "expand", revision: 1, phase: "active", objective } }),
+    useGoalActivation: () => "disarmed", onEdit, t,
+  } as unknown as Parameters<typeof OfficialGoalDock>[0])} />);
+  const toggle = view.container.querySelector<HTMLButtonElement>("button[aria-expanded]")!;
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  expect(view.container.querySelector("[data-goal-details] p")?.textContent).toBe(objective);
+  expect(onEdit).not.toHaveBeenCalled();
+  fireEvent.click(toggle);
+  expect(view.container.querySelector("[data-goal-details]")?.getAttribute("aria-hidden")).toBe("true");
+  expect(view.container.querySelector("[data-goal-details]")?.hasAttribute("inert")).toBe(true);
+});

@@ -51,6 +51,55 @@
   animation: amiba-dock-sheet-in 200ms ease-out;
 }
 
+.amiba-toaster-stack {
+  position: relative;
+  margin: 0 16px -10px;
+}
+.amiba-toaster-stack:not(:has([data-composer-section])) { display: none; }
+.amiba-composer-toaster {
+  position: relative;
+  z-index: 0;
+  margin: 0;
+  padding: 0 0 10px;
+  max-height: min(56vh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid hsl(var(--border) / .45);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  background: hsl(var(--background) / var(--amiba-composer-opacity, .6));
+  backdrop-filter: blur(var(--amiba-composer-blur, 24px)) saturate(1.08);
+  -webkit-backdrop-filter: blur(var(--amiba-composer-blur, 24px)) saturate(1.08);
+  box-shadow: inset 0 1px 0 hsl(var(--foreground) / .05);
+}
+/* The rear layer stays mounted but contributes no height while covered.
+ * Only a quiet top edge peeks out; queue controls cannot leak through glass. */
+.amiba-toaster-stack[data-interacting] > [data-composer-toaster="persistent"] {
+  position: absolute;
+  inset: -6px 4px 0;
+  /* Paint only the exposed edge: two translucent fills would whiten the front. */
+  clip-path: inset(0 0 calc(100% - 6px) 0);
+  overflow: hidden;
+  pointer-events: none;
+}
+.amiba-toaster-stack[data-interacting] > [data-composer-toaster="persistent"] > * {
+  visibility: hidden;
+}
+[data-composer-toaster="interaction"] { z-index: 1; }
+/* Local to the small dock tree; the editor and transcript are outside this selector. */
+.amiba-composer-toaster:not(:has([data-composer-section])),
+[data-composer-toaster-region]:empty { display: none; }
+[data-composer-toaster-region]:not(:empty) ~ [data-composer-toaster-region]:not(:empty),
+.amiba-composer-section + .amiba-composer-section {
+  border-top: 1px solid hsl(var(--border) / .3);
+}
+.amiba-composer-section { min-width: 0; padding-bottom: 10px; }
+/* Equal clear space inside the border; border thickness is not content padding. */
+.amiba-composer-section:is([data-composer-section="context"], [data-composer-section="queue"]) { padding-block: 4px; }
+.amiba-composer-section > :is([data-amiba-goal], [data-composer-context-rail]) { padding-top: 0; }
+.amiba-composer-section[data-tone="danger"] { background: hsl(var(--destructive) / .035); }
+.amiba-composer-section[data-tone="warn"] { background: hsl(var(--warning) / .035); }
+
 @media (prefers-reduced-motion: reduce) {
   .amiba-dock-sheet {
     animation: none;
@@ -746,4 +795,71 @@
  * rounded corners do not become square when they pass the viewport top. */
 [data-conversation-scroll-region] > [data-radix-scroll-area-viewport] {
   clip-path: inset(0 12px round 12px);
+}
+
+/* Shared toaster operations: identical geometry, contrast and interaction states. */
+.amiba-dock-icon-button,
+.amiba-dock-sheet [data-wizard-close] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
+  color: hsl(var(--muted-foreground) / .7);
+  transition: color 150ms, background-color 150ms;
+}
+.amiba-dock-icon-button svg,
+.amiba-dock-sheet [data-wizard-close] svg { width: 14px; height: 14px; stroke-width: 1.75; pointer-events: none; }
+.amiba-dock-icon-button:hover:not(:disabled),
+.amiba-dock-sheet [data-wizard-close]:hover:not(:disabled) { color: hsl(var(--foreground)); background: hsl(var(--foreground) / .05); }
+.amiba-dock-icon-button[data-destructive]:hover:not(:disabled) { color: hsl(var(--destructive)); background: hsl(var(--destructive) / .06); }
+.amiba-dock-icon-button:focus-visible,
+.amiba-dock-sheet [data-wizard-close]:focus-visible { outline: 2px solid hsl(var(--ring) / .4); outline-offset: 2px; }
+.amiba-dock-icon-button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Labeled decisions share compact geometry; primary/destructive semantics remain visible. */
+.amiba-dock-action,
+.amiba-dock-sheet [data-wizard-frame] footer button,
+.amiba-dock-sheet [data-wizard-frame] header button:not([data-wizard-close]) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: color 150ms, background-color 150ms, border-color 150ms;
+}
+.amiba-dock-action svg,
+.amiba-dock-sheet [data-wizard-frame] footer button svg { width: 14px; height: 14px; stroke-width: 1.75; }
+.amiba-dock-action:focus-visible { outline: 2px solid hsl(var(--ring) / .4); outline-offset: 2px; }
+.amiba-dock-action:disabled { opacity: .4; cursor: not-allowed; }
+.amiba-dock-action-secondary { color: hsl(var(--muted-foreground)); }
+.amiba-dock-action-secondary:hover:not(:disabled) { color: hsl(var(--foreground)); background: hsl(var(--foreground) / .05); }
+.amiba-dock-action-primary { color: hsl(var(--primary-foreground)); background: hsl(var(--primary)); }
+.amiba-dock-action-primary:hover:not(:disabled) { background: hsl(var(--primary) / .9); }
+
+/* Keep the details mounted so both expansion and collapse can interpolate. */
+.amiba-goal-details {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition: grid-template-rows 180ms ease, opacity 180ms ease, visibility 0s linear 180ms;
+}
+.amiba-goal-details[data-expanded] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+.amiba-goal-chevron { transition: transform 180ms ease; }
+.amiba-goal-chevron[data-expanded] { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .amiba-goal-details, .amiba-goal-chevron { transition: none; }
 }

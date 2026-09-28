@@ -43,6 +43,7 @@ export { WizardFrame, type WizardFrameProps, type WizardTab } from "./primitives
 // seat renders INSIDE it, never in a card of its own.
 export {
   ComposerDockSheet,
+  ComposerDockIconButton,
   type ComposerDockSheetProps,
   type ComposerDockTone,
 } from "./chat/ComposerDockSheet";

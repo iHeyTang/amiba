@@ -470,6 +470,8 @@ function Home({
               <EmptyStateVisual scene="home" />
             </div>
           )}
+          {/* Keep page-level sibling spacing outside the toaster/input pair. */}
+          <div data-home-composer="">
           <Composer
             triggerRuntime={triggerRuntime}
             ref={inputRef}
@@ -541,6 +543,7 @@ function Home({
               ) : undefined
             }
           />
+          </div>
         </section>
       </main>
     </InteractionRegion>

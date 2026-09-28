@@ -64,6 +64,7 @@ export function WizardFrame({
   const closeButton = onClose ? (
     <button
       aria-label={closeLabel ?? "Close"}
+      data-wizard-close=""
       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       onClick={onClose}
       type="button"

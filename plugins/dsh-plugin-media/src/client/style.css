@@ -383,9 +383,6 @@
 .amiba-media-confirm pre { max-height:180px; overflow:auto; padding:10px; background:hsl(var(--muted)); border-radius:8px; white-space:pre-wrap; overflow-wrap:anywhere; }
 .amiba-media-confirm textarea { width:100%; min-height:72px; resize:vertical; border:1px solid hsl(var(--border)); border-radius:8px; padding:10px; background:transparent; }
 .amiba-media-confirm footer { justify-content:flex-end; margin-top:12px; }
-.amiba-media-confirm button { padding:7px 12px; border:0; border-radius:6px; background:hsl(var(--muted)); cursor:pointer; }
-.amiba-media-confirm button:disabled { opacity:.4; cursor:default; }
-.amiba-media-confirm .amiba-media-confirm-submit { color:hsl(var(--background)); background:hsl(var(--foreground)); }
 .amiba-media-confirm-specs { display:flex; flex-wrap:wrap; gap:8px 20px; margin:12px 0; }
 .amiba-media-confirm-specs div { display:flex; gap:6px; }
 .amiba-media-confirm-specs dt { color:hsl(var(--muted-foreground)); }

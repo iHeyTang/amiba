@@ -130,9 +130,8 @@
 [data-amiba-product-shell] [data-section-header="rail"] > button {
   background: transparent;
 }
-/* Both composers share glass; keep the outer context rail's original
-   translucent treatment and frost only its compact workspace control. */
-[data-amiba-product-shell] [data-composer-card] {
+/* Composer and toaster layers share the same wallpaper/default-theme material. */
+[data-amiba-product-shell] :is([data-composer-card], .amiba-dock-sheet) {
   background: hsl(var(--background) / var(--amiba-composer-opacity));
   backdrop-filter: blur(var(--amiba-composer-blur)) saturate(1.08);
   -webkit-backdrop-filter: blur(var(--amiba-composer-blur)) saturate(1.08);
@@ -514,7 +513,7 @@
 .amiba-background-frame:not([data-background-active="true"]) [data-sidebar-glass]::after {
   display: none;
 }
-.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] [data-composer-card] {
+.amiba-background-frame:not([data-background-active="true"]) [data-amiba-product-shell] :is([data-composer-card], .amiba-dock-sheet) {
   border-color: hsl(var(--foreground) / calc(var(--amiba-edge-opacity, 0.14) * 1));
   box-shadow: 0 2px 12px hsl(var(--foreground) / 0.06);
 }

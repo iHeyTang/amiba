@@ -10,7 +10,7 @@ import { cn } from "../../primitives"
 import { Loader2, X } from "lucide-react"
 import { useEffect, useState, type ReactNode } from "react"
 import { WorkbenchViewBoundary } from "../workbench-extensions"
-import { ComposerDockSheet } from "../ComposerDockSheet"
+import { ComposerDockSheet, ComposerDockIconButton } from "../ComposerDockSheet"
 import { ApprovalCode } from "./approval-syntax"
 
 interface ApprovalDecisionMeta {
@@ -146,13 +146,12 @@ export function ApprovalBanner({
       {error && (
         <div className="mx-4 mt-3 flex items-start justify-between gap-2 rounded-lg bg-destructive/[0.07] px-2.5 py-2 text-[11px] leading-relaxed text-destructive">
           <span className="min-w-0 flex-1 break-words">{error}</span>
-          <button
+          <ComposerDockIconButton
             type="button"
             onClick={onDismissError}
-            className="shrink-0 rounded-md p-0.5 transition-colors hover:bg-destructive/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-destructive/30"
             aria-label={t("sidepanel.permission.dismissError")}>
             <X className="h-3 w-3" />
-          </button>
+          </ComposerDockIconButton>
         </div>
       )}
       <div className="divide-y divide-border/45">
@@ -215,7 +214,7 @@ export function ApprovalBanner({
                       onClick={() => onRespond(req, d.value)}
                       title={d.description}
                       className={cn(
-                        "inline-flex h-7 select-none items-center justify-center gap-1.5 rounded-md border px-2.5 text-[11px] font-medium transition-[background-color,color,border-color,opacity] focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/50",
+                        "amiba-dock-action border",
                         d.variant === "neutral" &&
                           "border-border/50 bg-transparent text-foreground/70 hover:bg-chat-surface-hover hover:text-foreground",
                         d.variant === "destructive" &&

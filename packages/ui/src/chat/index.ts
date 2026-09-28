@@ -210,6 +210,6 @@ export {
   type ConversationTurnTailAnchor,
 } from "./conversation-rows";
 
-export { ComposerDockSheet } from "./ComposerDockSheet";
+export { ComposerDockSheet, ComposerDockIconButton } from "./ComposerDockSheet";
 
 export { MessageActionButton } from "./bubble/message-action-button";

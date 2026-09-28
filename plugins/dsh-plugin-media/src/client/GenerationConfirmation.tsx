@@ -32,9 +32,9 @@ export function GenerationConfirmation({request,inFlight,error,respond,cancel}:A
     <p className="amiba-media-confirm-hint">确认后提交一次生成请求；预计费用不等于最终扣费。</p>
     {editing && <textarea aria-label="调整生成方案" placeholder="例如：改为 3 秒、降低分辨率，或换更便宜的模型" value={changes} onChange={event=>setChanges(event.target.value)} disabled={inFlight}/>}
     {error && <p role="alert">{error}</p>}
-    <footer>{editing && <button type="button" disabled={inFlight} onClick={()=>{setEditing(false);setChanges('');}}>返回原方案</button>}<button type="button" disabled={inFlight} onClick={cancel}>取消</button>
-      {editing ? <button type="button" disabled={inFlight || !changes.trim()} onClick={()=>respond([{id:question.id,selected:['调整参数'],custom:changes}])}>更新方案</button> : <button type="button" disabled={inFlight} onClick={()=>setEditing(true)}>调整参数</button>}
-      <button type="button" className="amiba-media-confirm-submit" disabled={inFlight || editing} onClick={()=>respond([{id:question.id,selected:[CONFIRM_GENERATION]}])}>确认生成</button>
+    <footer>{editing && <button className="amiba-dock-action amiba-dock-action-secondary" type="button" disabled={inFlight} onClick={()=>{setEditing(false);setChanges('');}}>返回原方案</button>}<button className="amiba-dock-action amiba-dock-action-secondary" type="button" disabled={inFlight} onClick={cancel}>取消</button>
+      {editing ? <button className="amiba-dock-action amiba-dock-action-secondary" type="button" disabled={inFlight || !changes.trim()} onClick={()=>respond([{id:question.id,selected:['调整参数'],custom:changes}])}>更新方案</button> : <button className="amiba-dock-action amiba-dock-action-secondary" type="button" disabled={inFlight} onClick={()=>setEditing(true)}>调整参数</button>}
+      <button type="button" className="amiba-dock-action amiba-dock-action-primary" disabled={inFlight || editing} onClick={()=>respond([{id:question.id,selected:[CONFIRM_GENERATION]}])}>确认生成</button>
     </footer>
   </section></ComposerDockSheet>;
 }

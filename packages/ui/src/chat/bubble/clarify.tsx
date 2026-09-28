@@ -23,7 +23,7 @@ import type {
 import { useT } from "@amiba/i18n";
 
 import { Input, cn } from "../../primitives";
-import { ComposerDockSheet } from "../ComposerDockSheet";
+import { ComposerDockSheet, ComposerDockIconButton } from "../ComposerDockSheet";
 
 /**
  * The user-questions surface over DSH's ask_user_question waits. Mirrors the
@@ -116,8 +116,7 @@ const completed = (draft: QuestionDraft): boolean =>
  * one primary action carries the accent, and even that stays h-7/rounded-md
  * so the sheet reads light.
  */
-const quietButton =
-  "inline-flex h-7 select-none items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-[background-color,color,border-color,opacity] focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
+const quietButton = "amiba-dock-action";
 const quietNeutral =
   "text-muted-foreground hover:bg-chat-surface-hover hover:text-foreground";
 const quietOutline =
@@ -364,14 +363,13 @@ function QuestionStepper({
           </h2>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <button
+          <ComposerDockIconButton
             aria-expanded={!minimized}
             aria-label={t(
               minimized
                 ? "sidepanel.clarify.expand"
                 : "sidepanel.clarify.collapse",
             )}
-            className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-chat-surface-hover hover:text-foreground"
             onClick={() => setMinimized((current) => !current)}
             type="button"
           >
@@ -380,18 +378,17 @@ function QuestionStepper({
             ) : (
               <ChevronDown className="h-3.5 w-3.5" />
             )}
-          </button>
+          </ComposerDockIconButton>
           {onCancel ? (
-            <button
+            <ComposerDockIconButton
               aria-label={t("sidepanel.clarify.dismiss")}
-              className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-chat-surface-hover hover:text-foreground disabled:opacity-50"
               disabled={inFlight}
               onClick={onCancel}
               title={t("sidepanel.clarify.dismissHint")}
               type="button"
             >
               <X className="h-3.5 w-3.5" />
-            </button>
+            </ComposerDockIconButton>
           ) : null}
         </div>
       </div>
@@ -527,9 +524,8 @@ function QuestionStepper({
           <div className="flex items-center gap-2 px-4 pt-1.5">
             {questions.length > 1 ? (
               <div className="flex shrink-0 items-center gap-0.5">
-                <button
+                <ComposerDockIconButton
                   aria-label={t("sidepanel.clarify.prev")}
-                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-chat-surface-hover hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
                   disabled={index === 0 || inFlight}
                   onClick={() => {
                     setIndex(index - 1);
@@ -538,10 +534,9 @@ function QuestionStepper({
                   type="button"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" />
-                </button>
-                <button
+                </ComposerDockIconButton>
+                <ComposerDockIconButton
                   aria-label={t("sidepanel.clarify.next")}
-                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-chat-surface-hover hover:text-foreground disabled:opacity-35 disabled:hover:bg-transparent"
                   disabled={isLast || inFlight}
                   onClick={() => {
                     setIndex(index + 1);
@@ -550,7 +545,7 @@ function QuestionStepper({
                   type="button"
                 >
                   <ChevronRight className="h-3.5 w-3.5" />
-                </button>
+                </ComposerDockIconButton>
               </div>
             ) : null}
             {feedback ? (
