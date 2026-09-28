@@ -17,6 +17,7 @@
  * Usage:
  *   node scripts/perf/render.mjs
  *   node scripts/perf/render.mjs --turns 1000 --samples 30
+ *   node scripts/perf/render.mjs --turns 100 --samples 30 --expanded
  *
  * Resolves packages/ui sources directly (esbuild), so it measures whatever
  * branch of the repo it is run from.
@@ -40,6 +41,7 @@ const TURNS = flag("--turns", 200);
 const SAMPLES = flag("--samples", 30);
 const GIANT_KB = flag("--giant", 0);
 const TOOLS = flag("--tools", 0);
+const EXPANDED = args.includes("--expanded");
 
 // --- Bundle the real MessageTurns tree with esbuild (no fake imports) -----
 const esbuildDir = fs
@@ -56,7 +58,14 @@ const g = globalThis;
 g.window = dom.window; g.document = dom.window.document; g.navigator = dom.window.navigator;
 g.HTMLElement = dom.window.HTMLElement; g.Node = dom.window.Node; g.Element = dom.window.Element;
 g.getComputedStyle = dom.window.getComputedStyle;
-if (typeof g.IntersectionObserver !== "function") { g.IntersectionObserver = class { observe(){} unobserve(){} disconnect(){} }; }
+const intersections = new Set();
+g.IntersectionObserver = class {
+  targets = new Set();
+  constructor(callback) { this.callback = callback; }
+  observe(target) { this.targets.add(target); intersections.add(this); }
+  unobserve(target) { this.targets.delete(target); }
+  disconnect() { this.targets.clear(); intersections.delete(this); }
+};
 if (typeof g.ResizeObserver !== "function") { g.ResizeObserver = class { observe(){} unobserve(){} disconnect(){} }; }
 if (typeof g.requestAnimationFrame !== "function") { g.requestAnimationFrame = (cb) => setTimeout(cb, 0); }
 
@@ -136,6 +145,21 @@ function median(ns) { const s=[...ns].sort((a,b)=>a-b); const m=Math.floor(s.len
 let mountT0 = performance.now();
 act(() => { root.render(createElement(MessageTurns, props)); });
 const mountMs = performance.now() - mountT0;
+// Exercise the production history sentinel rather than changing its limits.
+const expansionStart = performance.now();
+if (${EXPANDED}) {
+  for (let attempt = 0; container.querySelector("[data-turn-window-sentinel]"); attempt++) {
+    if (attempt >= TURNS) throw new Error("History expansion made no progress");
+    const sentinel = container.querySelector("[data-turn-window-sentinel]");
+    const observer = [...intersections].find(item => item.targets.has(sentinel));
+    if (!observer) throw new Error("History sentinel has no observer");
+    act(() => observer.callback([{ target: sentinel, isIntersecting: true }]));
+  }
+  if (container.querySelectorAll("[data-conversation-user-turn]").length !== TURNS) {
+    throw new Error("Expanded benchmark did not mount every requested turn");
+  }
+}
+const expansionMs = performance.now() - expansionStart;
 const mounts = [];
 for (let i = 0; i < ${SAMPLES}; i++) {
   const t0 = performance.now();
@@ -163,7 +187,7 @@ for (let i = 0; i < ${SAMPLES}; i++) {
     throw new Error("Streaming sample did not render appended text: " + i);
   }
 }
-console.log(JSON.stringify({ bundled: true, turns: TURNS, samples: ${SAMPLES}, mountMs, mounted,
+console.log(JSON.stringify({ bundled: true, turns: TURNS, samples: ${SAMPLES}, expanded: ${EXPANDED}, mountMs, expansionMs, mounted,
   keystrokeMedianMs: median(mounts), keystrokeMaxMs: Math.max(...mounts),
   streamingUpdatesVerified: streams.length, streamingMedianMs: median(streams), streamingMaxMs: Math.max(...streams) }));
 `;
