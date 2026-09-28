@@ -2323,3 +2323,41 @@ it("updates and removes a notice attached to an unchanged historical execution",
   view.rerender(<MessageTurns sessionId="s1" messages={messages} />);
   expect(screen.queryByText("Updated notice")).not.toBeInTheDocument();
 });
+
+
+it("refreshes historical actions and restore controls while another turn streams", () => {
+  const oldAction = vi.fn();
+  const newAction = vi.fn();
+  const restore = vi.fn();
+  const messages: UiMessage[] = [
+    { uiId: "old-user", role: "user", content: "Old prompt" },
+    { uiId: "old-reply", role: "assistant", content: "Old reply", assistantMessageId: "old-runtime" },
+    { uiId: "live-user", role: "user", content: "New prompt" },
+    { uiId: "live-reply", role: "assistant", content: "Live reply", streaming: true },
+  ];
+  const view = render(<MessageTurns messages={messages} assistantActions={() => <button onClick={oldAction}>Old action</button>} onRestoreBeforeTurn={restore} restorableTurnOrdinals={new Set()} />);
+  expect(screen.queryByRole("button", { name: "sidepanel.message.restoreWorkspace" })).not.toBeInTheDocument();
+  view.rerender(<MessageTurns messages={[...messages.slice(0, -1), { ...messages[3]!, content: "Live update" }]} assistantActions={() => <button onClick={newAction}>New action</button>} onRestoreBeforeTurn={restore} restorableTurnOrdinals={new Set([0])} />);
+  expect(screen.queryByRole("button", { name: "Old action" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "New action" }));
+  expect(newAction).toHaveBeenCalledOnce();
+  expect(oldAction).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "sidepanel.message.restoreWorkspace" }));
+  expect(restore).toHaveBeenCalledWith(messages[0], 0);
+});
+
+
+it("removes a historical turn tail when its runtime ownership moves to a later reply", () => {
+  const openTurnFile = vi.fn();
+  const turnTail = (turn: number) => <div>Tail {turn}</div>;
+  const messages: UiMessage[] = [
+    { uiId: "old-user", role: "user", content: "Old prompt" },
+    { uiId: "old-reply", role: "assistant", content: "Old reply", runtimeTurn: 7 },
+    { uiId: "live-user", role: "user", content: "New prompt" },
+    { uiId: "live-reply", role: "assistant", content: "Live reply", streaming: true },
+  ];
+  const view = render(<MessageTurns messages={messages} turnTail={turnTail} openTurnFile={openTurnFile} />);
+  expect(screen.getByText("Tail 7")).toBeInTheDocument();
+  view.rerender(<MessageTurns messages={[...messages.slice(0, -1), { ...messages[3]!, runtimeTurn: 7 }]} turnTail={turnTail} openTurnFile={openTurnFile} />);
+  expect(screen.queryByText("Tail 7")).not.toBeInTheDocument();
+});
