@@ -2239,3 +2239,39 @@ it("orders assistant copy, feedback, output tokens and timestamp together", () =
   expect(elements[2]?.textContent).toBe('dislike');
   expect(elements[3]?.textContent).toContain('355');
 });
+
+
+it("does not re-read completed history while the last reply streams", () => {
+  const historyReads = vi.fn();
+  const history: UiMessage = { uiId: "history", role: "assistant", get content() { historyReads(); return "Settled history"; } };
+  const messages: UiMessage[] = [
+    { uiId: "old-user", role: "user", content: "Old prompt" }, history,
+    { uiId: "new-user", role: "user", content: "New prompt" },
+    { uiId: "live", role: "assistant", content: "Live start", streaming: true },
+  ];
+  const view = render(<MessageTurns messages={messages} />);
+  historyReads.mockClear();
+  view.rerender(<MessageTurns messages={[...messages.slice(0, -1), { ...messages[3]!, content: "Live updated" }]} />);
+  expect(screen.getByText("Live updated")).toBeInTheDocument();
+  expect(screen.getByText("Settled history")).toBeInTheDocument();
+  expect(historyReads).not.toHaveBeenCalled();
+});
+
+it("updates and removes a notice attached to an unchanged historical execution", () => {
+  const messages: UiMessage[] = [
+    { uiId: "prompt", role: "user", content: "Read" },
+    { uiId: "work", role: "assistant", content: "", toolProgress: [{ tool: "read", toolCallId: "read-1", status: "completed", args: { path: "README.md" } }] },
+    { uiId: "next", role: "user", content: "Next" },
+    { uiId: "live", role: "assistant", content: "Working", streaming: true },
+  ];
+  const notice: UiMessage = { uiId: "notice", role: "user", content: "Finished", notice: { summary: "First notice", placement: { kind: "execution", sessionId: "s1", callId: "read-1" } } };
+  const view = render(<MessageTurns sessionId="s1" messages={messages} />);
+  expandProcess();
+  view.rerender(<MessageTurns sessionId="s1" messages={[...messages, notice]} />);
+  expect(screen.getByText("First notice")).toBeInTheDocument();
+  view.rerender(<MessageTurns sessionId="s1" messages={[...messages, { ...notice, notice: { ...notice.notice!, summary: "Updated notice" } }]} />);
+  expect(screen.queryByText("First notice")).not.toBeInTheDocument();
+  expect(screen.getByText("Updated notice")).toBeInTheDocument();
+  view.rerender(<MessageTurns sessionId="s1" messages={messages} />);
+  expect(screen.queryByText("Updated notice")).not.toBeInTheDocument();
+});

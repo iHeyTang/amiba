@@ -909,7 +909,8 @@ function TraceDisclosure({
   );
 }
 
-const ExecutionNoticesContext = createContext<ReadonlyMap<string, UiMessage[]>>(new Map());
+const EMPTY_EXECUTION_NOTICES: ReadonlyMap<string, UiMessage[]> = new Map();
+const ExecutionNoticesContext = createContext(EMPTY_EXECUTION_NOTICES);
 
 type TurnTraceDetail =
   | { kind: "notice"; id: string; message: UiMessage }
@@ -2378,7 +2379,7 @@ function MessageTurnsInner({
         turns.push(cur);
       }
     }
-    return { turns, extensionRows, lastMessageForTurn, executionNotices };
+    return { turns, extensionRows, lastMessageForTurn, executionNotices: executionNotices.size ? executionNotices : EMPTY_EXECUTION_NOTICES };
   }, [messages, timelineRows, turnTailAnchors, sessionId]);
   const { turns, extensionRows, lastMessageForTurn, executionNotices } = derived;
   // Long histories are windowed: mounting one bubble tree per turn on every
@@ -2442,7 +2443,36 @@ function MessageTurnsInner({
           className="h-px w-full"
         />
       )}
-      {visibleTurns.map((turn, i) => {
+      {visibleTurns.map((turn, i) => <ConversationTurnView
+        key={turn.user?.uiId ?? `turn-${i}`} turn={turn} i={i}
+        messageText={messageText} turnTail={turnTail} openTurnFile={openTurnFile} assistantActions={assistantActions} messageImages={messageImages} onOpenAgentDestination={onOpenAgentDestination} onReviewWorkspaceChanges={onReviewWorkspaceChanges} onBranchUserMessage={onBranchUserMessage} onRestoreBeforeTurn={onRestoreBeforeTurn} restorableTurnOrdinals={restorableTurnOrdinals} extensionRows={extensionRows} lastMessageForTurn={lastMessageForTurn} executionNotices={executionNotices} timeFormat={timeFormat} language={language}
+      />)}
+    </>
+  );
+}
+
+type ConversationTurnViewProps = Pick<Parameters<typeof MessageTurnsInner>[0],
+  "messageText" | "turnTail" | "openTurnFile" | "assistantActions" | "messageImages" | "onOpenAgentDestination" | "onReviewWorkspaceChanges" | "onBranchUserMessage" | "onRestoreBeforeTurn" | "restorableTurnOrdinals"> & {
+  turn: ConversationTurn;
+  i: number;
+  extensionRows: ReadonlyMap<string, ReactNode>;
+  lastMessageForTurn: ReadonlyMap<number, string>;
+  executionNotices: ReadonlyMap<string, UiMessage[]>;
+  timeFormat: TimeFormatPreference;
+  language: string;
+};
+
+function sameMessageReferences(a: readonly UiMessage[] | undefined, b: readonly UiMessage[] | undefined) {
+  return a === b || (!!a && !!b && a.length === b.length && a.every((message, index) => message === b[index]));
+}
+
+// A stream publishes a new messages array and rebuilds grouping maps. Compare
+// the actual inputs owned by this turn, so unchanged historical chrome, tools
+// and bodies can all bail out together. Notifications and presentation rows
+// remain reactive even when their owning message itself did not change.
+const ConversationTurnView = memo(function ConversationTurnView({
+  turn, i, messageText, turnTail, openTurnFile, assistantActions, messageImages, onOpenAgentDestination, onReviewWorkspaceChanges, onBranchUserMessage, onRestoreBeforeTurn, restorableTurnOrdinals, extensionRows, lastMessageForTurn, executionNotices, timeFormat, language
+}: ConversationTurnViewProps) {
         const replyItems = buildTurnReplyItems(turn.replies);
         // Rendering can fold assistant rows into an execution disclosure or omit
         // an empty row. Locate the tail after the row's final rendered item,
@@ -2595,10 +2625,21 @@ function MessageTurnsInner({
             ) : null}
           </div>
         );
-      })}
-    </>
-  );
-}
+}, (before, after) => {
+  for (const key of Object.keys(after) as Array<keyof ConversationTurnViewProps>) {
+    if (key === "turn" || key === "extensionRows" || key === "lastMessageForTurn" || key === "executionNotices") continue;
+    if (before[key] !== after[key]) return false;
+  }
+  if (before.turn.user !== after.turn.user || before.turn.userOrdinal !== after.turn.userOrdinal ||
+      !sameMessageReferences(before.turn.replies, after.turn.replies)) return false;
+  for (const message of [after.turn.user, ...after.turn.replies]) {
+    if (!message) continue;
+    if (before.extensionRows.get(message.uiId) !== after.extensionRows.get(message.uiId)) return false;
+    if (!sameMessageReferences(before.executionNotices.get(message.uiId), after.executionNotices.get(message.uiId))) return false;
+    if (message.runtimeTurn !== undefined && before.lastMessageForTurn.get(message.runtimeTurn) !== after.lastMessageForTurn.get(message.runtimeTurn)) return false;
+  }
+  return true;
+});
 
 export const MessageTurns = memo(MessageTurnsInner);
 
