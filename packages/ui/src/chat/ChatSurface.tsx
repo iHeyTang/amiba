@@ -2541,6 +2541,7 @@ const composerDraftSource: ComposerDraftSource = useMemo(
             <TranscriptScrollPositionContext.Provider value={readTranscriptPosition}>
             <ScrollArea
               data-conversation-scroll-region
+              nativeViewport
               className="min-h-0 min-w-0 flex-1"
               viewportRef={conversationViewportRef}
               viewportProps={{ "data-conversation-scroll": "" } as import("react").HTMLAttributes<HTMLDivElement>}

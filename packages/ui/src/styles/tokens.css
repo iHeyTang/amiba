@@ -365,11 +365,11 @@
  *   viewport's content wrapper so intrinsic content (long URLs, markdown)
  *   respects the viewport width instead of expanding past the panel edge.
  */
-[data-radix-scroll-area-viewport] {
+:is([data-radix-scroll-area-viewport], [data-amiba-native-scroll-viewport]) {
   overscroll-behavior: contain;
 }
 
-[data-radix-scroll-area-viewport] > div {
+:is([data-radix-scroll-area-viewport], [data-amiba-native-scroll-viewport]) > div {
   display: block !important;
   min-width: 0 !important;
   max-width: 100%;

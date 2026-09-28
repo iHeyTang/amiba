@@ -744,6 +744,6 @@
 
 /* Clip scrolled bubbles at the message column's padded edges, so their
  * rounded corners do not become square when they pass the viewport top. */
-[data-conversation-scroll-region] > [data-radix-scroll-area-viewport] {
+[data-conversation-scroll-region] > :is([data-radix-scroll-area-viewport], [data-amiba-native-scroll-viewport]) {
   clip-path: inset(0 12px round 12px);
 }
