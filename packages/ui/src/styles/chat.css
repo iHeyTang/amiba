@@ -94,8 +94,8 @@
   border-top: 1px solid hsl(var(--border) / .3);
 }
 .amiba-composer-section { min-width: 0; padding-bottom: 10px; }
-/* Own both insets together; the extra bottom pixel balances the sheet's top border. */
-.amiba-composer-section:is([data-composer-section="context"], [data-composer-section="queue"]) { padding-block: 3px 4px; }
+/* Equal clear space inside the border; border thickness is not content padding. */
+.amiba-composer-section:is([data-composer-section="context"], [data-composer-section="queue"]) { padding-block: 4px; }
 .amiba-composer-section > :is([data-amiba-goal], [data-composer-context-rail]) { padding-top: 0; }
 .amiba-composer-section[data-tone="danger"] { background: hsl(var(--destructive) / .035); }
 .amiba-composer-section[data-tone="warn"] { background: hsl(var(--warning) / .035); }
