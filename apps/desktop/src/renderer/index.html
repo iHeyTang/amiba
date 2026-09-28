@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-amiba-starting>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -85,18 +85,20 @@
         color: var(--amiba-boot-ink);
       }
       /* Only the native macOS window opts in: CSS blur cannot sample the desktop. */
-      html[data-startup-glass="true"]:has(#amiba-startup),
-      html[data-startup-glass="true"]:has(#amiba-startup) body {
+      html[data-startup-glass="true"][data-amiba-starting],
+      html[data-startup-glass="true"][data-amiba-starting] body {
         background: transparent !important;
       }
       /* Descendants can explicitly set visibility: visible (header controls).
          Keep them hidden too until the startup overlay is removed, while
-         preserving layout so shell measurement and warmup can finish. */
-      html:has(#amiba-startup) #root,
-      html:has(#amiba-startup) #root * {
+         preserving layout so shell measurement and warmup can finish.
+         Do not use html:has(...): its document-wide dependency invalidates
+         every root descendant when chat/editor nodes are inserted later. */
+      html[data-amiba-starting] #root,
+      html[data-amiba-starting] #root * {
         visibility: hidden !important;
       }
-      html:has(#amiba-startup) #root {
+      html[data-amiba-starting] #root {
         opacity: 0;
         pointer-events: none;
       }

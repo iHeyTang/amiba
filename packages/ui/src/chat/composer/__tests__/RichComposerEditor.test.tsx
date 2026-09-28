@@ -131,10 +131,11 @@ describe("RichComposerEditor", () => {
   })
 
   it("remeasures when layout classes change without an editor update", () => {
-    const scrollHeight = vi
-      .spyOn(HTMLElement.prototype, "scrollHeight", "get")
+    const bounds = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
       .mockImplementation(function (this: HTMLElement) {
-        return this.classList.contains("density-default") ? 60 : 48
+        const editor = this.closest("[data-auto-grow-editor]")
+        return new DOMRect(0, 0, 100, editor?.classList.contains("density-default") ? 60 : 48)
       })
 
     try {
@@ -161,7 +162,7 @@ describe("RichComposerEditor", () => {
       expect(editable.style.height).toBe("60px")
       expect(editable.dataset.autoGrowTargetHeight).toBe("60")
     } finally {
-      scrollHeight.mockRestore()
+      bounds.mockRestore()
     }
   })
 

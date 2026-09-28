@@ -49,7 +49,7 @@
 | glass-measure-per-frame | 流式期间玻璃测量/强制布局/Image.decode | B | — | 0（仅落定） |
 | window-change-report-sec | onTurnsWindowChange 每秒触发 | B | — | ≈0（仅在变化） |
 | session-open-decode-ms | 冷启动解码（缓存未命中，zstd→JSONL） | A | 18MB 会话 82ms / 11MB 会话 38ms | 记录对比 |
-| window-render-ms (jsdom) | 160 行窗口端到端挂载（20 个已落定 markdown + 流式行） | A' | 121ms（jsdom；真实浏览器 ≈ 1/10） | 记录对比 |
+| window-render-ms (jsdom) | 160 行窗口端到端挂载（20 个已落定 markdown + 流式行） | A' | 121ms（仅 jsdom，不换算真实浏览器时间） | 记录对比 |
 | index-stringify-ms | 326 条会话索引 JSON.stringify | A | 0.046ms | 噪音，关闭 |
 
 ## 扫描检查清单（第 1 步用）
@@ -106,3 +106,14 @@
 - 所有修复走 feature worktree → PR → 本地 dev 合并验证（见 AGENTS.md）。
 - 指标与对比表随 PR 提交，存放在 `scripts/perf/results/`。
 - 每轮结束更新本文件的「指标表」与「待办池」。
+## 2026-09-27：真实输入采样补充
+
+输入卡顿必须使用 `scripts/perf/typing-browser.mjs` 在实际 dev 数据目录、可见窗口、
+受影响的长历史会话中测量；保留草稿，不发送消息。`scripts/perf/BASELINES.md` 记录
+具体命令和原始数字。jsdom 相同 props 重渲染仅是 memo 回归检查，不能作为打字延迟
+或连续流式更新耗时。不要把 jsdom 时间按固定比例换算为浏览器时间。
+
+连续换行补测进一步确认：启动 CSS 的 `html:has(#amiba-startup) #root *` 在启动完成后
+仍参与整树样式失效。改为启动属性后，同场景后台输入中位数 235.54→24.24ms；详细
+追踪聚合、后台测试边界和剩余场景见 `scripts/perf/BASELINES.md`。`--background` 不能
+代替前台显示延迟，必须明确标注；普通键入通过不代表换行、IME 或流式更新通过。

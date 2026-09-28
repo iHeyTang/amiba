@@ -7,25 +7,25 @@ interface AutoGrowPluginProps {
   layoutKey?: string
 }
 
-function measureIntrinsicHeight(el: HTMLElement): number {
-  const clone = el.cloneNode(true) as HTMLElement
-  const width = el.getBoundingClientRect().width
-  clone.removeAttribute("id")
-  clone.setAttribute("aria-hidden", "true")
-  clone.style.position = "fixed"
-  clone.style.inset = "0 auto auto -100000px"
-  clone.style.width = `${width}px`
-  clone.style.height = "auto"
-  clone.style.maxHeight = "none"
-  clone.style.overflow = "visible"
-  clone.style.pointerEvents = "none"
-  clone.style.transition = "none"
-  clone.style.visibility = "hidden"
-
-  ;(el.parentElement ?? document.body).appendChild(clone)
-  const height = clone.scrollHeight
-  clone.remove()
-  return height
+export function measureIntrinsicHeight(el: HTMLElement): number {
+  // Lexical's root contains normal-flow, zero-margin paragraphs. Their last
+  // bottom edge gives the intrinsic height even while the root is capped,
+  // scrolled, or animating. Inserting a hidden clone into the live composer
+  // invalidates style/layout across the conversation on every keystroke.
+  const style = getComputedStyle(el)
+  const px = (value: string) => Number.parseFloat(value) || 0
+  const borderTop = px(style.borderTopWidth)
+  const borders = borderTop + px(style.borderBottomWidth)
+  const padding = px(style.paddingTop) + px(style.paddingBottom)
+  const minHeight = style.boxSizing === "border-box"
+    ? px(style.minHeight) - borders
+    : px(style.minHeight) + padding
+  const last = el.lastElementChild
+  const contentHeight = last
+    ? last.getBoundingClientRect().bottom - el.getBoundingClientRect().top
+      + el.scrollTop - borderTop + px(style.paddingBottom)
+    : padding
+  return Math.ceil(Math.max(minHeight, contentHeight))
 }
 
 /** Mirror the old textarea auto-grow: grow to content, cap at maxHeightPx, then scroll. */
@@ -65,7 +65,23 @@ export function AutoGrowPlugin({ maxHeightPx, layoutKey }: AutoGrowPluginProps) 
       el.style.overflowY = sh > maxHeightPx ? "auto" : "hidden"
     }
     apply()
-    return editor.registerUpdateListener(() => apply())
+    const unregister = editor.registerUpdateListener(({ dirtyElements, dirtyLeaves }) => {
+      // Selection-only updates do not change the paragraph geometry.
+      if (dirtyElements.size || dirtyLeaves.size) apply()
+    })
+    const el = editor.getRootElement()
+    let width = el?.getBoundingClientRect().width
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(() => {
+      const nextWidth = el?.getBoundingClientRect().width
+      if (nextWidth === width) return
+      width = nextWidth
+      apply()
+    })
+    if (el) observer?.observe(el)
+    return () => {
+      unregister()
+      observer?.disconnect()
+    }
   }, [editor, layoutKey, maxHeightPx])
   return null
 }
