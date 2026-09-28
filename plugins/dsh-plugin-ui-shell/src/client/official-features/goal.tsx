@@ -1,7 +1,7 @@
-import { ComposerDockSheet } from "@amiba/ui";
+import { ComposerDockSheet, ComposerDockIconButton } from "@amiba/ui";
 import { useEffect, useRef, useState } from "react";
 import { Check, Pause, Pencil, Play, Target, X } from "lucide-react";
-import { Button, Input } from "@amiba/ui/primitives";
+import { Input } from "@amiba/ui/primitives";
 import type {
   GoalDock as OfficialGoalDock,
   GoalActionResult,
@@ -109,18 +109,16 @@ function GoalStrip({
     action: () => void,
     disabled = pending,
   ) => (
-    <Button
+    <ComposerDockIconButton
       type="button"
-      variant="ghost"
-      size="icon"
-      className="h-6 w-6 shrink-0 text-muted-foreground/70 hover:text-foreground"
+      destructive={key === "clear"}
       aria-label={t(`action.${key}`)}
       title={t(`action.${key}`)}
       disabled={disabled}
       onClick={action}
     >
       <Icon className="h-3.5 w-3.5" />
-    </Button>
+    </ComposerDockIconButton>
   );
   return (
     <ComposerDockSheet region="context">
@@ -170,21 +168,23 @@ function GoalStrip({
               >
                 {goal.objective}
               </span>
-              {goal.phase === "active" &&
-                activation === "armed" &&
-                iconButton("pause", Pause, () => void run(onPause))}
-              {(goal.phase === "paused" ||
-                (goal.phase === "active" && activation === "disarmed")) &&
-                iconButton("resume", Play, () => void run(onResume))}
-              {iconButton("edit", Pencil, () => {
-                setDraft(goal.objective);
-                setEditing(true);
-              })}
-              {iconButton(
-                "clear",
-                X,
-                () => void run(onClear, () => setCleared(true)),
-              )}
+              <div className="flex shrink-0 items-center gap-1">
+                {goal.phase === "active" &&
+                  activation === "armed" &&
+                  iconButton("pause", Pause, () => void run(onPause))}
+                {(goal.phase === "paused" ||
+                  (goal.phase === "active" && activation === "disarmed")) &&
+                  iconButton("resume", Play, () => void run(onResume))}
+                {iconButton("edit", Pencil, () => {
+                  setDraft(goal.objective);
+                  setEditing(true);
+                })}
+                {iconButton(
+                  "clear",
+                  X,
+                  () => void run(onClear, () => setCleared(true)),
+                )}
+              </div>
             </>
           )}
         </div>

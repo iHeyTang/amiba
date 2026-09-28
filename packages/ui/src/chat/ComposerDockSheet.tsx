@@ -1,7 +1,15 @@
-import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { cn } from "../primitives";
+
+/** Compact operations share one geometry across every toaster region. */
+export function ComposerDockIconButton({ className, destructive = false, ...props }:
+  ButtonHTMLAttributes<HTMLButtonElement> & { destructive?: boolean }) {
+  return <button type="button" {...props} data-composer-dock-action=""
+    data-destructive={destructive || undefined}
+    className={cn("amiba-dock-icon-button", className)} />;
+}
 
 /** Ordered destinations keep plugin registration order out of the visual and reading order. */
 const REGIONS = ["context", "queue", "interaction", "feedback"] as const;
@@ -114,24 +122,11 @@ export function ComposerDockError({
     <ComposerDockSheet region="feedback" tone="danger">
       <div className="flex items-start justify-between gap-2 px-4 pt-2.5 text-[11px] leading-relaxed text-destructive">
         <span className="min-w-0 flex-1 break-words">{message}</span>
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="shrink-0 rounded-md p-0.5 transition-colors hover:bg-destructive/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-destructive/30"
-          aria-label={dismissLabel}
-        >
-          <svg
-            aria-hidden
-            className="h-3 w-3"
-            fill="none"
-            stroke="currentColor"
-            strokeLinecap="round"
-            strokeWidth="2"
-            viewBox="0 0 24 24"
-          >
+        <ComposerDockIconButton onClick={onDismiss} aria-label={dismissLabel} title={dismissLabel} destructive>
+          <svg aria-hidden fill="none" stroke="currentColor" strokeLinecap="round" viewBox="0 0 24 24">
             <path d="M18 6 6 18M6 6l12 12" />
           </svg>
-        </button>
+        </ComposerDockIconButton>
       </div>
     </ComposerDockSheet>
   );

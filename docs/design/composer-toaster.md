@@ -27,3 +27,9 @@ Errors belonging to an approval, question, goal or wizard remain next to that in
 ## Checks
 
 Goal + queue; multiple queue items; approvals + errors; plan review; ordinary questions; connector wizard; media confirmation; empty dock; home/Quick Ask; narrow widths; long text; light/dark/wallpaper; keyboard focus and draft preservation when neighboring sections appear/disappear. No model request is needed to inspect presentation fixtures.
+
+## Action styling
+
+Icon operations use `ComposerDockIconButton`: 24 px target, 14 px icon, 1.75 stroke, 6 px radius and one muted color. Adjacent operations have a 4 px gap; destructive hover is reserved for removal. Queue rows expose send, edit and remove in that order. Editing is disabled for the row already being edited. Goal operations, question navigation/collapse/dismiss and error dismissal use the same control. Wizard close adopts the same geometry only when docked.
+
+Labeled decisions use 28 px height, 12 px text and 6 px radius across approvals, questions, plans, docked wizards and media confirmation. Primary and destructive meanings retain distinct colors; choices and tabs retain their selection semantics.

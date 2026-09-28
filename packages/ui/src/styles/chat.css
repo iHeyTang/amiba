@@ -791,3 +791,50 @@
 [data-conversation-scroll-region] > [data-radix-scroll-area-viewport] {
   clip-path: inset(0 12px round 12px);
 }
+
+/* Shared toaster operations: identical geometry, contrast and interaction states. */
+.amiba-dock-icon-button,
+.amiba-dock-sheet [data-wizard-close] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
+  color: hsl(var(--muted-foreground) / .7);
+  transition: color 150ms, background-color 150ms;
+}
+.amiba-dock-icon-button svg,
+.amiba-dock-sheet [data-wizard-close] svg { width: 14px; height: 14px; stroke-width: 1.75; pointer-events: none; }
+.amiba-dock-icon-button:hover:not(:disabled),
+.amiba-dock-sheet [data-wizard-close]:hover:not(:disabled) { color: hsl(var(--foreground)); background: hsl(var(--foreground) / .05); }
+.amiba-dock-icon-button[data-destructive]:hover:not(:disabled) { color: hsl(var(--destructive)); background: hsl(var(--destructive) / .06); }
+.amiba-dock-icon-button:focus-visible,
+.amiba-dock-sheet [data-wizard-close]:focus-visible { outline: 2px solid hsl(var(--ring) / .4); outline-offset: 2px; }
+.amiba-dock-icon-button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Labeled decisions share compact geometry; primary/destructive semantics remain visible. */
+.amiba-dock-action,
+.amiba-dock-sheet [data-wizard-frame] footer button,
+.amiba-dock-sheet [data-wizard-frame] header button:not([data-wizard-close]) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: color 150ms, background-color 150ms, border-color 150ms;
+}
+.amiba-dock-action svg,
+.amiba-dock-sheet [data-wizard-frame] footer button svg { width: 14px; height: 14px; stroke-width: 1.75; }
+.amiba-dock-action:focus-visible { outline: 2px solid hsl(var(--ring) / .4); outline-offset: 2px; }
+.amiba-dock-action:disabled { opacity: .4; cursor: not-allowed; }
+.amiba-dock-action-secondary { color: hsl(var(--muted-foreground)); }
+.amiba-dock-action-secondary:hover:not(:disabled) { color: hsl(var(--foreground)); background: hsl(var(--foreground) / .05); }
+.amiba-dock-action-primary { color: hsl(var(--primary-foreground)); background: hsl(var(--primary)); }
+.amiba-dock-action-primary:hover:not(:disabled) { background: hsl(var(--primary) / .9); }

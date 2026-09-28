@@ -470,7 +470,7 @@ export const zhCN: UiMessages = {
   "sidepanel.queue.sendNow": "立即发送：把此消息提到队列最前",
   "sidepanel.queue.sendNow.aria": "立即发送",
   "sidepanel.queue.edit.aria": "编辑",
-  "sidepanel.queue.delete": "删除",
+  "sidepanel.queue.delete": "移除",
   "sidepanel.queue.editing": "此消息正在输入框中编辑",
   "sidepanel.tokens.details": "本轮 Token 用量",
   "sidepanel.tokens.inputTokens": "输入（不含缓存）",

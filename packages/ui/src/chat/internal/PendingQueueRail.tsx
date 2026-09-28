@@ -1,5 +1,7 @@
-import { MessageSquareText, Send, X } from "lucide-react";
+import { MessageSquareText, Pencil, Send, X } from "lucide-react";
 import { useT } from "@amiba/i18n";
+
+import { ComposerDockIconButton } from "../ComposerDockSheet";
 
 import { cn } from "../../primitives";
 
@@ -10,7 +12,7 @@ import { cn } from "../../primitives";
  * width and exposes three actions:
  *
  *   - **Send now** — pre-empt the current stream and fire this item.
- *   - **Click the preview** — hoist it into the composer for editing.
+ *   - **Edit** — hoist it into the composer for editing.
  *   - **Close** — drop the item (and its attachments).
  *
  * Pure presentational: the parent owns the queue state and the three
@@ -58,42 +60,37 @@ export function PendingQueueRail({
               isEditing && "text-muted-foreground",
             )}
           >
-            <button
-              type="button"
-              onClick={() => onEdit(item.queueId)}
-              disabled={isEditing}
-              title={
-                isEditing ? t("sidepanel.queue.editing") : item.preview
-              }
-              aria-label={t("sidepanel.queue.edit.aria")}
-              className={cn(
-                "flex min-w-0 flex-1 items-center gap-1.5 rounded px-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-                isEditing ? "cursor-default" : "text-foreground/85",
-              )}
-            >
+            <div title={item.preview} className="flex min-w-0 flex-1 items-center gap-1.5 px-0.5 text-foreground/85">
               <MessageSquareText className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-              <span className="min-w-0 flex-1 truncate">
-                {item.preview}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onSendNow(item.queueId)}
-              title={t("sidepanel.queue.sendNow")}
-              aria-label={t("sidepanel.queue.sendNow.aria")}
-              className="ml-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground/55 transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-            >
-              <Send className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onRemove(item.queueId)}
-              title={t("sidepanel.queue.delete")}
-              aria-label={t("sidepanel.queue.delete")}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground/40 transition-colors hover:bg-destructive/5 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+              <span className="min-w-0 flex-1 truncate">{item.preview}</span>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <ComposerDockIconButton
+                type="button"
+                onClick={() => onSendNow(item.queueId)}
+                title={t("sidepanel.queue.sendNow")}
+                aria-label={t("sidepanel.queue.sendNow.aria")}
+              >
+                <Send className="h-3.5 w-3.5" />
+              </ComposerDockIconButton>
+              <ComposerDockIconButton
+                onClick={() => onEdit(item.queueId)}
+                title={t(isEditing ? "sidepanel.queue.editing" : "sidepanel.queue.edit.aria")}
+                aria-label={t("sidepanel.queue.edit.aria")}
+                disabled={isEditing}
+              >
+                <Pencil />
+              </ComposerDockIconButton>
+              <ComposerDockIconButton
+                destructive
+                type="button"
+                onClick={() => onRemove(item.queueId)}
+                title={t("sidepanel.queue.delete")}
+                aria-label={t("sidepanel.queue.delete")}
+              >
+                <X className="h-3.5 w-3.5" />
+              </ComposerDockIconButton>
+            </div>
           </li>
         );
       })}

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -32,6 +32,7 @@ describe("PendingQueueRail", () => {
 
     const row = screen.getByRole("listitem");
     expect(row).toHaveClass("w-full");
+    expect(within(row).getAllByRole("button")).toHaveLength(3);
 
     await userEvent.click(
       screen.getByRole("button", { name: "sidepanel.queue.edit.aria" }),
@@ -47,5 +48,12 @@ describe("PendingQueueRail", () => {
       screen.getByRole("button", { name: "sidepanel.queue.delete" }),
     );
     expect(onRemove).toHaveBeenCalledWith("queue-1");
+  });
+  it("disables editing only for the item already open in the composer", () => {
+    render(<PendingQueueRail items={[{ queueId: "q", preview: "Draft" }]} editingQueueId="q"
+      onSendNow={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "sidepanel.queue.edit.aria" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "sidepanel.queue.sendNow.aria" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "sidepanel.queue.delete" })).toBeEnabled();
   });
 });
