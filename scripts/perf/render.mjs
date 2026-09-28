@@ -9,6 +9,10 @@
  *     per key press once the draft is decoupled (rounds 1-2). With the
  *     memo boundaries in place this should be ~0 ms regardless of history
  *     length; a regression to unmemoized turns makes it scale with turns.
+ *   - streaming: immutable updates that append text to the live reply on
+ *     every sample, with a DOM assertion proving each update was rendered.
+ *
+ * This jsdom benchmark does not measure browser layout, paint or native input.
  *
  * Usage:
  *   node scripts/perf/render.mjs
@@ -116,12 +120,12 @@ const props = { sessionId: "bench", messages, viewStateScope: {} };
 // Streaming-frame equivalent: a NEW messages array where only the last
 // assistant message's content grew by a token (the live reply).
 const growth = "MORE".repeat(${TURNS > 80 ? 20 : 8});
-const streamingMessages = messages.map((m, i) => (i === messages.length - 1 && !m.streaming)
+let streamingMessages = messages.map((m, i) => (i === messages.length - 1 && !m.streaming)
   ? { ...m, content: m.content + growth, streaming: true }
   : i === messages.length - 2 && m.role === "assistant"
     ? { ...m, streaming: true }
     : m);
-const streamingProps = { ...props, messages: streamingMessages };
+let streamingProps = { ...props, messages: streamingMessages };
 
 const container = document.createElement("div");
 document.body.appendChild(container);
@@ -142,13 +146,26 @@ const mounted = container.querySelectorAll("[data-conversation-user-turn]").leng
 act(() => { root.render(createElement(MessageTurns, streamingProps)); });
 const streams = [];
 for (let i = 0; i < ${SAMPLES}; i++) {
+  // Preserve historical message identities, as the real stream buffer does,
+  // but publish a new live message and array for every content delta.
+  const marker = " stream_sample_" + i + "_end";
+  streamingMessages = streamingMessages.map((message, index) =>
+    index === streamingMessages.length - 1
+      ? { ...message, content: message.content + marker }
+      : message);
+  streamingProps = { ...props, messages: streamingMessages };
   const t0 = performance.now();
   act(() => { root.render(createElement(MessageTurns, streamingProps)); });
   streams.push(performance.now() - t0);
+  // Outside the timed interval: a memo/no-op or dropped update must fail,
+  // rather than produce a misleading near-zero streaming result.
+  if (!container.textContent.includes(marker)) {
+    throw new Error("Streaming sample did not render appended text: " + i);
+  }
 }
 console.log(JSON.stringify({ bundled: true, turns: TURNS, samples: ${SAMPLES}, mountMs, mounted,
   keystrokeMedianMs: median(mounts), keystrokeMaxMs: Math.max(...mounts),
-  streamingMedianMs: median(streams), streamingMaxMs: Math.max(...streams) }));
+  streamingUpdatesVerified: streams.length, streamingMedianMs: median(streams), streamingMaxMs: Math.max(...streams) }));
 `;
 
 const result = esbuild.buildSync({
