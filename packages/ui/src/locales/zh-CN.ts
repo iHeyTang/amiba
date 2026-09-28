@@ -469,6 +469,8 @@ export const zhCN: UiMessages = {
   "sidepanel.attach": "附加文件",
   "sidepanel.queue.sendNow": "立即发送：把此消息提到队列最前",
   "sidepanel.queue.sendNow.aria": "立即发送",
+  "sidepanel.goal.expand": "展开目标全文",
+  "sidepanel.goal.collapse": "收起目标全文",
   "sidepanel.queue.edit.aria": "编辑",
   "sidepanel.queue.delete": "移除",
   "sidepanel.queue.editing": "此消息正在输入框中编辑",

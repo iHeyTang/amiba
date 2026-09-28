@@ -1020,7 +1020,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
         {inputDock}
         {contextRail ? (
           <ComposerDockSheet region="queue">
-            <div data-composer-context-rail="" className="min-w-0 px-4 pt-0.5">
+            <div data-composer-context-rail="" className="min-w-0 px-4">
               {contextRail}
             </div>
           </ComposerDockSheet>

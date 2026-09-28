@@ -1,6 +1,7 @@
 import { ComposerDockSheet, ComposerDockIconButton } from "@amiba/ui";
-import { useEffect, useRef, useState } from "react";
-import { Check, Pause, Pencil, Play, Target, X } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { ChevronDown, ChevronUp, Check, Pause, Pencil, Play, Target, X } from "lucide-react";
+import { useT } from "@amiba/i18n";
 import { Input } from "@amiba/ui/primitives";
 import type {
   GoalDock as OfficialGoalDock,
@@ -59,6 +60,9 @@ function GoalStrip({
   onClear,
   t,
 }: StripProps) {
+  const { t: uiT } = useT();
+  const [expanded, setExpanded] = useState(false);
+  const detailsId = useId();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
@@ -122,7 +126,7 @@ function GoalStrip({
   );
   return (
     <ComposerDockSheet region="context">
-      <div className="px-4 pt-0.5 text-xs" data-amiba-goal>
+      <div className="px-4 text-xs" data-amiba-goal>
         <div className="flex min-w-0 items-center gap-2">
           <Target className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           {editing ? (
@@ -162,12 +166,18 @@ function GoalStrip({
           ) : (
             <>
               <span className="shrink-0 text-muted-foreground">{label}</span>
-              <span
-                className="min-w-0 flex-1 truncate"
-                title={goal.blockedReason?.message ?? goal.objective}
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-1 rounded text-left hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                aria-expanded={expanded}
+                aria-controls={detailsId}
+                aria-label={uiT(expanded ? "sidepanel.goal.collapse" : "sidepanel.goal.expand")}
+                title={uiT(expanded ? "sidepanel.goal.collapse" : "sidepanel.goal.expand")}
+                onClick={() => setExpanded(value => !value)}
               >
-                {goal.objective}
-              </span>
+                <span className="min-w-0 flex-1 truncate">{goal.objective}</span>
+                {expanded ? <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+              </button>
               <div className="flex shrink-0 items-center gap-1">
                 {goal.phase === "active" &&
                   activation === "armed" &&
@@ -188,6 +198,12 @@ function GoalStrip({
             </>
           )}
         </div>
+        {expanded && !editing && (
+          <div id={detailsId} className="py-2 text-xs leading-relaxed" data-goal-details="">
+            <p className="select-text whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{goal.objective}</p>
+            {goal.blockedReason?.message && <p className="mt-2 whitespace-pre-wrap break-words text-muted-foreground">{goal.blockedReason.message}</p>}
+          </div>
+        )}
         {failure && (
           <p role="alert" className="mt-1 text-destructive">
             {failure}

@@ -508,6 +508,8 @@ export const en = {
   "sidepanel.queue.sendNow":
     "Send now: jump this message to the front of the queue",
   "sidepanel.queue.sendNow.aria": "Send now",
+  "sidepanel.goal.expand": "Expand full goal",
+  "sidepanel.goal.collapse": "Collapse full goal",
   "sidepanel.queue.edit.aria": "Edit",
   "sidepanel.queue.delete": "Delete",
   "sidepanel.queue.editing": "This message is being edited in the composer",
