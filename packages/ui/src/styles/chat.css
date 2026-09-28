@@ -843,3 +843,23 @@
 .amiba-dock-action-secondary:hover:not(:disabled) { color: hsl(var(--foreground)); background: hsl(var(--foreground) / .05); }
 .amiba-dock-action-primary { color: hsl(var(--primary-foreground)); background: hsl(var(--primary)); }
 .amiba-dock-action-primary:hover:not(:disabled) { background: hsl(var(--primary) / .9); }
+
+/* Keep the details mounted so both expansion and collapse can interpolate. */
+.amiba-goal-details {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition: grid-template-rows 180ms ease, opacity 180ms ease, visibility 0s linear 180ms;
+}
+.amiba-goal-details[data-expanded] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+.amiba-goal-chevron { transition: transform 180ms ease; }
+.amiba-goal-chevron[data-expanded] { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .amiba-goal-details, .amiba-goal-chevron { transition: none; }
+}

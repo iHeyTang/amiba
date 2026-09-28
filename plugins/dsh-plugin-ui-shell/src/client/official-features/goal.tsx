@@ -1,6 +1,6 @@
 import { ComposerDockSheet, ComposerDockIconButton } from "@amiba/ui";
 import { useEffect, useId, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Check, Pause, Pencil, Play, Target, X } from "lucide-react";
+import { ChevronDown, Check, Pause, Pencil, Play, Target, X } from "lucide-react";
 import { useT } from "@amiba/i18n";
 import { Input } from "@amiba/ui/primitives";
 import type {
@@ -176,7 +176,7 @@ function GoalStrip({
                 onClick={() => setExpanded(value => !value)}
               >
                 <span className="min-w-0 flex-1 truncate">{goal.objective}</span>
-                {expanded ? <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                <ChevronDown className="amiba-goal-chevron h-3.5 w-3.5 shrink-0 text-muted-foreground" data-expanded={expanded || undefined} />
               </button>
               <div className="flex shrink-0 items-center gap-1">
                 {goal.phase === "active" &&
@@ -198,12 +198,17 @@ function GoalStrip({
             </>
           )}
         </div>
-        {expanded && !editing && (
-          <div id={detailsId} className="py-2 text-xs leading-relaxed" data-goal-details="">
-            <p className="select-text whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{goal.objective}</p>
-            {goal.blockedReason?.message && <p className="mt-2 whitespace-pre-wrap break-words text-muted-foreground">{goal.blockedReason.message}</p>}
+        <div id={detailsId} className="amiba-goal-details" data-goal-details=""
+          data-expanded={(expanded && !editing) || undefined}
+          aria-hidden={!expanded || editing}
+          {...(!expanded || editing ? { inert: "" } : {})}>
+          <div className="min-h-0 overflow-hidden">
+            <div className="py-2 text-xs leading-relaxed">
+              <p className="select-text whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{goal.objective}</p>
+              {goal.blockedReason?.message && <p className="mt-2 whitespace-pre-wrap break-words text-muted-foreground">{goal.blockedReason.message}</p>}
+            </div>
           </div>
-        )}
+        </div>
         {failure && (
           <p role="alert" className="mt-1 text-destructive">
             {failure}

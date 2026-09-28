@@ -251,5 +251,6 @@ it("expands selectable full goal text without running a goal action", () => {
   expect(view.container.querySelector("[data-goal-details] p")?.textContent).toBe(objective);
   expect(onEdit).not.toHaveBeenCalled();
   fireEvent.click(toggle);
-  expect(view.container.querySelector("[data-goal-details]")).toBeNull();
+  expect(view.container.querySelector("[data-goal-details]")?.getAttribute("aria-hidden")).toBe("true");
+  expect(view.container.querySelector("[data-goal-details]")?.hasAttribute("inert")).toBe(true);
 });
