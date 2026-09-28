@@ -1,4 +1,5 @@
 import { preparePluginStartup } from "./plugin-startup";
+import { removeStartupScreen } from "./startup-screen";
 import { setPlatform } from "@amiba/app-runtime/platform";
 import { seedDocumentLanguage } from "@amiba/i18n";
 
@@ -14,10 +15,6 @@ installEmbeddedPageHost();
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("root element missing");
 const root: HTMLElement = rootElement;
-
-function removeStartupScreen(): void {
-  document.getElementById("amiba-startup")?.remove();
-}
 
 const ROOT_READY_EVENT = "amiba:dsh-root-ready";
 let shellReady = false;

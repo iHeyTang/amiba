@@ -1,0 +1,14 @@
+{
+  "before": {
+    "scenario": "three newline insertions; original dev long conversation; background focus emulation",
+    "styleRecalcMs": 166.291,
+    "largestStyleRecalcElementCount": 9721,
+    "startupSelectorSubtreeInvalidations": 3
+  },
+  "after": {
+    "scenario": "three newline insertions; original dev long conversation; background focus emulation",
+    "styleRecalcMs": 21.572,
+    "largestStyleRecalcElementCount": 553,
+    "startupSelectorSubtreeInvalidations": 0
+  }
+}

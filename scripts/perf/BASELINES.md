@@ -98,3 +98,50 @@ TypeScript checks passed there. All six PR checks passed on implementation commi
 the Mac was locked; the candidate comparison above must not be relabeled as that
 final built-dev run. Repeat the command after unlocking and opening the same
 conversation before claiming the final foreground verification is complete.
+
+## Native layout and multiline follow-up (2026-09-28)
+
+The built dev implementation passed 17 native-browser layout cases (two widths,
+Chinese/wrapped/multiline/empty content, scroll cap, shrink, and width-only
+changes), with the original draft restored. Results: `baselines/composer-native-layout.json`.
+
+The Mac was locked for the follow-up. `typing-browser.mjs --background` now
+explicitly enables CDP focus emulation and records the original visibility and
+mode. It reports **scheduledFrameIntervalsMs**, not foreground frame intervals.
+These runs measure native input handling, style and layout; they do not establish
+what was presented on the screen or replace the pending foreground UX check.
+
+```sh
+node scripts/perf/typing-browser.mjs --run --background --scenario multiline --samples 30 --out /tmp/multiline.json
+# Other input paths: --scenario typing | ime | bulk
+```
+
+This broader scenario exposed a second cause: startup CSS retained
+`html:has(#amiba-startup) #root *` after removing the overlay. Chromium invalidation
+tracking explicitly attributed whole-root invalidations to that selector when
+Lexical inserted paragraphs. A three-newline trace recalculated up to 9,721
+style elements; replacing the relational gate with a one-time HTML attribute
+reduced that maximum to 553 and removed all startup-selector subtree
+invalidations. See `baselines/startup-invalidation.json` (aggregates only).
+
+Same actual dev profile, same long conversation and focus-emulation conditions:
+
+| 30 multiline insertions | Auto-grow fix only | + startup attribute gate (A/B) |
+|---|---:|---:|
+| Input dispatch median | 235.54 ms | 24.24 ms |
+| Input dispatch P95 | 265.96 ms | 27.28 ms |
+| Native style recalc total | 4,462.39 ms | 255.52 ms |
+| Native layout total | 2,046.17 ms | 368.87 ms |
+
+The attribute is present in initial HTML and removed alongside the startup
+overlay on both success and failure. Run `node apps/desktop/scripts/smoke-startup-style.mjs`
+for Chromium visibility/layout assertions in light/dark and glass/opaque modes,
+including explicitly visible child controls and repeated cleanup. This native
+smoke uses its own disposable profile and is a correctness test; performance
+reports above are from the user's original dev profile.
+
+Remaining investigation: multiline still costs about 24 ms in this A/B run.
+The residual trace contains narrower message-action `:has` invalidations. Do
+not call the whole experience smooth or change those rules without a separate
+measurement. Streaming, history expansion and session switching still need
+real-browser scenario coverage.

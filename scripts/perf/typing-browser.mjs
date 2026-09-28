@@ -12,8 +12,11 @@ const flag = (name, fallback) => args.includes(name) ? args[args.indexOf(name) +
 const port = Number(flag('--port', '19376'));
 const samples = Number(flag('--samples', '50'));
 const output = flag('--out', null);
+const background = args.includes('--background');
+const scenario = flag('--scenario', 'typing');
 if (!args.includes('--run')) throw Error('Pass --run to type temporary characters in the current editor (draft restored; no submit).');
 if (!Number.isInteger(samples) || samples < 1 || samples > 500) throw Error('samples must be 1..500');
+if (!['typing', 'ime', 'multiline', 'bulk'].includes(scenario)) throw Error('scenario must be typing, ime, multiline, or bulk');
 const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
 const pages = targets.filter(t => t.type === 'page' && !/quick-ask|devtools:/.test(t.url));
 if (pages.length !== 1) throw Error('Expected exactly one main window on this debug port.');
@@ -52,6 +55,10 @@ const stop = () => { interrupted = true; };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
 try {
+  const physicalVisibility = await evaluate('document.visibilityState');
+  // Explicit backend validation only: this keeps RAF/ResizeObserver alive on
+  // a locked machine, but cannot measure what was presented on the screen.
+  if (background) await call('Emulation.setFocusEmulationEnabled', { enabled: true });
   const context = await evaluate(`(() => {
     if (document.visibilityState !== 'visible') throw Error('Main window must be visible; hidden-window timing is not a typing baseline.');
     if (window.__amibaTypingProbe) throw Error('Another typing probe is already active.');
@@ -75,19 +82,30 @@ try {
   for (let i = 0; i < samples; i++) {
     if (interrupted) throw Error('Typing probe interrupted; restoring draft.');
     const start = performance.now();
-    await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', text: 'a', unmodifiedText: 'a', windowsVirtualKeyCode: 65 });
-    await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65 });
+    if (scenario === 'typing') {
+      await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', text: 'a', unmodifiedText: 'a', windowsVirtualKeyCode: 65 });
+      await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65 });
+    } else if (scenario === 'ime') {
+      await call('Input.imeSetComposition', { text: '性能测试', selectionStart: 4, selectionEnd: 4 });
+      await call('Input.insertText', { text: '性能测试' });
+    } else {
+      // Insert text without Enter, so neither multiline nor bulk can submit.
+      await call('Input.insertText', { text: scenario === 'multiline' ? '性能测试\n' : '批量输入测试 '.repeat(80) });
+    }
     keys.push(performance.now() - start);
     await new Promise(r => setTimeout(r, 40));
   }
   const after = await metrics();
   const observed = await evaluate(`(() => {const p=window.__amibaTypingProbe;cancelAnimationFrame(p.raf);if(document.visibilityState!=='visible'||document.querySelector('[data-auto-grow-editor]')!==p.root)throw Error('Window/session changed during measurement');return {clones:p.clones,frames:p.frames}})()`);
-  const report = { context, samples, keyDispatchRoundTripMs: stats(keys), frameIntervalsMs: stats(observed.frames), editorClones: observed.clones,
+  const report = { context: { ...context, mode: background ? 'background-focus-emulation' : 'foreground', visibilityBeforeEmulation: physicalVisibility }, scenario, samples,
+    inputDispatchRoundTripMs: stats(keys), ...(scenario === 'typing' ? { keyDispatchRoundTripMs: stats(keys) } : {}),
+    ...(background ? { scheduledFrameIntervalsMs: stats(observed.frames) } : { frameIntervalsMs: stats(observed.frames) }), editorClones: observed.clones,
     metrics: Object.fromEntries(Object.keys(after).filter(k => /Duration|Count/.test(k)).map(k => [k, after[k] - before[k]])) };
   if (output) fs.writeFileSync(output, JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify(report, null, 2));
 } finally {
   if (saved) await evaluate(`(() => {const p=window.__amibaTypingProbe;if(!p)return;cancelAnimationFrame(p.raf);Node.prototype.cloneNode=p.originalClone;p.editor.setEditorState(p.state,{tag:'historic'});delete window.__amibaTypingProbe;})()`).catch(error => { console.error('DRAFT RESTORE FAILED:', error.message); process.exitCode = 1; });
+  if (background) await call('Emulation.setFocusEmulationEnabled', { enabled: false }).catch(() => {});
   socket.close();
   process.off('SIGINT', stop);
   process.off('SIGTERM', stop);

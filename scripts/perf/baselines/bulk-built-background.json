@@ -1,0 +1,35 @@
+{
+  "context": {
+    "mountedTurns": 24,
+    "domNodes": 3389,
+    "visibility": "visible",
+    "mode": "background-focus-emulation",
+    "visibilityBeforeEmulation": "hidden"
+  },
+  "scenario": "bulk",
+  "samples": 10,
+  "inputDispatchRoundTripMs": {
+    "count": 10,
+    "p50": 3.958917000000042,
+    "p95": 17.529416999999967,
+    "max": 17.529416999999967
+  },
+  "scheduledFrameIntervalsMs": {
+    "count": 56,
+    "p50": 8.300000000046566,
+    "p95": 9.800000000046566,
+    "max": 9.900000000023283
+  },
+  "editorClones": 0,
+  "metrics": {
+    "LayoutCount": 13,
+    "RecalcStyleCount": 62,
+    "LayoutDuration": 0.0042320000000000005,
+    "RecalcStyleDuration": 0.004886,
+    "DevToolsCommandDuration": 0.000049,
+    "ScriptDuration": 0.034372,
+    "V8CompileDuration": 0,
+    "TaskDuration": 0.09739600000000001,
+    "TaskOtherDuration": 0.053857
+  }
+}
