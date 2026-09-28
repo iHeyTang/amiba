@@ -34,7 +34,7 @@ export function useConversationAutoScroll(
       // Deferred historical content can change height while our saved anchor
       // is being restored. Native anchoring would move scrollTop a second
       // time, which looks like reader navigation to onScroll below.
-      viewport.style.overflowAnchor = restoringAnchor ? "none" : nativeOverflowAnchor;
+      viewport.style.overflowAnchor = enabledRef.current && restoringAnchor ? "none" : nativeOverflowAnchor;
     };
     syncAnchorOwner();
     const readAnchor = () => {
@@ -47,6 +47,7 @@ export function useConversationAutoScroll(
       top: pendingTop ?? lastTop.current, following: following.current, anchor,
     });
     const reconcile = (resumed = false) => {
+      syncAnchorOwner();
       if (!enabledRef.current) return;
       if (resumed) {
         // The official transcript owned this viewport while we were disabled.

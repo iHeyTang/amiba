@@ -159,3 +159,25 @@ it("owns anchoring only while restoring history and releases it for reader scrol
   returned.unmount();
   expect(returned.viewport.style.overflowAnchor).toBe("");
 });
+
+it("releases anchor ownership when an official transcript takes over during restoration", () => {
+  const viewport = document.createElement("div");
+  Object.defineProperties(viewport, {scrollHeight:{value:1000}, clientHeight:{value:400}});
+  const turn = document.createElement("div");
+  turn.dataset.conversationUserTurn = "reader";
+  turn.getBoundingClientRect = () => ({top:100-viewport.scrollTop, bottom:700-viewport.scrollTop}) as DOMRect;
+  viewport.append(turn);
+  const ref = {current:viewport}, scope = {};
+  const hook = renderHook(({sessionId, enabled}) => useConversationAutoScroll(ref,sessionId,0,60,{scope,enabled}), {
+    initialProps:{sessionId:"first",enabled:true},
+  });
+  viewport.scrollTop=180; fireEvent.scroll(viewport);
+  hook.rerender({sessionId:"second",enabled:true});
+  hook.rerender({sessionId:"first",enabled:true});
+  expect(viewport.style.overflowAnchor).toBe("none");
+  hook.rerender({sessionId:"first",enabled:false});
+  expect(viewport.style.overflowAnchor).toBe("");
+  hook.rerender({sessionId:"first",enabled:true});
+  expect(viewport.style.overflowAnchor).toBe("");
+  hook.unmount();
+});
