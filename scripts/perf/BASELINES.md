@@ -145,3 +145,11 @@ The residual trace contains narrower message-action `:has` invalidations. Do
 not call the whole experience smooth or change those rules without a separate
 measurement. Streaming, history expansion and session switching still need
 real-browser scenario coverage.
+
+The compatibility audit also found that the earlier DraftBoundComposer wrapper
+omitted its native `draftSource` prop. Two failing regressions demonstrated
+literal token text becoming a reference and undo history disappearing on remount.
+Forwarding the same source restores both behaviors while preserving the bounded
+subscription (33 focused tests now pass). The input probe now keeps a private
+recovery copy during a run, rejects conversation changes, and verifies settled
+draft restoration before deleting that copy.

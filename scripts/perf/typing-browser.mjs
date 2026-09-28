@@ -4,6 +4,8 @@
 // Never sends a message. Restores the editor state in finally; no conversation
 // contents are written to the report. Do not type or switch sessions mid-run.
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createRequire } from 'node:module';
 const require = createRequire(new URL('../../apps/desktop/package.json', import.meta.url));
 const WebSocket = require('ws');
@@ -50,6 +52,7 @@ const stats = values => {
   return { count: sorted.length, p50: sorted[Math.floor(sorted.length * .5)], p95: sorted[Math.floor(sorted.length * .95)], max: sorted.at(-1) };
 };
 let saved = false;
+let backupDirectory;
 let interrupted = false;
 const stop = () => { interrupted = true; };
 process.on('SIGINT', stop);
@@ -59,6 +62,8 @@ try {
   // Explicit backend validation only: this keeps RAF/ResizeObserver alive on
   // a locked machine, but cannot measure what was presented on the screen.
   if (background) await call('Emulation.setFocusEmulationEnabled', { enabled: true });
+  // Let a just-opened conversation hydrate its resident draft before capture.
+  await new Promise(r => setTimeout(r, 300));
   const context = await evaluate(`(() => {
     if (document.visibilityState !== 'visible') throw Error('Main window must be visible; hidden-window timing is not a typing baseline.');
     if (window.__amibaTypingProbe) throw Error('Another typing probe is already active.');
@@ -66,7 +71,7 @@ try {
     if (roots.length !== 1 || !roots[0].isContentEditable) throw Error('Expected one editable composer.');
     const root = roots[0], editor = root.__lexicalEditor;
     if (!editor) throw Error('Lexical editor unavailable.');
-    const probe = window.__amibaTypingProbe = {root, editor, state: editor.getEditorState(), clones: 0, frames: [], raf: 0, originalClone: Node.prototype.cloneNode};
+    const probe = window.__amibaTypingProbe = {root, editor, state: editor.getEditorState(), firstTurn: document.querySelector('[data-conversation-user-turn]')?.getAttribute('data-conversation-user-turn'), clones: 0, frames: [], raf: 0, originalClone: Node.prototype.cloneNode};
     Node.prototype.cloneNode = function(...args) { if (this === root) probe.clones++; return probe.originalClone.apply(this, args); };
     root.focus();
     const selection = getSelection(), range = document.createRange();
@@ -74,6 +79,10 @@ try {
     return { mountedTurns: document.querySelectorAll('[data-conversation-user-turn]').length, domNodes: document.querySelectorAll('*').length, visibility: document.visibilityState };
   })()`);
   saved = true;
+  // Keep a local, private recovery copy until asynchronous restoration is
+  // verified. Never put draft contents in the public performance report.
+  backupDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'amiba-typing-draft-'));
+  fs.writeFileSync(path.join(backupDirectory, 'draft.json'), JSON.stringify(await evaluate('window.__amibaTypingProbe.state.toJSON()')), { mode: 0o600 });
   await call('Performance.enable');
   await new Promise(r => setTimeout(r, 300));
   await evaluate(`(() => {const p=window.__amibaTypingProbe;let last;const frame=t=>{if(last!==undefined)p.frames.push(t-last);last=t;p.raf=requestAnimationFrame(frame)};p.raf=requestAnimationFrame(frame);p.clones=0;})()`);
@@ -81,6 +90,7 @@ try {
   const keys = [];
   for (let i = 0; i < samples; i++) {
     if (interrupted) throw Error('Typing probe interrupted; restoring draft.');
+    await evaluate(`(() => {const p=window.__amibaTypingProbe;if(document.querySelector('[data-auto-grow-editor]')!==p.root || document.querySelector('[data-conversation-user-turn]')?.getAttribute('data-conversation-user-turn')!==p.firstTurn)throw Error('Conversation changed during probe');})()`);
     const start = performance.now();
     if (scenario === 'typing') {
       await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', text: 'a', unmodifiedText: 'a', windowsVirtualKeyCode: 65 });
@@ -104,7 +114,17 @@ try {
   if (output) fs.writeFileSync(output, JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify(report, null, 2));
 } finally {
-  if (saved) await evaluate(`(() => {const p=window.__amibaTypingProbe;if(!p)return;cancelAnimationFrame(p.raf);Node.prototype.cloneNode=p.originalClone;p.editor.setEditorState(p.state,{tag:'historic'});delete window.__amibaTypingProbe;})()`).catch(error => { console.error('DRAFT RESTORE FAILED:', error.message); process.exitCode = 1; });
+  if (saved) await evaluate(`(async () => {
+    const p=window.__amibaTypingProbe;if(!p)throw Error('Saved editor state unavailable');
+    cancelAnimationFrame(p.raf);Node.prototype.cloneNode=p.originalClone;
+    if(document.querySelector('[data-auto-grow-editor]')!==p.root || document.querySelector('[data-conversation-user-turn]')?.getAttribute('data-conversation-user-turn')!==p.firstTurn)throw Error('Conversation changed; refusing to overwrite another draft');
+    p.editor.setEditorState(p.state,{tag:'historic'});
+    await new Promise(r=>setTimeout(r,300));
+    if(JSON.stringify(p.editor.getEditorState().toJSON())!==JSON.stringify(p.state.toJSON()))throw Error('Restored draft did not settle');
+    delete window.__amibaTypingProbe;
+  })()`).then(() => { if (backupDirectory) fs.rmSync(backupDirectory, { recursive: true }); }).catch(error => {
+    console.error('DRAFT RESTORE FAILED:', error.message, backupDirectory ? 'Recovery copy: '+path.join(backupDirectory,'draft.json') : ''); process.exitCode = 1;
+  });
   if (background) await call('Emulation.setFocusEmulationEnabled', { enabled: false }).catch(() => {});
   socket.close();
   process.off('SIGINT', stop);

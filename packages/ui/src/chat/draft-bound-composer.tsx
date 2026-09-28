@@ -28,6 +28,7 @@ export const DraftBoundComposer = forwardRef<
     <Composer
       ref={ref}
       {...props}
+      draftSource={draftSource}
       value={value}
       onChange={draftSource.set}
       canSubmit={canSubmitDraft(value)}
