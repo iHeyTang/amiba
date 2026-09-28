@@ -887,6 +887,23 @@ describe("chat message chrome", () => {
     expect(screen.getByText(after)).toBeVisible();
   });
 
+  it("does not measure a historical reply for a completion animation", () => {
+    const bounds = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
+    try {
+      render(<Bubble m={{
+        uiId: "historical-flow", role: "assistant", streaming: false, content: "Checking.Done.",
+        toolProgress: [{ tool: "search_files", toolCallId: "search", status: "completed" }],
+        assistantTimeline: [
+          { kind: "text", id: "before", text: "Checking." },
+          { kind: "tool", id: "tool", toolCallId: "search" },
+          { kind: "text", id: "after", text: "Done." },
+        ],
+      }} />);
+      expect(screen.getByText("Done.")).toBeVisible();
+      expect(bounds).not.toHaveBeenCalled();
+    } finally { bounds.mockRestore(); }
+  });
+
   it.each([false, true])("respects reduced motion (%s) when completing a live turn", (reducedMotion) => {
     let height = 300;
     const bounds = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => ({
