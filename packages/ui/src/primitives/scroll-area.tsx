@@ -9,8 +9,6 @@ interface ScrollAreaProps
     React.ElementRef<typeof ScrollAreaPrimitive.Viewport>
   >;
   hideScrollbar?: boolean;
-  /** Use browser scrolling without mounting custom thumb geometry observers. */
-  nativeViewport?: boolean;
   viewportProps?: React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Viewport>;
 }
 
@@ -19,25 +17,13 @@ const ScrollArea = React.forwardRef<
   ScrollAreaProps
 >(
   (
-    { className, children, viewportRef, viewportProps, hideScrollbar = false, nativeViewport = false, type = "scroll", scrollHideDelay = 700, ...props },
+    { className, children, viewportRef, viewportProps, hideScrollbar = false, ...props },
     ref,
-  ) => {
-    if (nativeViewport && !props.asChild) {
-      return <div ref={ref} data-amiba-scroll-area="" className={cn("relative overflow-hidden", className)} {...props}>
-        <div
-          {...viewportProps}
-          ref={viewportRef}
-          data-amiba-native-scroll-viewport=""
-          tabIndex={viewportProps?.tabIndex ?? 0}
-          className={cn("h-full w-full rounded-[inherit]", hideScrollbar && "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden", viewportProps?.className)}
-          style={{ overflowX: "hidden", overflowY: "scroll", WebkitOverflowScrolling: "touch", ...viewportProps?.style }}
-        ><div>{children}</div></div>
-      </div>;
-    }
-    return <ScrollAreaPrimitive.Root
+  ) => (
+    <ScrollAreaPrimitive.Root
       ref={ref}
-      type={type}
-      scrollHideDelay={scrollHideDelay}
+      type="scroll"
+      scrollHideDelay={700}
       data-amiba-scroll-area=""
       className={cn("relative overflow-hidden", className)}
       {...props}
@@ -59,8 +45,8 @@ const ScrollArea = React.forwardRef<
         className={hideScrollbar ? "pointer-events-none opacity-0" : undefined}
       />
       <ScrollAreaPrimitive.Corner />
-    </ScrollAreaPrimitive.Root>;
-  },
+    </ScrollAreaPrimitive.Root>
+  ),
 );
 ScrollArea.displayName = ScrollAreaPrimitive.Root.displayName;
 
