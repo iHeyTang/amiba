@@ -1,0 +1,139 @@
+{
+  "mode": "background-focus-emulation; behavior only",
+  "mountedTurns": 24,
+  "results": [
+    {
+      "width": 750,
+      "label": "empty",
+      "target": 60,
+      "expected": 60,
+      "overflow": "hidden",
+      "pass": true
+    },
+    {
+      "width": 750,
+      "label": "short",
+      "target": 60,
+      "expected": 60,
+      "overflow": "hidden",
+      "pass": true
+    },
+    {
+      "width": 750,
+      "label": "wrapped",
+      "target": 80,
+      "expected": 80,
+      "overflow": "hidden",
+      "pass": true
+    },
+    {
+      "width": 750,
+      "label": "chinese",
+      "target": 200,
+      "expected": 200,
+      "overflow": "auto",
+      "pass": true
+    },
+    {
+      "width": 750,
+      "label": "capped-scroll",
+      "target": 200,
+      "expected": 200,
+      "overflow": "auto",
+      "pass": true
+    },
+    {
+      "width": 750,
+      "label": "trailing",
+      "target": 80,
+      "expected": 80,
+      "overflow": "hidden",
+      "pass": true
+    },
+    {
+      "width": 750,
+      "label": "shrink",
+      "target": 60,
+      "expected": 60,
+      "overflow": "hidden",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "label": "empty",
+      "target": 60,
+      "expected": 60,
+      "overflow": "hidden",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "label": "short",
+      "target": 60,
+      "expected": 60,
+      "overflow": "hidden",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "label": "wrapped",
+      "target": 160,
+      "expected": 160,
+      "overflow": "hidden",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "label": "chinese",
+      "target": 200,
+      "expected": 200,
+      "overflow": "auto",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "label": "capped-scroll",
+      "target": 200,
+      "expected": 200,
+      "overflow": "auto",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "label": "trailing",
+      "target": 80,
+      "expected": 80,
+      "overflow": "hidden",
+      "pass": true
+    },
+    {
+      "width": 320,
+      "label": "shrink",
+      "target": 60,
+      "expected": 60,
+      "overflow": "hidden",
+      "pass": true
+    },
+    {
+      "label": "resize-without-input",
+      "width": 750,
+      "target": 100,
+      "expected": 100,
+      "pass": true
+    },
+    {
+      "label": "resize-without-input",
+      "width": 320,
+      "target": 200,
+      "expected": 200,
+      "pass": true
+    },
+    {
+      "label": "resize-without-input",
+      "width": 750,
+      "target": 100,
+      "expected": 100,
+      "pass": true
+    }
+  ]
+}
