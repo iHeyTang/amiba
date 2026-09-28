@@ -61,6 +61,7 @@ export interface DshSessionRow {
   running: boolean;
   blank: boolean;
   parentSessionId?: string;
+  origin?: "subagent";
   agentPreset?: string;
   /** DSH session-title projection, when `session/list` carries it. */
   title?: string;

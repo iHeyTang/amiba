@@ -369,7 +369,7 @@ export class ChatEngineHost {
     // watcher — the same two sources the renderer store derives them from.
     const retained = this.addressBySession.get(sessionId);
     if (retained) return retained;
-    const parent = sessionIndex.parent(sessionId);
+    const parent = sessionIndex.subagentParent(sessionId);
     if (parent) {
       return {
         parentSessionId: parent,
@@ -382,7 +382,7 @@ export class ChatEngineHost {
 
   /**
    * The engine's synchronous view of durable subagent addresses: the mainStore
-   * sidecar plus the session index's parent fallback, resolved here because the
+   * sidecar plus the session index's explicit subagent parent fallback, resolved here because the
    * worker cannot reach either.
    */
   private subagentAddressMap(): Record<string, AgentSubagentAddress> {

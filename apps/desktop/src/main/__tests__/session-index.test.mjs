@@ -152,3 +152,25 @@ test('retains active approvals and questions until the first index, without repl
     await flush(); assert.equal(waits.length, 3);
   } finally { h.index.dispose(); }
 });
+
+
+test('ordinary forks retain lineage without acquiring subagent routing', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const h = harness();
+  h.items = [row('fork', { parentSessionId: 'a' }), row('child', { parentSessionId: 'a', origin: 'subagent' })];
+  try {
+    h.index.start(); await flush();
+    assert.equal(h.index.parent('fork'), 'a');
+    assert.equal(h.index.subagentParent('fork'), undefined);
+    assert.equal(h.index.subagentParent('child'), 'a');
+    h.streams[0].push({ type: 'session/added', summary: row('new-fork', { parentSessionId: 'a' }) });
+    h.streams[0].push({ type: 'session/added', summary: row('new-child', { parentSessionId: 'a', origin: 'subagent' }) });
+    await flush();
+    assert.equal(h.index.subagentParent('new-fork'), undefined);
+    assert.equal(h.index.subagentParent('new-child'), 'a');
+    // Reconciliation must publish a changed origin even if the parent is unchanged.
+    h.items = [row('child', { parentSessionId: 'a' })];
+    t.mock.timers.tick(30_000); await flush();
+    assert.equal(h.index.subagentParent('child'), undefined);
+  } finally { h.index.dispose(); }
+});

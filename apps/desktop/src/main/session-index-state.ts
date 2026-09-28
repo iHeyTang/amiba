@@ -13,6 +13,7 @@ const RECONCILE_MS = 30_000;
 function row(item: DshSessionSummary): DshSessionRow {
   return {
     sessionId: item.sessionId, updatedAt: item.updatedAt, running: item.running, blank: item.blank,
+    ...(item.origin === undefined ? {} : { origin: item.origin }),
     ...(item.parentSessionId === undefined ? {} : { parentSessionId: item.parentSessionId }),
     ...(item.agentPreset === undefined ? {} : { agentPreset: item.agentPreset }),
     ...(typeof item.projections?.values?.title === "string" ? { title: item.projections.values.title } : {}),
@@ -60,6 +61,11 @@ export class SessionIndex {
   getSnapshot(): DshSessionRow[] { return this.rows; }
   running(id: string): boolean { return this.byId.get(id)?.running ?? false; }
   parent(id: string): string | undefined { return this.byId.get(id)?.parentSessionId; }
+  subagentParent(id: string): string | undefined {
+    const session = this.byId.get(id);
+    // Forks also have parents; only the Host origin establishes subagent ownership.
+    return session?.origin === "subagent" ? session.parentSessionId : undefined;
+  }
 
   dispose(): void {
     this.lifetime.abort();
