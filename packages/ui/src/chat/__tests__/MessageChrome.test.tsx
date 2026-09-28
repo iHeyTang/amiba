@@ -2126,6 +2126,34 @@ it("loads every earlier turn as the history sentinel enters view", () => {
   }
 });
 
+it("restores expanded turn addresses while recreating only nearby historical content", () => {
+  const callbacks = new Map<Element, () => void>();
+  vi.stubGlobal("IntersectionObserver", class {
+    constructor(private callback: (entries: { isIntersecting: boolean }[]) => void) {}
+    observe(node: Element) { callbacks.set(node, () => this.callback([{isIntersecting:true}])); }
+    disconnect() {}
+  });
+  const scope = {};
+  const messages: UiMessage[] = Array.from({length:10}, (_, i) => [
+    {uiId:`defer-u${i}`, role:"user" as const, content:`Deferred prompt ${i}`},
+    {uiId:`defer-a${i}`, role:"assistant" as const, content:`Deferred answer ${i}`},
+  ]).flat();
+  let view = render(<MessageTurns messages={messages} sessionId="deferred" viewStateScope={scope} />);
+  try {
+    act(() => callbacks.get(view.container.querySelector("[data-turn-window-sentinel]")!)!());
+    expect(view.container.querySelectorAll("[data-conversation-user-turn]")).toHaveLength(10);
+    expect(screen.queryByText("Deferred answer 0")).toBeNull();
+    expect(screen.getByText("Deferred answer 9")).toBeInTheDocument();
+    act(() => callbacks.get(view.container.querySelector('[data-conversation-user-turn="defer-u0"]')!)!());
+    expect(screen.getByText("Deferred answer 0")).toBeInTheDocument();
+    view.unmount();
+    view = render(<MessageTurns messages={messages} sessionId="deferred" viewStateScope={scope} />);
+    expect(view.container.querySelectorAll("[data-conversation-user-turn]")).toHaveLength(10);
+    expect(view.container.querySelectorAll("[data-conversation-turn-deferred]")).toHaveLength(9);
+    expect(screen.getByText("Deferred answer 9")).toBeInTheDocument();
+  } finally { view.unmount(); vi.unstubAllGlobals(); }
+});
+
 it("reports the rendered turn window so the conversation rail stays aligned with the DOM", () => {
   const messages: UiMessage[] = [];
   for (let turn = 0; turn < 30; turn += 1) {

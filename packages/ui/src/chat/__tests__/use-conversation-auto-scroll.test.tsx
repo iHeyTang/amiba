@@ -142,3 +142,20 @@ it("restores the same message offset when content above it changes height", () =
   const reopened = setup(scope, 220);
   expect(reopened.viewport.scrollTop).toBe(300);
 });
+
+it("owns anchoring only while restoring history and releases it for reader scrolling or cleanup", () => {
+  const scope = {};
+  const first = setup(scope, 100);
+  first.viewport.scrollTop = 180;
+  fireEvent.scroll(first.viewport);
+  first.unmount();
+  const reopened = setup(scope, 220);
+  expect(reopened.viewport.style.overflowAnchor).toBe("none");
+  fireEvent.wheel(reopened.viewport, {deltaY:-1});
+  expect(reopened.viewport.style.overflowAnchor).toBe("");
+  reopened.unmount();
+  const returned = setup(scope, 220);
+  expect(returned.viewport.style.overflowAnchor).toBe("none");
+  returned.unmount();
+  expect(returned.viewport.style.overflowAnchor).toBe("");
+});
